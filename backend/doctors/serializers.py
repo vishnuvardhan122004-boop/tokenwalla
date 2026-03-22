@@ -3,9 +3,10 @@ from .models import Doctor
 
 
 class DoctorSerializer(serializers.ModelSerializer):
-    hospital_name = serializers.CharField(source="hospital.name", read_only=True)
+    hospital_name  = serializers.CharField(source="hospital.name", read_only=True)
+    image          = serializers.SerializerMethodField()
+    hospital_image = serializers.SerializerMethodField()
 
-    # Explicit field so multipart list values are accepted correctly
     slots = serializers.ListField(
         child=serializers.CharField(),
         default=list,
@@ -21,11 +22,19 @@ class DoctorSerializer(serializers.ModelSerializer):
             "hospital", "hospital_name", "city",
         ]
         extra_kwargs = {
-            "image":          {"required": False, "allow_null": True},
-            "hospital_image": {"required": False, "allow_null": True},
-            "city":           {"required": False, "allow_blank": True},
-            "experience":     {"required": False},
-            "max_per_slot":   {"required": False},
-            "available":      {"required": False},
-            "fee":            {"required": False},
+            "city":         {"required": False, "allow_blank": True},
+            "experience":   {"required": False},
+            "max_per_slot": {"required": False},
+            "available":    {"required": False},
+            "fee":          {"required": False},
         }
+
+    def get_image(self, obj):
+        if obj.image:
+            return obj.image.url
+        return 'https://placehold.co/150x150?text=Doctor'
+
+    def get_hospital_image(self, obj):
+        if obj.hospital_image:
+            return obj.hospital_image.url
+        return 'https://placehold.co/1200x350?text=Hospital'
