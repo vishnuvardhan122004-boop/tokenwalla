@@ -113,17 +113,16 @@ STATIC_URL  = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# ── Media — Cloudinary in production, local in dev ────────────────────────────
-if config('CLOUDINARY_CLOUD_NAME', default=''):
-    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
-    CLOUDINARY_STORAGE = {
-        'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),
-        'API_KEY':    config('CLOUDINARY_API_KEY',    default=''),
-        'API_SECRET': config('CLOUDINARY_API_SECRET', default=''),
-    }
-else:
-    MEDIA_URL  = '/media/'
-    MEDIA_ROOT = BASE_DIR / 'media'
+# ── Media — Cloudinary ────────────────────────────────────────────────────────
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),
+    'API_KEY':    config('CLOUDINARY_API_KEY',    default=''),
+    'API_SECRET': config('CLOUDINARY_API_SECRET', default=''),
+}
+# Local fallback for dev
+MEDIA_URL  = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # ── Third-party Keys ──────────────────────────────────────────────────────────
 RAZORPAY_KEY_ID      = config('RAZORPAY_KEY_ID',      default='')
