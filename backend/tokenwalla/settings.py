@@ -63,7 +63,6 @@ TEMPLATES = [{
 }]
 
 # ── Database ──────────────────────────────────────────────────────────────────
-# Uses DATABASE_URL on Render, falls back to local postgres in dev
 DATABASE_URL = config('DATABASE_URL', default=None)
 
 if DATABASE_URL:
@@ -106,10 +105,8 @@ SIMPLE_JWT = {
 }
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-CORS_ALLOWED_ORIGINS = config(
-    CORS_ALLOW_ALL_ORIGINS = True
-    CORS_ALLOW_CREDENTIALS = True
-).split(',')
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
 
 # ── Static files ──────────────────────────────────────────────────────────────
 STATIC_URL  = '/static/'
@@ -149,12 +146,12 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # ── Security (production only) ────────────────────────────────────────────────
 if not DEBUG:
-    SECURE_BROWSER_XSS_FILTER   = True
-    X_FRAME_OPTIONS              = 'DENY'
-    SECURE_CONTENT_TYPE_NOSNIFF  = True
-    SECURE_SSL_REDIRECT          = True
-    SESSION_COOKIE_SECURE        = True
-    CSRF_COOKIE_SECURE           = True
-    SECURE_HSTS_SECONDS          = 31536000   # 1 year
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD          = True
+    SECURE_BROWSER_XSS_FILTER      = True
+    X_FRAME_OPTIONS                 = 'DENY'
+    SECURE_CONTENT_TYPE_NOSNIFF     = True
+    SECURE_SSL_REDIRECT             = True
+    SESSION_COOKIE_SECURE           = True
+    CSRF_COOKIE_SECURE              = True
+    SECURE_HSTS_SECONDS             = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS  = True
+    SECURE_HSTS_PRELOAD             = True
