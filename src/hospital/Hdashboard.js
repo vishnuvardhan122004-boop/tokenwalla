@@ -3,18 +3,31 @@ import { useNavigate } from "react-router";
 import API from "../services/api";
 
 const DEFAULT_SLOTS = [
-  "09:00 AM", "09:30 AM", "10:00 AM", "10:30 AM",
-  "11:00 AM", "11:30 AM", "12:00 PM", "12:30 PM",
-  "01:00 PM", "01:30 PM", "02:00 PM", "02:30 PM",
-  "03:00 PM", "03:30 PM", "04:00 PM", "04:30 PM",
-  "05:00 PM", "05:30 PM", "06:00 PM", "06:30 PM",
-  "07:00 PM", "07:30 PM", "08:00 PM", "08:30 PM",
-  "09:00 PM", "09:30 PM", "10:00 PM", "10:30 PM",
-  "11:00 PM", "11:30 PM", "12:00 AM", "12:30 AM",
-  "01:00 AM", "01:30 AM", "02:00 AM", "02:30 AM",
-  "03:00 AM", "03:30 AM", "04:00 AM", "04:30 AM",
-  "05:00 AM", "05:30 AM", "06:00 AM", "06:30 AM",
-  "07:00 AM", "07:30 AM", "08:00 AM", "08:30 AM",
+  // 🌙 Late Night / Early Morning
+  "12:00 AM", "12:30 AM", "01:00 AM", "01:30 AM",
+  "02:00 AM", "02:30 AM", "03:00 AM", "03:30 AM",
+  "04:00 AM", "04:30 AM", "05:00 AM", "05:30 AM",
+  // 🌅 Morning
+  "06:00 AM", "06:30 AM", "07:00 AM", "07:30 AM",
+  "08:00 AM", "08:30 AM", "09:00 AM", "09:30 AM",
+  "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
+  // ☀️ Afternoon
+  "12:00 PM", "12:30 PM", "01:00 PM", "01:30 PM",
+  "02:00 PM", "02:30 PM", "03:00 PM", "03:30 PM",
+  // 🌆 Evening
+  "04:00 PM", "04:30 PM", "05:00 PM", "05:30 PM",
+  "06:00 PM", "06:30 PM", "07:00 PM", "07:30 PM",
+  // 🌙 Night
+  "08:00 PM", "08:30 PM", "09:00 PM", "09:30 PM",
+  "10:00 PM", "10:30 PM", "11:00 PM", "11:30 PM",
+];
+
+const SLOT_SECTIONS = [
+  { label: "🌙 Late Night / Early Morning", slots: DEFAULT_SLOTS.slice(0, 12) },
+  { label: "🌅 Morning",                    slots: DEFAULT_SLOTS.slice(12, 24) },
+  { label: "☀️ Afternoon",                  slots: DEFAULT_SLOTS.slice(24, 32) },
+  { label: "🌆 Evening",                    slots: DEFAULT_SLOTS.slice(32, 40) },
+  { label: "🌙 Night",                      slots: DEFAULT_SLOTS.slice(40, 48) },
 ];
 
 const EMPTY_DOCTOR = {
@@ -498,32 +511,24 @@ const Hdashboard = () => {
                     <div className="col-12">
                       <label className="form-label fw-semibold">
                         🕐 Select Time Slots *
-                        <small className="text-muted ms-2">({formData.slots.length} selected)</small>
+                        <small className="text-muted ms-2">({formData.slots.length} of 48 selected)</small>
                       </label>
-                      <div className="mb-2">
-                        <small className="text-muted fw-semibold d-block mb-1">🌅 Morning</small>
-                        <div className="d-flex flex-wrap gap-2">
-                          {DEFAULT_SLOTS.slice(0, 8).map(slot => (
-                            <button key={slot} type="button"
-                              className={`btn btn-sm ${formData.slots.includes(slot) ? "btn-primary" : "btn-outline-secondary"}`}
-                              onClick={() => toggleSlot(slot)}>
-                              {slot}
-                            </button>
-                          ))}
+
+                      {SLOT_SECTIONS.map(section => (
+                        <div className="mb-3" key={section.label}>
+                          <small className="text-muted fw-semibold d-block mb-1">{section.label}</small>
+                          <div className="d-flex flex-wrap gap-2">
+                            {section.slots.map(slot => (
+                              <button key={slot} type="button"
+                                className={`btn btn-sm ${formData.slots.includes(slot) ? "btn-primary" : "btn-outline-secondary"}`}
+                                onClick={() => toggleSlot(slot)}>
+                                {slot}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                      <div className="mb-2">
-                        <small className="text-muted fw-semibold d-block mb-1">🌆 Evening & Night</small>
-                        <div className="d-flex flex-wrap gap-2">
-                          {DEFAULT_SLOTS.slice(8).map(slot => (
-                            <button key={slot} type="button"
-                              className={`btn btn-sm ${formData.slots.includes(slot) ? "btn-primary" : "btn-outline-secondary"}`}
-                              onClick={() => toggleSlot(slot)}>
-                              {slot}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                      ))}
+
                       <div className="d-flex gap-2 mt-2">
                         <button type="button" className="btn btn-sm btn-outline-primary"
                           onClick={() => { setFormData(p => ({ ...p, slots: [...DEFAULT_SLOTS] })); setErrors(p => ({ ...p, slots: "" })); }}>
