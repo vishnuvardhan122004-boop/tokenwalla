@@ -303,6 +303,7 @@ export default function Payment() {
                   token:        verifyData.token,
                   doctorName,
                   hospital,
+                  doctorMobile: location.state?.doctorMobile, 
                   date,
                   slot,
                   paymentId:    response.razorpay_payment_id,

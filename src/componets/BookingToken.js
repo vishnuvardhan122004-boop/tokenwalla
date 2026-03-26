@@ -449,10 +449,22 @@ export default function BookingToken() {
                 <div className="bt-info-label">Slot</div>
                 <div className="bt-info-value">{slot || '—'}</div>
               </div>
-              <div className="bt-info-item full">
-                <div className="bt-info-label">Hospital</div>
-                <div className="bt-info-value">🏥 {hospital || '—'}</div>
-              </div>
+             <div className="bt-info-item full">
+            <div className="bt-info-label">Hospital</div>
+           <div className="bt-info-value">🏥 {hospital || '—'}</div>
+           </div>
+           <div className="bt-info-item full">
+           <div className="bt-info-label">Doctor Contact</div>
+               <div className="bt-info-value">
+                        📞 
+              <a
+               href={`tel:${location.state?.doctorMobile}`}
+            style={{ color: '#00D4FF', textDecoration: 'none' }}
+              >
+             {location.state?.doctorMobile || '—'}
+              </a>
+             </div>
+          </div>
               {paymentId && (
                 <div className="bt-info-item full">
                   <div className="bt-info-label">Payment ID</div>

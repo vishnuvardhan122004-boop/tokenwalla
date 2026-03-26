@@ -518,6 +518,7 @@ export default function DoctorDetails() {
       state: {
         doctorId:     doctor.id,
         doctorName:   doctor.name,
+       doctorMobile: doctor.mobile, 
         hospital:     doctor.hospital_name,
         date:         selectedDate,
         slot:         selectedSlot,
