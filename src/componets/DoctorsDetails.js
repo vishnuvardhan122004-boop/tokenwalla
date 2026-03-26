@@ -581,7 +581,6 @@ export default function DoctorDetails() {
               <div className="dd-profile-pills">
                 <div className="dd-pill">📍 {doctor.city}</div>
                 <div className="dd-pill">⏳ {doctor.experience} yrs</div>
-                <div className="dd-pill">📞 {doctor.mobile}</div>
                 <div className={`dd-avail-pill ${doctor.available ? 'yes' : 'no'}`}>
                   <span className="dd-avail-dot" />
                   {doctor.available ? 'Available Today' : 'Unavailable'}
