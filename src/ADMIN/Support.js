@@ -25,49 +25,87 @@ const Support = () => {
   }, []);
 
   return (
-    <div className="container-fluid p-4">
-      <h4 className="mb-1 fw-bold">🎧 Support Team</h4>
-      <p className="text-muted mb-4">Contact the support staff for system issues.</p>
+    <>
+      <style>{`
+        .sp-header { margin-bottom: 24px; }
+        .sp-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.4rem; font-weight: 800; color: var(--gray-900); margin-bottom: 4px; }
+        .sp-sub { font-size: 14px; color: var(--gray-400); }
+        .sp-contact-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+        .sp-contact-card { background: #fff; border: 1px solid var(--blue-100); border-radius: 16px; padding: 24px 22px; text-align: center; }
+        .sp-contact-icon { font-size: 2rem; margin-bottom: 12px; display: block; }
+        .sp-contact-label { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 14px; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
+        .sp-contact-value { font-size: 14px; }
+        .sp-contact-value a { color: var(--blue-600); text-decoration: none; font-weight: 500; }
+        .sp-contact-value a:hover { color: var(--blue-800); }
+        .sp-table-card { background: #fff; border: 1px solid var(--blue-100); border-radius: 16px; overflow: hidden; }
+        .sp-table-header { padding: 18px 22px; border-bottom: 1px solid var(--blue-50); }
+        .sp-table-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 15px; font-weight: 700; color: var(--gray-900); }
+        .sp-table { width: 100%; border-collapse: collapse; }
+        .sp-table th { padding: 11px 20px; text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--gray-400); background: var(--gray-50); border-bottom: 1px solid var(--blue-50); }
+        .sp-table td { padding: 13px 20px; font-size: 14px; border-bottom: 1px solid var(--blue-50); vertical-align: middle; color: var(--gray-800); }
+        .sp-table tr:last-child td { border-bottom: none; }
+        .sp-table tr:hover td { background: var(--blue-50); }
+        .sp-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 100px; font-size: 12px; font-weight: 600; border: 1px solid transparent; }
+        @media (max-width: 700px) { .sp-contact-grid { grid-template-columns: 1fr; } }
+      `}</style>
 
-      <div className="row g-3 mb-4">
+      <div className="sp-header">
+        <div className="sp-title">🎧 Support Team</div>
+        <div className="sp-sub">Contact channels and support staff management</div>
+      </div>
+
+      <div className="sp-contact-grid">
         {[
-          { icon: '📧', label: 'Email Support', content: <a href="mailto:tokentraq@gmail.com" className="text-primary small">tokentraq@gmail.com</a> },
-          { icon: '📞', label: 'Phone Support', content: <a href="tel:+919000000001" className="text-primary small">+91-9000000001</a> },
-          { icon: '🏢', label: 'Office',        content: <small className="text-muted">Hindupur – Nimpalli Road, AP – 515201</small> },
+          { icon: '📧', label: 'Email Support', content: <a href="mailto:tokentraq@gmail.com">tokentraq@gmail.com</a> },
+          { icon: '📞', label: 'Phone Support', content: <a href="tel:+919000000001">+91-9000000001</a> },
+          { icon: '🏢', label: 'Office',        content: <span style={{ color: 'var(--gray-600)' }}>Hindupur – Nimpalli Road, AP – 515201</span> },
         ].map(c => (
-          <div key={c.label} className="col-md-4">
-            <div className="card border-0 shadow-sm p-3 text-center">
-              <div className="fs-2 mb-1">{c.icon}</div>
-              <h6 className="fw-bold">{c.label}</h6>
-              {c.content}
-            </div>
+          <div key={c.label} className="sp-contact-card">
+            <span className="sp-contact-icon">{c.icon}</span>
+            <div className="sp-contact-label">{c.label}</div>
+            <div className="sp-contact-value">{c.content}</div>
           </div>
         ))}
       </div>
 
       {loading ? (
-        <div className="text-center py-4"><div className="spinner-border text-primary" /></div>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+          <div style={{ width: 36, height: 36, border: '3px solid var(--blue-100)', borderTopColor: 'var(--blue-600)', borderRadius: '50%', animation: 'adSpin 0.7s linear infinite' }} />
+          <style>{`@keyframes adSpin { to { transform: rotate(360deg); } }`}</style>
+        </div>
       ) : (
-        <div className="card shadow-sm border-0">
-          <div className="card-header bg-light fw-semibold">Support Contacts</div>
-          <table className="table table-hover mb-0">
-            <thead className="table-light">
-              <tr><th>Name</th><th>Role</th><th>Mobile</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-              {contacts.map(m => (
-                <tr key={m.id}>
-                  <td className="fw-semibold">{m.name}</td>
-                  <td>{m.role}</td>
-                  <td><a href={`tel:${m.mobile}`} className="text-primary">{m.mobile}</a></td>
-                  <td><span className={`badge ${m.active ? 'bg-success' : 'bg-secondary'}`}>{m.active ? 'Available' : 'Offline'}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="sp-table-card">
+          <div className="sp-table-header">
+            <div className="sp-table-title">Support Contacts ({contacts.length})</div>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="sp-table">
+              <thead>
+                <tr><th>Name</th><th>Role</th><th>Mobile</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {contacts.map(m => (
+                  <tr key={m.id}>
+                    <td style={{ fontWeight: 600 }}>{m.name}</td>
+                    <td style={{ color: 'var(--gray-500)' }}>{m.role}</td>
+                    <td><a href={`tel:${m.mobile}`} style={{ color: 'var(--blue-600)', textDecoration: 'none', fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{m.mobile}</a></td>
+                    <td>
+                      <span className="sp-badge" style={{
+                        background: m.active ? 'var(--color-success-bg)' : 'var(--gray-100)',
+                        color: m.active ? 'var(--color-success-text)' : 'var(--gray-500)',
+                        borderColor: m.active ? 'var(--color-success-border)' : 'var(--gray-200)',
+                      }}>
+                        {m.active ? '🟢 Available' : '⚫ Offline'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

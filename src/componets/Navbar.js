@@ -15,7 +15,9 @@ export default function Navbar() {
   const [scrolled,  setScrolled]  = useState(false);
   const [menuOpen,  setMenuOpen]  = useState(false);
   const [dropOpen,  setDropOpen]  = useState(false);
-  const dropRef = useRef(null);
+  const [hospDrop,  setHospDrop]  = useState(false);
+  const dropRef     = useRef(null);
+  const hospDropRef = useRef(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
@@ -28,17 +30,29 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', fn);
   }, []);
 
+  // Close patient dropdown on outside click
   useEffect(() => {
-    const fn = (e) => { if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false); };
+    const fn = (e) => {
+      if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false);
+    };
     document.addEventListener('mousedown', fn);
     return () => document.removeEventListener('mousedown', fn);
   }, []);
 
-  useEffect(() => { setMenuOpen(false); setDropOpen(false); }, [location]);
+  // Close hospital dropdown on outside click
+  useEffect(() => {
+    const fn = (e) => {
+      if (hospDropRef.current && !hospDropRef.current.contains(e.target)) setHospDrop(false);
+    };
+    document.addEventListener('mousedown', fn);
+    return () => document.removeEventListener('mousedown', fn);
+  }, []);
+
+  useEffect(() => { setMenuOpen(false); setDropOpen(false); setHospDrop(false); }, [location]);
 
   const logout = () => { localStorage.clear(); setUser(null); navigate('/'); };
   const isActive = (p) => p === '/' ? location.pathname === '/' : location.pathname.startsWith(p);
-  const initials = (name) => name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2) : '?';
+  const initials = (name) => name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : '?';
 
   const isHospital = user?.role === 'hospital';
   const isPatient  = user && !isHospital;
@@ -101,6 +115,25 @@ export default function Navbar() {
           animation: twPulse 2s ease-in-out infinite;
         }
 
+        /* Hospital profile trigger */
+        .hosp-profile-trigger {
+          display: flex; align-items: center; gap: 9px;
+          padding: 5px 12px 5px 5px;
+          background: #fff; border: 1px solid var(--blue-100);
+          border-radius: 100px; cursor: pointer; transition: all 0.15s;
+        }
+        .hosp-profile-trigger:hover { border-color: var(--blue-300); background: var(--blue-50); }
+        .hosp-avatar {
+          width: 28px; height: 28px; border-radius: 50%;
+          background: var(--blue-600); color: #fff;
+          display: flex; align-items: center; justify-content: center;
+          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-size: 11px; font-weight: 700; flex-shrink: 0;
+        }
+        .hosp-name { font-size: 13px; font-weight: 500; color: var(--gray-800); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .hosp-chevron { font-size: 9px; color: var(--gray-400); transition: transform 0.2s; }
+        .hosp-chevron.open { transform: rotate(180deg); }
+
         /* User menu */
         .user-trigger {
           display: flex; align-items: center; gap: 9px;
@@ -123,7 +156,7 @@ export default function Navbar() {
         /* Dropdown */
         .dropdown {
           position: absolute; top: calc(100% + 8px); right: 0;
-          width: 210px; background: #fff;
+          width: 220px; background: #fff;
           border: 1px solid var(--blue-100); border-radius: 14px;
           padding: 6px;
           box-shadow: 0 8px 32px rgba(24,95,165,0.14);
@@ -197,12 +230,18 @@ export default function Navbar() {
           display: flex; align-items: center; justify-content: center;
           font-family: 'Plus Jakarta Sans', sans-serif; font-size: 16px; font-weight: 800;
         }
+        .mobile-hosp-card {
+          display: flex; align-items: center; gap: 12px;
+          padding: 14px; background: var(--blue-50);
+          border: 1px solid var(--blue-200); border-radius: 14px; margin-bottom: 6px;
+        }
 
         @keyframes twPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
         @media (max-width: 860px) {
           .nav-links { display: none; }
           .hamburger { display: flex; }
+          .hosp-badge { display: none; }
         }
         @media (max-width: 480px) { .nav-inner { padding: 0 16px; } }
         .nav-spacer { height: 64px; }
@@ -221,7 +260,7 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* Desktop nav */}
+          {/* Desktop nav — only for non-hospital */}
           {!isHospital && (
             <ul className="nav-links">
               {NAV_LINKS.map(l => (
@@ -232,34 +271,60 @@ export default function Navbar() {
             </ul>
           )}
 
-          {/* Right */}
+          {/* Hospital nav links */}
+          {isHospital && (
+            <ul className="nav-links">
+              <li><Link to="/Hdashboard" className={`nav-link ${isActive('/Hdashboard') ? 'active' : ''}`}>🏥 Dashboard</Link></li>
+            </ul>
+          )}
+
+          {/* Right side */}
           <div className="nav-right">
 
-            {/* Hospital */}
+            {/* ── HOSPITAL USER ── */}
             {isHospital && (
               <>
+                {/* Live badge (hidden on mobile) */}
                 <div className="hosp-badge">
                   <span className="hosp-dot" />
                   🏥 {user?.hospital?.name || user?.name || 'Hospital'}
                 </div>
-                <Link to="/Hdashboard" className="btn-secondary" style={{ padding: '8px 16px', fontSize: 13 }}>
-                  Dashboard
-                </Link>
-                <button
-                  onClick={logout}
-                  style={{
-                    background: 'var(--color-error-bg)', color: 'var(--color-error-text)',
-                    border: '1px solid var(--color-error-border)',
-                    borderRadius: 10, padding: '8px 16px', fontSize: 13, fontWeight: 500,
-                    cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', transition: 'all 0.15s',
-                  }}
-                >
-                  Logout
-                </button>
+
+                {/* Hospital profile dropdown */}
+                <div style={{ position: 'relative' }} ref={hospDropRef}>
+                  <div className="hosp-profile-trigger" onClick={() => setHospDrop(p => !p)}>
+                    <div className="hosp-avatar">
+                      {initials(user?.hospital?.name || user?.name || 'H')}
+                    </div>
+                    <span className="hosp-name">{user?.hospital?.name || user?.name || 'Hospital'}</span>
+                    <span className={`hosp-chevron ${hospDrop ? 'open' : ''}`}>▼</span>
+                  </div>
+                  {hospDrop && (
+                    <div className="dropdown">
+                      <div className="dropdown-header">
+                        <div className="dropdown-name">{user?.hospital?.name || user?.name}</div>
+                        <div className="dropdown-role">Hospital Admin</div>
+                      </div>
+                      <Link to="/Hdashboard" className="dropdown-item">
+                        <div className="dropdown-icon">🏥</div> Dashboard
+                      </Link>
+                      <Link to="/Hdashboard" className="dropdown-item" onClick={() => { setHospDrop(false); }}>
+                        <div className="dropdown-icon">👨‍⚕️</div> Manage Doctors
+                      </Link>
+                      <Link to="/Hdashboard" className="dropdown-item" onClick={() => { setHospDrop(false); }}>
+                        <div className="dropdown-icon">📋</div> Patient Queue
+                      </Link>
+                      <div className="dropdown-divider" />
+                      <button className="dropdown-item danger" onClick={logout}>
+                        <div className="dropdown-icon" style={{ background: 'var(--color-error-bg)' }}>🚪</div> Logout
+                      </button>
+                    </div>
+                  )}
+                </div>
               </>
             )}
 
-            {/* Patient */}
+            {/* ── PATIENT USER ── */}
             {isPatient && (
               <div style={{ position: 'relative' }} ref={dropRef}>
                 <div className="user-trigger" onClick={() => setDropOpen(p => !p)}>
@@ -293,14 +358,14 @@ export default function Navbar() {
               </div>
             )}
 
-            {/* Guest */}
+            {/* ── GUEST ── */}
             {!user && (
               <Link to="/login" className="btn-primary" style={{ padding: '9px 20px', fontSize: 14 }}>
                 Login →
               </Link>
             )}
 
-            {/* Hamburger */}
+            {/* Hamburger — for patient / guest only */}
             {!isHospital && (
               <button
                 className={`hamburger ${menuOpen ? 'open' : ''}`}
@@ -310,11 +375,23 @@ export default function Navbar() {
                 <span /><span /><span />
               </button>
             )}
+
+            {/* Hospital hamburger */}
+            {isHospital && (
+              <button
+                className={`hamburger ${menuOpen ? 'open' : ''}`}
+                onClick={() => setMenuOpen(p => !p)}
+                aria-label="Menu"
+                style={{ display: 'none' }}
+              >
+                <span /><span /><span />
+              </button>
+            )}
           </div>
         </div>
       </nav>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer — patient/guest */}
       {menuOpen && !isHospital && (
         <div className="mobile-drawer">
           {isPatient && (
@@ -367,6 +444,7 @@ export default function Navbar() {
       )}
 
       <div className="nav-spacer" />
+      <style>{`@keyframes twPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
     </>
   );
 }
