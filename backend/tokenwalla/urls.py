@@ -1,18 +1,11 @@
-from django.urls import path
-from .views import (
-    MyBookingsView, HospitalQueueView,
-    CallNextView, CompleteBookingView,
-    AllBookingsView, UpgradeQueueAccessView,
-    RescheduleBookingView, CancelBookingView,
-)
+from django.contrib import admin
+from django.urls import path, include
 
 urlpatterns = [
-    path("",                         AllBookingsView.as_view()),
-    path("my/",                      MyBookingsView.as_view()),
-    path("queue/<int:hospital_id>/", HospitalQueueView.as_view()),
-    path("call/<int:pk>/",           CallNextView.as_view()),
-    path("complete/<int:pk>/",       CompleteBookingView.as_view()),
-    path("cancel/<int:pk>/",         CancelBookingView.as_view()),
-    path("upgrade/<int:pk>/",        UpgradeQueueAccessView.as_view()),
-    path("reschedule/<int:pk>/",     RescheduleBookingView.as_view()),
+    path('admin/',       admin.site.urls),
+    path('api/auth/',    include('users.urls')),
+    path('api/doctors/', include('doctors.urls')),
+    path('api/hospitals/', include('hospitals.urls')),
+    path('api/bookings/', include('bookings.urls')),
+    path('api/payment/', include('payments.urls')),
 ]
