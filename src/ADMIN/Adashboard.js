@@ -1,24 +1,157 @@
-// ADMIN/Adashboard.js — Fixed layout with blue palette, working nav & outlet
-import React, { useState, useEffect } from 'react';
+// ADMIN/Adashboard.js
+// Overview stats are built-in here. No separate AdminIndex.js needed.
+import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router';
+import API from '../services/api';
 
+/* ── Overview panel (shown only at /Adashboard exactly) ─────────────────── */
+const Overview = () => {
+  const [stats,   setStats]   = useState({ total: 0, completed: 0, waiting: 0, bookings: [] });
+  const [users,   setUsers]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState('');
+
+  useEffect(() => {
+    Promise.all([API.get('/payment/reports/'), API.get('/auth/users/')])
+      .then(([r, u]) => { setStats(r.data); setUsers(u.data); })
+      .catch(() => setError('Failed to load data.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const STATUS_STYLES = {
+    completed:   { bg: '#EAF3DE', text: '#3B6D11', border: '#97C459', label: 'Completed'   },
+    waiting:     { bg: '#FAEEDA', text: '#854F0B', border: '#EF9F27', label: 'Waiting'     },
+    in_progress: { bg: '#E6F1FB', text: '#185FA5', border: '#85B7EB', label: 'In Progress' },
+    cancelled:   { bg: '#F1F5F9', text: '#64748B', border: '#E2E8F0', label: 'Cancelled'   },
+  };
+
+  if (loading) return (
+    <div style={{ display:'flex', justifyContent:'center', padding:'80px 0' }}>
+      <div style={{ width:36, height:36, border:'3px solid #B5D4F4', borderTopColor:'#185FA5', borderRadius:'50%', animation:'ovSpin 0.7s linear infinite' }} />
+      <style>{`@keyframes ovSpin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
+  if (error) return (
+    <div style={{ background:'#FCEBEB', border:'1px solid #F09595', borderRadius:12, padding:'14px 18px', color:'#A32D2D', fontSize:14 }}>⚠️ {error}</div>
+  );
+
+  const inProgress   = stats.bookings.filter(b => b.status === 'in_progress').length;
+  const patientCount = users.filter(u => u.role === 'patient').length;
+  const hospCount    = users.filter(u => u.role === 'hospital').length;
+  const revenue      = stats.bookings.reduce((a, b) => a + (b.amount || 0), 0);
+
+  const statCards = [
+    { icon: '👥', label: 'Total Users',    val: users.length,    accent: '#185FA5' },
+    { icon: '🏥', label: 'Total Bookings', val: stats.total,     accent: '#0EA5E9' },
+    { icon: '✅', label: 'Completed',      val: stats.completed, accent: '#3B6D11' },
+    { icon: '⏳', label: 'Waiting',        val: stats.waiting,   accent: '#854F0B' },
+    { icon: '🔄', label: 'In Progress',    val: inProgress,      accent: '#0EA5E9' },
+    { icon: '🩺', label: 'Patients',       val: patientCount,    accent: '#7C3AED' },
+    { icon: '🏨', label: 'Hospitals',      val: hospCount,       accent: '#0D9488' },
+    { icon: '💰', label: 'Revenue',        val: `₹${revenue.toLocaleString('en-IN')}`, accent: '#185FA5' },
+  ];
+
+  return (
+    <>
+      <style>{`
+        .ov-heading { margin-bottom: 22px; }
+        .ov-heading h2 { font-family:'Plus Jakarta Sans',sans-serif; font-size:1.35rem; font-weight:800; color:#0F172A; margin-bottom:3px; }
+        .ov-heading p  { font-size:13px; color:#94A3B8; }
+        .ov-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px; }
+        .ov-card { background:#fff; border:1px solid #B5D4F4; border-radius:16px; padding:20px 18px; position:relative; overflow:hidden; }
+        .ov-card-bar { position:absolute; top:0; left:0; right:0; height:3px; }
+        .ov-card-icon { font-size:1.5rem; margin-bottom:10px; display:block; }
+        .ov-card-val { font-family:'Plus Jakarta Sans',sans-serif; font-size:1.75rem; font-weight:800; color:#0F172A; line-height:1; margin-bottom:3px; }
+        .ov-card-label { font-size:13px; color:#64748B; }
+        .ov-table-wrap { background:#fff; border:1px solid #B5D4F4; border-radius:16px; overflow:hidden; }
+        .ov-table-head { padding:16px 20px; border-bottom:1px solid #E6F1FB; display:flex; align-items:center; justify-content:space-between; }
+        .ov-table-title { font-family:'Plus Jakarta Sans',sans-serif; font-size:14px; font-weight:700; color:#0F172A; }
+        .ov-table-sub   { font-size:12px; color:#94A3B8; }
+        table.ov-table  { width:100%; border-collapse:collapse; }
+        table.ov-table th { padding:10px 18px; text-align:left; font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:#94A3B8; background:#F8FAFC; border-bottom:1px solid #E6F1FB; }
+        table.ov-table td { padding:12px 18px; font-size:14px; border-bottom:1px solid #E6F1FB; color:#1E293B; vertical-align:middle; }
+        table.ov-table tr:last-child td { border-bottom:none; }
+        table.ov-table tr:hover td { background:#F4F9FF; }
+        .ov-token { font-family:'DM Mono',monospace; font-size:13px; color:#185FA5; font-weight:500; }
+        .ov-badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:100px; font-size:12px; font-weight:600; border:1px solid transparent; }
+        .ov-empty { text-align:center; padding:48px 20px; color:#94A3B8; font-size:14px; }
+        @media(max-width:900px){ .ov-grid{grid-template-columns:repeat(2,1fr);} }
+        @media(max-width:500px){ .ov-grid{grid-template-columns:1fr 1fr;} }
+      `}</style>
+
+      <div className="ov-heading">
+        <h2>Platform Overview</h2>
+        <p>Real-time stats across the TokenWalla platform</p>
+      </div>
+
+      <div className="ov-grid">
+        {statCards.map(({ icon, label, val, accent }) => (
+          <div className="ov-card" key={label}>
+            <div className="ov-card-bar" style={{ background: accent }} />
+            <span className="ov-card-icon">{icon}</span>
+            <div className="ov-card-val">{val}</div>
+            <div className="ov-card-label">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="ov-table-wrap">
+        <div className="ov-table-head">
+          <div>
+            <div className="ov-table-title">🕐 Recent Bookings</div>
+            <div className="ov-table-sub">Last {Math.min(stats.bookings.length, 10)} · Revenue ₹{revenue.toLocaleString('en-IN')}</div>
+          </div>
+        </div>
+        {stats.bookings.length === 0 ? (
+          <div className="ov-empty">No bookings yet.</div>
+        ) : (
+          <div style={{ overflowX:'auto' }}>
+            <table className="ov-table">
+              <thead>
+                <tr><th>Token</th><th>Patient</th><th>Doctor</th><th>Date</th><th>₹</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {stats.bookings.slice(0, 10).map(b => {
+                  const st = STATUS_STYLES[b.status] || STATUS_STYLES.cancelled;
+                  return (
+                    <tr key={b.id}>
+                      <td><span className="ov-token">{b.token}</span></td>
+                      <td style={{ fontWeight:500 }}>{b.patient_name || b.user_name || '—'}</td>
+                      <td style={{ color:'#64748B' }}>{b.doctor_name || '—'}</td>
+                      <td style={{ color:'#64748B' }}>{b.date || '—'}</td>
+                      <td style={{ fontWeight:600 }}>₹{b.amount || 0}</td>
+                      <td>
+                        <span className="ov-badge" style={{ background:st.bg, color:st.text, borderColor:st.border }}>
+                          {st.label}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  );
+};
+
+/* ── Shell ───────────────────────────────────────────────────────────────── */
 const Adashboard = () => {
-  const navigate  = useNavigate();
-  const location  = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
     try {
-      if (stored) {
-        const u = JSON.parse(stored);
-        if (u.role !== 'admin') { navigate('/'); return; }
-        setUser(u);
-      } else {
-        navigate('/login');
-      }
-    } catch { navigate('/login'); }
+      if (!stored) { navigate('/2004'); return; }
+      const u = JSON.parse(stored);
+      if (u.role !== 'admin') { navigate('/2004'); return; }
+      setUser(u);
+    } catch { navigate('/2004'); }
   }, [navigate]);
 
   const logout = () => {
@@ -26,242 +159,186 @@ const Adashboard = () => {
     localStorage.removeItem('refresh');
     localStorage.removeItem('user');
     navigate('/');
+    window.location.reload();
   };
 
-  const initials = (name) => name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'AD';
+  const initials = (name) =>
+    name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : 'AD';
 
-  const navItems = [
-    { to: '/Adashboard',                    end: true,  icon: '📊', label: 'Overview'         },
-    { to: '/Adashboard/user-management',    end: false, icon: '👥', label: 'Users'             },
-    { to: '/Adashboard/hospitals',          end: false, icon: '🏥', label: 'Hospitals & Docs'  },
-    { to: '/Adashboard/reports',            end: false, icon: '📋', label: 'Reports'           },
-    { to: '/Adashboard/support',            end: false, icon: '🎧', label: 'Support'           },
-    { to: '/Adashboard/settings',           end: false, icon: '⚙️', label: 'Settings'          },
+  const isOverview = location.pathname === '/Adashboard' || location.pathname === '/Adashboard/';
+
+  const PAGE_LABELS = {
+    '/Adashboard/user-management': 'User Management',
+    '/Adashboard/hospitals':       'Hospitals & Doctors',
+    '/Adashboard/reports':         'Reports',
+    '/Adashboard/support':         'Support',
+    '/Adashboard/settings':        'Settings',
+  };
+  const pageLabel = PAGE_LABELS[location.pathname] || 'Overview';
+
+  const NAV_ITEMS = [
+    { to: 'user-management', icon: '👥', label: 'User Management'    },
+    { to: 'hospitals',       icon: '🏥', label: 'Hospitals / Doctors' },
+    { to: 'reports',         icon: '📋', label: 'Reports'             },
+    { to: 'support',         icon: '🎧', label: 'Support'             },
+    { to: 'settings',        icon: '⚙️', label: 'Settings'            },
   ];
 
   return (
     <>
       <style>{`
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        .ad-shell {
-          display: flex; min-height: 100vh; font-family: 'DM Sans', sans-serif;
-          background: var(--gray-50);
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
 
-        /* ── SIDEBAR ── */
-        .ad-sidebar {
-          width: 256px; flex-shrink: 0;
-          background: var(--blue-900);
+        *, *::before, *::after { box-sizing: border-box; }
+
+        .adb-shell {
+          display: flex; min-height: 100vh;
+          font-family: 'DM Sans', sans-serif;
+        }
+        .adb-aside {
+          width: 240px; flex-shrink: 0;
+          background: #042C53;
           display: flex; flex-direction: column;
-          position: fixed; top: 0; left: 0; bottom: 0; z-index: 200;
-          transition: transform 0.25s ease;
+          position: sticky; top: 0; height: 100vh;
+          overflow-y: auto;
         }
-        .ad-sidebar.closed { transform: translateX(-100%); }
-
-        .ad-sidebar-brand {
+        .adb-brand {
           display: flex; align-items: center; gap: 10px;
-          padding: 20px 20px 18px;
+          padding: 20px 18px 18px;
           border-bottom: 1px solid rgba(255,255,255,0.08);
         }
-        .ad-brand-logo {
-          width: 36px; height: 36px; border-radius: 10px; overflow: hidden;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3); flex-shrink: 0;
+        .adb-brand-logo {
+          width: 36px; height: 36px; border-radius: 10px;
+          overflow: hidden; flex-shrink: 0;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
-        .ad-brand-logo img { width:100%; height:100%; object-fit:cover; display:block; }
-        .ad-brand-text { flex: 1; }
-        .ad-brand-name {
+        .adb-brand-logo img { width:100%; height:100%; object-fit:cover; display:block; }
+        .adb-brand-name {
           font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 1rem; font-weight: 800; color: #fff;
+          font-size: 1rem; font-weight: 800; color: #fff; line-height: 1.2; margin: 0;
         }
-        .ad-brand-name .accent { color: #85B7EB; }
-        .ad-brand-sub { font-size: 11px; color: rgba(255,255,255,0.35); font-weight: 500; }
-
-        .ad-nav { flex: 1; padding: 12px 10px; overflow-y: auto; }
-        .ad-nav-section { margin-bottom: 6px; }
-        .ad-nav-label {
+        .adb-brand-name .acc { color: #85B7EB; }
+        .adb-brand-sub { font-size: 10px; color: rgba(255,255,255,0.35); margin: 0; }
+        .adb-nav { flex: 1; padding: 12px 10px; }
+        .adb-nav-label {
           font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
-          color: rgba(255,255,255,0.25); padding: 8px 10px 6px;
+          color: rgba(255,255,255,0.25); padding: 10px 10px 6px; display: block;
         }
-        .ad-nav-item {
+        .adb-nav-link {
+          display: flex; align-items: center; gap: 10px;
+          padding: 10px 12px; border-radius: 10px; margin-bottom: 2px;
+          font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.55);
+          text-decoration: none; transition: all 0.15s;
+        }
+        .adb-nav-link:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.9); text-decoration: none; }
+        .adb-nav-link.active { background: #185FA5; color: #fff; font-weight: 600; }
+        .adb-nav-icon {
+          width: 30px; height: 30px; border-radius: 8px;
+          background: rgba(255,255,255,0.07);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 14px; flex-shrink: 0;
+        }
+        .adb-nav-link.active .adb-nav-icon { background: rgba(255,255,255,0.15); }
+        .adb-footer { padding: 12px 10px; border-top: 1px solid rgba(255,255,255,0.08); }
+        .adb-user-row {
           display: flex; align-items: center; gap: 10px;
           padding: 10px 12px; border-radius: 10px;
-          font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.6);
-          text-decoration: none; transition: all 0.15s; margin-bottom: 2px;
-          cursor: pointer; border: none; background: none; width: 100%; text-align: left;
-          font-family: 'DM Sans', sans-serif;
+          background: rgba(255,255,255,0.05); margin-bottom: 8px;
         }
-        .ad-nav-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.9); text-decoration: none; }
-        .ad-nav-item.active { background: var(--blue-600); color: #fff; font-weight: 600; }
-        .ad-nav-icon { width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
-        .ad-nav-item.active .ad-nav-icon { background: rgba(255,255,255,0.15); }
-
-        .ad-sidebar-footer {
-          padding: 14px 10px;
-          border-top: 1px solid rgba(255,255,255,0.08);
-        }
-        .ad-user-card {
-          display: flex; align-items: center; gap: 10px;
-          padding: 10px 12px; border-radius: 10px;
-          background: rgba(255,255,255,0.05);
-          margin-bottom: 8px;
-        }
-        .ad-user-avatar {
-          width: 32px; height: 32px; border-radius: 50%;
-          background: var(--blue-600); color: #fff;
+        .adb-avatar {
+          width: 30px; height: 30px; border-radius: 50%;
+          background: #185FA5; color: #fff;
           display: flex; align-items: center; justify-content: center;
           font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 12px; font-weight: 700; flex-shrink: 0;
+          font-size: 11px; font-weight: 800; flex-shrink: 0;
         }
-        .ad-user-name { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.85); }
-        .ad-user-role { font-size: 11px; color: rgba(255,255,255,0.35); }
-        .ad-logout-btn {
+        .adb-user-name { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.8); margin: 0; }
+        .adb-user-role { font-size: 10px; color: rgba(255,255,255,0.3); margin: 0; }
+        .adb-logout {
           display: flex; align-items: center; gap: 8px;
-          width: 100%; padding: 9px 12px; border-radius: 8px;
-          background: rgba(255,80,80,0.1); border: 1px solid rgba(255,80,80,0.2);
-          color: #FF8080; font-size: 13px; font-weight: 500;
-          cursor: pointer; transition: all 0.15s;
-          font-family: 'DM Sans', sans-serif;
+          width: 100%; padding: 9px 12px; border-radius: 9px;
+          background: rgba(163,45,45,0.15); border: 1px solid rgba(240,149,149,0.2);
+          color: #F09595; font-size: 13px; font-weight: 500; cursor: pointer;
+          transition: all 0.15s; font-family: 'DM Sans', sans-serif;
         }
-        .ad-logout-btn:hover { background: rgba(255,80,80,0.2); border-color: rgba(255,80,80,0.35); }
-
-        /* ── MAIN ── */
-        .ad-main { flex: 1; margin-left: 256px; display: flex; flex-direction: column; min-height: 100vh; }
-
-        /* ── TOPBAR ── */
-        .ad-topbar {
-          position: sticky; top: 0; z-index: 100;
-          background: rgba(255,255,255,0.97);
-          border-bottom: 1px solid var(--blue-100);
-          padding: 0 28px; height: 64px;
-          display: flex; align-items: center; justify-content: space-between; gap: 16px;
-          backdrop-filter: blur(12px);
+        .adb-logout:hover { background: rgba(163,45,45,0.25); border-color: rgba(240,149,149,0.4); }
+        .adb-main { flex: 1; display: flex; flex-direction: column; background: #F4F9FF; min-height: 100vh; }
+        .adb-topbar {
+          background: #fff; border-bottom: 1px solid #B5D4F4;
+          padding: 0 28px; height: 60px;
+          display: flex; align-items: center; justify-content: space-between;
+          position: sticky; top: 0; z-index: 100; flex-shrink: 0;
         }
-        .ad-topbar-left { display: flex; align-items: center; gap: 14px; }
-        .ad-page-title {
+        .adb-page-title {
           font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 1.05rem; font-weight: 700; color: var(--gray-900);
+          font-size: 1rem; font-weight: 700; color: #0F172A; margin: 0;
         }
-        .ad-topbar-right { display: flex; align-items: center; gap: 10px; }
-        .ad-badge-admin {
+        .adb-badge {
           display: flex; align-items: center; gap: 6px;
-          background: var(--blue-50); border: 1px solid var(--blue-200);
+          background: #E6F1FB; border: 1px solid #B5D4F4;
           border-radius: 100px; padding: 4px 12px;
-          font-size: 12px; font-weight: 600; color: var(--blue-700);
+          font-size: 12px; font-weight: 600; color: #185FA5;
         }
-        .ad-live-dot {
-          width: 6px; height: 6px; border-radius: 50%; background: #3B6D11;
-          animation: twPulse 2s infinite;
-        }
+        .adb-dot { width: 6px; height: 6px; border-radius: 50%; background: #3B6D11; animation: adbPulse 2s infinite; }
+        @keyframes adbPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .adb-content { flex: 1; padding: 28px; }
 
-        /* ── CONTENT ── */
-        .ad-content { flex: 1; padding: 28px; }
-
-        /* ── OVERLAY (mobile) ── */
-        .ad-overlay {
-          position: fixed; inset: 0; z-index: 199;
-          background: rgba(4,44,83,0.5);
-          backdrop-filter: blur(4px);
-        }
-
-        /* Hamburger for mobile */
-        .ad-hamburger {
-          display: none; flex-direction: column; gap: 4px;
-          background: none; border: 1px solid var(--blue-100);
-          border-radius: 8px; padding: 8px; cursor: pointer;
-        }
-        .ad-hamburger span { display: block; width: 18px; height: 2px; background: var(--gray-700); border-radius: 2px; }
-
-        @keyframes twPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-        @media (max-width: 900px) {
-          .ad-sidebar { transform: translateX(-100%); }
-          .ad-sidebar.open { transform: translateX(0); }
-          .ad-main { margin-left: 0; }
-          .ad-hamburger { display: flex; }
-          .ad-content { padding: 16px; }
-          .ad-topbar { padding: 0 16px; }
+        @media (max-width: 800px) {
+          .adb-aside { display: none; }
+          .adb-content { padding: 16px; }
+          .adb-topbar { padding: 0 16px; }
         }
       `}</style>
 
-      <div className="ad-shell">
+      <div className="adb-shell">
 
-        {/* Overlay for mobile sidebar */}
-        {sidebarOpen && (
-          <div className="ad-overlay" onClick={() => setSidebarOpen(false)} />
-        )}
-
-        {/* ── SIDEBAR ── */}
-        <aside className={`ad-sidebar ${sidebarOpen ? 'open' : ''}`}>
-          <div className="ad-sidebar-brand">
-            <div className="ad-brand-logo">
-              <img src="/logo.png" alt="TokenWalla" />
-            </div>
-            <div className="ad-brand-text">
-              <div className="ad-brand-name"><span className="accent">Token</span>walla</div>
-              <div className="ad-brand-sub">Admin Console</div>
+        <aside className="adb-aside">
+          <div className="adb-brand">
+            <div className="adb-brand-logo"><img src="/logo.png" alt="TW" /></div>
+            <div>
+              <div className="adb-brand-name"><span className="acc">Token</span>walla</div>
+              <div className="adb-brand-sub">Admin Panel</div>
             </div>
           </div>
 
-          <nav className="ad-nav">
-            <div className="ad-nav-section">
-              <div className="ad-nav-label">Main</div>
-              {navItems.map(item => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end}
-                  className={({ isActive }) => `ad-nav-item ${isActive ? 'active' : ''}`}
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <span className="ad-nav-icon">{item.icon}</span>
-                  {item.label}
-                </NavLink>
-              ))}
-            </div>
+          <nav className="adb-nav">
+            <span className="adb-nav-label">Navigation</span>
+            {NAV_ITEMS.map(item => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => `adb-nav-link${isActive ? ' active' : ''}`}
+              >
+                <span className="adb-nav-icon">{item.icon}</span>
+                {item.label}
+              </NavLink>
+            ))}
           </nav>
 
-          <div className="ad-sidebar-footer">
+          <div className="adb-footer">
             {user && (
-              <div className="ad-user-card">
-                <div className="ad-user-avatar">{initials(user.name || user.username)}</div>
+              <div className="adb-user-row">
+                <div className="adb-avatar">{initials(user.name || user.username)}</div>
                 <div>
-                  <div className="ad-user-name">{user.name || user.username}</div>
-                  <div className="ad-user-role">Administrator</div>
+                  <div className="adb-user-name">{user.name || user.username || 'Admin'}</div>
+                  <div className="adb-user-role">Administrator</div>
                 </div>
               </div>
             )}
-            <button className="ad-logout-btn" onClick={logout}>
-              🚪 Sign Out
-            </button>
+            <button className="adb-logout" onClick={logout}>🚪 Sign Out</button>
           </div>
         </aside>
 
-        {/* ── MAIN AREA ── */}
-        <div className="ad-main">
-          <div className="ad-topbar">
-            <div className="ad-topbar-left">
-              <button className="ad-hamburger" onClick={() => setSidebarOpen(p => !p)}>
-                <span /><span /><span />
-              </button>
-              <div className="ad-page-title">
-                {navItems.find(i => {
-                  if (i.end) return location.pathname === i.to;
-                  return location.pathname.startsWith(i.to);
-                })?.label || 'Admin Dashboard'}
-              </div>
-            </div>
-            <div className="ad-topbar-right">
-              <div className="ad-badge-admin">
-                <span className="ad-live-dot" />
-                Admin
-              </div>
-            </div>
+        <main className="adb-main">
+          <div className="adb-topbar">
+            <div className="adb-page-title">Admin Dashboard — {pageLabel}</div>
+            <div className="adb-badge"><span className="adb-dot" /> Admin</div>
           </div>
-
-          <div className="ad-content">
-            <Outlet />
+          <div className="adb-content">
+            {/* Show Overview inline at /Adashboard, child pages via Outlet */}
+            {isOverview ? <Overview /> : <Outlet />}
           </div>
-        </div>
+        </main>
       </div>
     </>
   );
