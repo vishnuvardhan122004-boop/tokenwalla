@@ -22,7 +22,6 @@ import Hdashboard  from '../hospital/Hdashboard';
 
 import Adashboard     from '../ADMIN/Adashboard';
 import Admin          from '../ADMIN/Admin';
-import AdminIndex     from '../ADMIN/AdminIndex';
 import UserManagement from '../ADMIN/UserManagement';
 import Reports        from '../ADMIN/Reports';
 import Hospitals      from '../ADMIN/Hospitals';
@@ -33,9 +32,7 @@ function getUser() {
   try {
     const raw = localStorage.getItem('user');
     return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function RequireAuth({ children, redirectTo = '/login' }) {
@@ -83,18 +80,23 @@ const Routing = () => (
     <Route path="/payment"       element={<RequireAuth><Payment /></RequireAuth>} />
     <Route path="/booking-token" element={<RequireAuth><BookingToken /></RequireAuth>} />
     <Route path="/my-bookings"   element={<RequireAuth><MyBookings /></RequireAuth>} />
+
     <Route path="/Hlogin"      element={<HLogin />} />
     <Route path="/Husercreate" element={<Husercreate />} />
     <Route path="/Hdashboard"  element={<RequireHospital><Hdashboard /></RequireHospital>} />
+
+    {/* Admin gateway — login page */}
     <Route path="/2004" element={<Admin />} />
+
+    {/* Admin shell — overview is rendered by Adashboard itself at index */}
     <Route path="/Adashboard" element={<RequireAdmin><Adashboard /></RequireAdmin>}>
-      <Route index                  element={<AdminIndex />} />
       <Route path="user-management" element={<UserManagement />} />
       <Route path="reports"         element={<Reports />} />
       <Route path="hospitals"       element={<Hospitals />} />
       <Route path="support"         element={<Support />} />
       <Route path="settings"        element={<Settings />} />
     </Route>
+
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>
 );
