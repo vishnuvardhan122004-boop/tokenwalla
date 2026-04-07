@@ -407,15 +407,86 @@ export default function DoctorDetails() {
         @keyframes ddFadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
         @keyframes ddPulse  { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-        /* Responsive */
-        @media (max-width: 860px) {
-          .dd-layout { grid-template-columns: 1fr; }
-          .dd-booking-card { position: static; }
-          .dd-stats-row { grid-template-columns: repeat(3,1fr); }
+        /* ── RESPONSIVE ── */
+
+        /* Tablet */
+        @media (max-width: 960px) {
+          .dd-layout { grid-template-columns: 1fr; gap: 0; }
+          .dd-booking-card { position: static; margin-bottom: 16px; }
+          .dd-stats-row { gap: 10px; }
+          .dd-profile-card { padding: 18px 20px; gap: 14px; }
         }
-        @media (max-width: 480px) {
-          .dd-profile-card { flex-direction: column; }
-          .dd-stats-row { grid-template-columns: 1fr 1fr; }
+
+        /* Mobile */
+        @media (max-width: 640px) {
+          /* Banner */
+          .dd-banner { height: 200px; }
+          .dd-back { top: 12px; left: 12px; padding: 7px 12px; font-size: 12px; }
+
+          /* Profile */
+          .dd-profile-wrap { padding: 0 12px; margin-top: -48px; }
+          .dd-profile-card {
+            flex-direction: row; padding: 14px 16px; gap: 12px;
+            border-radius: 16px;
+          }
+          .dd-doctor-avatar,
+          .dd-doctor-avatar-placeholder {
+            width: 64px; height: 64px; border-radius: 12px; font-size: 1.6rem;
+          }
+          .dd-doctor-name { font-size: 1.1rem; margin-bottom: 7px; }
+          .dd-spec-badge { font-size: 10px; margin-bottom: 4px; }
+          .dd-pill { font-size: 11px; padding: 3px 9px; }
+          .dd-avail-pill { font-size: 11px; padding: 3px 9px; }
+          .dd-hospital-name { font-size: 12px; }
+
+          /* Stats */
+          .dd-stats-row {
+            padding: 0 12px; margin-top: 12px;
+            grid-template-columns: repeat(3,1fr); gap: 8px;
+          }
+          .dd-stat-box { padding: 12px 8px; border-radius: 12px; }
+          .dd-stat-val { font-size: 1.1rem; }
+          .dd-stat-lbl { font-size: 11px; }
+
+          /* Layout */
+          .dd-layout { padding: 0 12px; margin-top: 12px; }
+
+          /* Blocks */
+          .dd-block { padding: 16px; border-radius: 14px; margin-bottom: 12px; }
+          .dd-block-title { font-size: 14px; margin-bottom: 12px; }
+          .dd-block-title-icon { width: 26px; height: 26px; font-size: 12px; }
+
+          /* Date chips */
+          .dd-date-chip { padding: 8px 10px; min-width: 50px; border-radius: 10px; }
+          .dd-date-num { font-size: 1rem; }
+          .dd-date-day { font-size: 9px; }
+          .dd-date-month { font-size: 8px; }
+
+          /* Slots */
+          .dd-slots-grid { grid-template-columns: repeat(auto-fill, minmax(76px,1fr)); gap: 6px; }
+          .dd-slot { padding: 9px 4px; font-size: 11px; border-radius: 9px; }
+
+          /* Booking card */
+          .dd-booking-card { border-radius: 16px; }
+          .dd-booking-header { padding: 14px 16px 12px; }
+          .dd-booking-header-title { font-size: 15px; }
+          .dd-booking-body { padding: 14px 16px; }
+          .dd-summary-row { padding: 8px 0; font-size: 13px; }
+          .dd-plan { padding: 10px 12px; }
+          .dd-plan-name { font-size: 12px; }
+          .dd-plan-desc { font-size: 10px; }
+          .dd-plan-price { font-size: 1rem; }
+          .dd-total-amount { font-size: 1.3rem; }
+          .dd-book-btn { padding: 13px; font-size: 14px; }
+          .dd-book-note { font-size: 11px; }
+        }
+
+        /* Very small phones */
+        @media (max-width: 360px) {
+          .dd-profile-card { flex-direction: column; align-items: flex-start; }
+          .dd-stats-row { grid-template-columns: 1fr 1fr 1fr; }
+          .dd-stat-val { font-size: 1rem; }
+          .dd-slots-grid { grid-template-columns: repeat(3, 1fr); }
         }
       `}</style>
 
