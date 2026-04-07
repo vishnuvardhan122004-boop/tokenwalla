@@ -4,244 +4,13 @@ import API from '../services/api';
 
 const RAZORPAY_KEY_ID = process.env.REACT_APP_RAZORPAY_KEY_ID || 'rzp_test_XXXXXXXXXXXXXXXX';
 
-const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
-
-  .pay-wrap {
-    font-family: 'DM Sans', sans-serif;
-    background: #00133A;
-    min-height: 100vh;
-    color: white;
-    padding: 60px 0 80px;
-  }
-
-  .pay-bg {
-    position: fixed; inset: 0; z-index: 0;
-    background:
-      radial-gradient(ellipse 60% 60% at 80% 20%, rgba(0,87,255,0.15) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 50% at 20% 80%, rgba(0,212,255,0.08) 0%, transparent 50%);
-    pointer-events: none;
-  }
-
-  .pay-grid {
-    position: fixed; inset: 0; z-index: 0;
-    background-image:
-      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
-    background-size: 60px 60px;
-    pointer-events: none;
-  }
-
-  .pay-inner {
-    position: relative; z-index: 1;
-    max-width: 600px; margin: 0 auto;
-    padding: 0 20px;
-  }
-
-  /* ── BACK ── */
-  .pay-back {
-    display: inline-flex; align-items: center; gap: 8px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 10px; padding: 8px 16px;
-    font-size: 13px; color: rgba(255,255,255,0.5);
-    cursor: pointer; transition: all 0.2s;
-    margin-bottom: 32px;
-    font-family: 'DM Sans', sans-serif;
-  }
-
-  .pay-back:hover { background: rgba(255,255,255,0.08); color: white; }
-
-  /* ── PAGE TITLE ── */
-  .pay-title {
-    font-family: 'Syne', sans-serif;
-    font-size: clamp(1.6rem, 4vw, 2.2rem);
-    font-weight: 800; margin-bottom: 6px;
-    animation: payFadeUp 0.5s ease both;
-  }
-
-  .pay-sub {
-    font-size: 14px; color: rgba(255,255,255,0.4);
-    margin-bottom: 36px;
-    animation: payFadeUp 0.5s 0.05s ease both;
-  }
-
-  /* ── CARD ── */
-  .pay-card {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 22px;
-    overflow: hidden;
-    margin-bottom: 20px;
-    animation: payFadeUp 0.5s ease both;
-  }
-
-  .pay-card-header {
-    padding: 18px 24px;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    display: flex; align-items: center; gap: 12px;
-    background: rgba(0,87,255,0.05);
-  }
-
-  .pay-card-header-icon {
-    width: 36px; height: 36px; border-radius: 10px;
-    background: rgba(0,87,255,0.15);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px;
-  }
-
-  .pay-card-header-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 15px; font-weight: 700;
-  }
-
-  /* ── SUMMARY ROWS ── */
-  .pay-summary-body { padding: 8px 24px; }
-
-  .pay-row {
-    display: flex; justify-content: space-between;
-    align-items: center;
-    padding: 13px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-    font-size: 14px;
-  }
-
-  .pay-row:last-child { border-bottom: none; }
-  .pay-row-label { color: rgba(255,255,255,0.4); }
-  .pay-row-value { font-weight: 500; color: rgba(255,255,255,0.85); }
-
-  /* ── PLAN BADGE ── */
-  .pay-plan-badge {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 5px 12px; border-radius: 100px;
-    font-size: 12px; font-weight: 600;
-  }
-
-  .pay-plan-badge.basic {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    color: rgba(255,255,255,0.6);
-  }
-
-  .pay-plan-badge.queue {
-    background: rgba(0,212,255,0.1);
-    border: 1px solid rgba(0,212,255,0.25);
-    color: #00D4FF;
-  }
-
-  /* ── TOTAL ── */
-  .pay-total-row {
-    display: flex; justify-content: space-between;
-    align-items: center;
-    padding: 18px 24px;
-    border-top: 1px solid rgba(255,255,255,0.07);
-    background: rgba(0,87,255,0.04);
-  }
-
-  .pay-total-label {
-    font-family: 'Syne', sans-serif;
-    font-size: 15px; font-weight: 700;
-  }
-
-  .pay-total-amount {
-    font-family: 'Syne', sans-serif;
-    font-size: 2rem; font-weight: 800;
-    background: linear-gradient(135deg, #00D4FF, #00F5C4);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  /* ── SECURE BADGE ── */
-  .pay-secure {
-    display: flex; align-items: center; gap: 14px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 16px;
-    padding: 16px 20px;
-    margin-bottom: 20px;
-    animation: payFadeUp 0.5s 0.1s ease both;
-  }
-
-  .pay-secure-icon {
-    width: 44px; height: 44px; border-radius: 12px;
-    background: rgba(0,87,255,0.15);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 22px; flex-shrink: 0;
-  }
-
-  .pay-secure-title {
-    font-size: 14px; font-weight: 600; margin-bottom: 2px;
-  }
-
-  .pay-secure-desc { font-size: 12px; color: rgba(255,255,255,0.35); }
-
-  .pay-methods {
-    display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;
-  }
-
-  .pay-method-chip {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 8px; padding: 4px 10px;
-    font-size: 11px; color: rgba(255,255,255,0.45);
-  }
-
-  /* ── PAY BUTTON ── */
-  .pay-btn {
-    width: 100%; padding: 18px;
-    border-radius: 16px; border: none;
-    background: linear-gradient(135deg, #0057FF, #0040CC);
-    color: white;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 17px; font-weight: 600;
-    cursor: pointer; transition: all 0.25s;
-    box-shadow: 0 8px 32px rgba(0,87,255,0.35);
-    display: flex; align-items: center; justify-content: center; gap: 12px;
-    animation: payFadeUp 0.5s 0.15s ease both;
-  }
-
-  .pay-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 16px 40px rgba(0,87,255,0.5);
-  }
-
-  .pay-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-
-  .pay-spinner {
-    width: 20px; height: 20px;
-    border: 2px solid rgba(255,255,255,0.3);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: paySpin 0.7s linear infinite;
-    flex-shrink: 0;
-  }
-
-  .pay-note {
-    text-align: center; margin-top: 16px;
-    font-size: 12px; color: rgba(255,255,255,0.2);
-    line-height: 1.6;
-    animation: payFadeUp 0.5s 0.2s ease both;
-  }
-
-  /* ── ANIMATIONS ── */
-  @keyframes payFadeUp {
-    from { opacity: 0; transform: translateY(16px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  @keyframes paySpin {
-    to { transform: rotate(360deg); }
-  }
-`;
-
 export default function Payment() {
   const location = useLocation();
   const navigate  = useNavigate();
   const {
     doctorId, doctorName, hospital,
-    date, slot, fee = 10, amount = 1000,
-    queue_access = false,
+    date, slot, fee = 15, amount = 1500,
+    queue_access = true,
   } = location.state || {};
 
   const [user,    setUser]    = useState(null);
@@ -250,7 +19,7 @@ export default function Payment() {
   useEffect(() => {
     const stored = localStorage.getItem('user');
     if (stored) setUser(JSON.parse(stored));
-    else { navigate('/login'); }
+    else navigate('/login');
   }, [navigate]);
 
   useEffect(() => {
@@ -274,8 +43,7 @@ export default function Payment() {
       if (!ready) { alert('Razorpay SDK failed. Check internet.'); setLoading(false); return; }
 
       const { data: orderData } = await API.post('/payment/create-order/', {
-        amount,
-        currency: 'INR',
+        amount, currency: 'INR',
         notes: { doctorId, doctorName, hospital, date, slot },
       });
 
@@ -287,8 +55,7 @@ export default function Payment() {
         description: `Appointment — Dr. ${doctorName}`,
         order_id:    orderData.order_id,
         prefill:     { name: user?.name || '', contact: user?.mobile || '' },
-        theme:       { color: '#0057FF' },
-
+        theme:       { color: '#185FA5' },
         handler: async (response) => {
           try {
             const { data: verifyData } = await API.post('/payment/verify/', {
@@ -303,9 +70,8 @@ export default function Payment() {
                   token:        verifyData.token,
                   doctorName,
                   hospital,
-                  doctorMobile: location.state?.doctorMobile, 
-                  date,
-                  slot,
+                  doctorMobile: location.state?.doctorMobile,
+                  date, slot,
                   paymentId:    response.razorpay_payment_id,
                   userName:     user?.name || user?.username,
                   queue_access,
@@ -339,28 +105,166 @@ export default function Payment() {
 
   return (
     <>
-      <style>{css}</style>
-      <div className="pay-wrap">
-        <div className="pay-bg" />
-        <div className="pay-grid" />
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+        .pay-root {
+          font-family: 'DM Sans', sans-serif;
+          background: linear-gradient(160deg, #F4F9FF 0%, #EAF3FF 60%, #F8FBFF 100%);
+          min-height: 100vh; padding: 60px 0 80px; position: relative;
+        }
+        .pay-grid {
+          position: fixed; inset: 0; pointer-events: none;
+          background-image:
+            linear-gradient(#B5D4F4 1px, transparent 1px),
+            linear-gradient(90deg, #B5D4F4 1px, transparent 1px);
+          background-size: 52px 52px; opacity: 0.35;
+        }
+        .pay-inner { position: relative; z-index: 1; max-width: 580px; margin: 0 auto; padding: 0 20px; }
+
+        .pay-back {
+          display: inline-flex; align-items: center; gap: 8px;
+          background: #fff; border: 1px solid #B5D4F4; border-radius: 10px;
+          padding: 8px 16px; font-size: 13px; color: #185FA5;
+          cursor: pointer; transition: all 0.2s; margin-bottom: 28px;
+          font-family: 'DM Sans', sans-serif;
+        }
+        .pay-back:hover { border-color: #378ADD; background: #E6F1FB; }
+
+        .pay-title {
+          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-size: clamp(1.6rem, 4vw, 2rem); font-weight: 800;
+          color: #0F172A; margin-bottom: 6px;
+          animation: payUp 0.5s ease both;
+        }
+        .pay-sub { font-size: 14px; color: #64748B; margin-bottom: 32px; animation: payUp 0.5s 0.05s ease both; }
+
+        /* Summary card */
+        .pay-card {
+          background: #fff; border: 1px solid #B5D4F4;
+          border-radius: 20px; overflow: hidden; margin-bottom: 16px;
+          box-shadow: 0 8px 32px rgba(24,95,165,0.08);
+          animation: payUp 0.5s 0.05s ease both;
+        }
+        .pay-card-header {
+          padding: 16px 22px; border-bottom: 1px solid #E6F1FB;
+          display: flex; align-items: center; gap: 12px;
+          background: linear-gradient(160deg, #F4F9FF, #EAF3FF);
+          position: relative; overflow: hidden;
+        }
+        .pay-card-header::before {
+          content:''; position:absolute; top:0;left:0;right:0;height:3px;
+          background: linear-gradient(90deg, #185FA5, #378ADD, #85B7EB);
+        }
+        .pay-card-header-icon {
+          width: 36px; height: 36px; border-radius: 10px;
+          background: #E6F1FB; display: flex; align-items: center;
+          justify-content: center; font-size: 18px; flex-shrink: 0;
+        }
+        .pay-card-header-title {
+          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-size: 15px; font-weight: 700; color: #0F172A;
+        }
+
+        .pay-rows { padding: 8px 22px; }
+        .pay-row {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 12px 0; border-bottom: 1px solid #F1F5F9; font-size: 14px;
+        }
+        .pay-row:last-child { border-bottom: none; }
+        .pay-row-label { color: #64748B; }
+        .pay-row-value { font-weight: 500; color: #0F172A; }
+
+        .pay-plan-badge {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 600;
+          background: #E6F1FB; border: 1px solid #B5D4F4; color: #185FA5;
+        }
+
+        .pay-total-row {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 16px 22px; border-top: 1px solid #E6F1FB;
+          background: #F4F9FF;
+        }
+        .pay-total-label {
+          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-size: 15px; font-weight: 700; color: #0F172A;
+        }
+        .pay-total-amount {
+          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-size: 2rem; font-weight: 800; color: #185FA5;
+        }
+
+        /* Secure badge */
+        .pay-secure {
+          display: flex; align-items: center; gap: 14px;
+          background: #fff; border: 1px solid #B5D4F4;
+          border-radius: 16px; padding: 16px 20px; margin-bottom: 16px;
+          animation: payUp 0.5s 0.1s ease both;
+        }
+        .pay-secure-icon {
+          width: 44px; height: 44px; border-radius: 12px;
+          background: #E6F1FB; display: flex; align-items: center;
+          justify-content: center; font-size: 22px; flex-shrink: 0;
+        }
+        .pay-secure-title { font-size: 14px; font-weight: 600; color: #0F172A; margin-bottom: 2px; }
+        .pay-secure-desc { font-size: 12px; color: #64748B; }
+        .pay-methods { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 7px; }
+        .pay-method-chip {
+          background: #E6F1FB; border: 1px solid #B5D4F4;
+          border-radius: 7px; padding: 3px 10px;
+          font-size: 11px; color: #185FA5; font-weight: 500;
+        }
+
+        /* Pay button */
+        .pay-btn {
+          width: 100%; padding: 16px; border-radius: 14px; border: none;
+          background: #185FA5; color: #fff;
+          font-family: 'DM Sans', sans-serif; font-size: 16px; font-weight: 600;
+          cursor: pointer; transition: all 0.25s;
+          box-shadow: 0 6px 24px rgba(24,95,165,0.25);
+          display: flex; align-items: center; justify-content: center; gap: 10px;
+          animation: payUp 0.5s 0.15s ease both;
+        }
+        .pay-btn:hover:not(:disabled) {
+          background: #0C447C;
+          box-shadow: 0 12px 32px rgba(24,95,165,0.35);
+          transform: translateY(-1px);
+        }
+        .pay-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .pay-spinner {
+          width: 20px; height: 20px;
+          border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff;
+          border-radius: 50%; animation: paySpin 0.7s linear infinite; flex-shrink: 0;
+        }
+        @keyframes paySpin { to{transform:rotate(360deg)} }
+
+        .pay-note {
+          text-align: center; margin-top: 14px;
+          font-size: 12px; color: #94A3B8; line-height: 1.6;
+          animation: payUp 0.5s 0.2s ease both;
+        }
+
+        @keyframes payUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+      `}</style>
+
+      <div className="pay-root">
+        <div className="pay-grid" />
         <div className="pay-inner">
 
-          <button className="pay-back" onClick={() => navigate(-1)}>
-            ← Back
-          </button>
+          <button className="pay-back" onClick={() => navigate(-1)}>← Back</button>
 
           <div className="pay-title">Complete Payment</div>
           <div className="pay-sub">Review your appointment details before paying</div>
 
           {/* Summary card */}
-          <div className="pay-card" style={{ animationDelay: '0.05s' }}>
+          <div className="pay-card">
             <div className="pay-card-header">
               <div className="pay-card-header-icon">📋</div>
               <div className="pay-card-header-title">Appointment Summary</div>
             </div>
-
-            <div className="pay-summary-body">
+            <div className="pay-rows">
               <div className="pay-row">
                 <span className="pay-row-label">Doctor</span>
                 <span className="pay-row-value">Dr. {doctorName}</span>
@@ -383,12 +287,9 @@ export default function Payment() {
               </div>
               <div className="pay-row">
                 <span className="pay-row-label">Plan</span>
-                <span className={`pay-plan-badge ${queue_access ? 'queue' : 'basic'}`}>
-                  {queue_access ? '📍 Queue View' : '🎫 Basic Token'}
-                </span>
+                <span className="pay-plan-badge">📍 Queue View</span>
               </div>
             </div>
-
             <div className="pay-total-row">
               <span className="pay-total-label">Total Amount</span>
               <span className="pay-total-amount">₹{fee}</span>
@@ -411,18 +312,16 @@ export default function Payment() {
 
           {/* Pay button */}
           <button className="pay-btn" onClick={handlePayment} disabled={loading}>
-            {loading ? (
-              <><div className="pay-spinner" /> Opening Payment Gateway...</>
-            ) : (
-              <>💳 Pay ₹{fee} & Confirm Appointment</>
-            )}
+            {loading
+              ? <><div className="pay-spinner" /> Opening Payment Gateway…</>
+              : <>💳 Pay ₹{fee} & Confirm Appointment</>
+            }
           </button>
 
           <p className="pay-note">
             By paying, you agree to our Terms & Conditions.<br />
             Refundable if cancelled at least 2 hours before your slot.
           </p>
-
         </div>
       </div>
     </>
