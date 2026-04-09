@@ -93,6 +93,15 @@ const Hdashboard = () => {
   const [doctorImagePreview,   setDoctorImagePreview]   = useState(null);
   const [hospitalImagePreview, setHospitalImagePreview] = useState(null);
   const [submitting,           setSubmitting]           = useState(false);
+  // Track which doctor IDs are currently being toggled
+  const [toggling,             setToggling]             = useState(new Set());
+  // Toast notification
+  const [toast,                setToast]                = useState(null);
+
+  const showToast = (msg, type = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   // ── Auth Check ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -136,28 +145,67 @@ const Hdashboard = () => {
   }, [hospital]);
 
   // ── Queue Actions ───────────────────────────────────────────────────────────
-  const handleCall     = async (id) => { try { await API.patch(`/bookings/call/${id}/`);     loadQueue(); } catch { alert("Failed to call patient"); } };
-  const handleComplete = async (id) => { try { await API.patch(`/bookings/complete/${id}/`); loadQueue(); } catch { alert("Failed to complete booking"); } };
+  const handleCall     = async (id) => {
+    try { await API.patch(`/bookings/call/${id}/`);     loadQueue(); }
+    catch { showToast("Failed to call patient", "error"); }
+  };
+  const handleComplete = async (id) => {
+    try { await API.patch(`/bookings/complete/${id}/`); loadQueue(); }
+    catch { showToast("Failed to complete booking", "error"); }
+  };
 
+  // ── Toggle Availability ─────────────────────────────────────────────────────
+  // Sends only { available: bool } as JSON.
+  // The backend's fast-path in partial_update handles this without touching slots.
   const toggleAvailability = async (doctor) => {
-    try { await API.patch(`/doctors/${doctor.id}/`, { available: !doctor.available }); loadDoctors(); }
-    catch { alert("Failed to update availability"); }
+    const newVal = !doctor.available;
+    const docId  = doctor.id;
+
+    // Optimistic UI update — flip immediately so the user sees instant feedback
+    setDoctors(prev =>
+      prev.map(d => d.id === docId ? { ...d, available: newVal } : d)
+    );
+    setToggling(prev => new Set(prev).add(docId));
+
+    try {
+      const { data } = await API.patch(
+        `/doctors/${docId}/`,
+        { available: newVal },                      // plain JSON body
+        { headers: { "Content-Type": "application/json" } }
+      );
+      // Sync with server response to stay in sync
+      setDoctors(prev =>
+        prev.map(d => d.id === docId ? { ...d, ...data } : d)
+      );
+      showToast(
+        `Dr. ${doctor.name} is now ${newVal ? "available ✅" : "unavailable ❌"}`
+      );
+    } catch (err) {
+      // Revert the optimistic update on failure
+      setDoctors(prev =>
+        prev.map(d => d.id === docId ? { ...d, available: !newVal } : d)
+      );
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.detail ||
+        "Failed to update availability. Please try again.";
+      showToast(msg, "error");
+      console.error("Toggle availability error:", err?.response?.data || err);
+    } finally {
+      setToggling(prev => {
+        const next = new Set(prev);
+        next.delete(docId);
+        return next;
+      });
+    }
   };
 
   // ── Image Change ────────────────────────────────────────────────────────────
   const handleImageChange = (e, type) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert("Image size must be less than 5MB"); return;
-    }
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
-      alert("Please select a valid image file"); return;
-    }
-
+    if (file.size > 5 * 1024 * 1024) { showToast("Image size must be less than 5MB", "error"); return; }
+    if (!file.type.startsWith("image/")) { showToast("Please select a valid image file", "error"); return; }
     const preview = URL.createObjectURL(file);
     if (type === "doctor") {
       setDoctorImage(file);
@@ -207,21 +255,17 @@ const Hdashboard = () => {
         ? prev.slots.filter(s => s !== slot)
         : [...prev.slots, slot],
     }));
-    // Clear slots error when a slot is selected
     if (errors.slots) setErrors(prev => ({ ...prev, slots: "" }));
   };
 
-  // ── Handle Field Change with live validation ─────────────────────────────
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error for this field on change
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: "" }));
   };
 
   // ── Submit ──────────────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     const { errors: newErrors, valid } = validate(formData);
     if (!valid) { setErrors(newErrors); return; }
 
@@ -246,10 +290,10 @@ const Hdashboard = () => {
 
       if (editDoctor) {
         await API.patch(`/doctors/${editDoctor.id}/`, fd, { headers: { "Content-Type": "multipart/form-data" } });
-        alert("Doctor updated successfully!");
+        showToast("Doctor updated successfully!");
       } else {
         await API.post("/doctors/", fd, { headers: { "Content-Type": "multipart/form-data" } });
-        alert("Doctor added successfully!");
+        showToast("Doctor added successfully!");
       }
 
       setShowForm(false);
@@ -268,9 +312,9 @@ const Hdashboard = () => {
         const msg = Object.entries(apiErrors)
           .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(", ") : msgs}`)
           .join("\n");
-        alert("Validation errors:\n" + msg);
+        showToast("Validation errors:\n" + msg, "error");
       } else {
-        alert(err?.response?.data?.message || "Failed to save doctor");
+        showToast(err?.response?.data?.message || "Failed to save doctor", "error");
       }
     } finally {
       setSubmitting(false);
@@ -280,20 +324,40 @@ const Hdashboard = () => {
   // ── Delete ──────────────────────────────────────────────────────────────────
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this doctor?")) return;
-    try { await API.delete(`/doctors/${id}/`); loadDoctors(); }
-    catch { alert("Failed to delete doctor"); }
+    try {
+      await API.delete(`/doctors/${id}/`);
+      loadDoctors();
+      showToast("Doctor deleted.");
+    } catch { showToast("Failed to delete doctor", "error"); }
   };
 
   const logout = () => { localStorage.clear(); navigate("/Hlogin"); };
   const totalToday = queue.waiting.length + queue.inProgress.length + queue.completed.length;
 
-  // ── Error field component ───────────────────────────────────────────────────
   const FieldError = ({ msg }) => msg
     ? <small className="text-danger d-block mt-1">⚠️ {msg}</small>
     : null;
 
   return (
     <div className="min-vh-100 bg-light">
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)",
+            padding: "12px 24px", borderRadius: 12,
+            background: toast.type === "error" ? "#A32D2D" : "#3B6D11",
+            color: "#fff", fontSize: 14, fontWeight: 500,
+            zIndex: 9999, whiteSpace: "nowrap",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+            animation: "fadeIn 0.3s ease",
+          }}
+        >
+          {toast.msg}
+        </div>
+      )}
+      <style>{`@keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}`}</style>
 
       {/* Navbar */}
       <nav className="navbar bg-white shadow-sm px-4 py-2">
@@ -409,7 +473,6 @@ const Hdashboard = () => {
                               <img src={doctorImagePreview} alt="Doctor Preview"
                                 className="rounded-circle border border-3 border-primary"
                                 style={{ width: 100, height: 100, objectFit: "cover" }} />
-                              <small className="d-block text-muted mt-1">Doctor Image Preview</small>
                             </div>
                           )}
                         </div>
@@ -422,7 +485,6 @@ const Hdashboard = () => {
                             <div className="mt-2">
                               <img src={hospitalImagePreview} alt="Hospital Banner Preview"
                                 className="rounded w-100" style={{ height: 100, objectFit: "cover" }} />
-                              <small className="d-block text-muted mt-1 text-center">Hospital Banner Preview</small>
                             </div>
                           )}
                         </div>
@@ -478,9 +540,6 @@ const Hdashboard = () => {
                         />
                       </div>
                       <FieldError msg={errors.mobile} />
-                      {formData.mobile && /^[6-9]\d{9}$/.test(formData.mobile) && (
-                        <small className="text-success">✓ Valid mobile number</small>
-                      )}
                     </div>
 
                     {/* Max per slot */}
@@ -567,55 +626,66 @@ const Hdashboard = () => {
                     <p className="text-muted text-center py-4">No doctors added yet. Click + Add Doctor.</p>
                   </div>
                 )}
-                {doctors.map(doc => (
-                  <div key={doc.id} className="col-md-6 col-lg-4">
-                    <div className="card border-0 shadow-sm h-100">
-                      <div style={{ position: "relative", height: 100 }}>
-                        {doc.hospital_image && !doc.hospital_image.includes("placehold") ? (
-                          <img src={doc.hospital_image} alt="Hospital" className="w-100 h-100"
-                            style={{ objectFit: "cover", borderRadius: "8px 8px 0 0" }} />
-                        ) : (
-                          <div style={{ width: "100%", height: "100%", background: "#e9ecef", borderRadius: "8px 8px 0 0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>🏥</div>
-                        )}
-                        {doc.image && !doc.image.includes("placehold") ? (
-                          <img src={doc.image} alt={doc.name}
-                            className="rounded-circle border border-3 border-white position-absolute"
-                            style={{ width: 60, height: 60, objectFit: "cover", bottom: -30, left: 16 }} />
-                        ) : (
-                          <div className="rounded-circle border border-3 border-white position-absolute d-flex align-items-center justify-content-center bg-light"
-                            style={{ width: 60, height: 60, bottom: -30, left: 16, fontSize: 24 }}>👨‍⚕️</div>
-                        )}
-                      </div>
-                      <div className="p-3 pt-4 mt-2">
-                        <div className="fw-semibold">Dr. {doc.name}</div>
-                        <div className="small text-primary mb-1">{doc.specialization}</div>
-                        <div className="small text-muted mb-1">📞 {doc.mobile}</div>
-                        <div className="small text-muted mb-1">⏳ {doc.experience} yrs exp</div>
-                        <div className="small text-muted mb-2">👥 Max {doc.max_per_slot || 10} patients/slot</div>
-                        <div className="mb-3">
-                          <small className="fw-semibold text-muted d-block mb-1">🕐 Slots ({doc.slots?.length || 0})</small>
-                          <div className="d-flex flex-wrap gap-1">
-                            {(doc.slots || []).slice(0, 3).map(s => (
-                              <span key={s} className="badge bg-light text-dark border small">{s}</span>
-                            ))}
-                            {(doc.slots || []).length > 3 && (
-                              <span className="badge bg-secondary small">+{doc.slots.length - 3} more</span>
-                            )}
-                            {(doc.slots || []).length === 0 && <span className="text-danger small">No slots set</span>}
-                          </div>
+                {doctors.map(doc => {
+                  const isToggling = toggling.has(doc.id);
+                  return (
+                    <div key={doc.id} className="col-md-6 col-lg-4">
+                      <div className="card border-0 shadow-sm h-100">
+                        <div style={{ position: "relative", height: 100 }}>
+                          {doc.hospital_image && !doc.hospital_image.includes("placehold") ? (
+                            <img src={doc.hospital_image} alt="Hospital" className="w-100 h-100"
+                              style={{ objectFit: "cover", borderRadius: "8px 8px 0 0" }} />
+                          ) : (
+                            <div style={{ width: "100%", height: "100%", background: "#e9ecef", borderRadius: "8px 8px 0 0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>🏥</div>
+                          )}
+                          {doc.image && !doc.image.includes("placehold") ? (
+                            <img src={doc.image} alt={doc.name}
+                              className="rounded-circle border border-3 border-white position-absolute"
+                              style={{ width: 60, height: 60, objectFit: "cover", bottom: -30, left: 16 }} />
+                          ) : (
+                            <div className="rounded-circle border border-3 border-white position-absolute d-flex align-items-center justify-content-center bg-light"
+                              style={{ width: 60, height: 60, bottom: -30, left: 16, fontSize: 24 }}>👨‍⚕️</div>
+                          )}
                         </div>
-                        <div className="d-flex gap-2">
-                          <button className={`btn btn-sm flex-grow-1 ${doc.available ? "btn-success" : "btn-secondary"}`}
-                            onClick={() => toggleAvailability(doc)}>
-                            {doc.available ? "✅ Available" : "❌ Unavailable"}
-                          </button>
-                          <button className="btn btn-sm btn-outline-primary" onClick={() => openEditForm(doc)}>✏️</button>
-                          <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(doc.id)}>🗑</button>
+                        <div className="p-3 pt-4 mt-2">
+                          <div className="fw-semibold">Dr. {doc.name}</div>
+                          <div className="small text-primary mb-1">{doc.specialization}</div>
+                          <div className="small text-muted mb-1">📞 {doc.mobile}</div>
+                          <div className="small text-muted mb-1">⏳ {doc.experience} yrs exp</div>
+                          <div className="small text-muted mb-2">👥 Max {doc.max_per_slot || 10} patients/slot</div>
+                          <div className="mb-3">
+                            <small className="fw-semibold text-muted d-block mb-1">🕐 Slots ({doc.slots?.length || 0})</small>
+                            <div className="d-flex flex-wrap gap-1">
+                              {(doc.slots || []).slice(0, 3).map(s => (
+                                <span key={s} className="badge bg-light text-dark border small">{s}</span>
+                              ))}
+                              {(doc.slots || []).length > 3 && (
+                                <span className="badge bg-secondary small">+{doc.slots.length - 3} more</span>
+                              )}
+                              {(doc.slots || []).length === 0 && <span className="text-danger small">No slots set</span>}
+                            </div>
+                          </div>
+                          <div className="d-flex gap-2">
+                            {/* ── Availability toggle button ── */}
+                            <button
+                              className={`btn btn-sm flex-grow-1 ${doc.available ? "btn-success" : "btn-secondary"}`}
+                              onClick={() => toggleAvailability(doc)}
+                              disabled={isToggling}
+                              title={isToggling ? "Updating…" : doc.available ? "Click to mark unavailable" : "Click to mark available"}
+                            >
+                              {isToggling
+                                ? <><span className="spinner-border spinner-border-sm me-1" style={{ width: 12, height: 12, borderWidth: 2 }} />Updating…</>
+                                : doc.available ? "✅ Available" : "❌ Unavailable"
+                              }
+                            </button>
+                            <button className="btn btn-sm btn-outline-primary" onClick={() => openEditForm(doc)}>✏️</button>
+                            <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(doc.id)}>🗑</button>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
