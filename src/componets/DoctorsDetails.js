@@ -67,10 +67,10 @@ export default function DoctorDetails() {
     });
   };
 
-  const slots     = doctor?.slots || [];
-  const am        = slots.filter(s => s.includes('AM'));
-  const pm        = slots.filter(s => s.includes('PM'));
-  const plan      = PLANS.find(p => p.key === selectedPlan);
+  const slots    = doctor?.slots || [];
+  const am       = slots.filter(s => s.includes('AM'));
+  const pm       = slots.filter(s => s.includes('PM'));
+  const plan     = PLANS.find(p => p.key === selectedPlan);
   const dateLabel = DAYS.find(d => d.full === selectedDate);
 
   /* ── Loading skeleton ── */
@@ -78,22 +78,17 @@ export default function DoctorDetails() {
     <>
       <style>{`
         .dd-skel-root { background: #F4F9FF; min-height: 100vh; }
-        .dd-skel-banner { height: 280px; background: linear-gradient(90deg,#E6F1FB 25%,#B5D4F4 50%,#E6F1FB 75%); background-size:200% 100%; animation:ddShimmer 1.4s infinite; }
-        .dd-skel-body { max-width:1100px; margin:0 auto; padding:24px 20px; display:grid; grid-template-columns:1fr 340px; gap:24px; }
+        .dd-skel-banner { height: 220px; background: linear-gradient(90deg,#E6F1FB 25%,#B5D4F4 50%,#E6F1FB 75%); background-size:200% 100%; animation:ddShimmer 1.4s infinite; }
+        .dd-skel-body { max-width:1100px; margin:0 auto; padding:16px 12px; }
         .dd-skel-line { border-radius:10px; background:linear-gradient(90deg,#E6F1FB 25%,#B5D4F4 50%,#E6F1FB 75%); background-size:200% 100%; animation:ddShimmer 1.4s infinite; margin-bottom:14px; }
         @keyframes ddShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-        @media(max-width:860px){.dd-skel-body{grid-template-columns:1fr;}}
       `}</style>
       <div className="dd-skel-root">
         <div className="dd-skel-banner" />
         <div className="dd-skel-body">
-          <div>
-            <div className="dd-skel-line" style={{height:18,width:'40%'}} />
-            <div className="dd-skel-line" style={{height:28,width:'65%'}} />
-            <div className="dd-skel-line" style={{height:14,width:'55%'}} />
-            <div className="dd-skel-line" style={{height:14,width:'80%'}} />
-          </div>
-          <div className="dd-skel-line" style={{height:400,borderRadius:18}} />
+          <div className="dd-skel-line" style={{height:100,borderRadius:16,marginBottom:16}} />
+          <div className="dd-skel-line" style={{height:80,borderRadius:12,marginBottom:12}} />
+          <div className="dd-skel-line" style={{height:300,borderRadius:16}} />
         </div>
       </div>
     </>
@@ -104,33 +99,32 @@ export default function DoctorDetails() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
 
-        *, *::before, *::after { box-sizing: border-box; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         .dd-root {
           font-family: 'DM Sans', sans-serif;
           background: #F4F9FF;
           min-height: 100vh;
-          /* No base padding-bottom — added only at tablet/mobile breakpoints */
+          padding-bottom: 60px;
         }
 
         /* ── BANNER ── */
         .dd-banner {
-          position: relative; height: 280px; overflow: hidden;
+          position: relative;
+          height: 240px;
+          overflow: hidden;
           background: linear-gradient(160deg, #E6F1FB 0%, #B5D4F4 100%);
         }
         .dd-banner-img {
           width: 100%; height: 100%; object-fit: cover;
           filter: brightness(0.6);
-          transition: transform 8s ease;
         }
-        .dd-banner:hover .dd-banner-img { transform: scale(1.04); }
         .dd-banner-placeholder {
           width: 100%; height: 100%;
           display: flex; align-items: center; justify-content: center;
           font-size: 5rem; opacity: 0.25;
-          background: linear-gradient(160deg, #E6F1FB 0%, #B5D4F4 100%);
         }
         .dd-banner-overlay {
           position: absolute; inset: 0;
@@ -144,364 +138,384 @@ export default function DoctorDetails() {
           background-size: 48px 48px;
         }
         .dd-back {
-          position: absolute; top: 16px; left: 16px; z-index: 10;
-          display: flex; align-items: center; gap: 8px;
-          background: rgba(255,255,255,0.9); backdrop-filter: blur(12px);
+          position: absolute; top: 14px; left: 14px; z-index: 10;
+          display: inline-flex; align-items: center; gap: 6px;
+          background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
           border: 1px solid #B5D4F4; border-radius: 10px;
-          padding: 8px 16px; font-size: 13px; color: #185FA5;
+          padding: 8px 14px; font-size: 13px; color: #185FA5;
           cursor: pointer; transition: all 0.2s;
           font-family: 'DM Sans', sans-serif;
+          white-space: nowrap;
         }
         .dd-back:hover { background: #fff; border-color: #378ADD; }
 
-        /* ── PROFILE CARD ── */
-        .dd-profile-wrap {
-          max-width: 1100px; margin: -60px auto 0;
-          padding: 0 20px; position: relative; z-index: 10;
+        /* ── WRAPPER ── */
+        .dd-wrap {
+          max-width: 1100px;
+          margin: 0 auto;
+          padding: 0 16px;
         }
+
+        /* ── PROFILE CARD ── */
         .dd-profile-card {
-          background: #fff; border: 1px solid #B5D4F4;
-          border-radius: 20px; padding: 22px 26px;
-          display: flex; align-items: flex-start; gap: 18px;
-          box-shadow: 0 8px 32px rgba(24,95,165,0.1);
-          animation: ddFadeUp 0.5s ease both;
-          position: relative; overflow: hidden;
+          background: #fff;
+          border: 1px solid #B5D4F4;
+          border-radius: 18px;
+          padding: 18px;
+          display: flex;
+          align-items: flex-start;
+          gap: 14px;
+          box-shadow: 0 6px 24px rgba(24,95,165,0.09);
+          margin-top: -52px;
+          position: relative;
+          z-index: 10;
+          overflow: hidden;
         }
         .dd-profile-card::before {
-          content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+          content: '';
+          position: absolute; top: 0; left: 0; right: 0; height: 3px;
           background: linear-gradient(90deg, #185FA5, #378ADD, #85B7EB);
         }
         .dd-doctor-avatar {
-          width: 84px; height: 84px; border-radius: 16px;
+          width: 76px; height: 76px; border-radius: 14px;
           object-fit: cover; border: 2px solid #B5D4F4; flex-shrink: 0;
         }
         .dd-doctor-avatar-placeholder {
-          width: 84px; height: 84px; border-radius: 16px;
+          width: 76px; height: 76px; border-radius: 14px;
           background: #E6F1FB; border: 2px solid #B5D4F4;
           display: flex; align-items: center; justify-content: center;
-          font-size: 2.2rem; flex-shrink: 0;
+          font-size: 2rem; flex-shrink: 0;
         }
         .dd-profile-info { flex: 1; min-width: 0; }
         .dd-spec-badge {
-          font-size: 11px; font-weight: 600; letter-spacing: 2px;
-          text-transform: uppercase; color: #185FA5; margin-bottom: 5px; display: block;
+          font-size: 10px; font-weight: 600; letter-spacing: 1.8px;
+          text-transform: uppercase; color: #185FA5;
+          margin-bottom: 4px; display: block;
         }
         .dd-doctor-name {
           font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: clamp(1.2rem, 3vw, 1.7rem);
-          font-weight: 800; color: #0F172A; margin-bottom: 10px; line-height: 1.1;
+          font-size: 1.25rem; font-weight: 800; color: #0F172A;
+          margin-bottom: 8px; line-height: 1.2;
         }
-        .dd-profile-pills { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 8px; }
+        .dd-profile-pills {
+          display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px;
+        }
         .dd-pill {
-          display: flex; align-items: center; gap: 5px;
+          display: inline-flex; align-items: center; gap: 4px;
           background: #E6F1FB; border: 1px solid #B5D4F4;
-          border-radius: 100px; padding: 4px 12px;
-          font-size: 12px; color: #185FA5; font-weight: 500;
+          border-radius: 100px; padding: 3px 10px;
+          font-size: 11px; color: #185FA5; font-weight: 500;
+          white-space: nowrap;
         }
         .dd-avail-pill {
-          display: inline-flex; align-items: center; gap: 6px;
-          border-radius: 100px; padding: 4px 12px;
-          font-size: 12px; font-weight: 600;
+          display: inline-flex; align-items: center; gap: 5px;
+          border-radius: 100px; padding: 3px 10px;
+          font-size: 11px; font-weight: 600; white-space: nowrap;
         }
-        .dd-avail-pill.yes {
-          background: #EAF3DE; border: 1px solid #97C459; color: #3B6D11;
+        .dd-avail-pill.yes { background: #EAF3DE; border: 1px solid #97C459; color: #3B6D11; }
+        .dd-avail-pill.no  { background: #FCEBEB; border: 1px solid #F09595; color: #A32D2D; }
+        .dd-avail-dot {
+          width: 6px; height: 6px; border-radius: 50%;
+          background: currentColor; animation: ddPulse 2s infinite; flex-shrink: 0;
         }
-        .dd-avail-pill.no {
-          background: #FCEBEB; border: 1px solid #F09595; color: #A32D2D;
-        }
-        .dd-avail-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: ddPulse 2s infinite; }
-        .dd-hospital-name { font-size: 13px; color: #64748B; margin-top: 4px; }
+        .dd-hospital-name { font-size: 12px; color: #64748B; margin-top: 2px; }
 
         /* ── STATS ── */
         .dd-stats-row {
-          max-width: 1100px; margin: 16px auto 0;
-          padding: 0 20px;
-          display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 10px;
+          margin-top: 14px;
         }
         .dd-stat-box {
           background: #fff; border: 1px solid #B5D4F4;
-          border-radius: 14px; padding: 16px;
+          border-radius: 12px; padding: 14px 10px;
           text-align: center;
         }
         .dd-stat-val {
           font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 1.4rem; font-weight: 800; color: #185FA5;
-          margin-bottom: 3px;
+          font-size: 1.3rem; font-weight: 800; color: #185FA5; margin-bottom: 2px;
         }
-        .dd-stat-lbl { font-size: 12px; color: #64748B; }
+        .dd-stat-lbl { font-size: 11px; color: #64748B; }
 
         /* ── MAIN LAYOUT ── */
         .dd-layout {
-          max-width: 1100px; margin: 20px auto 0;
-          padding: 0 20px;
-          display: grid; grid-template-columns: 1fr 340px;
-          gap: 24px; align-items: start;
+          display: grid;
+          grid-template-columns: 1fr 340px;
+          gap: 20px;
+          align-items: start;
+          margin-top: 18px;
         }
 
         /* ── BLOCKS ── */
         .dd-block {
           background: #fff; border: 1px solid #B5D4F4;
-          border-radius: 18px; padding: 22px;
-          margin-bottom: 16px;
-          animation: ddFadeUp 0.5s ease both;
+          border-radius: 16px; padding: 18px;
+          margin-bottom: 14px;
         }
+        .dd-block:last-child { margin-bottom: 0; }
         .dd-block-title {
           font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 15px; font-weight: 700; color: #0F172A;
-          margin-bottom: 16px;
-          display: flex; align-items: center; gap: 9px;
+          font-size: 14px; font-weight: 700; color: #0F172A;
+          margin-bottom: 14px;
+          display: flex; align-items: center; gap: 8px;
         }
         .dd-block-title-icon {
-          width: 30px; height: 30px; border-radius: 8px;
+          width: 28px; height: 28px; border-radius: 7px;
           background: #E6F1FB; display: flex; align-items: center;
-          justify-content: center; font-size: 14px; flex-shrink: 0;
+          justify-content: center; font-size: 13px; flex-shrink: 0;
         }
 
         /* ── DATE CHIPS ── */
         .dd-date-row {
-          display: flex; gap: 8px; overflow-x: auto;
-          padding-bottom: 6px; scrollbar-width: none;
+          display: flex; gap: 7px; overflow-x: auto;
+          padding-bottom: 4px; scrollbar-width: none;
         }
         .dd-date-row::-webkit-scrollbar { display: none; }
         .dd-date-chip {
           flex-shrink: 0; display: flex; flex-direction: column;
           align-items: center; gap: 2px;
-          padding: 10px 14px; border-radius: 12px;
+          padding: 9px 12px; border-radius: 11px;
           border: 1px solid #B5D4F4; background: #F8FAFC;
           cursor: pointer; transition: all 0.2s;
-          font-family: 'DM Sans', sans-serif; min-width: 58px;
+          min-width: 52px;
         }
         .dd-date-chip:hover { background: #E6F1FB; border-color: #378ADD; }
         .dd-date-chip.selected { background: #E6F1FB; border-color: #185FA5; }
-        .dd-date-day { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #94A3B8; }
+        .dd-date-day {
+          font-size: 9px; font-weight: 600; text-transform: uppercase;
+          letter-spacing: 0.8px; color: #94A3B8;
+        }
         .dd-date-chip.selected .dd-date-day { color: #185FA5; }
-        .dd-date-num { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.2rem; font-weight: 800; color: #1E293B; line-height: 1; }
+        .dd-date-num {
+          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-size: 1.1rem; font-weight: 800; color: #1E293B; line-height: 1;
+        }
         .dd-date-chip.selected .dd-date-num { color: #185FA5; }
-        .dd-date-month { font-size: 9px; color: #94A3B8; text-transform: uppercase; }
+        .dd-date-month { font-size: 8px; color: #94A3B8; text-transform: uppercase; }
 
         /* ── SLOTS ── */
-        .dd-slot-section { margin-bottom: 16px; }
+        .dd-slot-section { margin-bottom: 14px; }
+        .dd-slot-section:last-child { margin-bottom: 0; }
         .dd-slot-period {
-          font-size: 10px; font-weight: 600; letter-spacing: 1.5px;
+          font-size: 10px; font-weight: 600; letter-spacing: 1.2px;
           text-transform: uppercase; color: #94A3B8; margin-bottom: 8px;
-          display: flex; align-items: center; gap: 8px;
+          display: flex; align-items: center; gap: 7px;
         }
-        .dd-slot-period::after { content: ''; flex: 1; height: 1px; background: #E6F1FB; }
+        .dd-slot-period::after { content:''; flex:1; height:1px; background:#E6F1FB; }
         .dd-slots-grid {
-          display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px;
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+          gap: 7px;
         }
         .dd-slot {
-          padding: 10px 6px; border-radius: 10px;
+          padding: 9px 4px; border-radius: 9px;
           border: 1px solid #B5D4F4; background: #F8FAFC;
           font-size: 12px; font-weight: 500; color: #64748B;
           cursor: pointer; transition: all 0.2s; text-align: center;
-          font-family: 'DM Sans', sans-serif;
         }
         .dd-slot:hover { background: #E6F1FB; border-color: #378ADD; color: #185FA5; }
-        .dd-slot.selected { background: #E6F1FB; border-color: #185FA5; color: #185FA5; font-weight: 600; box-shadow: 0 0 0 2px rgba(24,95,165,0.15); }
-        .dd-no-slots { text-align: center; padding: 28px; color: #94A3B8; font-size: 14px; }
+        .dd-slot.selected {
+          background: #E6F1FB; border-color: #185FA5; color: #185FA5;
+          font-weight: 600; box-shadow: 0 0 0 2px rgba(24,95,165,0.12);
+        }
+        .dd-no-slots { text-align: center; padding: 24px; color: #94A3B8; font-size: 13px; }
 
-        /* ── BOOKING SIDEBAR ── */
+        /* ── BOOKING CARD ── */
         .dd-booking-card {
           background: #fff; border: 1px solid #B5D4F4;
-          border-radius: 20px; overflow: hidden;
-          box-shadow: 0 8px 32px rgba(24,95,165,0.1);
-          position: sticky; top: 84px;
+          border-radius: 18px; overflow: hidden;
+          box-shadow: 0 6px 24px rgba(24,95,165,0.09);
+          position: sticky; top: 80px;
         }
         .dd-booking-header {
-          padding: 18px 20px 14px;
+          padding: 16px 18px 12px;
           border-bottom: 1px solid #E6F1FB;
           background: linear-gradient(160deg, #F4F9FF, #EAF3FF);
           position: relative; overflow: hidden;
         }
         .dd-booking-header::before {
-          content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+          content:''; position:absolute; top:0; left:0; right:0; height:3px;
           background: linear-gradient(90deg, #185FA5, #378ADD, #85B7EB);
         }
         .dd-booking-header-title {
           font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 1rem; font-weight: 800; color: #0F172A; margin-bottom: 2px;
+          font-size: 15px; font-weight: 800; color: #0F172A; margin-bottom: 2px;
         }
         .dd-booking-header-sub { font-size: 12px; color: #64748B; }
-        .dd-booking-body { padding: 16px 20px; }
+        .dd-booking-body { padding: 14px 18px; }
 
-        /* Summary rows */
         .dd-summary-row {
           display: flex; justify-content: space-between; align-items: center;
-          padding: 9px 0; border-bottom: 1px solid #F1F5F9;
-          font-size: 13px;
+          padding: 8px 0; border-bottom: 1px solid #F1F5F9;
+          font-size: 13px; gap: 8px;
         }
         .dd-summary-row:last-of-type { border-bottom: none; }
-        .dd-summary-label { color: #64748B; }
-        .dd-summary-value { font-weight: 500; color: #0F172A; text-align: right; max-width: 60%; }
+        .dd-summary-label { color: #64748B; flex-shrink: 0; }
+        .dd-summary-value { font-weight: 500; color: #0F172A; text-align: right; }
         .dd-summary-value.empty { color: #94A3B8; font-style: italic; }
 
-        /* Plans */
-        .dd-plans { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+        .dd-plans { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
         .dd-plan {
-          display: flex; align-items: center; gap: 12px;
-          padding: 12px 14px; border-radius: 12px;
+          display: flex; align-items: center; gap: 10px;
+          padding: 11px 12px; border-radius: 11px;
           border: 1.5px solid #B5D4F4; cursor: pointer; transition: all 0.2s;
           position: relative; background: #F8FAFC;
         }
         .dd-plan:hover { border-color: #378ADD; background: #E6F1FB; }
         .dd-plan.selected { border-color: #185FA5; background: #E6F1FB; }
         .dd-plan-radio {
-          width: 18px; height: 18px; border-radius: 50%;
+          width: 17px; height: 17px; border-radius: 50%;
           border: 2px solid #B5D4F4;
           display: flex; align-items: center; justify-content: center;
-          flex-shrink: 0; transition: all 0.2s;
+          flex-shrink: 0; transition: border-color 0.2s;
         }
-        .dd-plan.selected .dd-plan-radio { border-color: #185FA5; background: #E6F1FB; }
-        .dd-plan-radio-dot { width: 8px; height: 8px; border-radius: 50%; background: #185FA5; opacity: 0; transition: opacity 0.2s; }
+        .dd-plan.selected .dd-plan-radio { border-color: #185FA5; }
+        .dd-plan-radio-dot {
+          width: 7px; height: 7px; border-radius: 50%;
+          background: #185FA5; opacity: 0; transition: opacity 0.2s;
+        }
         .dd-plan.selected .dd-plan-radio-dot { opacity: 1; }
         .dd-plan-info { flex: 1; min-width: 0; }
-        .dd-plan-name { font-size: 13px; font-weight: 600; color: #0F172A; margin-bottom: 2px; }
+        .dd-plan-name { font-size: 12px; font-weight: 600; color: #0F172A; margin-bottom: 1px; }
         .dd-plan-desc { font-size: 11px; color: #64748B; }
-        .dd-plan-price { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.1rem; font-weight: 800; color: #185FA5; flex-shrink: 0; }
+        .dd-plan-price {
+          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-size: 1rem; font-weight: 800; color: #185FA5; flex-shrink: 0;
+        }
         .dd-plan-popular {
           position: absolute; top: -8px; right: 10px;
           background: #185FA5; color: #fff;
-          font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+          font-size: 9px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;
           padding: 2px 8px; border-radius: 100px;
         }
 
-        /* Total */
         .dd-total-row {
           display: flex; justify-content: space-between; align-items: center;
-          padding: 12px 0; border-top: 1px solid #E6F1FB; margin-bottom: 14px;
+          padding: 12px 0; border-top: 1px solid #E6F1FB; margin-bottom: 12px;
         }
-        .dd-total-label { font-size: 14px; font-weight: 600; color: #64748B; }
+        .dd-total-label { font-size: 13px; font-weight: 600; color: #64748B; }
         .dd-total-amount {
           font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 1.5rem; font-weight: 800; color: #185FA5;
+          font-size: 1.4rem; font-weight: 800; color: #185FA5;
         }
 
-        /* Book button */
         .dd-book-btn {
-          width: 100%; padding: 14px; border-radius: 12px; border: none;
+          width: 100%; padding: 13px; border-radius: 11px; border: none;
           background: #185FA5; color: #fff;
-          font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600;
+          font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
           cursor: pointer; transition: all 0.25s;
-          box-shadow: 0 4px 14px rgba(24,95,165,0.25);
-          display: flex; align-items: center; justify-content: center; gap: 8px;
+          box-shadow: 0 4px 14px rgba(24,95,165,0.22);
+          display: flex; align-items: center; justify-content: center; gap: 7px;
         }
         .dd-book-btn:hover:not(:disabled) {
           background: #0C447C;
-          box-shadow: 0 8px 24px rgba(24,95,165,0.35);
+          box-shadow: 0 6px 20px rgba(24,95,165,0.3);
           transform: translateY(-1px);
         }
         .dd-book-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
         .dd-book-btn.outline {
           background: transparent; color: #185FA5;
-          border: 1px solid #B5D4F4; box-shadow: none;
+          border: 1.5px solid #B5D4F4; box-shadow: none;
         }
-        .dd-book-btn.outline:hover { background: #E6F1FB; border-color: #378ADD; transform: none; }
-
+        .dd-book-btn.outline:hover {
+          background: #E6F1FB; border-color: #378ADD; transform: none;
+        }
         .dd-book-note {
           font-size: 11px; color: #94A3B8; text-align: center;
           margin-top: 10px; line-height: 1.6;
         }
 
-        /* Animations */
-        @keyframes ddFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes ddPulse  { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        /* ── ANIMATIONS ── */
+        @keyframes ddFadeUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes ddPulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.4; }
+        }
 
-        /* ── STICKY MOBILE BOOK BUTTON ── */
-        .dd-sticky-bar {
-          display: none;
-          position: fixed; bottom: 0; left: 0; right: 0; z-index: 500;
-          background: rgba(255,255,255,0.97); backdrop-filter: blur(12px);
-          border-top: 1px solid #B5D4F4;
-          padding: 12px 16px;
-          box-shadow: 0 -4px 20px rgba(24,95,165,0.1);
-        }
-        .dd-sticky-bar-inner {
-          display: flex; align-items: center; justify-content: space-between; gap: 12px;
-          max-width: 600px; margin: 0 auto;
-        }
-        .dd-sticky-info { flex: 1; min-width: 0; }
-        .dd-sticky-slot {
-          font-size: 13px; font-weight: 600; color: #185FA5;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .dd-sticky-price { font-size: 12px; color: #64748B; }
-        .dd-sticky-btn {
-          flex-shrink: 0; padding: 12px 24px; border-radius: 12px; border: none;
-          background: #185FA5; color: #fff;
-          font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
-          cursor: pointer; transition: all 0.2s;
-          box-shadow: 0 4px 14px rgba(24,95,165,0.25);
-        }
-        .dd-sticky-btn:disabled { background: #94A3B8; box-shadow: none; cursor: not-allowed; }
-        .dd-sticky-btn:not(:disabled):hover { background: #0C447C; }
-
-        /* ── RESPONSIVE ── */
-
-        /* Tablet (≤960px) — single column, sticky bar appears, booking card stays visible */
+        /* ── TABLET (≤ 960px) ── */
         @media (max-width: 960px) {
+          .dd-banner { height: 220px; }
           .dd-layout {
             grid-template-columns: 1fr;
-            gap: 0;
-            padding-bottom: 80px; /* space for sticky bar */
+            /* Booking card first on tablet/mobile */
+            direction: rtl;
           }
-          .dd-booking-card { position: static; }
-          .dd-stats-row { gap: 10px; }
-          .dd-profile-card { padding: 18px 20px; gap: 14px; }
-          .dd-sticky-bar { display: block; }
+          .dd-layout > * { direction: ltr; }
+          .dd-booking-card {
+            position: static;
+            margin-bottom: 14px;
+          }
         }
 
-        /* Mobile (≤640px) — hide booking card entirely, rely on sticky bar */
+        /* ── MOBILE (≤ 640px) ── */
         @media (max-width: 640px) {
-          /* Banner */
           .dd-banner { height: 180px; }
-          .dd-back { top: 12px; left: 12px; padding: 7px 12px; font-size: 12px; }
+          .dd-back { top: 10px; left: 10px; padding: 7px 12px; font-size: 12px; }
 
-          /* Profile */
-          .dd-profile-wrap { padding: 0 12px; margin-top: -44px; }
-          .dd-profile-card { padding: 14px 16px; gap: 12px; border-radius: 14px; }
+          .dd-wrap { padding: 0 12px; }
+
+          .dd-profile-card {
+            margin-top: -44px;
+            border-radius: 14px;
+            padding: 14px;
+            gap: 12px;
+          }
           .dd-doctor-avatar,
-          .dd-doctor-avatar-placeholder { width: 60px; height: 60px; border-radius: 12px; font-size: 1.5rem; }
+          .dd-doctor-avatar-placeholder {
+            width: 64px; height: 64px; border-radius: 11px; font-size: 1.6rem;
+          }
           .dd-doctor-name { font-size: 1.05rem; margin-bottom: 6px; }
-          .dd-spec-badge { font-size: 10px; margin-bottom: 4px; }
-          .dd-pill { font-size: 11px; padding: 3px 9px; }
-          .dd-avail-pill { font-size: 11px; padding: 3px 9px; }
-          .dd-hospital-name { font-size: 12px; }
+          .dd-spec-badge  { font-size: 9px; margin-bottom: 3px; }
+          .dd-pill        { font-size: 10px; padding: 3px 9px; }
+          .dd-avail-pill  { font-size: 10px; padding: 3px 9px; }
+          .dd-hospital-name { font-size: 11px; }
 
-          /* Stats */
-          .dd-stats-row { padding: 0 12px; margin-top: 10px; gap: 8px; }
-          .dd-stat-box { padding: 12px 6px; border-radius: 12px; }
-          .dd-stat-val { font-size: 1.1rem; }
-          .dd-stat-lbl { font-size: 11px; }
+          .dd-stats-row { gap: 8px; margin-top: 10px; }
+          .dd-stat-box  { padding: 11px 6px; border-radius: 10px; }
+          .dd-stat-val  { font-size: 1.1rem; }
+          .dd-stat-lbl  { font-size: 10px; }
 
-          /* Layout */
-          .dd-layout { padding: 0 12px 80px; margin-top: 12px; }
+          .dd-layout { gap: 0; margin-top: 12px; }
 
-          /* Blocks */
-          .dd-block { padding: 14px; border-radius: 14px; margin-bottom: 10px; }
-          .dd-block-title { font-size: 14px; margin-bottom: 12px; }
-          .dd-block-title-icon { width: 26px; height: 26px; font-size: 12px; }
+          .dd-block { padding: 14px; border-radius: 12px; margin-bottom: 10px; }
+          .dd-block-title { font-size: 13px; margin-bottom: 10px; }
+          .dd-block-title-icon { width: 24px; height: 24px; font-size: 11px; }
 
-          /* Date chips */
-          .dd-date-row { gap: 6px; padding-bottom: 4px; }
-          .dd-date-chip { padding: 8px 10px; min-width: 48px; border-radius: 10px; }
-          .dd-date-num { font-size: 0.95rem; }
-          .dd-date-day { font-size: 9px; }
-          .dd-date-month { font-size: 8px; }
+          .dd-date-row { gap: 6px; }
+          .dd-date-chip { padding: 8px 9px; min-width: 46px; border-radius: 9px; }
+          .dd-date-num  { font-size: 1rem; }
+          .dd-date-day  { font-size: 8px; }
+          .dd-date-month { font-size: 7px; }
 
-          /* Slots — 3 columns */
-          .dd-slots-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
-          .dd-slot { padding: 10px 4px; font-size: 12px; border-radius: 9px; }
+          .dd-slots-grid { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
+          .dd-slot { padding: 8px 3px; font-size: 11px; }
 
-          /* Hide booking card — sticky bar handles booking on mobile */
-          .dd-booking-card { display: none; }
+          .dd-booking-card   { border-radius: 14px; }
+          .dd-booking-header { padding: 13px 14px 11px; }
+          .dd-booking-header-title { font-size: 14px; }
+          .dd-booking-body   { padding: 12px 14px; }
+          .dd-summary-row    { padding: 7px 0; font-size: 12px; }
+          .dd-summary-label  { font-size: 12px; }
+          .dd-summary-value  { font-size: 12px; }
+          .dd-plan           { padding: 10px 11px; border-radius: 10px; }
+          .dd-plan-name      { font-size: 12px; }
+          .dd-plan-desc      { font-size: 10px; }
+          .dd-plan-price     { font-size: 15px; }
+          .dd-total-amount   { font-size: 1.25rem; }
+          .dd-book-btn       { padding: 12px; font-size: 14px; }
         }
 
-        /* Very small phones (≤360px) */
+        /* ── VERY SMALL (≤ 360px) ── */
         @media (max-width: 360px) {
-          .dd-profile-card { flex-direction: column; }
           .dd-stats-row { grid-template-columns: repeat(3, 1fr); }
+          .dd-stat-val  { font-size: 0.95rem; }
+          .dd-stat-lbl  { font-size: 9px; }
           .dd-slots-grid { grid-template-columns: repeat(3, 1fr); }
+          .dd-doctor-name { font-size: 0.95rem; }
         }
       `}</style>
 
@@ -518,8 +532,9 @@ export default function DoctorDetails() {
           <button className="dd-back" onClick={() => navigate(-1)}>← Back</button>
         </div>
 
-        {/* ── PROFILE ── */}
-        <div className="dd-profile-wrap">
+        <div className="dd-wrap">
+
+          {/* ── PROFILE ── */}
           <div className="dd-profile-card">
             {doctor.image && !doctor.image.includes('placehold')
               ? <img className="dd-doctor-avatar" src={doctor.image} alt={`Dr. ${doctor.name}`} />
@@ -539,205 +554,183 @@ export default function DoctorDetails() {
               <div className="dd-hospital-name">🏥 {doctor.hospital_name}</div>
             </div>
           </div>
-        </div>
 
-        {/* ── STATS ── */}
-        <div className="dd-stats-row">
-          {[
-            { val: `${doctor.experience}+`, lbl: 'Years Exp'    },
-            { val: slots.length,             lbl: 'Daily Slots'  },
-            { val: doctor.max_per_slot || 10, lbl: 'Per Slot'   },
-          ].map(({ val, lbl }) => (
-            <div key={lbl} className="dd-stat-box">
-              <div className="dd-stat-val">{val}</div>
-              <div className="dd-stat-lbl">{lbl}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* ── MAIN LAYOUT ── */}
-        <div className="dd-layout">
-
-          {/* LEFT — Date + Slots */}
-          <div>
-            {/* Date picker */}
-            <div className="dd-block" style={{ animationDelay: '0.05s' }}>
-              <div className="dd-block-title">
-                <div className="dd-block-title-icon">📅</div>
-                Select Date
+          {/* ── STATS ── */}
+          <div className="dd-stats-row">
+            {[
+              { val: `${doctor.experience}+`, lbl: 'Years Exp'   },
+              { val: slots.length,             lbl: 'Daily Slots' },
+              { val: doctor.max_per_slot || 10, lbl: 'Per Slot'  },
+            ].map(({ val, lbl }) => (
+              <div key={lbl} className="dd-stat-box">
+                <div className="dd-stat-val">{val}</div>
+                <div className="dd-stat-lbl">{lbl}</div>
               </div>
-              <div className="dd-date-row">
-                {DAYS.map(day => (
-                  <button
-                    key={day.full}
-                    className={`dd-date-chip ${selectedDate === day.full ? 'selected' : ''}`}
-                    onClick={() => { setSelectedDate(day.full); setSelectedSlot(''); }}
-                  >
-                    <span className="dd-date-day">{day.label}</span>
-                    <span className="dd-date-num">{day.num}</span>
-                    <span className="dd-date-month">{day.month}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Slots */}
-            <div className="dd-block" style={{ animationDelay: '0.1s' }}>
-              <div className="dd-block-title">
-                <div className="dd-block-title-icon">🕐</div>
-                Select Time Slot
-                {selectedSlot && (
-                  <span style={{ marginLeft: 'auto', fontSize: 12, color: '#185FA5', fontWeight: 600 }}>
-                    ✓ {selectedSlot}
-                  </span>
-                )}
-              </div>
-
-              {slots.length === 0 ? (
-                <div className="dd-no-slots">No slots configured. Contact the hospital directly.</div>
-              ) : (
-                <>
-                  {am.length > 0 && (
-                    <div className="dd-slot-section">
-                      <div className="dd-slot-period">🌅 Morning</div>
-                      <div className="dd-slots-grid">
-                        {am.map(s => (
-                          <button
-                            key={s}
-                            className={`dd-slot ${selectedSlot === s ? 'selected' : ''}`}
-                            onClick={() => setSelectedSlot(s)}
-                          >{s}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {pm.length > 0 && (
-                    <div className="dd-slot-section">
-                      <div className="dd-slot-period">🌇 Afternoon / Evening</div>
-                      <div className="dd-slots-grid">
-                        {pm.map(s => (
-                          <button
-                            key={s}
-                            className={`dd-slot ${selectedSlot === s ? 'selected' : ''}`}
-                            onClick={() => setSelectedSlot(s)}
-                          >{s}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+            ))}
           </div>
 
-          {/* RIGHT — Booking card (hidden on mobile, visible on tablet+) */}
-          <div>
-            <div className="dd-booking-card">
-              <div className="dd-booking-header">
-                <div className="dd-booking-header-title">Book Appointment</div>
-                <div className="dd-booking-header-sub">Instant confirmation · Secure payment</div>
+          {/* ── MAIN LAYOUT ── */}
+          {/*
+            On desktop: [slots col] [booking col]
+            On mobile:  direction:rtl flips to [booking col] first, then [slots col]
+          */}
+          <div className="dd-layout">
+
+            {/* LEFT — Date + Slots */}
+            <div>
+              {/* Date picker */}
+              <div className="dd-block">
+                <div className="dd-block-title">
+                  <div className="dd-block-title-icon">📅</div>
+                  Select Date
+                </div>
+                <div className="dd-date-row">
+                  {DAYS.map(day => (
+                    <button
+                      key={day.full}
+                      className={`dd-date-chip ${selectedDate === day.full ? 'selected' : ''}`}
+                      onClick={() => { setSelectedDate(day.full); setSelectedSlot(''); }}
+                    >
+                      <span className="dd-date-day">{day.label}</span>
+                      <span className="dd-date-num">{day.num}</span>
+                      <span className="dd-date-month">{day.month}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="dd-booking-body">
-                {/* Summary */}
-                <div className="dd-summary-row">
-                  <span className="dd-summary-label">Doctor</span>
-                  <span className="dd-summary-value">Dr. {doctor.name}</span>
-                </div>
-                <div className="dd-summary-row">
-                  <span className="dd-summary-label">Date</span>
-                  <span className="dd-summary-value">
-                    {dateLabel ? `${dateLabel.label}, ${dateLabel.num} ${dateLabel.month}` : '—'}
-                  </span>
-                </div>
-                <div className="dd-summary-row">
-                  <span className="dd-summary-label">Slot</span>
-                  <span className={`dd-summary-value ${!selectedSlot ? 'empty' : ''}`}>
-                    {selectedSlot || 'Not selected'}
-                  </span>
+              {/* Slots */}
+              <div className="dd-block">
+                <div className="dd-block-title">
+                  <div className="dd-block-title-icon">🕐</div>
+                  Select Time Slot
+                  {selectedSlot && (
+                    <span style={{ marginLeft:'auto', fontSize:12, color:'#185FA5', fontWeight:600 }}>
+                      ✓ {selectedSlot}
+                    </span>
+                  )}
                 </div>
 
-                {/* Plan */}
-                <div style={{ marginTop: 14 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.5, textTransform: 'uppercase', color: '#94A3B8', marginBottom: 10 }}>
-                    Choose Plan
-                  </div>
-                  <div className="dd-plans">
-                    {PLANS.map(p => (
-                      <div
-                        key={p.key}
-                        className={`dd-plan ${selectedPlan === p.key ? 'selected' : ''}`}
-                        onClick={() => setSelectedPlan(p.key)}
-                      >
-                        {p.popular && <div className="dd-plan-popular">Popular</div>}
-                        <div className="dd-plan-radio"><div className="dd-plan-radio-dot" /></div>
-                        <div className="dd-plan-info">
-                          <div className="dd-plan-name">{p.name}</div>
-                          <div className="dd-plan-desc">{p.desc}</div>
-                        </div>
-                        <div className="dd-plan-price">₹{p.price}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Total */}
-                <div className="dd-total-row">
-                  <span className="dd-total-label">Total Amount</span>
-                  <span className="dd-total-amount">₹{plan?.price}</span>
-                </div>
-
-                {/* Book button */}
-                {user ? (
-                  <button
-                    className="dd-book-btn"
-                    onClick={handleBook}
-                    disabled={!selectedSlot || !doctor.available}
-                  >
-                    {!doctor.available
-                      ? '⛔ Doctor Unavailable'
-                      : !selectedSlot
-                      ? 'Select a Slot First'
-                      : `💳 Pay ₹${plan?.price} & Book`}
-                  </button>
+                {slots.length === 0 ? (
+                  <div className="dd-no-slots">No slots configured. Contact the hospital directly.</div>
                 ) : (
-                  <button className="dd-book-btn outline" onClick={() => navigate('/login')}>
-                    Login to Book →
-                  </button>
+                  <>
+                    {am.length > 0 && (
+                      <div className="dd-slot-section">
+                        <div className="dd-slot-period">🌅 Morning</div>
+                        <div className="dd-slots-grid">
+                          {am.map(s => (
+                            <button
+                              key={s}
+                              className={`dd-slot ${selectedSlot === s ? 'selected' : ''}`}
+                              onClick={() => setSelectedSlot(s)}
+                            >{s}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {pm.length > 0 && (
+                      <div className="dd-slot-section">
+                        <div className="dd-slot-period">🌇 Afternoon / Evening</div>
+                        <div className="dd-slots-grid">
+                          {pm.map(s => (
+                            <button
+                              key={s}
+                              className={`dd-slot ${selectedSlot === s ? 'selected' : ''}`}
+                              onClick={() => setSelectedSlot(s)}
+                            >{s}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
-
-                <p className="dd-book-note">
-                  Secured by Razorpay · UPI · Cards · Wallets<br />
-                  Refundable if cancelled 2hrs before slot
-                </p>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
 
-      {/* ── STICKY MOBILE / TABLET BOOK BAR ── */}
-      <div className="dd-sticky-bar">
-        <div className="dd-sticky-bar-inner">
-          <div className="dd-sticky-info">
-            <div className="dd-sticky-slot">
-              {selectedSlot ? `⏰ ${selectedSlot}` : 'Select a time slot above'}
+            {/* RIGHT — Booking card */}
+            <div>
+              <div className="dd-booking-card">
+                <div className="dd-booking-header">
+                  <div className="dd-booking-header-title">Book Appointment</div>
+                  <div className="dd-booking-header-sub">Instant confirmation · Secure payment</div>
+                </div>
+
+                <div className="dd-booking-body">
+                  <div className="dd-summary-row">
+                    <span className="dd-summary-label">Doctor</span>
+                    <span className="dd-summary-value">Dr. {doctor.name}</span>
+                  </div>
+                  <div className="dd-summary-row">
+                    <span className="dd-summary-label">Date</span>
+                    <span className="dd-summary-value">
+                      {dateLabel ? `${dateLabel.label}, ${dateLabel.num} ${dateLabel.month}` : '—'}
+                    </span>
+                  </div>
+                  <div className="dd-summary-row">
+                    <span className="dd-summary-label">Slot</span>
+                    <span className={`dd-summary-value ${!selectedSlot ? 'empty' : ''}`}>
+                      {selectedSlot || 'Not selected'}
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize:10, fontWeight:600, letterSpacing:'1.2px', textTransform:'uppercase', color:'#94A3B8', marginBottom:10 }}>
+                      Choose Plan
+                    </div>
+                    <div className="dd-plans">
+                      {PLANS.map(p => (
+                        <div
+                          key={p.key}
+                          className={`dd-plan ${selectedPlan === p.key ? 'selected' : ''}`}
+                          onClick={() => setSelectedPlan(p.key)}
+                        >
+                          {p.popular && <div className="dd-plan-popular">Popular</div>}
+                          <div className="dd-plan-radio">
+                            <div className="dd-plan-radio-dot" />
+                          </div>
+                          <div className="dd-plan-info">
+                            <div className="dd-plan-name">{p.name}</div>
+                            <div className="dd-plan-desc">{p.desc}</div>
+                          </div>
+                          <div className="dd-plan-price">₹{p.price}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="dd-total-row">
+                    <span className="dd-total-label">Total Amount</span>
+                    <span className="dd-total-amount">₹{plan?.price}</span>
+                  </div>
+
+                  {user ? (
+                    <button
+                      className="dd-book-btn"
+                      onClick={handleBook}
+                      disabled={!selectedSlot || !doctor.available}
+                    >
+                      {!doctor.available
+                        ? '⛔ Doctor Unavailable'
+                        : !selectedSlot
+                        ? 'Select a Slot First'
+                        : `💳 Pay ₹${plan?.price} & Book`}
+                    </button>
+                  ) : (
+                    <button className="dd-book-btn outline" onClick={() => navigate('/login')}>
+                      Login to Book →
+                    </button>
+                  )}
+
+                  <p className="dd-book-note">
+                    Secured by Razorpay · UPI · Cards · Wallets<br />
+                    Refundable if cancelled 2hrs before slot
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="dd-sticky-price">₹{plan?.price} · {plan?.name}</div>
+
           </div>
-          {user ? (
-            <button
-              className="dd-sticky-btn"
-              onClick={handleBook}
-              disabled={!selectedSlot || !doctor.available}
-            >
-              {!doctor.available ? 'Unavailable' : !selectedSlot ? 'Pick Slot' : `Pay ₹${plan?.price}`}
-            </button>
-          ) : (
-            <button className="dd-sticky-btn" onClick={() => navigate('/login')}>
-              Login to Book
-            </button>
-          )}
         </div>
       </div>
     </>
