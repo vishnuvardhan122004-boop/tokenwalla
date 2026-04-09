@@ -67,10 +67,10 @@ export default function DoctorDetails() {
     });
   };
 
-  const slots    = doctor?.slots || [];
-  const am       = slots.filter(s => s.includes('AM'));
-  const pm       = slots.filter(s => s.includes('PM'));
-  const plan     = PLANS.find(p => p.key === selectedPlan);
+  const slots     = doctor?.slots || [];
+  const am        = slots.filter(s => s.includes('AM'));
+  const pm        = slots.filter(s => s.includes('PM'));
+  const plan      = PLANS.find(p => p.key === selectedPlan);
   const dateLabel = DAYS.find(d => d.full === selectedDate);
 
   /* ── Loading skeleton ── */
@@ -112,7 +112,7 @@ export default function DoctorDetails() {
           font-family: 'DM Sans', sans-serif;
           background: #F4F9FF;
           min-height: 100vh;
-          padding-bottom: 80px;
+          /* No base padding-bottom — added only at tablet/mobile breakpoints */
         }
 
         /* ── BANNER ── */
@@ -216,7 +216,7 @@ export default function DoctorDetails() {
         .dd-stats-row {
           max-width: 1100px; margin: 16px auto 0;
           padding: 0 20px;
-          display: grid; grid-template-columns: repeat(3,1fr); gap: 12px;
+          display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
         }
         .dd-stat-box {
           background: #fff; border: 1px solid #B5D4F4;
@@ -286,9 +286,9 @@ export default function DoctorDetails() {
           text-transform: uppercase; color: #94A3B8; margin-bottom: 8px;
           display: flex; align-items: center; gap: 8px;
         }
-        .dd-slot-period::after { content:''; flex:1; height:1px; background:#E6F1FB; }
+        .dd-slot-period::after { content: ''; flex: 1; height: 1px; background: #E6F1FB; }
         .dd-slots-grid {
-          display: grid; grid-template-columns: repeat(auto-fill, minmax(88px,1fr)); gap: 8px;
+          display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px;
         }
         .dd-slot {
           padding: 10px 6px; border-radius: 10px;
@@ -315,7 +315,7 @@ export default function DoctorDetails() {
           position: relative; overflow: hidden;
         }
         .dd-booking-header::before {
-          content:''; position:absolute; top:0;left:0;right:0;height:3px;
+          content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
           background: linear-gradient(90deg, #185FA5, #378ADD, #85B7EB);
         }
         .dd-booking-header-title {
@@ -404,8 +404,8 @@ export default function DoctorDetails() {
         }
 
         /* Animations */
-        @keyframes ddFadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes ddPulse  { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        @keyframes ddFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes ddPulse  { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
         /* ── STICKY MOBILE BOOK BUTTON ── */
         .dd-sticky-bar {
@@ -438,29 +438,36 @@ export default function DoctorDetails() {
 
         /* ── RESPONSIVE ── */
 
-        /* Tablet */
+        /* Tablet (≤960px) — single column, sticky bar appears, booking card stays visible */
         @media (max-width: 960px) {
-          .dd-layout { grid-template-columns: 1fr; gap: 0; }
-          .dd-booking-card { position: static; margin-bottom: 80px; }
+          .dd-layout {
+            grid-template-columns: 1fr;
+            gap: 0;
+            padding-bottom: 80px; /* space for sticky bar */
+          }
+          .dd-booking-card { position: static; }
           .dd-stats-row { gap: 10px; }
           .dd-profile-card { padding: 18px 20px; gap: 14px; }
           .dd-sticky-bar { display: block; }
         }
 
-        /* Mobile */
+        /* Mobile (≤640px) — hide booking card entirely, rely on sticky bar */
         @media (max-width: 640px) {
+          /* Banner */
           .dd-banner { height: 180px; }
-          .dd-back { top: 10px; left: 10px; padding: 7px 12px; font-size: 12px; }
+          .dd-back { top: 12px; left: 12px; padding: 7px 12px; font-size: 12px; }
 
-          .dd-wrap { padding: 0 12px; }
+          /* Profile */
+          .dd-profile-wrap { padding: 0 12px; margin-top: -44px; }
+          .dd-profile-card { padding: 14px 16px; gap: 12px; border-radius: 14px; }
+          .dd-doctor-avatar,
+          .dd-doctor-avatar-placeholder { width: 60px; height: 60px; border-radius: 12px; font-size: 1.5rem; }
+          .dd-doctor-name { font-size: 1.05rem; margin-bottom: 6px; }
+          .dd-spec-badge { font-size: 10px; margin-bottom: 4px; }
+          .dd-pill { font-size: 11px; padding: 3px 9px; }
+          .dd-avail-pill { font-size: 11px; padding: 3px 9px; }
+          .dd-hospital-name { font-size: 12px; }
 
-          .dd-profile-card {
-            margin-top: -44px;
-            border-radius: 14px;
-            padding: 14px;
-            gap: 12px;
-          } 
-            
           /* Stats */
           .dd-stats-row { padding: 0 12px; margin-top: 10px; gap: 8px; }
           .dd-stat-box { padding: 12px 6px; border-radius: 12px; }
@@ -468,41 +475,33 @@ export default function DoctorDetails() {
           .dd-stat-lbl { font-size: 11px; }
 
           /* Layout */
-          .dd-layout { padding: 0 12px; margin-top: 12px; }
+          .dd-layout { padding: 0 12px 80px; margin-top: 12px; }
 
           /* Blocks */
           .dd-block { padding: 14px; border-radius: 14px; margin-bottom: 10px; }
           .dd-block-title { font-size: 14px; margin-bottom: 12px; }
           .dd-block-title-icon { width: 26px; height: 26px; font-size: 12px; }
 
-          /* Date chips — scrollable row */
+          /* Date chips */
           .dd-date-row { gap: 6px; padding-bottom: 4px; }
           .dd-date-chip { padding: 8px 10px; min-width: 48px; border-radius: 10px; }
           .dd-date-num { font-size: 0.95rem; }
           .dd-date-day { font-size: 9px; }
           .dd-date-month { font-size: 8px; }
 
-          /* Slots — 3 columns on mobile */
+          /* Slots — 3 columns */
           .dd-slots-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
           .dd-slot { padding: 10px 4px; font-size: 12px; border-radius: 9px; }
 
-          /* Booking card — hide on mobile (use sticky bar) */
-          .dd-booking-card .dd-booking-body .dd-plans,
-          .dd-booking-card .dd-total-row { display: none; }
-          .dd-booking-card { border-radius: 14px; margin-bottom: 80px; }
-          .dd-booking-header { padding: 14px 16px 12px; }
-          .dd-booking-header-title { font-size: 15px; }
-          .dd-booking-body { padding: 12px 16px; }
-          .dd-summary-row { padding: 8px 0; font-size: 13px; }
-          .dd-book-btn { padding: 12px; font-size: 14px; }
-          .dd-book-note { font-size: 11px; margin-top: 8px; }
+          /* Hide booking card — sticky bar handles booking on mobile */
+          .dd-booking-card { display: none; }
         }
 
-        /* Very small phones */
+        /* Very small phones (≤360px) */
         @media (max-width: 360px) {
           .dd-profile-card { flex-direction: column; }
-          .dd-stats-row { grid-template-columns: repeat(3,1fr); }
-          .dd-slots-grid { grid-template-columns: repeat(3,1fr); }
+          .dd-stats-row { grid-template-columns: repeat(3, 1fr); }
+          .dd-slots-grid { grid-template-columns: repeat(3, 1fr); }
         }
       `}</style>
 
@@ -545,9 +544,9 @@ export default function DoctorDetails() {
         {/* ── STATS ── */}
         <div className="dd-stats-row">
           {[
-            { val: `${doctor.experience}+`, lbl: 'Years Exp'   },
-            { val: slots.length,             lbl: 'Daily Slots' },
-            { val: doctor.max_per_slot || 10, lbl: 'Per Slot'  },
+            { val: `${doctor.experience}+`, lbl: 'Years Exp'    },
+            { val: slots.length,             lbl: 'Daily Slots'  },
+            { val: doctor.max_per_slot || 10, lbl: 'Per Slot'   },
           ].map(({ val, lbl }) => (
             <div key={lbl} className="dd-stat-box">
               <div className="dd-stat-val">{val}</div>
@@ -562,7 +561,7 @@ export default function DoctorDetails() {
           {/* LEFT — Date + Slots */}
           <div>
             {/* Date picker */}
-            <div className="dd-block" style={{ animationDelay:'0.05s' }}>
+            <div className="dd-block" style={{ animationDelay: '0.05s' }}>
               <div className="dd-block-title">
                 <div className="dd-block-title-icon">📅</div>
                 Select Date
@@ -583,12 +582,12 @@ export default function DoctorDetails() {
             </div>
 
             {/* Slots */}
-            <div className="dd-block" style={{ animationDelay:'0.1s' }}>
+            <div className="dd-block" style={{ animationDelay: '0.1s' }}>
               <div className="dd-block-title">
                 <div className="dd-block-title-icon">🕐</div>
                 Select Time Slot
                 {selectedSlot && (
-                  <span style={{ marginLeft:'auto', fontSize:12, color:'#185FA5', fontWeight:600 }}>
+                  <span style={{ marginLeft: 'auto', fontSize: 12, color: '#185FA5', fontWeight: 600 }}>
                     ✓ {selectedSlot}
                   </span>
                 )}
@@ -631,7 +630,7 @@ export default function DoctorDetails() {
             </div>
           </div>
 
-          {/* RIGHT — Booking card */}
+          {/* RIGHT — Booking card (hidden on mobile, visible on tablet+) */}
           <div>
             <div className="dd-booking-card">
               <div className="dd-booking-header">
@@ -659,8 +658,8 @@ export default function DoctorDetails() {
                 </div>
 
                 {/* Plan */}
-                <div style={{ marginTop:14 }}>
-                  <div style={{ fontSize:11, fontWeight:600, letterSpacing:1.5, textTransform:'uppercase', color:'#94A3B8', marginBottom:10 }}>
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.5, textTransform: 'uppercase', color: '#94A3B8', marginBottom: 10 }}>
                     Choose Plan
                   </div>
                   <div className="dd-plans">
@@ -717,14 +716,14 @@ export default function DoctorDetails() {
         </div>
       </div>
 
-      {/* ── STICKY MOBILE BOOK BAR ── */}
+      {/* ── STICKY MOBILE / TABLET BOOK BAR ── */}
       <div className="dd-sticky-bar">
         <div className="dd-sticky-bar-inner">
           <div className="dd-sticky-info">
             <div className="dd-sticky-slot">
               {selectedSlot ? `⏰ ${selectedSlot}` : 'Select a time slot above'}
             </div>
-            <div className="dd-sticky-price">₹{plan?.price} · Queue View</div>
+            <div className="dd-sticky-price">₹{plan?.price} · {plan?.name}</div>
           </div>
           {user ? (
             <button
