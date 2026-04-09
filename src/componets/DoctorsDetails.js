@@ -449,23 +449,18 @@ export default function DoctorDetails() {
 
         /* Mobile */
         @media (max-width: 640px) {
-          /* Banner */
           .dd-banner { height: 180px; }
-          .dd-back { top: 12px; left: 12px; padding: 7px 12px; font-size: 12px; }
+          .dd-back { top: 10px; left: 10px; padding: 7px 12px; font-size: 12px; }
 
-          /* Profile */
-          .dd-profile-wrap { padding: 0 12px; margin-top: -44px; }
-          .dd-profile-card { padding: 14px 16px; gap: 12px; border-radius: 14px; }
-          .dd-doctor-avatar,
-          .dd-doctor-avatar-placeholder {
-            width: 60px; height: 60px; border-radius: 12px; font-size: 1.5rem;
-          }
-          .dd-doctor-name { font-size: 1.05rem; margin-bottom: 6px; }
-          .dd-spec-badge { font-size: 10px; margin-bottom: 4px; }
-          .dd-pill { font-size: 11px; padding: 3px 9px; }
-          .dd-avail-pill { font-size: 11px; padding: 3px 9px; }
-          .dd-hospital-name { font-size: 12px; }
+          .dd-wrap { padding: 0 12px; }
 
+          .dd-profile-card {
+            margin-top: -44px;
+            border-radius: 14px;
+            padding: 14px;
+            gap: 12px;
+          } 
+            
           /* Stats */
           .dd-stats-row { padding: 0 12px; margin-top: 10px; gap: 8px; }
           .dd-stat-box { padding: 12px 6px; border-radius: 12px; }
