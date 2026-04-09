@@ -1,6 +1,5 @@
 import json
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from .models import Doctor
@@ -8,17 +7,6 @@ from .serializers import DoctorSerializer
 
 
 class DoctorViewSet(viewsets.ModelViewSet):
-    """
-    Full CRUD for Doctor.
-
-    GET    /api/doctors/                      → list  (filter: ?hospital=<id>)
-    POST   /api/doctors/                      → create
-    GET    /api/doctors/<id>/                 → retrieve
-    PUT    /api/doctors/<id>/                 → full update
-    PATCH  /api/doctors/<id>/                 → partial update (edit form)
-    PATCH  /api/doctors/<id>/toggle/          → toggle availability only
-    DELETE /api/doctors/<id>/                 → destroy
-    """
     serializer_class   = DoctorSerializer
     permission_classes = [AllowAny]
 
@@ -31,15 +19,14 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
     def _prepare_data(self, raw):
         """
-        Normalise multipart/form-data coming from the React dashboard.
-
-        1. slots      — sent as JSON string '["09:00 AM","10:00 AM"]'
-                        → decoded to a Python list
-        2. available  — sent as string "true"/"false"
-                        → converted to bool
-        3. experience / max_per_slot — coerce to int
+        Normalise multipart/form-data from the React dashboard.
+        Works with both QueryDict (multipart) and plain dict (JSON).
         """
-        data = raw.copy()
+        # QueryDict needs .copy(); plain dict is already mutable
+        try:
+            data = raw.copy()
+        except AttributeError:
+            data = dict(raw)
 
         # ── slots ──────────────────────────────────────────────
         slots_raw = data.get("slots", None)
@@ -48,9 +35,16 @@ class DoctorViewSet(viewsets.ModelViewSet):
                 try:
                     decoded = json.loads(slots_raw)
                     if isinstance(decoded, list):
-                        data.setlist("slots", decoded)
+                        # QueryDict path
+                        if hasattr(data, "setlist"):
+                            data.setlist("slots", decoded)
+                        else:
+                            data["slots"] = decoded
                 except (json.JSONDecodeError, ValueError):
-                    data.setlist("slots", [])
+                    if hasattr(data, "setlist"):
+                        data.setlist("slots", [])
+                    else:
+                        data["slots"] = []
 
         # ── available (string → bool) ──────────────────────────
         avail = data.get("available", None)
@@ -89,15 +83,15 @@ class DoctorViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
 
-        # ── Fast-path: availability-only toggle ────────────────
-        # When the request body only contains `available` (sent as JSON
-        # from the dashboard toggle button) we update just that field
-        # directly without touching slots or other required fields.
-        incoming_keys = set(request.data.keys())
-        is_toggle_only = incoming_keys == {"available"}
+        incoming = request.data
 
-        if is_toggle_only:
-            raw_val = request.data.get("available")
+        # ── Fast-path: availability-only toggle ────────────────
+        # Handles plain JSON { "available": true/false } sent by the
+        # dashboard toggle button. Skips _prepare_data entirely so
+        # slots are never touched.
+        incoming_keys = set(incoming.keys())
+        if incoming_keys == {"available"}:
+            raw_val = incoming.get("available")
             if isinstance(raw_val, bool):
                 new_val = raw_val
             else:
@@ -109,8 +103,8 @@ class DoctorViewSet(viewsets.ModelViewSet):
             print(f"=== TOGGLE /api/doctors/{instance.id}/ available={new_val} ===")
             return Response(DoctorSerializer(instance).data)
 
-        # ── Full / partial form update ─────────────────────────
-        data = self._prepare_data(request.data)
+        # ── Full / partial form update (multipart FormData) ────
+        data = self._prepare_data(incoming)
 
         print(f"=== PATCH /api/doctors/{instance.id}/ ===")
         print("DATA  :", dict(data))
