@@ -5,7 +5,7 @@
  */
 import { useEffect } from 'react';
 
-const BASE_URL = 'https://www.tokenwalla.in';
+const BASE_URL = 'https://www.tokenwalla.com';
 const DEFAULT_IMAGE = `${BASE_URL}/og-image.png`;
 
 export default function SEO({
