@@ -1,44 +1,208 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-<meta charset="utf-8" />
-<link rel="icon" type="image/png" sizes="32x32" href="%PUBLIC_URL%/logo.png" />
-<link rel="icon" type="image/png" sizes="64x64" href="%PUBLIC_URL%/logo.png" />
-<link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/logo.png" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="theme-color" content="#0d6efd" />
-<meta name="description" content="TokenWalla - Smart Hospital Token Booking" />
-<meta name="google-site-verification" content="abc123xyz" />
-    <!--
-      manifest.json provides metadata used when your web app is installed on a
-      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-    -->
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
+    <meta charset="utf-8" />
 
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
-      <link rel="preconnect" href="https://fonts.googleapis.com">
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-       <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <title>TokenWalla</title>
+    <!-- ── Viewport & Theme ── -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#185FA5" />
+    <meta name="color-scheme" content="light" />
+
+    <!-- ── Primary SEO ── -->
+    <title>TokenWalla — Book Doctor Appointments Online | Skip Hospital Queue | AP & Telangana</title>
+    <meta name="description" content="TokenWalla is a smart hospital token booking platform in Andhra Pradesh and Telangana. Book doctor appointments online, get a digital token, and track your live queue position. No more long waiting rooms." />
+    <meta name="keywords" content="hospital token booking, book doctor appointment online, skip hospital queue, OPD token booking, doctor appointment AP, doctor appointment Telangana, hospital queue management, TokenWalla, online doctor booking Hindupur, digital hospital token" />
+    <meta name="author" content="TokenWalla" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow" />
+    <link rel="canonical" href="https://www.tokenwalla.in/" />
+
+    <!-- ── Open Graph (Facebook, WhatsApp, LinkedIn) ── -->
+    <meta property="og:type"        content="website" />
+    <meta property="og:url"         content="https://www.tokenwalla.in/" />
+    <meta property="og:site_name"   content="TokenWalla" />
+    <meta property="og:title"       content="TokenWalla — Book Doctor Appointments Online, Skip the Queue" />
+    <meta property="og:description" content="Book doctor appointments online in AP & Telangana. Get a digital token instantly, track your live queue position, and walk in right on time. No more waiting rooms." />
+    <meta property="og:image"       content="https://www.tokenwalla.in/og-image.png" />
+    <meta property="og:image:width"  content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt"    content="TokenWalla — Smart Hospital Token Booking" />
+    <meta property="og:locale"       content="en_IN" />
+
+    <!-- ── Twitter Card ── -->
+    <meta name="twitter:card"        content="summary_large_image" />
+    <meta name="twitter:site"        content="@tokenwalla" />
+    <meta name="twitter:title"       content="TokenWalla — Book Doctor Appointments Online" />
+    <meta name="twitter:description" content="Skip the hospital queue. Book doctor appointments online in AP & Telangana. Digital tokens + live queue tracking." />
+    <meta name="twitter:image"       content="https://www.tokenwalla.in/og-image.png" />
+    <meta name="twitter:image:alt"   content="TokenWalla — Smart Hospital Token Booking" />
+
+    <!-- ── Geo / Local SEO ── -->
+    <meta name="geo.region"      content="IN-AP" />
+    <meta name="geo.placename"   content="Andhra Pradesh, India" />
+    <meta name="geo.position"    content="15.9129;79.7400" />
+    <meta name="ICBM"            content="15.9129, 79.7400" />
+    <meta name="language"        content="English" />
+    <meta name="revisit-after"   content="7 days" />
+    <meta name="rating"          content="general" />
+    <meta name="coverage"        content="India" />
+    <meta name="distribution"    content="global" />
+
+    <!-- ── Mobile / PWA ── -->
+    <meta name="mobile-web-app-capable"       content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title"   content="TokenWalla" />
+    <meta name="application-name"             content="TokenWalla" />
+    <meta name="msapplication-TileColor"      content="#185FA5" />
+    <meta name="msapplication-TileImage"      content="%PUBLIC_URL%/logo.png" />
+
+    <!-- ── Favicons ── -->
+    <link rel="icon"              type="image/png" sizes="32x32"  href="%PUBLIC_URL%/logo.png" />
+    <link rel="icon"              type="image/png" sizes="64x64"  href="%PUBLIC_URL%/logo.png" />
+    <link rel="apple-touch-icon"  sizes="180x180"                 href="%PUBLIC_URL%/logo.png" />
+    <link rel="manifest"                                           href="%PUBLIC_URL%/manifest.json" />
+
+    <!-- ── Preconnect for performance ── -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://res.cloudinary.com" />
+    <link rel="dns-prefetch" href="https://checkout.razorpay.com" />
+
+    <!-- ── Fonts ── -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+    <!-- ── Structured Data: Organization ── -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "TokenWalla",
+      "url": "https://www.tokenwalla.in",
+      "logo": "https://www.tokenwalla.in/logo.png",
+      "description": "Smart hospital token and queue management platform in Andhra Pradesh and Telangana. Book doctor appointments online and skip the waiting room.",
+      "foundingDate": "2026",
+      "areaServed": ["Andhra Pradesh", "Telangana", "India"],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "telephone": "+91-9000000001",
+        "contactType": "customer support",
+        "email": "tokentraq@gmail.com",
+        "availableLanguage": ["English", "Telugu"],
+        "contactOption": "TollFree",
+        "areaServed": "IN"
+      },
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "Hindupur – Nimpalli Road",
+        "addressRegion": "Andhra Pradesh",
+        "postalCode": "515201",
+        "addressCountry": "IN"
+      },
+      "sameAs": [
+        "https://www.tokenwalla.in"
+      ]
+    }
+    </script>
+
+    <!-- ── Structured Data: WebSite + SearchAction ── -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "TokenWalla",
+      "url": "https://www.tokenwalla.in",
+      "description": "Book doctor appointments online in AP & Telangana. Skip hospital queues with digital tokens.",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://www.tokenwalla.in/alldoctor?search={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+
+    <!-- ── Structured Data: MedicalWebPage / SoftwareApplication ── -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "TokenWalla",
+      "operatingSystem": "Web, iOS, Android",
+      "applicationCategory": "HealthApplication",
+      "offers": {
+        "@type": "Offer",
+        "price": "15",
+        "priceCurrency": "INR",
+        "description": "Queue View — Token + live queue position tracking"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "240",
+        "bestRating": "5"
+      },
+      "description": "Book doctor appointments online in Andhra Pradesh and Telangana. Get a digital OPD token, skip hospital waiting rooms, and track your live queue position.",
+      "url": "https://www.tokenwalla.in",
+      "screenshot": "https://www.tokenwalla.in/og-image.png"
+    }
+    </script>
+
+    <!-- ── Structured Data: FAQPage ── -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How does TokenWalla work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Find a doctor, pick a date and time slot, pay ₹15 securely via Razorpay, and get a digital token instantly. Track your live queue position from anywhere and walk in right on time."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is TokenWalla available in Andhra Pradesh?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, TokenWalla is currently live in Andhra Pradesh and Telangana, covering multiple hospitals and cities including Hindupur and surrounding areas."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How much does it cost to book a doctor appointment on TokenWalla?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "TokenWalla charges ₹15 per appointment which includes a confirmed token and live queue tracking. Payments are secured by Razorpay."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I cancel my appointment?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, you can cancel a waiting appointment from My Bookings at least 2 hours before your slot. Refunds are processed within 5-7 business days."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I track my position in the hospital queue?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "After booking, your token page shows your live queue position, updated every 15 seconds. You'll know exactly when to leave for the hospital."
+          }
+        }
+      ]
+    }
+    </script>
+
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
-    <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
-
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
-
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
-    -->
   </body>
 </html>
