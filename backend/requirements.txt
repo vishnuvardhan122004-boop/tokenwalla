@@ -1,43 +1,41 @@
-asgiref==3.11.1
-blinker==1.9.0
-certifi==2026.2.25
-charset-normalizer==3.4.5
-click==8.3.1
-cloudinary==1.44.1
-contourpy==1.3.3
-cycler==0.12.1
-distlib==0.4.0
-dj-database-url==3.1.2
+# ── Django core ───────────────────────────────────────────────────────────────
 Django==6.0.2
-django-cloudinary-storage==0.3.0
-django-cors-headers==4.9.0
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
-filelock==3.20.3
-Flask==3.1.3
-flask-cors==6.0.2
-fonttools==4.61.1
-gunicorn==25.1.0
-idna==3.11
-itsdangerous==2.2.0
-Jinja2==3.1.6
-kiwisolver==1.4.9
-MarkupSafe==3.0.3
-matplotlib==3.10.8
-numpy==2.4.2
-packaging==26.0
-pillow==12.1.1
-platformdirs==4.5.1
-psycopg2-binary==2.9.11
-PyJWT==2.11.0
-pyparsing==3.3.2
-python-dateutil==2.9.0.post0
-python-decouple==3.8
-razorpay==2.0.0
-requests==2.32.5
-six==1.17.0
-sqlparse==0.5.5
-urllib3==2.6.3
-virtualenv==20.36.1
-Werkzeug==3.1.6
+django-cors-headers==4.9.0
 whitenoise==6.12.0
+gunicorn==25.1.0
+
+# ── Database ──────────────────────────────────────────────────────────────────
+psycopg2-binary==2.9.11
+dj-database-url==3.1.2
+
+# ── Cache — Redis (REQUIRED for OTP in multi-worker) ─────────────────────────
+django-redis==5.4.0
+redis==5.0.8
+
+# ── Storage ───────────────────────────────────────────────────────────────────
+cloudinary==1.44.1
+django-cloudinary-storage==0.3.0
+pillow==12.1.1
+
+# ── Auth / Config ──────────────────────────────────────────────────────────────
+python-decouple==3.8
+PyJWT==2.11.0
+
+# ── Payments ──────────────────────────────────────────────────────────────────
+razorpay==2.0.0
+
+# ── HTTP ──────────────────────────────────────────────────────────────────────
+requests==2.32.5
+urllib3==2.6.3
+certifi==2026.2.25
+charset-normalizer==3.4.5
+idna==3.11
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+asgiref==3.11.1
+sqlparse==0.5.5
+python-dateutil==2.9.0.post0
+six==1.17.0
+packaging==26.0

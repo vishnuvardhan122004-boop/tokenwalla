@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import API from '../services/api';
+import SEO from './SEO';
 
 const STEPS = [
   { icon: '🔍', title: 'Find a Doctor',   desc: 'Browse by specialization, city, or hospital. See real-time availability and time slots.' },
@@ -43,9 +44,15 @@ export default function Hero() {
     const t = setInterval(() => setActiveIdx(p => (p + 1) % 3), 2600);
     return () => clearInterval(t);
   }, []);
-
+  
   return (
     <>
+    <SEO
+      title="Book Doctor Appointments Online — Skip Hospital Queue"
+    description="TokenWalla lets you book doctor appointments online in Andhra Pradesh & Telangana. Get a digital OPD token, track your live queue position, and walk in right on time. No more waiting rooms."
+    keywords="book doctor appointment online, hospital token booking AP, skip hospital queue, OPD booking Telangana, doctor appointment Hindupur"
+    url="/"
+    /> 
       <style>{`
         .hero-root { font-family: 'DM Sans', sans-serif; background: #fff; color: var(--gray-900); }
 

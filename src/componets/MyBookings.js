@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router';
 import API from '../services/api';
+import { useVisiblePolling } from '../services/useVisiblePolling';
 
 const STATUS_MAP = {
   waiting:     { label: 'Waiting',         cls: 'badge-amber',  pulse: true  },
@@ -16,8 +17,8 @@ const TABS = [
 ];
 
 function filterBookings(bookings, tab) {
-  if (tab === 'active')    return bookings.filter((b) => b.status === 'waiting' || b.status === 'in_progress');
-  if (tab === 'completed') return bookings.filter((b) => b.status === 'completed' || b.status === 'cancelled');
+  if (tab === 'active')    return bookings.filter(b => b.status === 'waiting' || b.status === 'in_progress');
+  if (tab === 'completed') return bookings.filter(b => b.status === 'completed' || b.status === 'cancelled');
   return bookings;
 }
 
@@ -25,15 +26,12 @@ const today = new Date().toISOString().split('T')[0];
 
 export default function MyBookings() {
   const navigate = useNavigate();
-  const [bookings,   setBookings]   = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [tab,        setTab]        = useState('all');
-  const [cancelling, setCancelling] = useState(null);
-  const [user,       setUser]       = useState(null);
-  const [toast,      setToast]      = useState(null);
-
-  // Reschedule state
+  const [bookings,          setBookings]          = useState([]);
+  const [loading,           setLoading]           = useState(true);
+  const [refreshing,        setRefreshing]        = useState(false);
+  const [tab,               setTab]               = useState('all');
+  const [cancelling,        setCancelling]        = useState(null);
+  const [toast,             setToast]             = useState(null);
   const [rescheduleBooking, setRescheduleBooking] = useState(null);
   const [newDate,           setNewDate]           = useState('');
   const [newSlot,           setNewSlot]           = useState('');
@@ -47,8 +45,7 @@ export default function MyBookings() {
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
-    if (!stored) { navigate('/login'); return; }
-    try { setUser(JSON.parse(stored)); } catch { navigate('/login'); }
+    if (!stored) { navigate('/login'); }
   }, [navigate]);
 
   const fetchBookings = useCallback(async (silent = false) => {
@@ -56,7 +53,7 @@ export default function MyBookings() {
     try {
       const { data } = await API.get('/bookings/my/');
       setBookings(data);
-    } catch (err) {
+    } catch {
       if (!silent) showToast('Failed to load bookings. Please refresh.', 'error');
     } finally {
       setLoading(false);
@@ -66,13 +63,9 @@ export default function MyBookings() {
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
-  // Auto-refresh when there are active bookings
-  useEffect(() => {
-    const hasActive = bookings.some((b) => b.status === 'waiting' || b.status === 'in_progress');
-    if (!hasActive) return;
-    const t = setInterval(() => fetchBookings(true), 15000);
-    return () => clearInterval(t);
-  }, [bookings, fetchBookings]);
+  // Auto-refresh only when there are active bookings, pauses when tab hidden
+  const hasActive = bookings.some(b => b.status === 'waiting' || b.status === 'in_progress');
+  useVisiblePolling(() => fetchBookings(true), 15000, hasActive);
 
   const handleCancel = async (booking) => {
     if (!window.confirm(`Cancel appointment with Dr. ${booking.doctor_name}?\n\nRefunds are processed within 5–7 business days.`)) return;
@@ -124,24 +117,16 @@ export default function MyBookings() {
   };
 
   const visible     = filterBookings(bookings, tab);
-  const activeCount = bookings.filter((b) => b.status === 'waiting' || b.status === 'in_progress').length;
-  const amSlots     = doctorSlots.filter((s) => s.includes('AM'));
-  const pmSlots     = doctorSlots.filter((s) => s.includes('PM'));
+  const activeCount = bookings.filter(b => b.status === 'waiting' || b.status === 'in_progress').length;
+  const amSlots     = doctorSlots.filter(s => s.includes('AM'));
+  const pmSlots     = doctorSlots.filter(s => s.includes('PM'));
 
   return (
     <>
       <style>{`
         .mb-root { font-family: 'DM Sans', sans-serif; background: var(--gray-50); min-height: 100vh; padding-bottom: 80px; }
-        .mb-header {
-          background: linear-gradient(160deg, var(--blue-50) 0%, #EAF3FF 60%, #F8FBFF 100%);
-          border-bottom: 1px solid var(--blue-100); padding: 52px 0 36px;
-          position: relative; overflow: hidden;
-        }
-        .mb-header-grid {
-          position: absolute; inset: 0;
-          background-image: linear-gradient(var(--blue-100) 1px, transparent 1px), linear-gradient(90deg, var(--blue-100) 1px, transparent 1px);
-          background-size: 48px 48px; opacity: 0.4;
-        }
+        .mb-header { background: linear-gradient(160deg, var(--blue-50) 0%, #EAF3FF 60%, #F8FBFF 100%); border-bottom: 1px solid var(--blue-100); padding: 52px 0 36px; position: relative; overflow: hidden; }
+        .mb-header-grid { position: absolute; inset: 0; background-image: linear-gradient(var(--blue-100) 1px, transparent 1px), linear-gradient(90deg, var(--blue-100) 1px, transparent 1px); background-size: 48px 48px; opacity: 0.4; }
         .mb-header-inner { position: relative; }
         .mb-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(1.7rem, 4vw, 2.4rem); font-weight: 800; color: var(--gray-900); margin-bottom: 6px; }
         .mb-title .accent { color: var(--blue-600); }
@@ -185,10 +170,9 @@ export default function MyBookings() {
         .mb-empty-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.3rem; font-weight: 700; color: var(--gray-500); margin-bottom: 8px; }
         .mb-skel { background: #fff; border: 1px solid var(--blue-100); border-radius: 18px; overflow: hidden; height: 140px; }
         .mb-skel-shine { height: 100%; background: linear-gradient(90deg, var(--gray-100) 25%, var(--gray-200) 50%, var(--gray-100) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
-        .mb-modal-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(4,44,83,0.45); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px; animation: fadeIn 0.18s ease both; }
-        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
-        .mb-modal { background: #fff; border: 1px solid var(--blue-100); border-radius: 22px; padding: 28px; width: 100%; max-width: 480px; position: relative; box-shadow: var(--shadow-lg); animation: slideUp 0.25s cubic-bezier(0.34,1.56,0.64,1) both; }
-        @keyframes slideUp { from{opacity:0;transform:translateY(24px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+        .mb-modal-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(4,44,83,0.45); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .mb-modal { background: #fff; border: 1px solid var(--blue-100); border-radius: 22px; padding: 28px; width: 100%; max-width: 480px; position: relative; box-shadow: var(--shadow-lg); }
         .mb-modal::before { content:''; position:absolute; top:0;left:0;right:0;height:3px; background: linear-gradient(90deg, var(--blue-600), var(--blue-400)); border-radius:22px 22px 0 0; }
         .mb-modal-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.15rem; font-weight: 800; color: var(--gray-900); margin-bottom: 4px; }
         .mb-modal-sub { font-size: 13px; color: var(--gray-400); margin-bottom: 22px; }
@@ -200,17 +184,15 @@ export default function MyBookings() {
         .mb-slot-btn:hover { background: var(--blue-50); border-color: var(--blue-300); color: var(--blue-700); }
         .mb-slot-btn.selected { background: var(--blue-50); border-color: var(--blue-500); color: var(--blue-700); font-weight: 600; }
         .mb-modal-actions { display: flex; gap: 10px; }
-        .mb-modal-cancel { flex: 1; padding: 12px; border-radius: 11px; border: 1px solid var(--blue-100); background: var(--gray-50); color: var(--gray-600); font-family: 'DM Sans', sans-serif; font-size: 14px; cursor: pointer; transition: all 0.15s; }
-        .mb-modal-cancel:hover { background: var(--gray-200); }
-        .mb-modal-confirm { flex: 2; padding: 12px; border-radius: 11px; border: none; background: var(--blue-600); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+        .mb-modal-cancel { flex: 1; padding: 12px; border-radius: 11px; border: 1px solid var(--blue-100); background: var(--gray-50); color: var(--gray-600); font-family: 'DM Sans', sans-serif; font-size: 14px; cursor: pointer; }
+        .mb-modal-confirm { flex: 2; padding: 12px; border-radius: 11px; border: none; background: var(--blue-600); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; }
         .mb-modal-confirm:hover:not(:disabled) { background: var(--blue-800); }
         .mb-modal-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
-        .mb-toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 12px; font-size: 14px; font-weight: 500; z-index: 9999; white-space: nowrap; box-shadow: var(--shadow-lg); animation: toastIn 0.3s ease both; }
-        @keyframes toastIn { from{opacity:0;transform:translateX(-50%) translateY(10px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+        .mb-toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 12px; font-size: 14px; font-weight: 500; z-index: 9999; white-space: nowrap; box-shadow: var(--shadow-lg); }
         .mb-toast.success { background: var(--color-success-text); color: #fff; }
         .mb-toast.error   { background: var(--color-error-text);   color: #fff; }
         @keyframes twPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        @media (max-width: 600px) { .mb-token-col { width: 84px; padding: 16px 10px; } .mb-info-col { padding: 14px; } .mb-action-panel { padding: 11px 14px; } }
+        @media (max-width: 600px) { .mb-token-col { width: 84px; padding: 16px 10px; } .mb-info-col { padding: 14px; } }
       `}</style>
 
       <div className="mb-root">
@@ -226,10 +208,9 @@ export default function MyBookings() {
         </div>
 
         <div className="tw-container" style={{ paddingTop: 32 }}>
-          {/* Tabs + refresh */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14, marginBottom: 28 }}>
             <div className="mb-tabs">
-              {TABS.map((t) => (
+              {TABS.map(t => (
                 <button key={t.key} className={`mb-tab ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
                   {t.label}
                   {t.key === 'active' && activeCount > 0 && (
@@ -247,7 +228,6 @@ export default function MyBookings() {
             </button>
           </div>
 
-          {/* Skeletons */}
           {loading && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               {[...Array(3)].map((_, i) => (
@@ -256,31 +236,23 @@ export default function MyBookings() {
             </div>
           )}
 
-          {/* Empty */}
           {!loading && visible.length === 0 && (
             <div className="mb-empty">
               <span className="mb-empty-icon">🎫</span>
-              <div className="mb-empty-title">
-                {tab === 'active' ? 'No active bookings' : 'No bookings yet'}
-              </div>
+              <div className="mb-empty-title">{tab === 'active' ? 'No active bookings' : 'No bookings yet'}</div>
               <p style={{ color: 'var(--gray-400)', marginBottom: 24 }}>
-                {tab === 'active'
-                  ? 'Your active appointments will appear here'
-                  : 'Book your first appointment and get a token instantly'}
+                {tab === 'active' ? 'Your active appointments will appear here' : 'Book your first appointment and get a token instantly'}
               </p>
-              <Link to="/alldoctor" className="btn-primary" style={{ display: 'inline-flex' }}>
-                Find Doctors →
-              </Link>
+              <Link to="/alldoctor" className="btn-primary" style={{ display: 'inline-flex' }}>Find Doctors →</Link>
             </div>
           )}
 
-          {/* Cards */}
           {!loading && visible.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               {visible.map((booking, idx) => {
-                const st = STATUS_MAP[booking.status] || STATUS_MAP.waiting;
+                const st       = STATUS_MAP[booking.status] || STATUS_MAP.waiting;
                 const isActive = booking.status === 'waiting' || booking.status === 'in_progress';
-                const qPos = booking.queue_position;
+                const qPos     = booking.queue_position;
 
                 return (
                   <div className="mb-card fade-up" key={booking.id} style={{ animationDelay: `${idx * 0.06}s` }}>
@@ -292,9 +264,7 @@ export default function MyBookings() {
                       <div className="mb-info-col">
                         <div style={{ marginBottom: 8 }}>
                           <span className={`badge ${st.cls}`} style={{ marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                            {st.pulse && (
-                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', animation: 'twPulse 2s infinite', flexShrink: 0 }} />
-                            )}
+                            {st.pulse && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', animation: 'twPulse 2s infinite', flexShrink: 0 }} />}
                             {st.label}
                           </span>
                         </div>
@@ -308,7 +278,6 @@ export default function MyBookings() {
                       </div>
                     </div>
 
-                    {/* Queue position — shown if active and queue_access */}
                     {isActive && booking.queue_access && (
                       <div className="mb-queue-panel">
                         <div className="mb-queue-circle">
@@ -317,29 +286,23 @@ export default function MyBookings() {
                         <div style={{ flex: 1 }}>
                           <div className="mb-queue-label">Your position in queue</div>
                           <div className="mb-queue-desc">
-                            {booking.status === 'in_progress'
-                              ? '✅ Your turn — please go in now!'
-                              : queueMsg(qPos)}
+                            {booking.status === 'in_progress' ? '✅ Your turn — please go in now!' : queueMsg(qPos)}
                           </div>
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>Auto-refreshes every 15s</div>
                       </div>
                     )}
 
-                    {/* Reschedule */}
                     {booking.status === 'waiting' && (
                       <div className="mb-action-panel">
                         <div>
                           <div className="mb-action-title">📅 Reschedule Appointment</div>
                           <div className="mb-action-desc">Change your date or time slot — free</div>
                         </div>
-                        <button className="mb-reschedule-btn" onClick={() => openReschedule(booking)}>
-                          Reschedule →
-                        </button>
+                        <button className="mb-reschedule-btn" onClick={() => openReschedule(booking)}>Reschedule →</button>
                       </div>
                     )}
 
-                    {/* Cancel */}
                     {booking.status === 'waiting' && (
                       <div className="mb-action-panel">
                         <div>
@@ -363,56 +326,37 @@ export default function MyBookings() {
         </div>
       </div>
 
-      {/* Reschedule Modal */}
       {rescheduleBooking && (
-        <div className="mb-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setRescheduleBooking(null); }}>
+        <div className="mb-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setRescheduleBooking(null); }}>
           <div className="mb-modal">
             <div className="mb-modal-title">📅 Reschedule Appointment</div>
             <div className="mb-modal-sub">Dr. {rescheduleBooking.doctor_name} · {rescheduleBooking.hospital_name}</div>
-
             <label className="mb-modal-label">Select New Date</label>
             <input
               type="date" className="mb-modal-input" min={today} value={newDate}
-              onChange={(e) => { setNewDate(e.target.value); setNewSlot(''); }}
+              onChange={e => { setNewDate(e.target.value); setNewSlot(''); }}
             />
-
             <label className="mb-modal-label">
               Select New Time Slot
               {newSlot && <span style={{ color: 'var(--blue-600)', marginLeft: 8, fontWeight: 600 }}>✓ {newSlot}</span>}
             </label>
-
             {doctorSlots.length === 0 ? (
-              <p style={{ color: 'var(--gray-400)', fontSize: 13, marginBottom: 18 }}>
-                No slots available for this doctor.
-              </p>
+              <p style={{ color: 'var(--gray-400)', fontSize: 13, marginBottom: 18 }}>No slots available for this doctor.</p>
             ) : (
               <div className="mb-slots-grid">
-                {amSlots.length > 0 && (
-                  <>
-                    <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 600, color: 'var(--gray-400)', letterSpacing: 1 }}>🌅 Morning</div>
-                    {amSlots.map((s) => (
-                      <button key={s} className={`mb-slot-btn ${newSlot === s ? 'selected' : ''}`} onClick={() => setNewSlot(s)}>{s}</button>
-                    ))}
-                  </>
-                )}
-                {pmSlots.length > 0 && (
-                  <>
-                    <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 600, color: 'var(--gray-400)', letterSpacing: 1, marginTop: 8 }}>🌇 Afternoon / Evening</div>
-                    {pmSlots.map((s) => (
-                      <button key={s} className={`mb-slot-btn ${newSlot === s ? 'selected' : ''}`} onClick={() => setNewSlot(s)}>{s}</button>
-                    ))}
-                  </>
-                )}
+                {amSlots.length > 0 && <>
+                  <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 600, color: 'var(--gray-400)', letterSpacing: 1 }}>🌅 Morning</div>
+                  {amSlots.map(s => <button key={s} className={`mb-slot-btn ${newSlot === s ? 'selected' : ''}`} onClick={() => setNewSlot(s)}>{s}</button>)}
+                </>}
+                {pmSlots.length > 0 && <>
+                  <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 600, color: 'var(--gray-400)', letterSpacing: 1, marginTop: 8 }}>🌇 Afternoon / Evening</div>
+                  {pmSlots.map(s => <button key={s} className={`mb-slot-btn ${newSlot === s ? 'selected' : ''}`} onClick={() => setNewSlot(s)}>{s}</button>)}
+                </>}
               </div>
             )}
-
             <div className="mb-modal-actions">
               <button className="mb-modal-cancel" onClick={() => setRescheduleBooking(null)}>Cancel</button>
-              <button
-                className="mb-modal-confirm"
-                onClick={handleReschedule}
-                disabled={rescheduling || !newDate || !newSlot}
-              >
+              <button className="mb-modal-confirm" onClick={handleReschedule} disabled={rescheduling || !newDate || !newSlot}>
                 {rescheduling ? '⏳ Saving…' : '✓ Confirm Reschedule'}
               </button>
             </div>

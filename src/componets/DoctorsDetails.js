@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import API from '../services/api';
+import SEO from './SEO';
 
 function getNext7Days() {
   const days   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -98,6 +99,13 @@ export default function DoctorDetails() {
 
   return (
     <>
+    <SEO
+  title={`Dr. ${doctor.name} — ${doctor.specialization} in ${doctor.city}`}
+  description={`Book an appointment with Dr. ${doctor.name}, ${doctor.specialization} at ${doctor.hospital_name} in ${doctor.city}. ${doctor.experience} years experience. Get a digital token for ₹15.`}
+  keywords={`Dr. ${doctor.name}, ${doctor.specialization} ${doctor.city}, book ${doctor.specialization} online, ${doctor.hospital_name} appointment`}
+  url={`/doctor/${doctor.id}`}
+  image={doctor.hospital_image || undefined}
+/>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
 

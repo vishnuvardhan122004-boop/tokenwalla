@@ -1,19 +1,20 @@
 import cloudinary
 import dj_database_url
 from pathlib import Path
-from decouple import config
+from decouple import config, Csv
 from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ── Core ──────────────────────────────────────────────────────────────────────
-SECRET_KEY = config('SECRET_KEY', default='dev-secret-key')
+SECRET_KEY = config('SECRET_KEY')
 DEBUG      = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS',
-    default='localhost,127.0.0.1'
-).split(',')
+    default='localhost,127.0.0.1',
+    cast=Csv()
+)
 
 # ── Apps ──────────────────────────────────────────────────────────────────────
 INSTALLED_APPS = [
@@ -24,6 +25,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'cloudinary_storage',
     'cloudinary',
@@ -82,11 +84,17 @@ else:
         }
     }
 
-# ── Cache ─────────────────────────────────────────────────────────────────────
+# ── Cache — Redis (REQUIRED: fixes OTP in multi-worker Gunicorn) ──────────────
+REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
+
 CACHES = {
-    "default": {
-        "BACKEND":  "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "tokenwalla-cache",
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': REDIS_URL,
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+        'TIMEOUT': 300,
     }
 }
 
@@ -98,16 +106,49 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 50,
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '60/minute',
+        'user': '300/minute',
+        'otp':  '5/minute',
+    },
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME':  timedelta(days=1),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
+    'ACCESS_TOKEN_LIFETIME':          timedelta(hours=2),
+    'REFRESH_TOKEN_LIFETIME':         timedelta(days=14),
+    'ROTATE_REFRESH_TOKENS':          True,
+    'BLACKLIST_AFTER_ROTATION':       True,
+    'UPDATE_LAST_LOGIN':              True,
+    'ALGORITHM':                      'HS256',
+    'SIGNING_KEY':                    SECRET_KEY,
+    'AUTH_HEADER_TYPES':              ('Bearer',),
 }
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
-CORS_ALLOW_ALL_ORIGINS = True
+# ── CORS — lock to your actual frontend domain ─────────────────────────────────
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOWED_ORIGINS   = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:3000',
+    cast=Csv()
+)
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 # ── Static files ──────────────────────────────────────────────────────────────
 STATIC_URL  = '/static/'
@@ -131,13 +172,12 @@ CLOUDINARY_STORAGE = {
     'API_SECRET': CLOUDINARY_API_SECRET,
 }
 
-# Django 6 uses STORAGES dict instead of DEFAULT_FILE_STORAGE
 STORAGES = {
-    "default": {
-        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+    'default': {
+        'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
     },
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
 }
 
@@ -148,8 +188,40 @@ MEDIA_ROOT = BASE_DIR / 'media'
 RAZORPAY_KEY_ID      = config('RAZORPAY_KEY_ID',      default='')
 RAZORPAY_KEY_SECRET  = config('RAZORPAY_KEY_SECRET',  default='')
 TWOFACTOR_API_KEY    = config('TWOFACTOR_API_KEY',    default='')
-META_WHATSAPP_TOKEN  = config('META_WHATSAPP_TOKEN',  default='')
-META_PHONE_NUMBER_ID = config('META_PHONE_NUMBER_ID', default='')
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class':     'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level':    'WARNING',
+    },
+    'loggers': {
+        'django': {
+            'handlers':  ['console'],
+            'level':     config('DJANGO_LOG_LEVEL', default='WARNING'),
+            'propagate': False,
+        },
+        'tokenwalla': {
+            'handlers':  ['console'],
+            'level':     'INFO',
+            'propagate': False,
+        },
+    },
+}
 
 # ── Localisation ──────────────────────────────────────────────────────────────
 LANGUAGE_CODE      = 'en-us'
@@ -160,17 +232,20 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ── Password Validators ───────────────────────────────────────────────────────
 AUTH_PASSWORD_VALIDATORS = [
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+     'OPTIONS': {'min_length': 6}},
 ]
 
-# ── Security (production only) ────────────────────────────────────────────────
+# ── Security (always on, not just production) ─────────────────────────────────
+SECURE_BROWSER_XSS_FILTER   = True
+X_FRAME_OPTIONS              = 'DENY'
+SECURE_CONTENT_TYPE_NOSNIFF  = True
+
 if not DEBUG:
-    SECURE_BROWSER_XSS_FILTER      = True
-    X_FRAME_OPTIONS                 = 'DENY'
-    SECURE_CONTENT_TYPE_NOSNIFF     = True
-    SECURE_SSL_REDIRECT             = False
+    SECURE_SSL_REDIRECT             = True
     SESSION_COOKIE_SECURE           = True
     CSRF_COOKIE_SECURE              = True
     SECURE_HSTS_SECONDS             = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS  = True
     SECURE_HSTS_PRELOAD             = True
+    SECURE_PROXY_SSL_HEADER         = ('HTTP_X_FORWARDED_PROTO', 'https')

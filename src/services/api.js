@@ -1,4 +1,3 @@
-// services/api.js
 import axios from 'axios';
 
 const BASE = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000/api';
@@ -12,42 +11,58 @@ API.interceptors.request.use((config) => {
   return config;
 });
 
-// ── Response: auto-refresh on 401, but NOT for auth routes ───────────────
+// ── Response: auto-refresh on 401, skip auth routes ───────────────────────
 API.interceptors.response.use(
   (res) => res,
   async (err) => {
-    const original = err.config;
-
-    // Skip refresh logic entirely for any /auth/ endpoint.
-    // This prevents an infinite loop when login itself returns 401
-    // (wrong credentials) or when there is no session yet.
-    const isAuthRoute = original?.url?.includes('/auth/');
+    const original     = err.config;
+    const isAuthRoute  = original?.url?.includes('/auth/');
     if (isAuthRoute) return Promise.reject(err);
 
     if (err.response?.status === 401 && !original._retry) {
       original._retry = true;
-      const refresh = localStorage.getItem('refresh');
+      const refresh   = localStorage.getItem('refresh');
 
-      // No refresh token stored — send user to login directly
       if (!refresh) {
-        localStorage.clear();
-        window.location.href = '/login';
+        clearSessionAndRedirect();
         return Promise.reject(err);
       }
 
       try {
         const { data } = await axios.post(`${BASE}/auth/token/refresh/`, { refresh });
         localStorage.setItem('access', data.access);
+        // Simplejwt ROTATE_REFRESH_TOKENS sends new refresh too
+        if (data.refresh) localStorage.setItem('refresh', data.refresh);
         original.headers.Authorization = `Bearer ${data.access}`;
         return API(original);
       } catch {
-        localStorage.clear();
-        window.location.href = '/login';
+        clearSessionAndRedirect();
       }
     }
 
     return Promise.reject(err);
   }
 );
+
+function clearSessionAndRedirect() {
+  localStorage.removeItem('access');
+  localStorage.removeItem('refresh');
+  localStorage.removeItem('user');
+  window.location.href = '/login';
+}
+
+/** Call this on logout button clicks — blacklists the refresh token server-side */
+export async function logoutUser() {
+  const refresh = localStorage.getItem('refresh');
+  try {
+    if (refresh) {
+      await API.post('/auth/logout/', { refresh });
+    }
+  } catch {
+    // Ignore — still clear session locally
+  } finally {
+    clearSessionAndRedirect();
+  }
+}
 
 export default API;

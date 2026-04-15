@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import SEO from './SEO';
 
-const WHATSAPP_NUMBER = '919000000001'; // Replace with real support number
+const WHATSAPP_NUMBER = '91000000000'; // Replace with real support number
 
 const Contact = () => {
   const [form, setForm]       = useState({ name: '', mobile: '', subject: '', message: '' });
@@ -49,9 +50,14 @@ const Contact = () => {
       setLoading(false);
     }
   };
-
+ 
   return (
     <>
+    <SEO
+  title="Contact TokenWalla — Support & Help"
+  description="Get in touch with TokenWalla support. Email us at tokentraq@gmail.com or call +91-9000000001 for help with bookings, hospitals, or technical issues."
+  url="/contact"
+     />
       <style>{`
         .ct-root {
           font-family: 'DM Sans', sans-serif;

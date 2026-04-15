@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router';
 import API from '../services/api';
+import { useVisiblePolling } from '../services/useVisiblePolling';
 
 export default function BookingToken() {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const location  = useLocation();
+  const navigate  = useNavigate();
   const {
     token, doctorName, hospital, date, slot,
     paymentId, userName, queue_access,
@@ -13,26 +14,30 @@ export default function BookingToken() {
   const [queuePos,  setQueuePos]  = useState(null);
   const [bookingId, setBookingId] = useState(null);
 
+  // Initial fetch to get the booking ID
   useEffect(() => {
     if (!queue_access) return;
     API.get('/bookings/my/')
       .then(({ data }) => {
         const found = data.find(b => b.token === token);
-        if (found) { setBookingId(found.id); setQueuePos(found.queue_position); }
-      }).catch(() => {});
+        if (found) {
+          setBookingId(found.id);
+          setQueuePos(found.queue_position);
+        }
+      })
+      .catch(() => {});
   }, [token, queue_access]);
 
-  useEffect(() => {
-    if (!bookingId || !queue_access) return;
-    const t = setInterval(() => {
-      API.get('/bookings/my/')
-        .then(({ data }) => {
-          const found = data.find(b => b.id === bookingId);
-          if (found) setQueuePos(found.queue_position);
-        }).catch(() => {});
-    }, 15000);
-    return () => clearInterval(t);
-  }, [bookingId, queue_access]);
+  // Poll every 15 s — pauses when tab is hidden
+  const hasBooking = !!bookingId && !!queue_access;
+  useVisiblePolling(() => {
+    API.get('/bookings/my/')
+      .then(({ data }) => {
+        const found = data.find(b => b.id === bookingId);
+        if (found) setQueuePos(found.queue_position);
+      })
+      .catch(() => {});
+  }, 15000, hasBooking);
 
   if (!token) { navigate('/alldoctor'); return null; }
 
@@ -57,8 +62,6 @@ export default function BookingToken() {
           background-size: 48px 48px; opacity: 0.35; pointer-events: none;
         }
         .bt-inner { position: relative; z-index: 1; max-width: 560px; margin: 0 auto; padding: 0 20px; }
-
-        /* Success header */
         .bt-success-icon {
           width: 80px; height: 80px; border-radius: 50%;
           background: var(--color-success-bg); border: 2px solid var(--color-success-border);
@@ -73,8 +76,6 @@ export default function BookingToken() {
           text-align: center; color: var(--gray-900); margin-bottom: 8px;
         }
         .bt-sub { text-align: center; font-size: 15px; color: var(--gray-500); margin-bottom: 36px; }
-
-        /* Token card */
         .bt-card {
           background: #fff; border: 1px solid var(--blue-100);
           border-radius: 24px; overflow: hidden; margin-bottom: 20px;
@@ -89,7 +90,6 @@ export default function BookingToken() {
         }
         @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
         @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
-
         .bt-card-header {
           padding: 20px 24px 16px;
           border-bottom: 1px solid var(--blue-50);
@@ -105,8 +105,6 @@ export default function BookingToken() {
           background: var(--color-success-bg); border: 1px solid var(--color-success-border);
           border-radius: 100px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: var(--color-success-text);
         }
-
-        /* Token number section */
         .bt-token-section { padding: 28px 24px; text-align: center; }
         .bt-token-label { font-size: 11px; font-weight: 600; letter-spacing: 2.5px; text-transform: uppercase; color: var(--gray-400); margin-bottom: 10px; }
         .bt-token-number {
@@ -114,8 +112,6 @@ export default function BookingToken() {
           font-weight: 500; color: var(--blue-600); line-height: 1; margin-bottom: 8px; letter-spacing: -1px;
         }
         .bt-token-sub { font-size: 13px; color: var(--gray-400); }
-
-        /* Dashed divider */
         .bt-dashed { margin: 0 20px; border: none; border-top: 2px dashed var(--blue-100); position: relative; }
         .bt-dashed::before, .bt-dashed::after {
           content:''; position:absolute; top:50%;transform:translateY(-50%);
@@ -123,14 +119,10 @@ export default function BookingToken() {
         }
         .bt-dashed::before { left:-22px; }
         .bt-dashed::after  { right:-22px; }
-
-        /* Info grid */
         .bt-info-grid { padding: 20px 24px 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
         .bt-info-label { font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gray-400); margin-bottom: 4px; }
         .bt-info-value { font-size: 14px; font-weight: 500; color: var(--gray-800); }
         .bt-info-item.full { grid-column: 1/-1; }
-
-        /* Queue row */
         .bt-queue-row {
           margin: 0 20px 20px;
           padding: 14px 16px; border-radius: 12px;
@@ -141,8 +133,6 @@ export default function BookingToken() {
         .bt-queue-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
         .bt-queue-title { font-size: 14px; font-weight: 600; color: var(--gray-800); margin-bottom: 2px; }
         .bt-queue-desc  { font-size: 12px; color: var(--gray-500); }
-
-        /* Queue position card */
         .bt-pos-card {
           background: var(--blue-50); border: 1px solid var(--blue-200);
           border-radius: 18px; padding: 22px;
@@ -165,22 +155,18 @@ export default function BookingToken() {
         @keyframes ring { 0%{transform:scale(1);opacity:0.6} 100%{transform:scale(1.5);opacity:0} }
         .bt-pos-label { font-size: 12px; color: var(--gray-500); margin-bottom: 4px; }
         .bt-pos-text  { font-size: 15px; font-weight: 600; color: var(--blue-700); }
-
-        /* Actions */
         .bt-actions { display: flex; flex-direction: column; gap: 12px; animation: fadeUp 0.5s 0.35s ease both; }
         .bt-note { text-align: center; font-size: 12px; color: var(--gray-400); line-height: 1.6; margin-top: 18px; }
+        @keyframes twPulse{0%,100%{opacity:1}50%{opacity:0.4}}
       `}</style>
 
       <div className="bt-root">
         <div className="bt-grid" />
         <div className="bt-inner">
-
-          {/* Success header */}
           <div className="bt-success-icon">✅</div>
           <div className="bt-title">Booking Confirmed!</div>
           <p className="bt-sub">Your appointment is booked. Show this token at the hospital.</p>
 
-          {/* Token card */}
           <div className="bt-card">
             <div className="bt-card-topbar" />
             <div className="bt-card-header">
@@ -240,7 +226,6 @@ export default function BookingToken() {
               )}
             </div>
 
-            {/* Queue access indicator */}
             <div className={`bt-queue-row ${queue_access ? 'has-access' : 'no-access'}`}>
               <div className="bt-queue-icon" style={{ background: queue_access ? 'var(--blue-100)' : 'var(--gray-100)' }}>
                 {queue_access ? '📍' : '🎫'}
@@ -254,7 +239,6 @@ export default function BookingToken() {
             </div>
           </div>
 
-          {/* Live queue position */}
           {queue_access && (
             <div className="bt-pos-card">
               <div className="bt-pos-circle">
@@ -264,12 +248,11 @@ export default function BookingToken() {
               <div>
                 <div className="bt-pos-label">Your queue position</div>
                 <div className="bt-pos-text">{queueMsg()}</div>
-                <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 3 }}>Auto-refreshes every 15s</div>
+                <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 3 }}>Auto-refreshes every 15s (pauses when tab is hidden)</div>
               </div>
             </div>
           )}
 
-          {/* Actions */}
           <div className="bt-actions">
             <Link to="/my-bookings" className="btn-primary" style={{ justifyContent: 'center', padding: 15, borderRadius: 12, fontSize: 15 }}>
               View My Bookings →
@@ -285,7 +268,6 @@ export default function BookingToken() {
           </p>
         </div>
       </div>
-      <style>{`@keyframes twPulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
     </>
   );
 }

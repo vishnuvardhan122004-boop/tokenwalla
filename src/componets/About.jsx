@@ -1,3 +1,4 @@
+import SEO from './SEO';
 const About = () => {
   const stats = [
     { num: '2,400+', label: 'Tokens issued' },
@@ -12,9 +13,14 @@ const About = () => {
     { icon: '🌐', title: 'Accessible anywhere', desc: 'Works on any device. No app download required.' },
     { icon: '⚡', title: 'Real-time queue',     desc: 'Live position tracking refreshed every 15 seconds.' },
   ];
-
+ 
   return (
     <>
+       <SEO
+  title="About TokenWalla — Smart Hospital Queue Management"
+  description="Learn about TokenWalla — the platform that digitises hospital OPD queues in Andhra Pradesh and Telangana, helping patients skip waiting rooms and hospitals run on schedule."
+  url="/about"
+      />
       <style>{`
         .ab-root { font-family: 'DM Sans', sans-serif; background: #fff; }
 

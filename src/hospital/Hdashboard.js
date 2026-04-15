@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import API from "../services/api";
+import { logoutUser } from "../services/api";
 
 const DEFAULT_SLOTS = [
   // 🌙 Late Night / Early Morning
@@ -331,7 +332,7 @@ const Hdashboard = () => {
     } catch { showToast("Failed to delete doctor", "error"); }
   };
 
-  const logout = () => { localStorage.clear(); navigate("/Hlogin"); };
+  const logout = () => logoutUser();
   const totalToday = queue.waiting.length + queue.inProgress.length + queue.completed.length;
 
   const FieldError = ({ msg }) => msg

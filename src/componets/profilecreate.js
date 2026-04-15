@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import API from '../services/api';
 import { authCSS } from './authStyles';
+import SEO from './SEO';
 
 export default function Profilecreate() {
   const navigate = useNavigate();
@@ -81,8 +82,15 @@ export default function Profilecreate() {
 
   const step = otpVerified ? 3 : otpSent ? 2 : 1;
 
-  return (
+  return (                                  
     <>
+      {/* ✅ SEO is the FIRST thing inside return() */}
+      <SEO
+        title="Register Free — TokenWalla Patient Account"
+        description="Create your free TokenWalla account to start booking doctor appointments online in AP & Telangana. OTP verification required."
+        url="/profilecreate"
+      />
+
       <style>{authCSS}</style>
       <div className="auth-page">
 
@@ -106,8 +114,8 @@ export default function Profilecreate() {
 
             <div className="auth-features">
               {[
-                { icon: '1️⃣', title: 'Enter your details',    desc: 'Name, mobile number and password'          },
-                { icon: '2️⃣', title: 'Verify mobile via OTP', desc: 'We\'ll send a 4-digit code to your number' },
+                { icon: '1️⃣', title: 'Enter your details',    desc: 'Name, mobile number and password'           },
+                { icon: '2️⃣', title: 'Verify mobile via OTP', desc: "We'll send a 4-digit code to your number"   },
                 { icon: '3️⃣', title: 'Start booking',         desc: 'Find doctors and book your first appointment' },
               ].map((f, i) => (
                 <div className="auth-feature" key={i}>
@@ -124,7 +132,6 @@ export default function Profilecreate() {
 
         {/* ── RIGHT ── */}
         <div className="auth-right">
-          {/* Progress */}
           <div className="auth-progress">
             {[1,2,3].map(n => (
               <div key={n} className={`auth-progress-step ${n < step ? 'done' : n === step ? 'active' : ''}`} />
@@ -144,7 +151,6 @@ export default function Profilecreate() {
 
           <form onSubmit={submitHandler}>
 
-            {/* Name */}
             <div className="auth-field">
               <label className="auth-field-label">Full Name</label>
               <div className="auth-input-wrap">
@@ -158,7 +164,6 @@ export default function Profilecreate() {
               {errors.name && <span className="auth-field-error">{errors.name}</span>}
             </div>
 
-            {/* Mobile + OTP */}
             <div className="auth-field">
               <label className="auth-field-label">Mobile Number</label>
               <div className="auth-otp-row">
@@ -180,7 +185,6 @@ export default function Profilecreate() {
               {errors.mobile && <span className="auth-field-error">{errors.mobile}</span>}
             </div>
 
-            {/* OTP input */}
             {otpSent && !otpVerified && (
               <div className="auth-field">
                 <label className="auth-field-label">Enter OTP</label>
@@ -207,7 +211,6 @@ export default function Profilecreate() {
               </div>
             )}
 
-            {/* Verified */}
             {otpVerified && (
               <div className="auth-verified" style={{ marginBottom:14 }}>
                 <span style={{ fontSize:18 }}>✅</span>
@@ -215,7 +218,6 @@ export default function Profilecreate() {
               </div>
             )}
 
-            {/* Password */}
             <div className="auth-field">
               <label className="auth-field-label">Password</label>
               <div className="auth-input-wrap">
@@ -230,7 +232,6 @@ export default function Profilecreate() {
               {errors.password && <span className="auth-field-error">{errors.password}</span>}
             </div>
 
-            {/* Confirm password */}
             <div className="auth-field">
               <label className="auth-field-label">Confirm Password</label>
               <div className="auth-input-wrap">

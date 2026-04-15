@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+# Disallow admin and auth pages
+Disallow: /Adashboard
+Disallow: /Hdashboard
+Disallow: /2004
+Disallow: /booking-token
+Disallow: /payment
+
+# Sitemap
+Sitemap: https://www.tokenwalla.in/sitemap.xml

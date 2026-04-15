@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import API from '../services/api';
 import { authCSS } from './authStyles';
-
+import SEO from './SEO';
 export default function Login() {
   const navigate = useNavigate();
   const [details,    setDetails]    = useState({ mobile: '', password: '' })
@@ -40,6 +40,12 @@ export default function Login() {
 
   return (
     <>
+    <SEO
+     title="Patient Login — TokenWalla"
+     description="Log in to your TokenWalla account to view bookings, track your queue position, and book new doctor appointments online."
+      url="/login"
+      noIndex={false}
+   />
       <style>{authCSS}</style>
       <div className="auth-page">
 

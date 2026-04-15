@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import API from '../services/api';
+import SEO from './SEO';
 
 function SkeletonCard() {
   return (
@@ -52,8 +53,15 @@ export default function AllDoctor() {
     return matchSearch && matchCity && matchSpec && matchAvail;
   });
 
+
   return (
     <>
+      <SEO
+  title="Find Doctors Near You — Book Appointment Online"
+  description="Browse doctors by specialization, city, and hospital in Andhra Pradesh & Telangana. Book your OPD slot online and get a confirmed digital token instantly."
+  keywords="find doctors online AP, book doctor near me Telangana, OPD appointment booking, specialist doctor Hindupur, cardiologist appointment online"
+  url="/alldoctor"
+    />
       <style>{`
         .ad-root { font-family: 'DM Sans', sans-serif; background: #fff; min-height: 100vh; }
 
