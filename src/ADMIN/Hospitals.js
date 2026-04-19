@@ -19,10 +19,16 @@ const Hospitals = () => {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([API.get('/doctors/'), API.get('/hospitals/')])
+    Promise.all([
+      API.get('/doctors/'),
+      API.get('/hospitals/'),
+    ])
       .then(([docRes, hospRes]) => {
-        setDoctors(docRes.data);
-        setHospitals(hospRes.data);
+        // Both endpoints may return paginated or plain arrays
+        const parseDocs  = docRes.data;
+        const parseHosps = hospRes.data;
+        setDoctors(Array.isArray(parseDocs)  ? parseDocs  : parseDocs?.results  || []);
+        setHospitals(Array.isArray(parseHosps) ? parseHosps : parseHosps?.results || []);
       })
       .catch(() => setError('Failed to fetch data.'))
       .finally(() => setLoading(false));
@@ -31,10 +37,10 @@ const Hospitals = () => {
   const filtered = doctors.filter(doc => {
     const q = search.toLowerCase();
     return !search ||
-      (doc.name || '').toLowerCase().includes(q) ||
+      (doc.name           || '').toLowerCase().includes(q) ||
       (doc.specialization || '').toLowerCase().includes(q) ||
-      (doc.hospital_name || '').toLowerCase().includes(q) ||
-      (doc.city || '').toLowerCase().includes(q);
+      (doc.hospital_name  || '').toLowerCase().includes(q) ||
+      (doc.city           || '').toLowerCase().includes(q);
   });
 
   const openEdit = id => {
@@ -44,12 +50,14 @@ const Hospitals = () => {
   };
 
   const deleteDoctor = async id => {
-    if (!window.confirm('Delete this doctor?')) return;
+    if (!window.confirm('Delete this doctor? This cannot be undone.')) return;
     try {
       await API.delete(`/doctors/${id}/`);
       setDoctors(prev => prev.filter(d => d.id !== id));
       showToast('Doctor deleted successfully.');
-    } catch { showToast('Delete failed.', 'error'); }
+    } catch {
+      showToast('Delete failed. The doctor may have active bookings.', 'error');
+    }
   };
 
   const submitEdit = async e => {
@@ -60,16 +68,21 @@ const Hospitals = () => {
         name:           editDoctor.name,
         specialization: editDoctor.specialization,
         city:           editDoctor.city,
-        experience:     editDoctor.experience,
-        fee:            editDoctor.fee,
+        experience:     Number(editDoctor.experience) || 0,
+        fee:            Number(editDoctor.fee)        || 0,
         available:      editDoctor.available,
-      });
+      }, { headers: { 'Content-Type': 'application/json' } });
+
       setDoctors(prev => prev.map(d => d.id === editDoctor.id ? { ...d, ...data } : d));
       setShowModal(false);
       setEditDoctor(null);
       showToast('Doctor updated successfully!');
-    } catch { showToast('Update failed.', 'error'); }
-    finally { setSaving(false); }
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Update failed.';
+      showToast(msg, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -101,7 +114,6 @@ const Hospitals = () => {
         .hp-action-btn.del { background: var(--color-error-bg); color: var(--color-error-text); border-color: var(--color-error-border); }
         .hp-action-btn.del:hover { background: #f7c1c1; }
         .hp-empty { text-align: center; padding: 60px 20px; color: var(--gray-400); font-size: 14px; }
-        /* Modal */
         .hp-modal-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(4,44,83,0.45); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px; }
         .hp-modal { background: #fff; border: 1px solid var(--blue-100); border-radius: 20px; padding: 28px; width: 100%; max-width: 480px; box-shadow: var(--shadow-lg); position: relative; }
         .hp-modal::before { content:''; position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--blue-600),var(--blue-400));border-radius:20px 20px 0 0; }
@@ -146,8 +158,8 @@ const Hospitals = () => {
                 <div className="hp-hosp-name">{h.name}</div>
                 <div className="hp-hosp-city">📍 {h.city}</div>
                 <span className="hp-badge" style={{
-                  background: h.status === 'active' ? 'var(--color-success-bg)' : 'var(--gray-100)',
-                  color: h.status === 'active' ? 'var(--color-success-text)' : 'var(--gray-500)',
+                  background:  h.status === 'active' ? 'var(--color-success-bg)' : 'var(--gray-100)',
+                  color:       h.status === 'active' ? 'var(--color-success-text)' : 'var(--gray-500)',
                   borderColor: h.status === 'active' ? 'var(--color-success-border)' : 'var(--gray-200)',
                 }}>
                   {h.status === 'active' ? '✅ Active' : '⛔ Inactive'}
@@ -158,16 +170,23 @@ const Hospitals = () => {
         </>
       )}
 
-      {/* Doctors table */}
+      {/* Doctors table toolbar */}
       <div className="hp-toolbar">
         <div style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontSize: 15, fontWeight: 700, color: 'var(--gray-900)' }}>
           All Doctors ({doctors.length})
         </div>
         <div className="hp-search-wrap">
           <span className="hp-search-icon">🔍</span>
-          <input className="hp-search" placeholder="Search doctors…" value={search} onChange={e => setSearch(e.target.value)} />
+          <input
+            className="hp-search"
+            placeholder="Search doctors…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         </div>
-        <span className="hp-count">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
+        <span className="hp-count">
+          {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
       {loading ? (
@@ -181,8 +200,14 @@ const Hospitals = () => {
             <table className="hp-table">
               <thead>
                 <tr>
-                  <th>Name</th><th>Specialization</th><th>Hospital</th>
-                  <th>Exp</th><th>City</th><th>Fee</th><th>Status</th><th>Actions</th>
+                  <th>Name</th>
+                  <th>Specialization</th>
+                  <th>Hospital</th>
+                  <th>Exp</th>
+                  <th>City</th>
+                  <th>Fee</th>
+                  <th>Status</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -199,8 +224,8 @@ const Hospitals = () => {
                     <td style={{ fontWeight: 600 }}>₹{doc.fee || 0}</td>
                     <td>
                       <span className="hp-badge" style={{
-                        background: doc.available ? 'var(--color-success-bg)' : 'var(--gray-100)',
-                        color: doc.available ? 'var(--color-success-text)' : 'var(--gray-500)',
+                        background:  doc.available ? 'var(--color-success-bg)' : 'var(--gray-100)',
+                        color:       doc.available ? 'var(--color-success-text)' : 'var(--gray-500)',
                         borderColor: doc.available ? 'var(--color-success-border)' : 'var(--gray-200)',
                       }}>
                         {doc.available ? '✅ Available' : '⛔ Unavailable'}
@@ -208,7 +233,7 @@ const Hospitals = () => {
                     </td>
                     <td>
                       <button className="hp-action-btn edit" onClick={() => openEdit(doc.id)}>✏️ Edit</button>
-                      <button className="hp-action-btn del" onClick={() => deleteDoctor(doc.id)}>🗑</button>
+                      <button className="hp-action-btn del"  onClick={() => deleteDoctor(doc.id)}>🗑</button>
                     </td>
                   </tr>
                 ))}
@@ -220,45 +245,77 @@ const Hospitals = () => {
 
       {/* Edit Modal */}
       {showModal && editDoctor && (
-        <div className="hp-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
+        <div
+          className="hp-modal-overlay"
+          onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}
+        >
           <div className="hp-modal">
             <div className="hp-modal-title">✏️ Edit Dr. {editDoctor.name}</div>
             <form onSubmit={submitEdit}>
               <div className="hp-modal-row">
                 <div className="hp-field">
                   <label>Name *</label>
-                  <input value={editDoctor.name || ''} onChange={e => setEditDoctor(p => ({ ...p, name: e.target.value }))} placeholder="Doctor name" required />
+                  <input
+                    value={editDoctor.name || ''}
+                    onChange={e => setEditDoctor(p => ({ ...p, name: e.target.value }))}
+                    placeholder="Doctor name"
+                    required
+                  />
                 </div>
                 <div className="hp-field">
                   <label>Specialization *</label>
-                  <input value={editDoctor.specialization || ''} onChange={e => setEditDoctor(p => ({ ...p, specialization: e.target.value }))} placeholder="Cardiologist" required />
+                  <input
+                    value={editDoctor.specialization || ''}
+                    onChange={e => setEditDoctor(p => ({ ...p, specialization: e.target.value }))}
+                    placeholder="Cardiologist"
+                    required
+                  />
                 </div>
               </div>
               <div className="hp-modal-row">
                 <div className="hp-field">
                   <label>City</label>
-                  <input value={editDoctor.city || ''} onChange={e => setEditDoctor(p => ({ ...p, city: e.target.value }))} placeholder="City" />
+                  <input
+                    value={editDoctor.city || ''}
+                    onChange={e => setEditDoctor(p => ({ ...p, city: e.target.value }))}
+                    placeholder="City"
+                  />
                 </div>
                 <div className="hp-field">
                   <label>Experience (years)</label>
-                  <input type="number" min="0" value={editDoctor.experience || ''} onChange={e => setEditDoctor(p => ({ ...p, experience: e.target.value }))} placeholder="5" />
+                  <input
+                    type="number" min="0"
+                    value={editDoctor.experience || ''}
+                    onChange={e => setEditDoctor(p => ({ ...p, experience: e.target.value }))}
+                    placeholder="5"
+                  />
                 </div>
               </div>
               <div className="hp-modal-row">
                 <div className="hp-field">
                   <label>Fee (₹)</label>
-                  <input type="number" min="0" value={editDoctor.fee || ''} onChange={e => setEditDoctor(p => ({ ...p, fee: e.target.value }))} placeholder="0" />
+                  <input
+                    type="number" min="0"
+                    value={editDoctor.fee || ''}
+                    onChange={e => setEditDoctor(p => ({ ...p, fee: e.target.value }))}
+                    placeholder="0"
+                  />
                 </div>
                 <div className="hp-field">
                   <label>Availability</label>
-                  <select value={editDoctor.available ? 'true' : 'false'} onChange={e => setEditDoctor(p => ({ ...p, available: e.target.value === 'true' }))}>
+                  <select
+                    value={editDoctor.available ? 'true' : 'false'}
+                    onChange={e => setEditDoctor(p => ({ ...p, available: e.target.value === 'true' }))}
+                  >
                     <option value="true">✅ Available</option>
                     <option value="false">⛔ Unavailable</option>
                   </select>
                 </div>
               </div>
               <div className="hp-modal-actions">
-                <button type="button" className="hp-modal-cancel" onClick={() => setShowModal(false)}>Cancel</button>
+                <button type="button" className="hp-modal-cancel" onClick={() => setShowModal(false)}>
+                  Cancel
+                </button>
                 <button type="submit" className="hp-modal-save" disabled={saving}>
                   {saving ? '⏳ Saving…' : '💾 Save Changes'}
                 </button>

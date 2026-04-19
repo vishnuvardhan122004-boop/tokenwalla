@@ -16,11 +16,10 @@ logger = logging.getLogger('tokenwalla')
 User   = get_user_model()
 
 
-# ── OTP helper (self-contained, no cross-app import) ─────────────────────────
+# ── OTP helper (self-contained to avoid circular import) ──────────────────────
 
 def _verify_otp(mobile, otp_entered):
     """Mirror of users.auth_views.verify_otp — kept local to avoid circular import."""
-    from django.core.cache import cache
     api_key    = getattr(settings, 'TWOFACTOR_API_KEY', '')
     session_id = cache.get(f'otp_session:{mobile}')
     via        = cache.get(f'otp_via:{mobile}', 'sms')
@@ -52,6 +51,7 @@ def _verify_otp(mobile, otp_entered):
 # ── Views ─────────────────────────────────────────────────────────────────────
 
 class HospitalListView(APIView):
+    """Public — list all active hospitals."""
     permission_classes = [AllowAny]
 
     def get(self, request):
@@ -64,6 +64,7 @@ class HospitalListView(APIView):
 
 
 class HospitalRegisterView(APIView):
+    """Public — register a new hospital and create its linked User account."""
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -76,9 +77,9 @@ class HospitalRegisterView(APIView):
             return Response({'message': 'Name, mobile and password are required.'}, status=400)
 
         if Hospital.objects.filter(mobile=mobile).exists():
-            return Response({'message': 'Mobile already registered.'}, status=400)
+            return Response({'message': 'Mobile already registered as a hospital.'}, status=400)
         if User.objects.filter(mobile=mobile).exists():
-            return Response({'message': 'Mobile already registered as a user.'}, status=400)
+            return Response({'message': 'Mobile already registered.'}, status=400)
 
         hospital = Hospital.objects.create(
             name     = name,
@@ -89,24 +90,24 @@ class HospitalRegisterView(APIView):
             status   = 'active',
         )
 
+        # Create a Django User for JWT auth, role='hospital'
+        # Store hospital.id in last_name — used by all hospital views to identify tenant
         user = User(
             username   = mobile,
             mobile     = mobile,
             first_name = name,
+            last_name  = str(hospital.id),   # ← hospital tenant key
             role       = 'hospital',
         )
         user.set_password(password)
         user.save()
 
-        # Store hospital reference via last_name (no schema change needed)
-        user.last_name = str(hospital.id)
-        user.save(update_fields=['last_name'])
-
-        logger.info('Hospital %s registered (id=%s)', name, hospital.id)
+        logger.info('Hospital "%s" registered (id=%s, user=%s)', name, hospital.id, user.id)
         return Response(HospitalSerializer(hospital).data, status=201)
 
 
 class HospitalLoginView(APIView):
+    """Public — authenticate a hospital account, return JWT tokens."""
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -122,7 +123,7 @@ class HospitalLoginView(APIView):
             return Response({'message': 'Invalid credentials.'}, status=401)
 
         if hospital.status != 'active':
-            return Response({'message': 'Hospital account is not active.'}, status=403)
+            return Response({'message': 'Hospital account is not active. Contact admin.'}, status=403)
 
         password_ok = check_password(password, hospital.password)
         otp_ok      = _verify_otp(mobile, password)
@@ -131,30 +132,33 @@ class HospitalLoginView(APIView):
             logger.warning('Failed hospital login for mobile ending ...%s', mobile[-4:])
             return Response({'message': 'Invalid credentials.'}, status=401)
 
+        # Get or create the linked Django User
         user, created = User.objects.get_or_create(
             mobile=mobile,
             defaults={
                 'username':   mobile,
                 'first_name': hospital.name,
+                'last_name':  str(hospital.id),   # ← hospital tenant key
                 'role':       'hospital',
-                'last_name':  str(hospital.id),
             }
         )
-        if created:
-            if password_ok:
-                user.set_password(password)
-            else:
-                user.set_unusable_password()
-            user.last_name = str(hospital.id)
-            user.save()
 
+        # Always ensure these fields are current (e.g. if hospital was renamed)
+        needs_save = False
         if user.role != 'hospital':
-            user.role = 'hospital'
-            user.save(update_fields=['role'])
-
+            user.role  = 'hospital'
+            needs_save = True
         if user.last_name != str(hospital.id):
             user.last_name = str(hospital.id)
-            user.save(update_fields=['last_name'])
+            needs_save = True
+        if user.first_name != hospital.name:
+            user.first_name = hospital.name
+            needs_save = True
+        if created and password_ok:
+            user.set_password(password)
+            needs_save = True
+        if needs_save:
+            user.save()
 
         refresh = RefreshToken.for_user(user)
 
@@ -180,6 +184,7 @@ class HospitalLoginView(APIView):
 
 
 class HospitalDetailView(APIView):
+    """Public — fetch a single hospital by PK."""
     permission_classes = [AllowAny]
 
     def get(self, request, pk):
@@ -190,7 +195,7 @@ class HospitalDetailView(APIView):
 
 
 class HospitalResetPasswordView(APIView):
-    """POST { mobile, otp, password } — uses verified flag from VerifyOTPView."""
+    """Public — reset hospital password after OTP verification."""
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -227,10 +232,13 @@ class HospitalResetPasswordView(APIView):
 
 
 class HospitalAdminListView(APIView):
-    """Admin only — list all hospitals."""
+    """Admin only — list all hospitals including inactive ones."""
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
         return Response(
-            HospitalSerializer(Hospital.objects.all().order_by('name'), many=True).data
+            HospitalSerializer(
+                Hospital.objects.all().order_by('name'),
+                many=True
+            ).data
         )

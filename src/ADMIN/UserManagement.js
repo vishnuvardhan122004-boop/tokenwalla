@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import API from '../services/api';
 
 const UserManagement = () => {
-  const [users,   setUsers]   = useState([]);
-  const [search,  setSearch]  = useState('');
+  const [users,      setUsers]      = useState([]);
+  const [search,     setSearch]     = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
-  const [toast,   setToast]   = useState(null);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState('');
+  const [toast,      setToast]      = useState(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -16,18 +16,27 @@ const UserManagement = () => {
 
   useEffect(() => {
     setLoading(true);
-    API.get('/auth/users/')
-      .then(({ data }) => setUsers(data))
+    API.get('/auth/users/?page_size=500')
+      .then(({ data }) => {
+        // Handle both paginated { count, results: [] } and plain []
+        if (Array.isArray(data)) {
+          setUsers(data);
+        } else if (data?.results) {
+          setUsers(data.results);
+        } else {
+          setUsers([]);
+        }
+      })
       .catch(() => setError('Failed to load users.'))
       .finally(() => setLoading(false));
   }, []);
 
   const filtered = users.filter(u => {
-    const q = search.toLowerCase();
+    const q          = search.toLowerCase();
     const matchSearch = !search ||
-      (u.name || '').toLowerCase().includes(q) ||
+      (u.name   || '').toLowerCase().includes(q) ||
       (u.mobile || '').includes(q);
-    const matchRole = roleFilter === 'all' || u.role === roleFilter;
+    const matchRole  = roleFilter === 'all' || u.role === roleFilter;
     return matchSearch && matchRole;
   });
 
@@ -99,8 +108,10 @@ const UserManagement = () => {
           <span className="um-search-icon">🔍</span>
           <input
             className="um-search"
-            type="text" placeholder="Search by name or mobile…"
-            value={search} onChange={e => setSearch(e.target.value)}
+            type="text"
+            placeholder="Search by name or mobile…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
           />
         </div>
         {['all', 'patient', 'hospital', 'admin'].map(role => (
@@ -112,7 +123,9 @@ const UserManagement = () => {
             {role === 'all' ? 'All' : role.charAt(0).toUpperCase() + role.slice(1)}
           </button>
         ))}
-        <span className="um-count">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
+        <span className="um-count">
+          {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
       {loading ? (
@@ -143,9 +156,15 @@ const UserManagement = () => {
                   const isBlocked = user.status === 'blocked';
                   return (
                     <tr key={user.id}>
-                      <td style={{ color: 'var(--gray-400)', fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{i + 1}</td>
-                      <td style={{ fontWeight: 600, color: 'var(--gray-900)' }}>{user.name || '—'}</td>
-                      <td style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, color: 'var(--gray-600)' }}>{user.mobile}</td>
+                      <td style={{ color: 'var(--gray-400)', fontFamily: 'DM Mono, monospace', fontSize: 13 }}>
+                        {i + 1}
+                      </td>
+                      <td style={{ fontWeight: 600, color: 'var(--gray-900)' }}>
+                        {user.name || '—'}
+                      </td>
+                      <td style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, color: 'var(--gray-600)' }}>
+                        {user.mobile}
+                      </td>
                       <td>
                         <span className="um-badge" style={{ background: roleStyle.bg, color: roleStyle.text, borderColor: roleStyle.border }}>
                           {user.role}
@@ -153,9 +172,9 @@ const UserManagement = () => {
                       </td>
                       <td>
                         <span className="um-badge" style={{
-                          background: isBlocked ? 'var(--color-error-bg)' : 'var(--color-success-bg)',
-                          color: isBlocked ? 'var(--color-error-text)' : 'var(--color-success-text)',
-                          borderColor: isBlocked ? 'var(--color-error-border)' : 'var(--color-success-border)',
+                          background:  isBlocked ? 'var(--color-error-bg)'      : 'var(--color-success-bg)',
+                          color:       isBlocked ? 'var(--color-error-text)'    : 'var(--color-success-text)',
+                          borderColor: isBlocked ? 'var(--color-error-border)'  : 'var(--color-success-border)',
                         }}>
                           {isBlocked ? '🚫 Blocked' : '✅ Active'}
                         </span>

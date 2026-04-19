@@ -10,9 +10,6 @@ gunicorn==25.1.0
 psycopg2-binary==2.9.11
 dj-database-url==3.1.2
 
-# ── Cache — Redis (REQUIRED for OTP in multi-worker) ─────────────────────────
-django-redis==5.4.0
-redis==5.0.8
 
 # ── Storage ───────────────────────────────────────────────────────────────────
 cloudinary==1.44.1

@@ -10,7 +10,6 @@ from django.db import transaction, IntegrityError
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.pagination import PageNumberPagination
 
 from bookings.models import Booking
 from bookings.serializers import BookingSerializer
@@ -24,7 +23,7 @@ client = razorpay.Client(
 
 # Valid amounts in PAISE — server is the source of truth, never trust the client
 VALID_AMOUNTS_PAISE = {
-    1500: {'fee': 15, 'queue_access': True,  'plan': 'queue_view'},
+    1500: {'fee': 15, 'queue_access': True, 'plan': 'queue_view'},
 }
 
 
@@ -36,7 +35,6 @@ def _generate_token():
         token = f'TW-{ts}-{uid}'
         if not Booking.objects.filter(token=token).exists():
             return token
-    # Extremely unlikely but handle it gracefully
     raise RuntimeError('Could not generate a unique token after 5 attempts.')
 
 
@@ -60,7 +58,7 @@ class CreateOrderView(APIView):
                 'amount':          amount_paise,
                 'currency':        'INR',
                 'payment_capture': 1,
-                'notes':           {
+                'notes': {
                     'user_id': str(request.user.id),
                     'plan':    VALID_AMOUNTS_PAISE[amount_paise]['plan'],
                 },
@@ -87,7 +85,7 @@ class VerifyPaymentView(APIView):
         if not all([order_id, payment_id, sig]):
             return Response({'success': False, 'message': 'Missing payment fields.'}, status=400)
 
-        # ── 1. Idempotency check ──────────────────────────────────────────────
+        # ── 1. Idempotency — prevent duplicate bookings ───────────────────────
         existing = Booking.objects.filter(payment_id=payment_id).first()
         if existing:
             logger.warning('Duplicate verify attempt for payment_id %s', payment_id)
@@ -117,7 +115,7 @@ class VerifyPaymentView(APIView):
             logger.warning('Invalid Razorpay signature for order %s', order_id)
             return Response({'success': False, 'message': 'Invalid signature.'}, status=400)
 
-        # ── 3. Validate amount SERVER-SIDE — never trust client amount ────────
+        # ── 3. Validate amount SERVER-SIDE ────────────────────────────────────
         try:
             order_details = client.order.fetch(order_id)
         except Exception as exc:
@@ -151,7 +149,6 @@ class VerifyPaymentView(APIView):
             if not date_val or not slot_val:
                 return Response({'success': False, 'message': 'Date and slot are required.'}, status=400)
 
-            # Validate slot belongs to doctor
             if slot_val not in (doctor.slots or []):
                 return Response({'success': False, 'message': 'Invalid slot.'}, status=400)
 
@@ -217,24 +214,33 @@ class VerifyPaymentView(APIView):
 
 
 class AdminReportsView(APIView):
+    """
+    Admin-only reports endpoint.
+    Returns a flat (non-paginated) response so the frontend can read
+    data.total, data.completed, data.waiting, data.bookings directly.
+    Limited to last 500 bookings for performance.
+    """
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
-        paginator = PageNumberPagination()
-        paginator.page_size = 100
-
         all_b = (
             Booking.objects
             .all()
             .select_related('doctor', 'hospital', 'user')
             .order_by('-created')
         )
-        page      = paginator.paginate_queryset(all_b, request)
-        bookings  = BookingSerializer(page, many=True, context={'request': request}).data
 
-        return paginator.get_paginated_response({
-            'total':     all_b.count(),
-            'completed': all_b.filter(status='completed').count(),
-            'waiting':   all_b.filter(status='waiting').count(),
+        total     = all_b.count()
+        completed = all_b.filter(status='completed').count()
+        waiting   = all_b.filter(status='waiting').count()
+
+        # Limit to 500 most recent for the reports table
+        recent    = all_b[:500]
+        bookings  = BookingSerializer(recent, many=True, context={'request': request}).data
+
+        return Response({
+            'total':     total,
+            'completed': completed,
+            'waiting':   waiting,
             'bookings':  bookings,
         })

@@ -1,4 +1,3 @@
-import cloudinary
 import dj_database_url
 from pathlib import Path
 from decouple import config, Csv
@@ -8,11 +7,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ── Core ──────────────────────────────────────────────────────────────────────
 SECRET_KEY = config('SECRET_KEY')
-DEBUG      = config('DEBUG', default=False, cast=bool)
+DEBUG      = config('DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS',
-    default='localhost,127.0.0.1',
+    default='localhost,127.0.0.1,0.0.0.0',
     cast=Csv()
 )
 
@@ -84,21 +83,18 @@ else:
         }
     }
 
-# ── Cache — Redis (REQUIRED: fixes OTP in multi-worker Gunicorn) ──────────────
+# ── Cache (Redis) ─────────────────────────────────────────────────────────────
 REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
 
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': REDIS_URL,
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        },
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'tw_cache_table',
         'TIMEOUT': 300,
     }
 }
 
-# ── Auth / JWT ────────────────────────────────────────────────────────────────
+# ── REST Framework ────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -106,7 +102,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS':  'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 50,
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
@@ -119,84 +115,97 @@ REST_FRAMEWORK = {
     },
 }
 
+# ── JWT ───────────────────────────────────────────────────────────────────────
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME':          timedelta(hours=2),
-    'REFRESH_TOKEN_LIFETIME':         timedelta(days=14),
-    'ROTATE_REFRESH_TOKENS':          True,
-    'BLACKLIST_AFTER_ROTATION':       True,
-    'UPDATE_LAST_LOGIN':              True,
-    'ALGORITHM':                      'HS256',
-    'SIGNING_KEY':                    SECRET_KEY,
-    'AUTH_HEADER_TYPES':              ('Bearer',),
+    'ACCESS_TOKEN_LIFETIME':    timedelta(hours=2),
+    'REFRESH_TOKEN_LIFETIME':   timedelta(days=14),
+    'ROTATE_REFRESH_TOKENS':    True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN':        True,
+    'ALGORITHM':                'HS256',
+    'SIGNING_KEY':              SECRET_KEY,
+    'AUTH_HEADER_TYPES':        ('Bearer',),
 }
 
-# ── CORS — lock to your actual frontend domain ─────────────────────────────────
+# ── CORS ──────────────────────────────────────────────────────────────────────
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS   = config(
     'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:3000',
+    default='http://localhost:3000,http://127.0.0.1:3000',
     cast=Csv()
 )
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
+    'accept', 'accept-encoding', 'authorization', 'content-type',
+    'dnt', 'origin', 'user-agent', 'x-csrftoken', 'x-requested-with',
 ]
 
 # ── Static files ──────────────────────────────────────────────────────────────
 STATIC_URL  = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# ── Cloudinary ────────────────────────────────────────────────────────────────
+# ── Cloudinary / Storage ──────────────────────────────────────────────────────
+# Reads from .env — empty string means Cloudinary is NOT configured.
 CLOUDINARY_CLOUD_NAME = config('CLOUDINARY_CLOUD_NAME', default='')
 CLOUDINARY_API_KEY    = config('CLOUDINARY_API_KEY',    default='')
 CLOUDINARY_API_SECRET = config('CLOUDINARY_API_SECRET', default='')
 
-cloudinary.config(
-    cloud_name = CLOUDINARY_CLOUD_NAME,
-    api_key    = CLOUDINARY_API_KEY,
-    api_secret = CLOUDINARY_API_SECRET,
-    secure     = True,
+_cloudinary_configured = bool(
+    CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET
 )
 
-CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': CLOUDINARY_CLOUD_NAME,
-    'API_KEY':    CLOUDINARY_API_KEY,
-    'API_SECRET': CLOUDINARY_API_SECRET,
-}
-
-STORAGES = {
-    'default': {
-        'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
-    },
-    'staticfiles': {
-        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
-    },
-}
+if _cloudinary_configured:
+    import cloudinary
+    cloudinary.config(
+        cloud_name = CLOUDINARY_CLOUD_NAME,
+        api_key    = CLOUDINARY_API_KEY,
+        api_secret = CLOUDINARY_API_SECRET,
+        secure     = True,
+    )
+    CLOUDINARY_STORAGE = {
+        'CLOUD_NAME': CLOUDINARY_CLOUD_NAME,
+        'API_KEY':    CLOUDINARY_API_KEY,
+        'API_SECRET': CLOUDINARY_API_SECRET,
+    }
+    STORAGES = {
+        'default': {
+            'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
+        },
+        'staticfiles': {
+            'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+        },
+    }
+else:
+    # Dev fallback — images stored locally in backend/media/
+    STORAGES = {
+        'default': {
+            'BACKEND': 'django.core.files.storage.FileSystemStorage',
+        },
+        'staticfiles': {
+            'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+        },
+    }
 
 MEDIA_URL  = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # ── Third-party Keys ──────────────────────────────────────────────────────────
-RAZORPAY_KEY_ID      = config('RAZORPAY_KEY_ID',      default='')
-RAZORPAY_KEY_SECRET  = config('RAZORPAY_KEY_SECRET',  default='')
-TWOFACTOR_API_KEY    = config('TWOFACTOR_API_KEY',    default='')
+RAZORPAY_KEY_ID     = config('RAZORPAY_KEY_ID',     default='')
+RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
+TWOFACTOR_API_KEY   = config('TWOFACTOR_API_KEY',   default='')
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 LOGGING = {
-    'version': 1,
+    'version':                  1,
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
+            'format': '{levelname} {asctime} {module} {message}',
+            'style':  '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style':  '{',
         },
     },
     'handlers': {
@@ -217,7 +226,7 @@ LOGGING = {
         },
         'tokenwalla': {
             'handlers':  ['console'],
-            'level':     'INFO',
+            'level':     'DEBUG',
             'propagate': False,
         },
     },
@@ -230,22 +239,24 @@ USE_I18N           = True
 USE_TZ             = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# ── Password Validators ───────────────────────────────────────────────────────
+# ── Password Validation ────────────────────────────────────────────────────────
 AUTH_PASSWORD_VALIDATORS = [
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-     'OPTIONS': {'min_length': 6}},
+    {
+        'NAME':    'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {'min_length': 6},
+    },
 ]
 
-# ── Security (always on, not just production) ─────────────────────────────────
-SECURE_BROWSER_XSS_FILTER   = True
-X_FRAME_OPTIONS              = 'DENY'
-SECURE_CONTENT_TYPE_NOSNIFF  = True
+# ── Security headers ──────────────────────────────────────────────────────────
+SECURE_BROWSER_XSS_FILTER  = True
+X_FRAME_OPTIONS             = 'DENY'
+SECURE_CONTENT_TYPE_NOSNIFF = True
 
 if not DEBUG:
-    SECURE_SSL_REDIRECT             = True
-    SESSION_COOKIE_SECURE           = True
-    CSRF_COOKIE_SECURE              = True
-    SECURE_HSTS_SECONDS             = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS  = True
-    SECURE_HSTS_PRELOAD             = True
-    SECURE_PROXY_SSL_HEADER         = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT            = True
+    SESSION_COOKIE_SECURE          = True
+    CSRF_COOKIE_SECURE             = True
+    SECURE_HSTS_SECONDS            = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD            = True
+    SECURE_PROXY_SSL_HEADER        = ('HTTP_X_FORWARDED_PROTO', 'https')

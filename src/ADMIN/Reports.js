@@ -18,21 +18,30 @@ const Reports = () => {
   useEffect(() => {
     setLoading(true);
     API.get('/payment/reports/')
-      .then(({ data }) => setData(data))
+      .then(({ data: raw }) => {
+        // AdminReportsView returns flat { total, completed, waiting, bookings: [] }
+        setData({
+          total:     raw.total     || 0,
+          completed: raw.completed || 0,
+          waiting:   raw.waiting   || 0,
+          bookings:  Array.isArray(raw.bookings) ? raw.bookings : [],
+        });
+      })
       .catch(() => setError('Failed to load reports.'))
       .finally(() => setLoading(false));
   }, []);
 
-  const inProgress = data.bookings.filter(b => b.status === 'in_progress').length;
-  const revenue    = data.bookings.reduce((a, b) => a + (b.amount || 0), 0);
+  const bookingsArr = data.bookings;
+  const inProgress  = bookingsArr.filter(b => b.status === 'in_progress').length;
+  const revenue     = bookingsArr.reduce((a, b) => a + (b.amount || 0), 0);
 
-  const filtered = data.bookings.filter(b => {
+  const filtered = bookingsArr.filter(b => {
     const matchStatus = filter === 'all' || b.status === filter;
-    const q = search.toLowerCase();
+    const q           = search.toLowerCase();
     const matchSearch = !search ||
-      (b.token || '').toLowerCase().includes(q) ||
+      (b.token        || '').toLowerCase().includes(q) ||
       (b.patient_name || '').toLowerCase().includes(q) ||
-      (b.doctor_name || '').toLowerCase().includes(q);
+      (b.doctor_name  || '').toLowerCase().includes(q);
     return matchStatus && matchSearch;
   });
 
@@ -68,10 +77,9 @@ const Reports = () => {
         .rp-table tr:last-child td { border-bottom: none; }
         .rp-table tr:hover td { background: var(--blue-50); }
         .rp-badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 100px; font-size: 12px; font-weight: 600; border: 1px solid transparent; }
-        .rp-token { font-family: 'DM Mono, monospace'; font-size: 13px; color: var(--blue-700); font-weight: 500; }
+        .rp-token { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--blue-700); font-weight: 500; }
         .rp-empty { text-align: center; padding: 60px 20px; color: var(--gray-400); font-size: 14px; }
         @media (max-width: 900px) { .rp-stats { grid-template-columns: 1fr 1fr; } }
-        @media (max-width: 600px) { .rp-stats { grid-template-columns: 1fr 1fr; } }
       `}</style>
 
       <div className="rp-header">
@@ -85,7 +93,6 @@ const Reports = () => {
         </div>
       )}
 
-      {/* Stats */}
       <div className="rp-stats">
         <div className="rp-stat p">
           <div style={{ fontSize: '1.4rem', marginBottom: 8 }}>📊</div>
@@ -109,14 +116,22 @@ const Reports = () => {
         </div>
       </div>
 
-      {/* Toolbar */}
       <div className="rp-toolbar">
         <div className="rp-search-wrap">
           <span className="rp-search-icon">🔍</span>
-          <input className="rp-search" placeholder="Search token, patient…" value={search} onChange={e => setSearch(e.target.value)} />
+          <input
+            className="rp-search"
+            placeholder="Search token, patient…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         </div>
         {['all', 'waiting', 'in_progress', 'completed', 'cancelled'].map(s => (
-          <button key={s} className={`rp-filter-btn ${filter === s ? 'active' : ''}`} onClick={() => setFilter(s)}>
+          <button
+            key={s}
+            className={`rp-filter-btn ${filter === s ? 'active' : ''}`}
+            onClick={() => setFilter(s)}
+          >
             {s === 'all' ? 'All' : s.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}
           </button>
         ))}
@@ -134,8 +149,14 @@ const Reports = () => {
             <table className="rp-table">
               <thead>
                 <tr>
-                  <th>Token</th><th>Patient</th><th>Doctor</th>
-                  <th>Hospital</th><th>Date</th><th>Slot</th><th>₹</th><th>Status</th>
+                  <th>Token</th>
+                  <th>Patient</th>
+                  <th>Doctor</th>
+                  <th>Hospital</th>
+                  <th>Date</th>
+                  <th>Slot</th>
+                  <th>₹</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>

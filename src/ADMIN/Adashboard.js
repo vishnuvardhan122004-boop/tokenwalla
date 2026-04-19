@@ -1,10 +1,9 @@
 // ADMIN/Adashboard.js
-// Overview stats are built-in here. No separate AdminIndex.js needed.
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router';
 import API from '../services/api';
 
-/* ── Overview panel (shown only at /Adashboard exactly) ─────────────────── */
+/* ── Overview panel (shown at /Adashboard exactly) ──────────────────────────── */
 const Overview = () => {
   const [stats,   setStats]   = useState({ total: 0, completed: 0, waiting: 0, bookings: [] });
   const [users,   setUsers]   = useState([]);
@@ -12,9 +11,26 @@ const Overview = () => {
   const [error,   setError]   = useState('');
 
   useEffect(() => {
-    Promise.all([API.get('/payment/reports/'), API.get('/auth/users/')])
-      .then(([r, u]) => { setStats(r.data); setUsers(u.data); })
-      .catch(() => setError('Failed to load data.'))
+    Promise.all([
+      API.get('/payment/reports/'),
+      // AllUsersView returns paginated { count, results: [...] }
+      API.get('/auth/users/?page_size=500'),
+    ])
+      .then(([rReports, rUsers]) => {
+        // Reports endpoint returns flat { total, completed, waiting, bookings }
+        setStats(rReports.data);
+
+        // Users endpoint is paginated — handle both paginated and plain array responses
+        const rawUsers = rUsers.data;
+        if (Array.isArray(rawUsers)) {
+          setUsers(rawUsers);
+        } else if (rawUsers?.results) {
+          setUsers(rawUsers.results);
+        } else {
+          setUsers([]);
+        }
+      })
+      .catch(() => setError('Failed to load dashboard data.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -26,29 +42,32 @@ const Overview = () => {
   };
 
   if (loading) return (
-    <div style={{ display:'flex', justifyContent:'center', padding:'80px 0' }}>
-      <div style={{ width:36, height:36, border:'3px solid #B5D4F4', borderTopColor:'#185FA5', borderRadius:'50%', animation:'ovSpin 0.7s linear infinite' }} />
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
+      <div style={{ width: 36, height: 36, border: '3px solid #B5D4F4', borderTopColor: '#185FA5', borderRadius: '50%', animation: 'ovSpin 0.7s linear infinite' }} />
       <style>{`@keyframes ovSpin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 
   if (error) return (
-    <div style={{ background:'#FCEBEB', border:'1px solid #F09595', borderRadius:12, padding:'14px 18px', color:'#A32D2D', fontSize:14 }}>⚠️ {error}</div>
+    <div style={{ background: '#FCEBEB', border: '1px solid #F09595', borderRadius: 12, padding: '14px 18px', color: '#A32D2D', fontSize: 14 }}>
+      ⚠️ {error}
+    </div>
   );
 
-  const inProgress   = stats.bookings.filter(b => b.status === 'in_progress').length;
+  const bookingsArr  = Array.isArray(stats.bookings) ? stats.bookings : [];
+  const inProgress   = bookingsArr.filter(b => b.status === 'in_progress').length;
   const patientCount = users.filter(u => u.role === 'patient').length;
   const hospCount    = users.filter(u => u.role === 'hospital').length;
-  const revenue      = stats.bookings.reduce((a, b) => a + (b.amount || 0), 0);
+  const revenue      = bookingsArr.reduce((a, b) => a + (b.amount || 0), 0);
 
   const statCards = [
-    { icon: '👥', label: 'Total Users',    val: users.length,    accent: '#185FA5' },
-    { icon: '🏥', label: 'Total Bookings', val: stats.total,     accent: '#0EA5E9' },
-    { icon: '✅', label: 'Completed',      val: stats.completed, accent: '#3B6D11' },
-    { icon: '⏳', label: 'Waiting',        val: stats.waiting,   accent: '#854F0B' },
-    { icon: '🔄', label: 'In Progress',    val: inProgress,      accent: '#0EA5E9' },
-    { icon: '🩺', label: 'Patients',       val: patientCount,    accent: '#7C3AED' },
-    { icon: '🏨', label: 'Hospitals',      val: hospCount,       accent: '#0D9488' },
+    { icon: '👥', label: 'Total Users',    val: users.length,        accent: '#185FA5' },
+    { icon: '🏥', label: 'Total Bookings', val: stats.total || 0,    accent: '#0EA5E9' },
+    { icon: '✅', label: 'Completed',      val: stats.completed || 0, accent: '#3B6D11' },
+    { icon: '⏳', label: 'Waiting',        val: stats.waiting || 0,  accent: '#854F0B' },
+    { icon: '🔄', label: 'In Progress',    val: inProgress,          accent: '#0EA5E9' },
+    { icon: '🩺', label: 'Patients',       val: patientCount,        accent: '#7C3AED' },
+    { icon: '🏨', label: 'Hospitals',      val: hospCount,           accent: '#0D9488' },
     { icon: '💰', label: 'Revenue',        val: `₹${revenue.toLocaleString('en-IN')}`, accent: '#185FA5' },
   ];
 
@@ -100,29 +119,34 @@ const Overview = () => {
         <div className="ov-table-head">
           <div>
             <div className="ov-table-title">🕐 Recent Bookings</div>
-            <div className="ov-table-sub">Last {Math.min(stats.bookings.length, 10)} · Revenue ₹{revenue.toLocaleString('en-IN')}</div>
+            <div className="ov-table-sub">
+              Last {Math.min(bookingsArr.length, 10)} · Revenue ₹{revenue.toLocaleString('en-IN')}
+            </div>
           </div>
         </div>
-        {stats.bookings.length === 0 ? (
+        {bookingsArr.length === 0 ? (
           <div className="ov-empty">No bookings yet.</div>
         ) : (
-          <div style={{ overflowX:'auto' }}>
+          <div style={{ overflowX: 'auto' }}>
             <table className="ov-table">
               <thead>
-                <tr><th>Token</th><th>Patient</th><th>Doctor</th><th>Date</th><th>₹</th><th>Status</th></tr>
+                <tr>
+                  <th>Token</th><th>Patient</th><th>Doctor</th>
+                  <th>Date</th><th>₹</th><th>Status</th>
+                </tr>
               </thead>
               <tbody>
-                {stats.bookings.slice(0, 10).map(b => {
+                {bookingsArr.slice(0, 10).map(b => {
                   const st = STATUS_STYLES[b.status] || STATUS_STYLES.cancelled;
                   return (
                     <tr key={b.id}>
                       <td><span className="ov-token">{b.token}</span></td>
-                      <td style={{ fontWeight:500 }}>{b.patient_name || b.user_name || '—'}</td>
-                      <td style={{ color:'#64748B' }}>{b.doctor_name || '—'}</td>
-                      <td style={{ color:'#64748B' }}>{b.date || '—'}</td>
-                      <td style={{ fontWeight:600 }}>₹{b.amount || 0}</td>
+                      <td style={{ fontWeight: 500 }}>{b.patient_name || b.user_name || '—'}</td>
+                      <td style={{ color: '#64748B' }}>{b.doctor_name || '—'}</td>
+                      <td style={{ color: '#64748B' }}>{b.date || '—'}</td>
+                      <td style={{ fontWeight: 600 }}>₹{b.amount || 0}</td>
                       <td>
-                        <span className="ov-badge" style={{ background:st.bg, color:st.text, borderColor:st.border }}>
+                        <span className="ov-badge" style={{ background: st.bg, color: st.text, borderColor: st.border }}>
                           {st.label}
                         </span>
                       </td>
@@ -138,7 +162,7 @@ const Overview = () => {
   );
 };
 
-/* ── Shell ───────────────────────────────────────────────────────────────── */
+/* ── Shell ───────────────────────────────────────────────────────────────────── */
 const Adashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -188,110 +212,40 @@ const Adashboard = () => {
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
-
         *, *::before, *::after { box-sizing: border-box; }
-
-        .adb-shell {
-          display: flex; min-height: 100vh;
-          font-family: 'DM Sans', sans-serif;
-        }
-        .adb-aside {
-          width: 240px; flex-shrink: 0;
-          background: #042C53;
-          display: flex; flex-direction: column;
-          position: sticky; top: 0; height: 100vh;
-          overflow-y: auto;
-        }
-        .adb-brand {
-          display: flex; align-items: center; gap: 10px;
-          padding: 20px 18px 18px;
-          border-bottom: 1px solid rgba(255,255,255,0.08);
-        }
-        .adb-brand-logo {
-          width: 36px; height: 36px; border-radius: 10px;
-          overflow: hidden; flex-shrink: 0;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        }
+        .adb-shell { display:flex; min-height:100vh; font-family:'DM Sans',sans-serif; }
+        .adb-aside { width:240px; flex-shrink:0; background:#042C53; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+        .adb-brand { display:flex; align-items:center; gap:10px; padding:20px 18px 18px; border-bottom:1px solid rgba(255,255,255,0.08); }
+        .adb-brand-logo { width:36px; height:36px; border-radius:10px; overflow:hidden; flex-shrink:0; box-shadow:0 2px 8px rgba(0,0,0,0.3); }
         .adb-brand-logo img { width:100%; height:100%; object-fit:cover; display:block; }
-        .adb-brand-name {
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 1rem; font-weight: 800; color: #fff; line-height: 1.2; margin: 0;
-        }
-        .adb-brand-name .acc { color: #85B7EB; }
-        .adb-brand-sub { font-size: 10px; color: rgba(255,255,255,0.35); margin: 0; }
-        .adb-nav { flex: 1; padding: 12px 10px; }
-        .adb-nav-label {
-          font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
-          color: rgba(255,255,255,0.25); padding: 10px 10px 6px; display: block;
-        }
-        .adb-nav-link {
-          display: flex; align-items: center; gap: 10px;
-          padding: 10px 12px; border-radius: 10px; margin-bottom: 2px;
-          font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.55);
-          text-decoration: none; transition: all 0.15s;
-        }
-        .adb-nav-link:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.9); text-decoration: none; }
-        .adb-nav-link.active { background: #185FA5; color: #fff; font-weight: 600; }
-        .adb-nav-icon {
-          width: 30px; height: 30px; border-radius: 8px;
-          background: rgba(255,255,255,0.07);
-          display: flex; align-items: center; justify-content: center;
-          font-size: 14px; flex-shrink: 0;
-        }
-        .adb-nav-link.active .adb-nav-icon { background: rgba(255,255,255,0.15); }
-        .adb-footer { padding: 12px 10px; border-top: 1px solid rgba(255,255,255,0.08); }
-        .adb-user-row {
-          display: flex; align-items: center; gap: 10px;
-          padding: 10px 12px; border-radius: 10px;
-          background: rgba(255,255,255,0.05); margin-bottom: 8px;
-        }
-        .adb-avatar {
-          width: 30px; height: 30px; border-radius: 50%;
-          background: #185FA5; color: #fff;
-          display: flex; align-items: center; justify-content: center;
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 11px; font-weight: 800; flex-shrink: 0;
-        }
-        .adb-user-name { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.8); margin: 0; }
-        .adb-user-role { font-size: 10px; color: rgba(255,255,255,0.3); margin: 0; }
-        .adb-logout {
-          display: flex; align-items: center; gap: 8px;
-          width: 100%; padding: 9px 12px; border-radius: 9px;
-          background: rgba(163,45,45,0.15); border: 1px solid rgba(240,149,149,0.2);
-          color: #F09595; font-size: 13px; font-weight: 500; cursor: pointer;
-          transition: all 0.15s; font-family: 'DM Sans', sans-serif;
-        }
-        .adb-logout:hover { background: rgba(163,45,45,0.25); border-color: rgba(240,149,149,0.4); }
-        .adb-main { flex: 1; display: flex; flex-direction: column; background: #F4F9FF; min-height: 100vh; }
-        .adb-topbar {
-          background: #fff; border-bottom: 1px solid #B5D4F4;
-          padding: 0 28px; height: 60px;
-          display: flex; align-items: center; justify-content: space-between;
-          position: sticky; top: 0; z-index: 100; flex-shrink: 0;
-        }
-        .adb-page-title {
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 1rem; font-weight: 700; color: #0F172A; margin: 0;
-        }
-        .adb-badge {
-          display: flex; align-items: center; gap: 6px;
-          background: #E6F1FB; border: 1px solid #B5D4F4;
-          border-radius: 100px; padding: 4px 12px;
-          font-size: 12px; font-weight: 600; color: #185FA5;
-        }
-        .adb-dot { width: 6px; height: 6px; border-radius: 50%; background: #3B6D11; animation: adbPulse 2s infinite; }
+        .adb-brand-name { font-family:'Plus Jakarta Sans',sans-serif; font-size:1rem; font-weight:800; color:#fff; line-height:1.2; margin:0; }
+        .adb-brand-name .acc { color:#85B7EB; }
+        .adb-brand-sub { font-size:10px; color:rgba(255,255,255,0.35); margin:0; }
+        .adb-nav { flex:1; padding:12px 10px; }
+        .adb-nav-label { font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:rgba(255,255,255,0.25); padding:10px 10px 6px; display:block; }
+        .adb-nav-link { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; margin-bottom:2px; font-size:14px; font-weight:500; color:rgba(255,255,255,0.55); text-decoration:none; transition:all 0.15s; }
+        .adb-nav-link:hover { background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.9); text-decoration:none; }
+        .adb-nav-link.active { background:#185FA5; color:#fff; font-weight:600; }
+        .adb-nav-icon { width:30px; height:30px; border-radius:8px; background:rgba(255,255,255,0.07); display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+        .adb-nav-link.active .adb-nav-icon { background:rgba(255,255,255,0.15); }
+        .adb-footer { padding:12px 10px; border-top:1px solid rgba(255,255,255,0.08); }
+        .adb-user-row { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; background:rgba(255,255,255,0.05); margin-bottom:8px; }
+        .adb-avatar { width:30px; height:30px; border-radius:50%; background:#185FA5; color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Plus Jakarta Sans',sans-serif; font-size:11px; font-weight:800; flex-shrink:0; }
+        .adb-user-name { font-size:13px; font-weight:600; color:rgba(255,255,255,0.8); margin:0; }
+        .adb-user-role { font-size:10px; color:rgba(255,255,255,0.3); margin:0; }
+        .adb-logout { display:flex; align-items:center; gap:8px; width:100%; padding:9px 12px; border-radius:9px; background:rgba(163,45,45,0.15); border:1px solid rgba(240,149,149,0.2); color:#F09595; font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; font-family:'DM Sans',sans-serif; }
+        .adb-logout:hover { background:rgba(163,45,45,0.25); border-color:rgba(240,149,149,0.4); }
+        .adb-main { flex:1; display:flex; flex-direction:column; background:#F4F9FF; min-height:100vh; }
+        .adb-topbar { background:#fff; border-bottom:1px solid #B5D4F4; padding:0 28px; height:60px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; flex-shrink:0; }
+        .adb-page-title { font-family:'Plus Jakarta Sans',sans-serif; font-size:1rem; font-weight:700; color:#0F172A; margin:0; }
+        .adb-badge { display:flex; align-items:center; gap:6px; background:#E6F1FB; border:1px solid #B5D4F4; border-radius:100px; padding:4px 12px; font-size:12px; font-weight:600; color:#185FA5; }
+        .adb-dot { width:6px; height:6px; border-radius:50%; background:#3B6D11; animation:adbPulse 2s infinite; }
         @keyframes adbPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        .adb-content { flex: 1; padding: 28px; }
-
-        @media (max-width: 800px) {
-          .adb-aside { display: none; }
-          .adb-content { padding: 16px; }
-          .adb-topbar { padding: 0 16px; }
-        }
+        .adb-content { flex:1; padding:28px; }
+        @media (max-width: 800px) { .adb-aside { display:none; } .adb-content { padding:16px; } .adb-topbar { padding:0 16px; } }
       `}</style>
 
       <div className="adb-shell">
-
         <aside className="adb-aside">
           <div className="adb-brand">
             <div className="adb-brand-logo"><img src="/logo.png" alt="TW" /></div>
@@ -335,7 +289,6 @@ const Adashboard = () => {
             <div className="adb-badge"><span className="adb-dot" /> Admin</div>
           </div>
           <div className="adb-content">
-            {/* Show Overview inline at /Adashboard, child pages via Outlet */}
             {isOverview ? <Overview /> : <Outlet />}
           </div>
         </main>

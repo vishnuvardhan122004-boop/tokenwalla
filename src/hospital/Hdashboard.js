@@ -4,23 +4,14 @@ import API from "../services/api";
 import { logoutUser } from "../services/api";
 
 const DEFAULT_SLOTS = [
-  // 🌙 Late Night / Early Morning
-  "12:00 AM", "12:30 AM", "01:00 AM", "01:30 AM",
-  "02:00 AM", "02:30 AM", "03:00 AM", "03:30 AM",
-  "04:00 AM", "04:30 AM", "05:00 AM", "05:30 AM",
-  // 🌅 Morning
-  "06:00 AM", "06:30 AM", "07:00 AM", "07:30 AM",
-  "08:00 AM", "08:30 AM", "09:00 AM", "09:30 AM",
-  "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
-  // ☀️ Afternoon
-  "12:00 PM", "12:30 PM", "01:00 PM", "01:30 PM",
-  "02:00 PM", "02:30 PM", "03:00 PM", "03:30 PM",
-  // 🌆 Evening
-  "04:00 PM", "04:30 PM", "05:00 PM", "05:30 PM",
-  "06:00 PM", "06:30 PM", "07:00 PM", "07:30 PM",
-  // 🌙 Night
-  "08:00 PM", "08:30 PM", "09:00 PM", "09:30 PM",
-  "10:00 PM", "10:30 PM", "11:00 PM", "11:30 PM",
+  "12:00 AM","12:30 AM","01:00 AM","01:30 AM","02:00 AM","02:30 AM",
+  "03:00 AM","03:30 AM","04:00 AM","04:30 AM","05:00 AM","05:30 AM",
+  "06:00 AM","06:30 AM","07:00 AM","07:30 AM","08:00 AM","08:30 AM",
+  "09:00 AM","09:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM",
+  "12:00 PM","12:30 PM","01:00 PM","01:30 PM","02:00 PM","02:30 PM",
+  "03:00 PM","03:30 PM","04:00 PM","04:30 PM","05:00 PM","05:30 PM",
+  "06:00 PM","06:30 PM","07:00 PM","07:30 PM","08:00 PM","08:30 PM",
+  "09:00 PM","09:30 PM","10:00 PM","10:30 PM","11:00 PM","11:30 PM",
 ];
 
 const SLOT_SECTIONS = [
@@ -41,39 +32,19 @@ const EMPTY_ERRORS = {
   max_per_slot: "", slots: "",
 };
 
-// ── Validation ──────────────────────────────────────────────────────────────
 const validate = (formData) => {
   const errors = { ...EMPTY_ERRORS };
   let valid = true;
-
-  if (!formData.name.trim()) {
-    errors.name = "Doctor name is required"; valid = false;
-  } else if (formData.name.trim().length < 2) {
-    errors.name = "Name must be at least 2 characters"; valid = false;
-  }
-
-  if (!formData.specialization.trim()) {
-    errors.specialization = "Specialization is required"; valid = false;
-  }
-
-  if (!formData.mobile.trim()) {
-    errors.mobile = "Mobile number is required"; valid = false;
-  } else if (!/^[6-9]\d{9}$/.test(formData.mobile.trim())) {
-    errors.mobile = "Enter a valid 10-digit Indian mobile number"; valid = false;
-  }
-
-  if (formData.experience !== "" && (isNaN(formData.experience) || Number(formData.experience) < 0)) {
-    errors.experience = "Experience must be a positive number"; valid = false;
-  }
-
-  if (formData.max_per_slot !== "" && (isNaN(formData.max_per_slot) || Number(formData.max_per_slot) < 1)) {
-    errors.max_per_slot = "Must be at least 1 patient per slot"; valid = false;
-  }
-
-  if (formData.slots.length === 0) {
-    errors.slots = "Select at least one time slot"; valid = false;
-  }
-
+  if (!formData.name.trim()) { errors.name = "Doctor name is required"; valid = false; }
+  else if (formData.name.trim().length < 2) { errors.name = "Name must be at least 2 characters"; valid = false; }
+  if (!formData.specialization.trim()) { errors.specialization = "Specialization is required"; valid = false; }
+  if (!formData.mobile.trim()) { errors.mobile = "Mobile number is required"; valid = false; }
+  else if (!/^[6-9]\d{9}$/.test(formData.mobile.trim())) { errors.mobile = "Enter a valid 10-digit Indian mobile number"; valid = false; }
+  if (formData.experience !== "" && (isNaN(formData.experience) || Number(formData.experience) < 0))
+    { errors.experience = "Experience must be a positive number"; valid = false; }
+  if (formData.max_per_slot !== "" && (isNaN(formData.max_per_slot) || Number(formData.max_per_slot) < 1))
+    { errors.max_per_slot = "Must be at least 1 patient per slot"; valid = false; }
+  if (formData.slots.length === 0) { errors.slots = "Select at least one time slot"; valid = false; }
   return { errors, valid };
 };
 
@@ -82,6 +53,7 @@ const Hdashboard = () => {
 
   const [hospital,             setHospital]             = useState(null);
   const [activeTab,            setActiveTab]            = useState("queue");
+  // Queue state — keys match HospitalQueueView response: waiting, inProgress, completed
   const [queue,                setQueue]                = useState({ waiting: [], inProgress: [], completed: [] });
   const [doctors,              setDoctors]              = useState([]);
   const [loading,              setLoading]              = useState(false);
@@ -94,9 +66,7 @@ const Hdashboard = () => {
   const [doctorImagePreview,   setDoctorImagePreview]   = useState(null);
   const [hospitalImagePreview, setHospitalImagePreview] = useState(null);
   const [submitting,           setSubmitting]           = useState(false);
-  // Track which doctor IDs are currently being toggled
   const [toggling,             setToggling]             = useState(new Set());
-  // Toast notification
   const [toast,                setToast]                = useState(null);
 
   const showToast = (msg, type = "success") => {
@@ -104,14 +74,16 @@ const Hdashboard = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ── Auth Check ──────────────────────────────────────────────────────────────
+  // ── Auth check ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const token   = localStorage.getItem("access");
     const userRaw = localStorage.getItem("user");
     if (!token || !userRaw) { navigate("/Hlogin"); return; }
     try {
       const user = JSON.parse(userRaw);
-      if (user.role !== "hospital" || !user.hospital) { navigate("/Hlogin"); return; }
+      if (user.role !== "hospital") { navigate("/Hlogin"); return; }
+      // hospital object is stored in user.hospital by HospitalLoginView
+      if (!user.hospital) { navigate("/Hlogin"); return; }
       setHospital(user.hospital);
     } catch { navigate("/Hlogin"); }
   }, [navigate]);
@@ -120,9 +92,16 @@ const Hdashboard = () => {
   const loadQueue = async () => {
     if (!hospital) return;
     try {
-      const res = await API.get(`/bookings/queue/${hospital.id}/`);
-      setQueue(res.data);
-    } catch (err) { console.log("Queue load failed", err); }
+      const { data } = await API.get(`/bookings/queue/${hospital.id}/`);
+      // Response: { waiting: [], inProgress: [], completed: [] }
+      setQueue({
+        waiting:    data.waiting    || [],
+        inProgress: data.inProgress || [],
+        completed:  data.completed  || [],
+      });
+    } catch (err) {
+      console.warn("Queue load failed:", err?.response?.status, err?.response?.data);
+    }
   };
 
   // ── Load Doctors ────────────────────────────────────────────────────────────
@@ -130,10 +109,13 @@ const Hdashboard = () => {
     if (!hospital) return;
     setLoading(true);
     try {
-      const res = await API.get(`/doctors/?hospital=${hospital.id}`);
-      setDoctors(res.data);
-    } catch { console.log("Doctors load failed"); }
-    finally { setLoading(false); }
+      const { data } = await API.get(`/doctors/?hospital=${hospital.id}`);
+      setDoctors(Array.isArray(data) ? data : data?.results || []);
+    } catch {
+      console.warn("Doctors load failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -142,62 +124,40 @@ const Hdashboard = () => {
     loadDoctors();
     const interval = setInterval(loadQueue, 10000);
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hospital]);
 
   // ── Queue Actions ───────────────────────────────────────────────────────────
   const handleCall     = async (id) => {
     try { await API.patch(`/bookings/call/${id}/`);     loadQueue(); }
-    catch { showToast("Failed to call patient", "error"); }
+    catch (err) { showToast(err?.response?.data?.message || "Failed to call patient", "error"); }
   };
   const handleComplete = async (id) => {
     try { await API.patch(`/bookings/complete/${id}/`); loadQueue(); }
-    catch { showToast("Failed to complete booking", "error"); }
+    catch (err) { showToast(err?.response?.data?.message || "Failed to complete booking", "error"); }
   };
 
   // ── Toggle Availability ─────────────────────────────────────────────────────
-  // Sends only { available: bool } as JSON.
-  // The backend's fast-path in partial_update handles this without touching slots.
   const toggleAvailability = async (doctor) => {
     const newVal = !doctor.available;
     const docId  = doctor.id;
 
-    // Optimistic UI update — flip immediately so the user sees instant feedback
-    setDoctors(prev =>
-      prev.map(d => d.id === docId ? { ...d, available: newVal } : d)
-    );
+    setDoctors(prev => prev.map(d => d.id === docId ? { ...d, available: newVal } : d));
     setToggling(prev => new Set(prev).add(docId));
 
     try {
       const { data } = await API.patch(
         `/doctors/${docId}/`,
-        { available: newVal },                      // plain JSON body
+        { available: newVal },
         { headers: { "Content-Type": "application/json" } }
       );
-      // Sync with server response to stay in sync
-      setDoctors(prev =>
-        prev.map(d => d.id === docId ? { ...d, ...data } : d)
-      );
-      showToast(
-        `Dr. ${doctor.name} is now ${newVal ? "available ✅" : "unavailable ❌"}`
-      );
+      setDoctors(prev => prev.map(d => d.id === docId ? { ...d, ...data } : d));
+      showToast(`Dr. ${doctor.name} is now ${newVal ? "available ✅" : "unavailable ❌"}`);
     } catch (err) {
-      // Revert the optimistic update on failure
-      setDoctors(prev =>
-        prev.map(d => d.id === docId ? { ...d, available: !newVal } : d)
-      );
-      const msg =
-        err?.response?.data?.message ||
-        err?.response?.data?.detail ||
-        "Failed to update availability. Please try again.";
-      showToast(msg, "error");
-      console.error("Toggle availability error:", err?.response?.data || err);
+      setDoctors(prev => prev.map(d => d.id === docId ? { ...d, available: !newVal } : d));
+      showToast(err?.response?.data?.message || "Failed to update availability.", "error");
     } finally {
-      setToggling(prev => {
-        const next = new Set(prev);
-        next.delete(docId);
-        return next;
-      });
+      setToggling(prev => { const s = new Set(prev); s.delete(docId); return s; });
     }
   };
 
@@ -208,13 +168,8 @@ const Hdashboard = () => {
     if (file.size > 5 * 1024 * 1024) { showToast("Image size must be less than 5MB", "error"); return; }
     if (!file.type.startsWith("image/")) { showToast("Please select a valid image file", "error"); return; }
     const preview = URL.createObjectURL(file);
-    if (type === "doctor") {
-      setDoctorImage(file);
-      setDoctorImagePreview(preview);
-    } else {
-      setHospitalImage(file);
-      setHospitalImagePreview(preview);
-    }
+    if (type === "doctor") { setDoctorImage(file);   setDoctorImagePreview(preview); }
+    else                   { setHospitalImage(file); setHospitalImagePreview(preview); }
   };
 
   // ── Open Forms ──────────────────────────────────────────────────────────────
@@ -222,10 +177,8 @@ const Hdashboard = () => {
     setEditDoctor(null);
     setFormData(EMPTY_DOCTOR);
     setErrors(EMPTY_ERRORS);
-    setDoctorImage(null);
-    setHospitalImage(null);
-    setDoctorImagePreview(null);
-    setHospitalImagePreview(null);
+    setDoctorImage(null);       setDoctorImagePreview(null);
+    setHospitalImage(null);     setHospitalImagePreview(null);
     setShowForm(true);
   };
 
@@ -248,7 +201,6 @@ const Hdashboard = () => {
     setShowForm(true);
   };
 
-  // ── Toggle Slot ─────────────────────────────────────────────────────────────
   const toggleSlot = (slot) => {
     setFormData(prev => ({
       ...prev,
@@ -264,7 +216,7 @@ const Hdashboard = () => {
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: "" }));
   };
 
-  // ── Submit ──────────────────────────────────────────────────────────────────
+  // ── Submit Doctor Form ──────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
     const { errors: newErrors, valid } = validate(formData);
@@ -275,7 +227,7 @@ const Hdashboard = () => {
       const fd = new FormData();
       fd.append("name",           formData.name.trim());
       fd.append("specialization", formData.specialization.trim());
-      fd.append("experience",     Number(formData.experience) || 0);
+      fd.append("experience",     Number(formData.experience)  || 0);
       fd.append("mobile",         formData.mobile.trim());
       fd.append("available",      formData.available);
       fd.append("max_per_slot",   Number(formData.max_per_slot) || 10);
@@ -290,10 +242,14 @@ const Hdashboard = () => {
       if (hospitalImage) fd.append("hospital_image", hospitalImage);
 
       if (editDoctor) {
-        await API.patch(`/doctors/${editDoctor.id}/`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+        await API.patch(`/doctors/${editDoctor.id}/`, fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
         showToast("Doctor updated successfully!");
       } else {
-        await API.post("/doctors/", fd, { headers: { "Content-Type": "multipart/form-data" } });
+        await API.post("/doctors/", fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
         showToast("Doctor added successfully!");
       }
 
@@ -301,10 +257,8 @@ const Hdashboard = () => {
       setFormData(EMPTY_DOCTOR);
       setErrors(EMPTY_ERRORS);
       setEditDoctor(null);
-      setDoctorImage(null);
-      setHospitalImage(null);
-      setDoctorImagePreview(null);
-      setHospitalImagePreview(null);
+      setDoctorImage(null);     setDoctorImagePreview(null);
+      setHospitalImage(null);   setHospitalImagePreview(null);
       loadDoctors();
 
     } catch (err) {
@@ -329,36 +283,35 @@ const Hdashboard = () => {
       await API.delete(`/doctors/${id}/`);
       loadDoctors();
       showToast("Doctor deleted.");
-    } catch { showToast("Failed to delete doctor", "error"); }
+    } catch (err) {
+      showToast(err?.response?.data?.message || "Failed to delete doctor", "error");
+    }
   };
 
-  const logout = () => logoutUser();
-  const totalToday = queue.waiting.length + queue.inProgress.length + queue.completed.length;
-
-  const FieldError = ({ msg }) => msg
-    ? <small className="text-danger d-block mt-1">⚠️ {msg}</small>
+  const logout      = () => logoutUser();
+  const totalToday  = queue.waiting.length + queue.inProgress.length + queue.completed.length;
+  const FieldError  = ({ msg }) => msg
+    ? <small style={{ color: '#dc3545', display: 'block', marginTop: 3 }}>⚠️ {msg}</small>
     : null;
 
   return (
     <div className="min-vh-100 bg-light">
 
-      {/* ── Toast ── */}
+      {/* Toast */}
       {toast && (
-        <div
-          style={{
-            position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)",
-            padding: "12px 24px", borderRadius: 12,
-            background: toast.type === "error" ? "#A32D2D" : "#3B6D11",
-            color: "#fff", fontSize: 14, fontWeight: 500,
-            zIndex: 9999, whiteSpace: "nowrap",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
-            animation: "fadeIn 0.3s ease",
-          }}
-        >
+        <div style={{
+          position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)",
+          padding: "12px 24px", borderRadius: 12,
+          background: toast.type === "error" ? "#A32D2D" : "#3B6D11",
+          color: "#fff", fontSize: 14, fontWeight: 500,
+          zIndex: 9999, whiteSpace: "nowrap",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+          animation: "fadeInToast 0.3s ease",
+        }}>
           {toast.msg}
         </div>
       )}
-      <style>{`@keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}`}</style>
+      <style>{`@keyframes fadeInToast{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}`}</style>
 
       {/* Navbar */}
       <nav className="navbar bg-white shadow-sm px-4 py-2">
@@ -377,10 +330,10 @@ const Hdashboard = () => {
         {/* Stats */}
         <div className="row g-3 mb-4">
           {[
-            { label: "Total Today",  val: totalToday,              color: "primary" },
-            { label: "Waiting",      val: queue.waiting.length,    color: "warning" },
-            { label: "In Progress",  val: queue.inProgress.length, color: "info"    },
-            { label: "Completed",    val: queue.completed.length,  color: "success" },
+            { label: "Total Today",  val: totalToday,               color: "primary" },
+            { label: "Waiting",      val: queue.waiting.length,     color: "warning" },
+            { label: "In Progress",  val: queue.inProgress.length,  color: "info"    },
+            { label: "Completed",    val: queue.completed.length,   color: "success" },
           ].map(({ label, val, color }) => (
             <div key={label} className="col-6 col-md-3">
               <div className="card shadow-sm p-3 text-center border-0">
@@ -394,30 +347,55 @@ const Hdashboard = () => {
         {/* Tabs */}
         <ul className="nav nav-tabs mb-4">
           <li className="nav-item">
-            <button className={`nav-link ${activeTab === "queue" ? "active" : ""}`} onClick={() => setActiveTab("queue")}>
+            <button
+              className={`nav-link ${activeTab === "queue" ? "active" : ""}`}
+              onClick={() => setActiveTab("queue")}
+            >
               🏥 Queue Management
             </button>
           </li>
           <li className="nav-item">
-            <button className={`nav-link ${activeTab === "doctors" ? "active" : ""}`} onClick={() => setActiveTab("doctors")}>
+            <button
+              className={`nav-link ${activeTab === "doctors" ? "active" : ""}`}
+              onClick={() => setActiveTab("doctors")}
+            >
               👨‍⚕️ Doctors
             </button>
           </li>
         </ul>
 
-        {/* Queue Tab */}
+        {/* ── Queue Tab ── */}
         {activeTab === "queue" && (
           <div className="row g-3">
             {[
-              { title: "⏳ Waiting",     color: "warning", items: queue.waiting,    btn: { label: "Call Patient",  action: handleCall,     cls: "btn-primary" } },
-              { title: "🔄 In Progress", color: "info",    items: queue.inProgress, btn: { label: "Mark Complete", action: handleComplete, cls: "btn-success" } },
-              { title: "✅ Completed",   color: "success", items: queue.completed,  btn: null },
+              {
+                title: "⏳ Waiting",
+                color: "warning",
+                items: queue.waiting,
+                btn:   { label: "Call Patient",  action: handleCall,     cls: "btn-primary" },
+              },
+              {
+                title: "🔄 In Progress",
+                color: "info",
+                items: queue.inProgress,
+                btn:   { label: "Mark Complete", action: handleComplete, cls: "btn-success" },
+              },
+              {
+                title: "✅ Completed",
+                color: "success",
+                items: queue.completed,
+                btn:   null,
+              },
             ].map(({ title, color, items, btn }) => (
               <div key={title} className="col-md-4">
                 <div className="card border-0 shadow-sm h-100">
-                  <div className={`card-header bg-${color} text-white fw-bold`}>{title} ({items.length})</div>
+                  <div className={`card-header bg-${color} text-white fw-bold`}>
+                    {title} ({items.length})
+                  </div>
                   <div className="card-body p-2">
-                    {items.length === 0 && <p className="text-muted text-center small mt-3">No patients</p>}
+                    {items.length === 0 && (
+                      <p className="text-muted text-center small mt-3">No patients</p>
+                    )}
                     {items.map(p => (
                       <div key={p.id} className="border rounded p-2 mb-2 bg-light">
                         <div className="fw-semibold">{p.user_name || "Patient"}</div>
@@ -426,7 +404,10 @@ const Hdashboard = () => {
                         <div className="small text-muted">🕐 {p.slot}</div>
                         <div className="small text-primary fw-bold">Token: {p.token}</div>
                         {btn && (
-                          <button className={`btn ${btn.cls} btn-sm w-100 mt-2`} onClick={() => btn.action(p.id)}>
+                          <button
+                            className={`btn ${btn.cls} btn-sm w-100 mt-2`}
+                            onClick={() => btn.action(p.id)}
+                          >
                             {btn.label}
                           </button>
                         )}
@@ -439,21 +420,27 @@ const Hdashboard = () => {
           </div>
         )}
 
-        {/* Doctors Tab */}
+        {/* ── Doctors Tab ── */}
         {activeTab === "doctors" && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-3">
               <h5 className="mb-0 fw-bold">Our Doctors ({doctors.length})</h5>
-              <button className="btn btn-primary btn-sm" onClick={openAddForm}>+ Add Doctor</button>
+              <button className="btn btn-primary btn-sm" onClick={openAddForm}>
+                + Add Doctor
+              </button>
             </div>
 
-            {/* Form */}
+            {/* Add/Edit Form */}
             {showForm && (
               <div className="card shadow-sm border-0 p-4 mb-4">
                 <div className="d-flex justify-content-between align-items-center mb-4">
-                  <h6 className="fw-bold mb-0">{editDoctor ? "✏️ Edit Doctor" : "➕ Add New Doctor"}</h6>
-                  <button className="btn btn-sm btn-outline-secondary"
-                    onClick={() => { setShowForm(false); setEditDoctor(null); setErrors(EMPTY_ERRORS); }}>
+                  <h6 className="fw-bold mb-0">
+                    {editDoctor ? "✏️ Edit Doctor" : "➕ Add New Doctor"}
+                  </h6>
+                  <button
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => { setShowForm(false); setEditDoctor(null); setErrors(EMPTY_ERRORS); }}
+                  >
                     Cancel
                   </button>
                 </div>
@@ -466,33 +453,41 @@ const Hdashboard = () => {
                       <div className="row g-3">
                         <div className="col-md-6">
                           <label className="form-label fw-semibold">👤 Doctor Profile Image</label>
-                          <input type="file" accept="image/*" className="form-control mb-2"
-                            onChange={(e) => handleImageChange(e, "doctor")} />
+                          <input
+                            type="file" accept="image/*" className="form-control mb-2"
+                            onChange={(e) => handleImageChange(e, "doctor")}
+                          />
                           <small className="text-muted">Max 5MB · JPG, PNG, WebP</small>
                           {doctorImagePreview && (
                             <div className="mt-2 text-center">
-                              <img src={doctorImagePreview} alt="Doctor Preview"
+                              <img
+                                src={doctorImagePreview} alt="Doctor Preview"
                                 className="rounded-circle border border-3 border-primary"
-                                style={{ width: 100, height: 100, objectFit: "cover" }} />
+                                style={{ width: 100, height: 100, objectFit: "cover" }}
+                              />
                             </div>
                           )}
                         </div>
                         <div className="col-md-6">
                           <label className="form-label fw-semibold">🏥 Hospital Banner Image</label>
-                          <input type="file" accept="image/*" className="form-control mb-2"
-                            onChange={(e) => handleImageChange(e, "hospital")} />
+                          <input
+                            type="file" accept="image/*" className="form-control mb-2"
+                            onChange={(e) => handleImageChange(e, "hospital")}
+                          />
                           <small className="text-muted">Max 5MB · JPG, PNG, WebP</small>
                           {hospitalImagePreview && (
                             <div className="mt-2">
-                              <img src={hospitalImagePreview} alt="Hospital Banner Preview"
-                                className="rounded w-100" style={{ height: 100, objectFit: "cover" }} />
+                              <img
+                                src={hospitalImagePreview} alt="Hospital Banner Preview"
+                                className="rounded w-100"
+                                style={{ height: 100, objectFit: "cover" }}
+                              />
                             </div>
                           )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Name */}
                     <div className="col-md-6">
                       <label className="form-label fw-semibold">Doctor Name *</label>
                       <input
@@ -504,7 +499,6 @@ const Hdashboard = () => {
                       <FieldError msg={errors.name} />
                     </div>
 
-                    {/* Specialization */}
                     <div className="col-md-6">
                       <label className="form-label fw-semibold">Specialization *</label>
                       <input
@@ -516,7 +510,6 @@ const Hdashboard = () => {
                       <FieldError msg={errors.specialization} />
                     </div>
 
-                    {/* Experience */}
                     <div className="col-md-4">
                       <label className="form-label fw-semibold">Experience (years)</label>
                       <input
@@ -528,9 +521,10 @@ const Hdashboard = () => {
                       <FieldError msg={errors.experience} />
                     </div>
 
-                    {/* Mobile */}
                     <div className="col-md-4">
-                      <label className="form-label fw-semibold">Mobile * <small className="text-muted">(10-digit)</small></label>
+                      <label className="form-label fw-semibold">
+                        Mobile * <small className="text-muted">(10-digit)</small>
+                      </label>
                       <div className="input-group">
                         <span className="input-group-text text-muted">+91</span>
                         <input
@@ -543,7 +537,6 @@ const Hdashboard = () => {
                       <FieldError msg={errors.mobile} />
                     </div>
 
-                    {/* Max per slot */}
                     <div className="col-md-4">
                       <label className="form-label fw-semibold">Max Patients Per Slot</label>
                       <input
@@ -555,33 +548,40 @@ const Hdashboard = () => {
                       <FieldError msg={errors.max_per_slot} />
                     </div>
 
-                    {/* Availability */}
                     <div className="col-12">
                       <div className="form-check form-switch">
-                        <input className="form-check-input" type="checkbox"
+                        <input
+                          className="form-check-input" type="checkbox"
                           checked={formData.available}
-                          onChange={e => handleChange("available", e.target.checked)} />
+                          onChange={e => handleChange("available", e.target.checked)}
+                        />
                         <label className="form-check-label fw-semibold">
                           {formData.available ? "✅ Available" : "❌ Unavailable"}
                         </label>
                       </div>
                     </div>
 
-                    {/* Time Slots */}
+                    {/* Slot Selector */}
                     <div className="col-12">
                       <label className="form-label fw-semibold">
                         🕐 Select Time Slots *
-                        <small className="text-muted ms-2">({formData.slots.length} of 48 selected)</small>
+                        <small className="text-muted ms-2">
+                          ({formData.slots.length} of {DEFAULT_SLOTS.length} selected)
+                        </small>
                       </label>
 
                       {SLOT_SECTIONS.map(section => (
                         <div className="mb-3" key={section.label}>
-                          <small className="text-muted fw-semibold d-block mb-1">{section.label}</small>
+                          <small className="text-muted fw-semibold d-block mb-1">
+                            {section.label}
+                          </small>
                           <div className="d-flex flex-wrap gap-2">
                             {section.slots.map(slot => (
-                              <button key={slot} type="button"
+                              <button
+                                key={slot} type="button"
                                 className={`btn btn-sm ${formData.slots.includes(slot) ? "btn-primary" : "btn-outline-secondary"}`}
-                                onClick={() => toggleSlot(slot)}>
+                                onClick={() => toggleSlot(slot)}
+                              >
                                 {slot}
                               </button>
                             ))}
@@ -590,19 +590,22 @@ const Hdashboard = () => {
                       ))}
 
                       <div className="d-flex gap-2 mt-2">
-                        <button type="button" className="btn btn-sm btn-outline-primary"
-                          onClick={() => { setFormData(p => ({ ...p, slots: [...DEFAULT_SLOTS] })); setErrors(p => ({ ...p, slots: "" })); }}>
+                        <button
+                          type="button" className="btn btn-sm btn-outline-primary"
+                          onClick={() => { setFormData(p => ({ ...p, slots: [...DEFAULT_SLOTS] })); setErrors(p => ({ ...p, slots: "" })); }}
+                        >
                           Select All
                         </button>
-                        <button type="button" className="btn btn-sm btn-outline-danger"
-                          onClick={() => setFormData(p => ({ ...p, slots: [] }))}>
+                        <button
+                          type="button" className="btn btn-sm btn-outline-danger"
+                          onClick={() => setFormData(p => ({ ...p, slots: [] }))}
+                        >
                           Clear All
                         </button>
                       </div>
                       <FieldError msg={errors.slots} />
                     </div>
 
-                    {/* Submit */}
                     <div className="col-12">
                       <button type="submit" className="btn btn-primary px-4" disabled={submitting}>
                         {submitting
@@ -611,20 +614,23 @@ const Hdashboard = () => {
                         }
                       </button>
                     </div>
-
                   </div>
                 </form>
               </div>
             )}
 
-            {/* Doctors List */}
+            {/* Doctors Grid */}
             {loading ? (
-              <div className="text-center py-4"><div className="spinner-border text-primary" /></div>
+              <div className="text-center py-4">
+                <div className="spinner-border text-primary" />
+              </div>
             ) : (
               <div className="row g-3">
                 {doctors.length === 0 && (
                   <div className="col-12">
-                    <p className="text-muted text-center py-4">No doctors added yet. Click + Add Doctor.</p>
+                    <p className="text-muted text-center py-4">
+                      No doctors added yet. Click + Add Doctor to get started.
+                    </p>
                   </div>
                 )}
                 {doctors.map(doc => {
@@ -634,18 +640,29 @@ const Hdashboard = () => {
                       <div className="card border-0 shadow-sm h-100">
                         <div style={{ position: "relative", height: 100 }}>
                           {doc.hospital_image && !doc.hospital_image.includes("placehold") ? (
-                            <img src={doc.hospital_image} alt="Hospital" className="w-100 h-100"
-                              style={{ objectFit: "cover", borderRadius: "8px 8px 0 0" }} />
+                            <img
+                              src={doc.hospital_image} alt="Hospital"
+                              className="w-100 h-100"
+                              style={{ objectFit: "cover", borderRadius: "8px 8px 0 0" }}
+                            />
                           ) : (
-                            <div style={{ width: "100%", height: "100%", background: "#e9ecef", borderRadius: "8px 8px 0 0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>🏥</div>
+                            <div style={{ width: "100%", height: "100%", background: "#e9ecef", borderRadius: "8px 8px 0 0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>
+                              🏥
+                            </div>
                           )}
                           {doc.image && !doc.image.includes("placehold") ? (
-                            <img src={doc.image} alt={doc.name}
+                            <img
+                              src={doc.image} alt={doc.name}
                               className="rounded-circle border border-3 border-white position-absolute"
-                              style={{ width: 60, height: 60, objectFit: "cover", bottom: -30, left: 16 }} />
+                              style={{ width: 60, height: 60, objectFit: "cover", bottom: -30, left: 16 }}
+                            />
                           ) : (
-                            <div className="rounded-circle border border-3 border-white position-absolute d-flex align-items-center justify-content-center bg-light"
-                              style={{ width: 60, height: 60, bottom: -30, left: 16, fontSize: 24 }}>👨‍⚕️</div>
+                            <div
+                              className="rounded-circle border border-3 border-white position-absolute d-flex align-items-center justify-content-center bg-light"
+                              style={{ width: 60, height: 60, bottom: -30, left: 16, fontSize: 24 }}
+                            >
+                              👨‍⚕️
+                            </div>
                           )}
                         </div>
                         <div className="p-3 pt-4 mt-2">
@@ -653,9 +670,13 @@ const Hdashboard = () => {
                           <div className="small text-primary mb-1">{doc.specialization}</div>
                           <div className="small text-muted mb-1">📞 {doc.mobile}</div>
                           <div className="small text-muted mb-1">⏳ {doc.experience} yrs exp</div>
-                          <div className="small text-muted mb-2">👥 Max {doc.max_per_slot || 10} patients/slot</div>
+                          <div className="small text-muted mb-2">
+                            👥 Max {doc.max_per_slot || 10} patients/slot
+                          </div>
                           <div className="mb-3">
-                            <small className="fw-semibold text-muted d-block mb-1">🕐 Slots ({doc.slots?.length || 0})</small>
+                            <small className="fw-semibold text-muted d-block mb-1">
+                              🕐 Slots ({doc.slots?.length || 0})
+                            </small>
                             <div className="d-flex flex-wrap gap-1">
                               {(doc.slots || []).slice(0, 3).map(s => (
                                 <span key={s} className="badge bg-light text-dark border small">{s}</span>
@@ -663,11 +684,12 @@ const Hdashboard = () => {
                               {(doc.slots || []).length > 3 && (
                                 <span className="badge bg-secondary small">+{doc.slots.length - 3} more</span>
                               )}
-                              {(doc.slots || []).length === 0 && <span className="text-danger small">No slots set</span>}
+                              {(doc.slots || []).length === 0 && (
+                                <span className="text-danger small">No slots set</span>
+                              )}
                             </div>
                           </div>
                           <div className="d-flex gap-2">
-                            {/* ── Availability toggle button ── */}
                             <button
                               className={`btn btn-sm flex-grow-1 ${doc.available ? "btn-success" : "btn-secondary"}`}
                               onClick={() => toggleAvailability(doc)}

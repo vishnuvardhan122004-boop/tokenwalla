@@ -13,9 +13,25 @@ logger = logging.getLogger('tokenwalla')
 
 
 class StandardPagination(PageNumberPagination):
-    page_size            = 50
+    page_size             = 50
     page_size_query_param = 'page_size'
-    max_page_size        = 200
+    max_page_size         = 200
+
+
+def _get_user_hospital_id(user):
+    """
+    Resolve the hospital ID for a hospital-role user.
+
+    The hospital FK is stored two ways depending on how the user was created:
+      1. user.last_name == str(hospital.id)   (always set by HospitalLoginView)
+      2. A direct FK via a hypothetical user.hospital OneToOne (not in schema)
+
+    We use last_name as the canonical source.
+    """
+    try:
+        return int(user.last_name)
+    except (ValueError, TypeError, AttributeError):
+        return None
 
 
 # ── Patient: own bookings only ────────────────────────────────────────────────
@@ -29,7 +45,7 @@ class MyBookingsView(APIView):
             .select_related('doctor', 'hospital', 'user')
             .order_by('-created')
         )
-        queue_map = build_queue_map(bookings)
+        queue_map  = build_queue_map(bookings)
         serializer = BookingSerializer(
             bookings, many=True,
             context={'request': request, 'queue_map': queue_map}
@@ -42,18 +58,10 @@ class HospitalQueueView(APIView):
     permission_classes = [IsAuthenticated, IsHospitalStaff]
 
     def get(self, request, hospital_id):
-        # Verify the requesting user belongs to this hospital
-        user_hospital_id = None
-        try:
-            user_hospital_id = request.user.hospital.id
-        except AttributeError:
-            # last_name fallback used during registration
-            try:
-                user_hospital_id = int(request.user.last_name)
-            except (ValueError, TypeError):
-                pass
+        user_hospital_id = _get_user_hospital_id(request.user)
 
-        if user_hospital_id != hospital_id and request.user.role != 'admin':
+        # Admins can view any hospital's queue
+        if user_hospital_id != int(hospital_id) and request.user.role != 'admin':
             return Response(
                 {'message': 'You do not have access to this hospital queue.'},
                 status=403
@@ -64,10 +72,20 @@ class HospitalQueueView(APIView):
             .filter(hospital_id=hospital_id)
             .select_related('doctor', 'user')
         )
+
         return Response({
-            'waiting':    BookingSerializer(base.filter(status='waiting'),     many=True, context={'request': request}).data,
-            'inProgress': BookingSerializer(base.filter(status='in_progress'), many=True, context={'request': request}).data,
-            'completed':  BookingSerializer(base.filter(status='completed'),   many=True, context={'request': request}).data,
+            'waiting':    BookingSerializer(
+                base.filter(status='waiting').order_by('created'),
+                many=True, context={'request': request}
+            ).data,
+            'inProgress': BookingSerializer(
+                base.filter(status='in_progress').order_by('created'),
+                many=True, context={'request': request}
+            ).data,
+            'completed':  BookingSerializer(
+                base.filter(status='completed').order_by('-created')[:50],
+                many=True, context={'request': request}
+            ).data,
         })
 
 
@@ -76,27 +94,22 @@ class CallNextView(APIView):
     permission_classes = [IsAuthenticated, IsHospitalStaff]
 
     def patch(self, request, pk):
-        booking = get_object_or_404(Booking, pk=pk)
+        booking          = get_object_or_404(Booking, pk=pk)
+        user_hospital_id = _get_user_hospital_id(request.user)
 
-        # Verify the user's hospital owns this booking
-        user_hospital_id = self._get_user_hospital_id(request.user)
         if user_hospital_id != booking.hospital_id and request.user.role != 'admin':
             return Response({'message': 'Access denied.'}, status=403)
+
+        if booking.status != 'waiting':
+            return Response(
+                {'message': f'Cannot call a booking with status "{booking.status}".'},
+                status=400
+            )
 
         booking.status = 'in_progress'
         booking.save(update_fields=['status'])
         logger.info('Booking %s called by hospital %s', pk, user_hospital_id)
         return Response(BookingSerializer(booking, context={'request': request}).data)
-
-    @staticmethod
-    def _get_user_hospital_id(user):
-        try:
-            return user.hospital.id
-        except AttributeError:
-            try:
-                return int(user.last_name)
-            except (ValueError, TypeError):
-                return None
 
 
 # ── Hospital: complete booking (hospital staff only) ──────────────────────────
@@ -104,11 +117,17 @@ class CompleteBookingView(APIView):
     permission_classes = [IsAuthenticated, IsHospitalStaff]
 
     def patch(self, request, pk):
-        booking = get_object_or_404(Booking, pk=pk)
+        booking          = get_object_or_404(Booking, pk=pk)
+        user_hospital_id = _get_user_hospital_id(request.user)
 
-        user_hospital_id = CallNextView._get_user_hospital_id(request.user)
         if user_hospital_id != booking.hospital_id and request.user.role != 'admin':
             return Response({'message': 'Access denied.'}, status=403)
+
+        if booking.status not in ('waiting', 'in_progress'):
+            return Response(
+                {'message': f'Cannot complete a booking with status "{booking.status}".'},
+                status=400
+            )
 
         booking.status = 'completed'
         booking.save(update_fields=['status'])
@@ -128,19 +147,13 @@ class AllBookingsView(APIView):
             .select_related('doctor', 'hospital', 'user')
             .order_by('-created')
         )
-        page = paginator.paginate_queryset(qs, request)
+        page       = paginator.paginate_queryset(qs, request)
         serializer = BookingSerializer(page, many=True, context={'request': request})
         return paginator.get_paginated_response(serializer.data)
 
 
-# ── Upgrade queue access ───────────────────────────────────────────────────────
+# ── Upgrade queue access (requires real payment_id) ───────────────────────────
 class UpgradeQueueAccessView(APIView):
-    """
-    This endpoint should only be called AFTER a real Razorpay payment.
-    The payment view handles queue_access on initial booking.
-    This endpoint is intentionally left for legacy but now requires
-    payment proof via payment_id.
-    """
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, pk):
@@ -149,7 +162,6 @@ class UpgradeQueueAccessView(APIView):
         if booking.queue_access:
             return Response({'message': 'Queue access already active.'}, status=400)
 
-        # Require a real payment_id — do not allow free upgrades
         payment_id = request.data.get('payment_id', '').strip()
         if not payment_id:
             return Response(
@@ -212,7 +224,6 @@ class RescheduleBookingView(APIView):
         if not new_slot:
             return Response({'message': 'Slot is required.'}, status=400)
 
-        # Validate the new slot exists on this doctor
         doctor_slots = booking.doctor.slots or []
         if new_slot not in doctor_slots:
             return Response(

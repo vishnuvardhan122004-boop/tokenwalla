@@ -28,17 +28,30 @@ class OTPRateThrottle(AnonRateThrottle):
 def send_otp(mobile, otp, via='sms'):
     """
     Send OTP via 2factor.in.
-    Returns session_id/otp string on success, None on failure.
-    Secrets are NEVER logged.
+    When TWOFACTOR_API_KEY is empty, runs in dev mode:
+    the OTP is stored in Redis cache and printed clearly to the console.
     """
     api_key = getattr(settings, 'TWOFACTOR_API_KEY', '')
+
     if not api_key:
-        # Dev mode: store OTP directly
-        logger.info('[DEV] OTP for %s generated (not logged for security)', mobile)
+        # ── DEV MODE ──────────────────────────────────────────────────────────
+        # Store OTP in cache so verify_otp() can read it
         cache.set(f'otp_session:{mobile}', str(otp), timeout=300)
         cache.set(f'otp_via:{mobile}',     via,       timeout=300)
+
+        # Print clearly so you can see it during development
+        border = "─" * 50
+        print(f"\n┌{border}┐")
+        print(f"│  📱 DEV OTP  │  Mobile: {mobile}  │  OTP: {otp}  │")
+        print(f"└{border}┘\n")
+
+        logger.warning(
+            '[DEV MODE] OTP for mobile ...%s → %s (expires in 5 min)',
+            mobile[-4:], otp
+        )
         return str(otp)
 
+    # ── PRODUCTION MODE ────────────────────────────────────────────────────────
     try:
         import requests
         channel          = 'VOICE' if via == 'voice' else 'SMS'
@@ -46,17 +59,24 @@ def send_otp(mobile, otp, via='sms'):
             f'91{mobile}' if not mobile.startswith('91') else mobile
         )
         url  = f'https://2factor.in/API/V1/{api_key}/{channel}/{mobile_formatted}/{otp}'
-        res  = requests.get(url, timeout=5)
+        res  = requests.get(url, timeout=8)
         data = res.json()
 
         if data.get('Status') == 'Success':
+            # For voice OTP, store the raw OTP (verified by comparison)
+            # For SMS OTP, store the session ID (verified via 2Factor API)
             stored = str(otp) if via == 'voice' else data.get('Details')
-            cache.set(f'otp_session:{mobile}', stored,  timeout=300)
-            cache.set(f'otp_via:{mobile}',     via,     timeout=300)
+            cache.set(f'otp_session:{mobile}', stored, timeout=300)
+            cache.set(f'otp_via:{mobile}',     via,    timeout=300)
+            logger.info('OTP sent via %s to mobile ...%s', channel, mobile[-4:])
             return stored
 
-        logger.warning('2Factor OTP send failed for %s: %s', mobile, data.get('Details'))
+        logger.warning(
+            'OTP send failed for ...%s via %s: %s',
+            mobile[-4:], channel, data.get('Details', 'unknown error')
+        )
         return None
+
     except Exception:
         logger.exception('OTP send error for mobile ending ...%s', mobile[-4:])
         return None
@@ -64,33 +84,43 @@ def send_otp(mobile, otp, via='sms'):
 
 def verify_otp(mobile, otp_entered):
     """
-    Verify OTP from cache. Returns True/False.
+    Verify OTP from Redis cache.
+    Returns True on success (and clears the cache entry).
+    Returns False if OTP is wrong or expired.
     """
     api_key    = getattr(settings, 'TWOFACTOR_API_KEY', '')
     session_id = cache.get(f'otp_session:{mobile}')
     via        = cache.get(f'otp_via:{mobile}', 'sms')
 
     if not session_id:
-        logger.debug('OTP verify: no session for mobile ending ...%s', mobile[-4:])
+        logger.debug('OTP verify: no session found for mobile ...%s', mobile[-4:])
         return False
 
-    # Dev mode or voice — direct comparison
+    # Dev mode or voice call → direct string comparison
     if not api_key or via == 'voice':
-        result = str(session_id) == str(otp_entered)
+        result = str(session_id).strip() == str(otp_entered).strip()
         if result:
             cache.delete(f'otp_session:{mobile}')
             cache.delete(f'otp_via:{mobile}')
+            logger.info('OTP verified for mobile ...%s (dev/voice mode)', mobile[-4:])
+        else:
+            logger.warning(
+                'OTP mismatch for mobile ...%s (entered: %s)',
+                mobile[-4:], otp_entered
+            )
         return result
 
-    # SMS production — 2Factor verify endpoint
+    # SMS production → verify via 2Factor API
     try:
         import requests
         url  = f'https://2factor.in/API/V1/{api_key}/SMS/VERIFY/{session_id}/{otp_entered}'
-        data = requests.get(url, timeout=5).json()
+        data = requests.get(url, timeout=8).json()
         if data.get('Status') == 'Success' and 'Matched' in str(data.get('Details', '')):
             cache.delete(f'otp_session:{mobile}')
             cache.delete(f'otp_via:{mobile}')
+            logger.info('OTP verified for mobile ...%s (2Factor SMS)', mobile[-4:])
             return True
+        logger.warning('OTP verify failed for ...%s: %s', mobile[-4:], data.get('Details'))
         return False
     except Exception:
         logger.exception('OTP verify error for mobile ending ...%s', mobile[-4:])
@@ -116,6 +146,11 @@ class RegisterView(APIView):
 
 
 class LoginView(APIView):
+    """
+    Authenticate a patient or admin user.
+    Hospital users should use /api/hospitals/login/ instead.
+    This endpoint also works for hospital users who already have a User record.
+    """
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -130,7 +165,7 @@ class LoginView(APIView):
         except User.DoesNotExist:
             return Response({'message': 'No account found with this mobile.'}, status=401)
 
-        if user.status == 'blocked':
+        if getattr(user, 'status', 'active') == 'blocked':
             return Response({'message': 'Account blocked. Contact support.'}, status=403)
 
         password_ok = user.check_password(password)
@@ -141,15 +176,28 @@ class LoginView(APIView):
             return Response({'message': 'Invalid credentials.'}, status=401)
 
         r = RefreshToken.for_user(user)
+        user_data = UserSerializer(user).data
+
+        # Attach hospital object for hospital-role users (needed by Hdashboard)
+        if user.role == 'hospital':
+            try:
+                hospital_id = int(user.last_name)
+                from hospitals.models import Hospital
+                from hospitals.serializers import HospitalSerializer
+                hospital              = Hospital.objects.get(pk=hospital_id)
+                user_data['hospital'] = HospitalSerializer(hospital).data
+            except Exception as e:
+                logger.warning('Could not attach hospital to login response: %s', e)
+
         return Response({
-            'user':    UserSerializer(user).data,
+            'user':    user_data,
             'access':  str(r.access_token),
             'refresh': str(r),
         })
 
 
 class LogoutView(APIView):
-    """Blacklist the refresh token so it can't be reused."""
+    """Blacklist the refresh token so it cannot be reused."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -184,6 +232,7 @@ class RequestOTPView(APIView):
 
         if session_id is None:
             return Response({'message': 'Failed to send OTP. Try again.'}, status=500)
+
         return Response({'message': 'OTP sent.'})
 
 
@@ -194,9 +243,14 @@ class VerifyOTPView(APIView):
         mobile = request.data.get('mobile', '').strip()
         otp    = request.data.get('otp',    '').strip()
 
+        if not mobile or not otp:
+            return Response({'message': 'Mobile and OTP are required.'}, status=400)
+
         if verify_otp(mobile, otp):
+            # Store verification flag so reset-password can use it
             cache.set(f'otp_verified:{mobile}', True, timeout=600)
             return Response({'message': 'OTP verified.', 'verified': True})
+
         return Response({'message': 'Invalid or expired OTP.', 'verified': False}, status=400)
 
 
@@ -232,17 +286,27 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        user_data = UserSerializer(request.user).data
+        if request.user.role == 'hospital':
+            try:
+                hospital_id = int(request.user.last_name)
+                from hospitals.models import Hospital
+                from hospitals.serializers import HospitalSerializer
+                hospital              = Hospital.objects.get(pk=hospital_id)
+                user_data['hospital'] = HospitalSerializer(hospital).data
+            except Exception:
+                pass
+        return Response(user_data)
 
 
 class AllUsersView(APIView):
-    """Admin only — list all users with pagination."""
+    """Admin only — list all users (paginated)."""
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
         from rest_framework.pagination import PageNumberPagination
-        paginator          = PageNumberPagination()
-        paginator.page_size = 100
+        paginator           = PageNumberPagination()
+        paginator.page_size = int(request.query_params.get('page_size', 100))
 
         qs   = User.objects.all().order_by('-date_joined')
         page = paginator.paginate_queryset(qs, request)
@@ -252,20 +316,20 @@ class AllUsersView(APIView):
 
 
 class BlockUserView(APIView):
-    """Admin only — block/unblock a user."""
+    """Admin only — block or unblock a user."""
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def patch(self, request, pk):
         try:
             user = User.objects.get(pk=pk)
         except User.DoesNotExist:
-            return Response({'message': 'Not found.'}, status=404)
+            return Response({'message': 'User not found.'}, status=404)
 
         new_status = request.data.get('status', 'blocked')
         if new_status not in ('active', 'blocked'):
-            return Response({'message': 'Invalid status.'}, status=400)
+            return Response({'message': 'Status must be "active" or "blocked".'}, status=400)
 
         user.status = new_status
         user.save(update_fields=['status'])
-        logger.info('User %s status changed to %s by admin %s', pk, new_status, request.user.id)
+        logger.info('User %s → %s (by admin %s)', pk, new_status, request.user.id)
         return Response(UserSerializer(user).data)
