@@ -30,10 +30,11 @@ export default function AllDoctor() {
   useEffect(() => {
     setLoading(true);
     API.get('/doctors/')
-      .then(({ data }) => {
-        setDoctors(data);
-        setCities([...new Set(data.map(d => d.city).filter(Boolean))]);
-      })
+  .then(({ data }) => {
+    const doctors = Array.isArray(data) ? data : (data.results || []);
+    setDoctors(doctors);
+    setCities([...new Set(doctors.map(d => d.city).filter(Boolean))]);
+  })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);

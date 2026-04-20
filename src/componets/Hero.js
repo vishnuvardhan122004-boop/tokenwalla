@@ -37,7 +37,10 @@ export default function Hero() {
   const [activeIdx, setActiveIdx] = useState(0);
 
   useEffect(() => {
-    API.get('/doctors/').then(({ data }) => setDoctors(data.slice(0, 6))).catch(() => {});
+API.get('/doctors/').then(({ data }) => {
+  const doctors = Array.isArray(data) ? data : (data.results || []);
+  setDoctors(doctors.slice(0, 6));
+}).catch(() => {});
   }, []);
 
   useEffect(() => {
