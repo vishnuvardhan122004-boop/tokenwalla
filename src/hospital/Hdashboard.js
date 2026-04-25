@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import API from "../services/api";
 import { logoutUser } from "../services/api";
+import QRScanner from './QRScanner';
 
 const DEFAULT_SLOTS = [
   "12:00 AM","12:30 AM","01:00 AM","01:30 AM","02:00 AM","02:30 AM",
@@ -53,7 +54,6 @@ const Hdashboard = () => {
 
   const [hospital,             setHospital]             = useState(null);
   const [activeTab,            setActiveTab]            = useState("queue");
-  // Queue state — keys match HospitalQueueView response: waiting, inProgress, completed
   const [queue,                setQueue]                = useState({ waiting: [], inProgress: [], completed: [] });
   const [doctors,              setDoctors]              = useState([]);
   const [loading,              setLoading]              = useState(false);
@@ -82,7 +82,6 @@ const Hdashboard = () => {
     try {
       const user = JSON.parse(userRaw);
       if (user.role !== "hospital") { navigate("/Hlogin"); return; }
-      // hospital object is stored in user.hospital by HospitalLoginView
       if (!user.hospital) { navigate("/Hlogin"); return; }
       setHospital(user.hospital);
     } catch { navigate("/Hlogin"); }
@@ -93,7 +92,6 @@ const Hdashboard = () => {
     if (!hospital) return;
     try {
       const { data } = await API.get(`/bookings/queue/${hospital.id}/`);
-      // Response: { waiting: [], inProgress: [], completed: [] }
       setQueue({
         waiting:    data.waiting    || [],
         inProgress: data.inProgress || [],
@@ -344,7 +342,7 @@ const Hdashboard = () => {
           ))}
         </div>
 
-        {/* Tabs */}
+        {/* ── Tabs ── */}
         <ul className="nav nav-tabs mb-4">
           <li className="nav-item">
             <button
@@ -360,6 +358,14 @@ const Hdashboard = () => {
               onClick={() => setActiveTab("doctors")}
             >
               👨‍⚕️ Doctors
+            </button>
+          </li>
+          <li className="nav-item">
+            <button
+              className={`nav-link ${activeTab === "scanner" ? "active" : ""}`}
+              onClick={() => setActiveTab("scanner")}
+            >
+              📷 QR Scanner
             </button>
           </li>
         </ul>
@@ -403,6 +409,8 @@ const Hdashboard = () => {
                         <div className="small text-muted">🩺 {p.doctor_name}</div>
                         <div className="small text-muted">🕐 {p.slot}</div>
                         <div className="small text-primary fw-bold">Token: {p.token}</div>
+
+                        {/* Action button (Call / Mark Complete) */}
                         {btn && (
                           <button
                             className={`btn ${btn.cls} btn-sm w-100 mt-2`}
@@ -411,6 +419,15 @@ const Hdashboard = () => {
                             {btn.label}
                           </button>
                         )}
+
+                        {/* ── QR Scan shortcut button ── */}
+                        <button
+                          className="btn btn-outline-secondary btn-sm w-100 mt-1"
+                          onClick={() => setActiveTab("scanner")}
+                          title="Open QR Scanner"
+                        >
+                          📷 Scan QR
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -713,6 +730,12 @@ const Hdashboard = () => {
             )}
           </div>
         )}
+
+        {/* ── QR Scanner Tab ── */}
+        {activeTab === "scanner" && (
+          <QRScanner />
+        )}
+
       </div>
     </div>
   );

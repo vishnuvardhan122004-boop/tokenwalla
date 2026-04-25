@@ -239,3 +239,157 @@ class RescheduleBookingView(APIView):
             'message': 'Appointment rescheduled successfully.',
             'booking': BookingSerializer(booking, context={'request': request}).data,
         })
+class ScanQRView(APIView):
+    """
+    Hospital staff scans a patient's QR code.
+ 
+    GET  /api/bookings/scan/<token>/
+         → Returns booking details (patient name, doctor, date, slot, status)
+ 
+    POST /api/bookings/scan/<token>/
+         → Marks the booking as in_progress (attended)
+         → Returns updated booking details
+         → Returns 409 if already attended/completed
+         → Returns 403 if this booking doesn't belong to the scanning hospital
+ 
+    The QR code contains the booking token string e.g. "TW-143052-A3F9B1"
+    The hospital staff must be authenticated (hospital role).
+    """
+    permission_classes = [IsAuthenticated, IsHospitalStaff]
+ 
+    def _get_user_hospital_id(self, user):
+        try:
+            return user.hospital.id
+        except AttributeError:
+            try:
+                return int(user.last_name)
+            except (ValueError, TypeError):
+                return None
+ 
+    def get(self, request, token):
+        """Fetch booking info for a scanned token — no status change."""
+        try:
+            booking = (
+                Booking.objects
+                .select_related('user', 'doctor', 'hospital')
+                .get(token=token)
+            )
+        except Booking.DoesNotExist:
+            return Response({
+                'valid':   False,
+                'message': f'No booking found for token "{token}". Please check the QR code.',
+            }, status=404)
+ 
+        # Verify this booking belongs to the hospital scanning it
+        hospital_id = self._get_user_hospital_id(request.user)
+        if booking.hospital_id != hospital_id and request.user.role != 'admin':
+            return Response({
+                'valid':   False,
+                'message': 'This token belongs to a different hospital.',
+            }, status=403)
+ 
+        return Response({
+            'valid':        True,
+            'already_done': booking.status in ('in_progress', 'completed'),
+            'booking': {
+                'id':           booking.id,
+                'token':        booking.token,
+                'status':       booking.status,
+                'patient_name': booking.user.first_name or booking.user.username,
+                'patient_mobile': booking.user.mobile,
+                'doctor_name':  booking.doctor.name,
+                'specialization': booking.doctor.specialization,
+                'hospital_name': booking.hospital.name,
+                'date':         str(booking.date),
+                'slot':         booking.slot,
+                'amount':       booking.amount,
+                'queue_access': booking.queue_access,
+                'created':      booking.created.strftime('%d %b %Y, %I:%M %p'),
+            }
+        })
+ 
+    def post(self, request, token):
+        """Mark booking as in_progress (attended) after hospital confirms."""
+        try:
+            booking = (
+                Booking.objects
+                .select_related('user', 'doctor', 'hospital')
+                .get(token=token)
+            )
+        except Booking.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': f'No booking found for token "{token}".',
+            }, status=404)
+ 
+        # Verify hospital ownership
+        hospital_id = self._get_user_hospital_id(request.user)
+        if booking.hospital_id != hospital_id and request.user.role != 'admin':
+            return Response({
+                'success': False,
+                'message': 'This token belongs to a different hospital.',
+            }, status=403)
+ 
+        # Already attended / completed
+        if booking.status == 'completed':
+            return Response({
+                'success':      False,
+                'already_done': True,
+                'message':      'This patient has already completed their visit.',
+                'booking': {
+                    'token':        booking.token,
+                    'patient_name': booking.user.first_name or booking.user.username,
+                    'doctor_name':  booking.doctor.name,
+                    'status':       booking.status,
+                    'date':         str(booking.date),
+                    'slot':         booking.slot,
+                }
+            }, status=409)
+ 
+        if booking.status == 'in_progress':
+            return Response({
+                'success':      False,
+                'already_done': True,
+                'message':      'Patient is already marked as In Consultation.',
+                'booking': {
+                    'token':        booking.token,
+                    'patient_name': booking.user.first_name or booking.user.username,
+                    'doctor_name':  booking.doctor.name,
+                    'status':       booking.status,
+                    'date':         str(booking.date),
+                    'slot':         booking.slot,
+                }
+            }, status=409)
+ 
+        if booking.status == 'cancelled':
+            return Response({
+                'success': False,
+                'message': 'This booking was cancelled and cannot be attended.',
+            }, status=400)
+ 
+        # Mark as in_progress
+        booking.status = 'in_progress'
+        booking.save(update_fields=['status'])
+ 
+        logger.info(
+            'QR scan: Booking %s marked in_progress by hospital %s',
+            booking.id, hospital_id
+        )
+ 
+        return Response({
+            'success': True,
+            'message': f'✅ {booking.user.first_name or booking.user.username} marked as In Consultation.',
+            'booking': {
+                'id':             booking.id,
+                'token':          booking.token,
+                'status':         booking.status,
+                'patient_name':   booking.user.first_name or booking.user.username,
+                'patient_mobile': booking.user.mobile,
+                'doctor_name':    booking.doctor.name,
+                'specialization': booking.doctor.specialization,
+                'hospital_name':  booking.hospital.name,
+                'date':           str(booking.date),
+                'slot':           booking.slot,
+                'amount':         booking.amount,
+            }
+        })

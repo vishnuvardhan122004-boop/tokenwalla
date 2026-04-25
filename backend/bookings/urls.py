@@ -4,6 +4,7 @@ from .views import (
     CallNextView, CompleteBookingView,
     AllBookingsView, UpgradeQueueAccessView,
     CancelBookingView, RescheduleBookingView,
+    ScanQRView,
 )
 
 urlpatterns = [
@@ -15,4 +16,5 @@ urlpatterns = [
     path('upgrade/<int:pk>/',        UpgradeQueueAccessView.as_view()),
     path('cancel/<int:pk>/',         CancelBookingView.as_view()),
     path('reschedule/<int:pk>/',     RescheduleBookingView.as_view()),
+      path('scan/<str:token>/', ScanQRView.as_view()), 
 ]

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router';
 import API from '../services/api';
 import { useVisiblePolling } from '../services/useVisiblePolling';
+import BookingQR from './BookingQR';
 
 const STATUS_MAP = {
   waiting:     { label: 'Waiting',         cls: 'badge-amber',  pulse: true  },
@@ -278,6 +279,7 @@ export default function MyBookings() {
                       </div>
                     </div>
 
+                    {/* ── QUEUE PANEL ── */}
                     {isActive && booking.queue_access && (
                       <div className="mb-queue-panel">
                         <div className="mb-queue-circle">
@@ -293,6 +295,25 @@ export default function MyBookings() {
                       </div>
                     )}
 
+                    {/* ── QR CODE PANEL (waiting or in_progress) ── */}
+                    {(booking.status === 'waiting' || booking.status === 'in_progress') && (
+                      <div className="mb-action-panel">
+                        <div>
+                          <div className="mb-action-title">⬛ Show QR Code</div>
+                          <div className="mb-action-desc">Hospital staff scans this to verify your booking</div>
+                        </div>
+                        <BookingQR
+                          token={booking.token}
+                          doctorName={booking.doctor_name}
+                          hospital={booking.hospital_name}
+                          date={booking.date}
+                          slot={booking.slot}
+                          variant="button"
+                        />
+                      </div>
+                    )}
+
+                    {/* ── RESCHEDULE PANEL ── */}
                     {booking.status === 'waiting' && (
                       <div className="mb-action-panel">
                         <div>
@@ -303,6 +324,7 @@ export default function MyBookings() {
                       </div>
                     )}
 
+                    {/* ── CANCEL PANEL ── */}
                     {booking.status === 'waiting' && (
                       <div className="mb-action-panel">
                         <div>
@@ -318,6 +340,7 @@ export default function MyBookings() {
                         </button>
                       </div>
                     )}
+
                   </div>
                 );
               })}
@@ -326,6 +349,7 @@ export default function MyBookings() {
         </div>
       </div>
 
+      {/* ── RESCHEDULE MODAL ── */}
       {rescheduleBooking && (
         <div className="mb-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setRescheduleBooking(null); }}>
           <div className="mb-modal">

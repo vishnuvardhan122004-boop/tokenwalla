@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router';
 import API from '../services/api';
 import { useVisiblePolling } from '../services/useVisiblePolling';
+import BookingQR from './BookingQR';
 
 export default function BookingToken() {
   const location  = useLocation();
@@ -224,6 +225,17 @@ export default function BookingToken() {
                   <div className="bt-info-value" style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, color: 'var(--gray-400)' }}>{paymentId}</div>
                 </div>
               )}
+               <div className="bt-info-item full">
+                <div className="bt-info-label">Booking QR Code</div>
+                <BookingQR
+                  token={token}
+                  doctorName={doctorName}
+                  hospital={hospital}
+                  date={date}
+                  slot={slot}
+                  variant="inline"
+                />
+              </div>
             </div>
 
             <div className={`bt-queue-row ${queue_access ? 'has-access' : 'no-access'}`}>
