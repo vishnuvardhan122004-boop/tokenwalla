@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 
+
 // Install if not already: npm install qrcode.react
 
 export default function BookingQR({
