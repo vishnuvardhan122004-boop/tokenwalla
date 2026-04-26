@@ -333,15 +333,16 @@ class BlockUserView(APIView):
         user.save(update_fields=['status'])
         logger.info('User %s → %s (by admin %s)', pk, new_status, request.user.id)
         return Response(UserSerializer(user).data)
-    
-    # TEMPORARY — remove after use
+
+        
+# TEMPORARY — remove after use
 from django.http import JsonResponse
 from django.views import View
 
 class TempResetAdminView(View):
     def get(self, request):
         secret = request.GET.get('secret', '')
-        if secret != 'tw-reset-2026':   # your one-time secret
+        if secret != 'tw-reset-2026':
             return JsonResponse({'error': 'forbidden'}, status=403)
         
         mobile   = request.GET.get('mobile', '')
@@ -351,16 +352,31 @@ class TempResetAdminView(View):
             return JsonResponse({'error': 'mobile and password required'})
         
         try:
-            user = User.objects.get(mobile=mobile)
-            user.set_password(password)
-            user.role        = 'admin'
-            user.is_staff    = True
+            # Get OR CREATE the admin user
+            user, created = User.objects.get_or_create(
+                mobile=mobile,
+                defaults={
+                    'username':    mobile,
+                    'first_name':  'Admin',
+                    'is_staff':    True,
+                    'is_superuser': True,
+                    'role':        'admin',
+                }
+            )
+            # Always update these fields
+            user.username     = mobile
+            user.role         = 'admin'
+            user.is_staff     = True
             user.is_superuser = True
+            user.first_name   = 'Admin'
+            user.set_password(password)
             user.save()
+
             return JsonResponse({
                 'success': True,
-                'message': f'Password reset for {mobile}',
+                'created': created,
+                'message': f'Admin {"created" if created else "updated"} for {mobile}',
                 'role':    user.role,
             })
-        except User.DoesNotExist:
-            return JsonResponse({'error': 'User not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
