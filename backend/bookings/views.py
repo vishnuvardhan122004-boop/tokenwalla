@@ -234,38 +234,39 @@ class RescheduleBookingView(APIView):
 # ── QR Scan — FIXED ──────────────────────────────────────────────────────────
 class ScanQRView(APIView):
     """
-    Hospital staff scans a patient QR code.
-
-    POST /api/bookings/scan/
-         Body: { "token_code": "TW-192259-F9B165" }
-
-         - Looks up booking by token field
-         - Returns booking details
-         - Marks as in_progress if status is waiting
-         - Returns 409 if already in_progress / completed
-         - Returns 404 if token not found
-         - Returns 403 if booking belongs to different hospital
-
-    No URL token param — token comes in request body as token_code.
-    This matches the frontend QRScanner.js POST call.
+    GET  /api/bookings/scan/<token>/  → verify QR, return booking details
+    POST /api/bookings/scan/<token>/  → mark booking as in_progress (attended)
+ 
+    Both require: authenticated hospital staff (or admin).
     """
     permission_classes = [IsAuthenticated, IsHospitalStaff]
-
+ 
+    # Explicitly allow both methods — DRF only allows methods with handlers
+    http_method_names = ['get', 'post', 'head', 'options']
+ 
+    # ── Internal helpers ──────────────────────────────────────────────────────
+ 
     @staticmethod
-    def _hospital_id(user):
+    def _get_hospital_id(user):
+        """
+        Hospital ID is stored as a string in user.last_name.
+        Set there by HospitalRegisterView and HospitalLoginView.
+        Returns int or None.
+        """
         try:
             return int(user.last_name)
         except (ValueError, TypeError, AttributeError):
             return None
-
+ 
     @staticmethod
-    def _booking_payload(booking):
+    def _serialize_booking(booking):
+        """Consistent payload used by both GET and POST responses."""
         return {
             'id':             booking.id,
             'token':          booking.token,
             'status':         booking.status,
             'patient_name':   booking.user.first_name or booking.user.username,
-            'patient_mobile': getattr(booking.user, 'mobile', ''),
+            'patient_mobile': booking.user.mobile,
             'doctor_name':    booking.doctor.name,
             'specialization': booking.doctor.specialization,
             'hospital_name':  booking.hospital.name,
@@ -275,77 +276,125 @@ class ScanQRView(APIView):
             'queue_access':   booking.queue_access,
             'created':        booking.created.strftime('%d %b %Y, %I:%M %p'),
         }
-
-    def post(self, request):
-        # ── Get token from request body ──
-        token_code = (
-            request.data.get('token_code') or
-            request.data.get('token') or
-            ''
-        ).strip().upper()
-
-        if not token_code:
-            return Response(
-                {'success': False, 'message': 'token_code is required.'},
-                status=400
-            )
-
-        # ── Look up booking by token field ──
+ 
+    def _fetch_booking(self, token):
+        """Fetch booking with all related objects in one query."""
         try:
-            booking = (
+            return (
                 Booking.objects
                 .select_related('user', 'doctor', 'hospital')
-                .get(token=token_code)
-            )
+                .get(token=token)
+            ), None
         except Booking.DoesNotExist:
-            return Response(
-                {'success': False, 'message': f'No booking found for token "{token_code}".'},
-                status=404
+            return None, Response(
+                {'valid': False, 'message': f'No booking found for token "{token}".'},
+                status=404,
             )
-
-        # ── Hospital access check ──
-        hospital_id = self._hospital_id(request.user)
-        if request.user.role != 'admin' and hospital_id != booking.hospital_id:
+ 
+    def _check_access(self, request, booking):
+        """Returns None if allowed, a 403 Response if denied."""
+        if request.user.role == 'admin':
+            return None   # admins can scan any hospital
+        hospital_id = self._get_hospital_id(request.user)
+        if hospital_id is None or hospital_id != booking.hospital_id:
             return Response(
-                {'success': False, 'message': 'This token belongs to a different hospital.'},
-                status=403
+                {'valid': False, 'message': 'This token belongs to a different hospital.'},
+                status=403,
             )
-
-        # ── Already done ──
+        return None
+ 
+    # ── GET ───────────────────────────────────────────────────────────────────
+ 
+    def get(self, request, token):
+        """
+        Look up a booking by token. No status change.
+        Frontend uses this to display booking info before confirming attendance.
+ 
+        Response 200:
+          { valid: true, already_done: bool, booking: {...} }
+        Response 404:
+          { valid: false, message: "..." }
+        Response 403:
+          { valid: false, message: "..." }
+        """
+        booking, err = self._fetch_booking(token)
+        if err:
+            return err
+ 
+        access_err = self._check_access(request, booking)
+        if access_err:
+            return access_err
+ 
+        already_done = booking.status in ('in_progress', 'completed', 'cancelled')
+ 
+        return Response({
+            'valid':        True,
+            'already_done': already_done,
+            'booking':      self._serialize_booking(booking),
+        })
+ 
+    # ── POST ──────────────────────────────────────────────────────────────────
+ 
+    def post(self, request, token):
+        """
+        Mark booking as in_progress (patient has arrived).
+ 
+        Response 200:
+          { success: true, message: "...", booking: {...} }
+        Response 409 (already attended):
+          { success: false, already_done: true, message: "...", booking: {...} }
+        Response 400 (cancelled):
+          { success: false, message: "..." }
+        Response 404 / 403:
+          { success: false, message: "..." }
+        """
+        booking, err = self._fetch_booking(token)
+        if err:
+            return err
+ 
+        access_err = self._check_access(request, booking)
+        if access_err:
+            return access_err
+ 
+        # ── Guard: cancelled bookings cannot be attended ──
         if booking.status == 'cancelled':
             return Response(
                 {'success': False, 'message': 'This booking was cancelled.'},
-                status=400
+                status=400,
             )
-
+ 
+        # ── Guard: already attended ──
         if booking.status in ('in_progress', 'completed'):
+            msg = (
+                'Patient is already In Consultation.'
+                if booking.status == 'in_progress'
+                else 'This patient has already completed their visit.'
+            )
             return Response(
                 {
                     'success':      False,
                     'already_done': True,
-                    'message': (
-                        'Patient is already marked as In Consultation.'
-                        if booking.status == 'in_progress'
-                        else 'This patient has already completed their visit.'
-                    ),
-                    'booking': self._booking_payload(booking),
+                    'message':      msg,
+                    'booking':      self._serialize_booking(booking),
                 },
-                status=409
-            )
-
+                status=409,
+                            )
+ 
         # ── Mark as in_progress ──
         booking.status = 'in_progress'
         booking.save(update_fields=['status'])
-
+ 
         logger.info(
-            'QR scan: booking %s → in_progress (hospital %s)',
-            booking.id, hospital_id
+            'QR scan: booking %s → in_progress by user %s (hospital %s)',
+            booking.id, request.user.id, self._get_hospital_id(request.user),
         )
-
-        patient_name = booking.user.first_name or booking.user.username
+ 
+        patient = booking.user.first_name or booking.user.username
         return Response({
-            'success':      True,
-            'already_done': False,
-            'message':      f'✅ {patient_name} marked as In Consultation.',
-            'booking':      self._booking_payload(booking),
+            'success': True,
+            'message': f'✅ {patient} marked as In Consultation.',
+            'booking': self._serialize_booking(booking),
         })
+ 
+
+
