@@ -333,3 +333,34 @@ class BlockUserView(APIView):
         user.save(update_fields=['status'])
         logger.info('User %s → %s (by admin %s)', pk, new_status, request.user.id)
         return Response(UserSerializer(user).data)
+    
+    # TEMPORARY — remove after use
+from django.http import JsonResponse
+from django.views import View
+
+class TempResetAdminView(View):
+    def get(self, request):
+        secret = request.GET.get('secret', '')
+        if secret != 'tw-reset-2026':   # your one-time secret
+            return JsonResponse({'error': 'forbidden'}, status=403)
+        
+        mobile   = request.GET.get('mobile', '')
+        password = request.GET.get('password', '')
+        
+        if not mobile or not password:
+            return JsonResponse({'error': 'mobile and password required'})
+        
+        try:
+            user = User.objects.get(mobile=mobile)
+            user.set_password(password)
+            user.role        = 'admin'
+            user.is_staff    = True
+            user.is_superuser = True
+            user.save()
+            return JsonResponse({
+                'success': True,
+                'message': f'Password reset for {mobile}',
+                'role':    user.role,
+            })
+        except User.DoesNotExist:
+            return JsonResponse({'error': 'User not found'}, status=404)
