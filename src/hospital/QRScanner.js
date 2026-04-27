@@ -159,7 +159,7 @@ export default function QRScanner() {
 
     try {
       // ── FIX 3: Use POST with body { token_code } not GET with URL param ──
-      const { data } = await API.post('/bookings/scan/', { token_code: token });
+     const { data } = await API.get(`/bookings/scan/${token}/`);
 
       setScanResult(data);
       // If backend already marked attended, show already_done
@@ -200,13 +200,13 @@ export default function QRScanner() {
 
   // ── Mark as In Consultation ───────────────────────────────────────────────
   const markAttended = async () => {
-    const token = scanResult?.booking?.token || scanResult?.token_code;
+   const token = scanResult?.booking?.token;
     if (!token) return;
 
     setConfirming(true);
     try {
       // PATCH to update status to in_progress
-      await API.patch(`/bookings/call/${scanResult.booking?.id}/`);
+      await API.post(`/bookings/scan/${token}/`);
       setScanState('confirmed');
       setScanResult(prev => ({
         ...prev,
