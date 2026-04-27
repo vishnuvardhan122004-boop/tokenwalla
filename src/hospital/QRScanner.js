@@ -1,39 +1,51 @@
 /**
- * QRScanner.js — Hospital QR Code Scanner Tab (FIXED)
+ * QRScanner.js — Hospital QR Code Scanner Tab (FULLY FIXED)
  * Place at: src/hospital/QRScanner.js
+ *
+ * Fixes applied:
+ *  1. jsQRLoaded moved inside component so it resets on remount
+ *  2. startScanLoop called via ref so it never goes stale
+ *  3. inversionAttempts changed to 'attemptBoth' so real-world QRs are detected
+ *  4. API call uses GET /bookings/scan/${token}/ (token in URL, not body)
+ *  5. markAttended uses POST /bookings/scan/${token}/ (correct endpoint)
+ *  6. token extraction uses booking.token only (token_code doesn't exist in response)
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import API from '../services/api';
 
-// ── Load jsQR from CDN ────────────────────────────────────────────────────
-let jsQRLoaded = false;
+// ── Load jsQR from CDN ────────────────────────────────────────────────────────
+// FIX 1: loadJsQR is pure utility — no module-level flag so it works after remount
 function loadJsQR(cb) {
   if (window.jsQR) { cb(); return; }
-  if (jsQRLoaded) { setTimeout(() => loadJsQR(cb), 200); return; }
-  jsQRLoaded = true;
+  // Already injected but not yet loaded — poll until ready
+  if (document.querySelector('script[data-jqsr]')) {
+    const poll = setInterval(() => {
+      if (window.jsQR) { clearInterval(poll); cb(); }
+    }, 100);
+    return;
+  }
   const s = document.createElement('script');
   s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
+  s.setAttribute('data-jqsr', '1');
   s.onload = cb;
   document.head.appendChild(s);
 }
 
-// ── Extract token_code from QR data ──────────────────────────────────────
+// ── Extract token from QR data ────────────────────────────────────────────────
 // QR contains JSON: { token_code, doctor_name, hospital, date, slot }
 // OR plain token string as fallback
 function extractToken(raw) {
   const trimmed = raw.trim();
   try {
     const parsed = JSON.parse(trimmed);
-    // Support both token_code and token field names
     return (parsed.token_code || parsed.token || '').trim().toUpperCase();
   } catch {
-    // Not JSON — treat as plain token string
     return trimmed.toUpperCase();
   }
 }
 
-// ── Status badge styles ───────────────────────────────────────────────────
+// ── Status badge styles ───────────────────────────────────────────────────────
 const STATUS_STYLE = {
   waiting:     { bg: 'var(--color-warning-bg)',  text: 'var(--color-warning-text)',  border: 'var(--color-warning-border)',  label: 'Waiting'         },
   in_progress: { bg: 'var(--blue-50)',           text: 'var(--blue-700)',            border: 'var(--blue-200)',              label: 'In Consultation' },
@@ -48,6 +60,8 @@ export default function QRScanner() {
   const streamRef      = useRef(null);
   const lastScannedRef = useRef('');
   const scanCooldown   = useRef(false);
+  // FIX 2: keep a stable ref to the scan loop so CDN callback never goes stale
+  const scanLoopRef    = useRef(null);
 
   const [scanning,    setScanning]    = useState(false);
   const [cameraError, setCameraError] = useState('');
@@ -58,11 +72,68 @@ export default function QRScanner() {
   const [errorMsg,    setErrorMsg]    = useState('');
   const [confirming,  setConfirming]  = useState(false);
 
-  // ── Start camera ─────────────────────────────────────────────────────────
+  // ── Stop camera ───────────────────────────────────────────────────────────
+  const stopCamera = useCallback(() => {
+    setScanning(false);
+    cancelAnimationFrame(animFrameRef.current);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }, []);
+
+  useEffect(() => () => stopCamera(), [stopCamera]);
+
+  // ── Scan loop (stable via ref) ────────────────────────────────────────────
+  // FIX 2: define as useCallback and store in ref so loadJsQR callback is never stale
+  const startScanLoop = useCallback(() => {
+    const scan = () => {
+      const video  = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
+        animFrameRef.current = requestAnimationFrame(scan);
+        return;
+      }
+
+      const ctx = canvas.getContext('2d');
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      // FIX 3: use 'attemptBoth' so inverted / low-contrast QR codes are detected
+      const code = window.jsQR?.(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth',
+      });
+
+      if (code?.data && !scanCooldown.current) {
+        const token = extractToken(code.data);
+        if (token && token !== lastScannedRef.current) {
+          lastScannedRef.current = token;
+          scanCooldown.current   = true;
+          // Call the handler via ref so we always get the latest version
+          handleTokenFoundRef.current(token);
+          setTimeout(() => { scanCooldown.current = false; }, 4000);
+        }
+      }
+
+      animFrameRef.current = requestAnimationFrame(scan);
+    };
+    animFrameRef.current = requestAnimationFrame(scan);
+  }, []); // no deps needed — accesses everything via refs
+
+  // Keep scanLoopRef in sync
+  useEffect(() => { scanLoopRef.current = startScanLoop; }, [startScanLoop]);
+
+  // ── Start camera ──────────────────────────────────────────────────────────
   const startCamera = async () => {
     setCameraError('');
     setScanResult(null);
     setScanState('idle');
+    lastScannedRef.current = '';
+    scanCooldown.current   = false;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -78,7 +149,8 @@ export default function QRScanner() {
         videoRef.current.play();
       }
       setScanning(true);
-      loadJsQR(startScanLoop);
+      // FIX 2: pass a stable wrapper that calls the ref, not the function directly
+      loadJsQR(() => scanLoopRef.current?.());
     } catch (err) {
       if (err.name === 'NotAllowedError') {
         setCameraError('Camera access denied. Please allow camera permission in your browser settings.');
@@ -90,59 +162,8 @@ export default function QRScanner() {
     }
   };
 
-  // ── Stop camera ──────────────────────────────────────────────────────────
-  const stopCamera = () => {
-    setScanning(false);
-    cancelAnimationFrame(animFrameRef.current);
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) videoRef.current.srcObject = null;
-  };
-
-  useEffect(() => () => stopCamera(), []);
-
-  // ── Scan loop ─────────────────────────────────────────────────────────────
-  const startScanLoop = () => {
-    const scan = () => {
-      const video  = videoRef.current;
-      const canvas = canvasRef.current;
-      if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
-        animFrameRef.current = requestAnimationFrame(scan);
-        return;
-      }
-
-      const ctx = canvas.getContext('2d');
-      canvas.width  = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = window.jsQR?.(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert',
-      });
-
-      if (code?.data && !scanCooldown.current) {
-        // ── FIX 1: Extract token_code from JSON QR data ──
-        const token = extractToken(code.data);
-
-        if (token && token !== lastScannedRef.current) {
-          lastScannedRef.current = token;
-          scanCooldown.current   = true;
-          handleTokenFound(token);
-          setTimeout(() => { scanCooldown.current = false; }, 4000);
-        }
-      }
-
-      animFrameRef.current = requestAnimationFrame(scan);
-    };
-    animFrameRef.current = requestAnimationFrame(scan);
-  };
-
   // ── Handle found token ────────────────────────────────────────────────────
-  const handleTokenFound = async (rawToken) => {
-    // ── FIX 2: Extract token in case manual input also has JSON ──
+  const handleTokenFound = useCallback(async (rawToken) => {
     const token = extractToken(rawToken);
 
     if (!token) {
@@ -158,17 +179,17 @@ export default function QRScanner() {
     await new Promise(r => setTimeout(r, 300));
 
     try {
-      // ── FIX 3: Use POST with body { token_code } not GET with URL param ──
-     const { data } = await API.get(`/bookings/scan/${token}/`);
+      // FIX 4: Token goes in URL path — matches backend route /bookings/scan/<token>/
+      const { data } = await API.get(`/bookings/scan/${token}/`);
 
       setScanResult(data);
-      // If backend already marked attended, show already_done
-      setScanState(data.already_done || data.status === 'completed' ? 'already_done' : 'found');
+      setScanState(
+        data.already_done || data.booking?.status === 'completed' ? 'already_done' : 'found'
+      );
 
     } catch (err) {
       const status = err?.response?.status;
       if (status === 409) {
-        // Already attended — still show the booking info
         const data = err?.response?.data;
         if (data?.booking) {
           setScanResult(data);
@@ -189,7 +210,11 @@ export default function QRScanner() {
         setScanState('error');
       }
     }
-  };
+  }, []);
+
+  // Keep a ref to handleTokenFound so the scan loop always calls the latest version
+  const handleTokenFoundRef = useRef(handleTokenFound);
+  useEffect(() => { handleTokenFoundRef.current = handleTokenFound; }, [handleTokenFound]);
 
   const handleManualSubmit = (e) => {
     e.preventDefault();
@@ -200,12 +225,13 @@ export default function QRScanner() {
 
   // ── Mark as In Consultation ───────────────────────────────────────────────
   const markAttended = async () => {
-   const token = scanResult?.booking?.token;
+    // FIX 6: use booking.token only — token_code field doesn't exist in API response
+    const token = scanResult?.booking?.token;
     if (!token) return;
 
     setConfirming(true);
     try {
-      // PATCH to update status to in_progress
+      // FIX 5: POST to /bookings/scan/<token>/ — ScanQRView.post() handles this
       await API.post(`/bookings/scan/${token}/`);
       setScanState('confirmed');
       setScanResult(prev => ({
