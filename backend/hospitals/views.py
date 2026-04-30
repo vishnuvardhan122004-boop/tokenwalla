@@ -51,7 +51,7 @@ def _verify_otp(mobile, otp_entered):
 # ── Views ─────────────────────────────────────────────────────────────────────
 
 class HospitalListView(APIView):
-    """Public — list all active hospitals."""
+    """Public — list only APPROVED (active) hospitals."""
     permission_classes = [AllowAny]
 
     def get(self, request):
@@ -64,7 +64,11 @@ class HospitalListView(APIView):
 
 
 class HospitalRegisterView(APIView):
-    """Public — register a new hospital and create its linked User account."""
+    """
+    Public — register a new hospital.
+    New hospitals start with status='pending' and must be approved by an admin
+    before they can log in or appear publicly.
+    """
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -81,29 +85,39 @@ class HospitalRegisterView(APIView):
         if User.objects.filter(mobile=mobile).exists():
             return Response({'message': 'Mobile already registered.'}, status=400)
 
+        # ── NEW: hospitals start as 'pending', not 'active' ──────────────────
         hospital = Hospital.objects.create(
             name     = name,
             city     = data.get('city',    '').strip(),
             address  = data.get('address', '').strip(),
             mobile   = mobile,
             password = make_password(password),
-            status   = 'active',
+            status   = 'pending',   # ← CHANGED from 'active'
         )
 
         # Create a Django User for JWT auth, role='hospital'
-        # Store hospital.id in last_name — used by all hospital views to identify tenant
+        # Mark the linked user as inactive until admin approves
         user = User(
             username   = mobile,
             mobile     = mobile,
             first_name = name,
-            last_name  = str(hospital.id),   # ← hospital tenant key
+            last_name  = str(hospital.id),
             role       = 'hospital',
+            is_active  = False,     # ← can't log in until approved
         )
         user.set_password(password)
         user.save()
 
-        logger.info('Hospital "%s" registered (id=%s, user=%s)', name, hospital.id, user.id)
-        return Response(HospitalSerializer(hospital).data, status=201)
+        logger.info(
+            'Hospital "%s" registered (id=%s, user=%s) — awaiting admin approval',
+            name, hospital.id, user.id
+        )
+        return Response({
+            'message':  'Registration submitted successfully! '
+                        'Your account is under review and will be activated by an admin shortly.',
+            'status':   'pending',
+            'hospital': HospitalSerializer(hospital).data,
+        }, status=201)
 
 
 class HospitalLoginView(APIView):
@@ -122,8 +136,24 @@ class HospitalLoginView(APIView):
         except Hospital.DoesNotExist:
             return Response({'message': 'Invalid credentials.'}, status=401)
 
+        # ── NEW: block pending and rejected hospitals ─────────────────────────
+        if hospital.status == 'pending':
+            return Response(
+                {'message': 'Your hospital registration is under review. '
+                            'You will be notified once an admin approves your account.'},
+                status=403
+            )
+        if hospital.status == 'rejected':
+            return Response(
+                {'message': 'Your hospital registration was not approved. '
+                            'Please contact support at tokentraq@gmail.com.'},
+                status=403
+            )
         if hospital.status != 'active':
-            return Response({'message': 'Hospital account is not active. Contact admin.'}, status=403)
+            return Response(
+                {'message': 'Hospital account is not active. Contact admin.'},
+                status=403
+            )
 
         password_ok = check_password(password, hospital.password)
         otp_ok      = _verify_otp(mobile, password)
@@ -138,13 +168,16 @@ class HospitalLoginView(APIView):
             defaults={
                 'username':   mobile,
                 'first_name': hospital.name,
-                'last_name':  str(hospital.id),   # ← hospital tenant key
+                'last_name':  str(hospital.id),
                 'role':       'hospital',
+                'is_active':  True,
             }
         )
 
-        # Always ensure these fields are current (e.g. if hospital was renamed)
         needs_save = False
+        if not user.is_active:
+            user.is_active = True
+            needs_save     = True
         if user.role != 'hospital':
             user.role  = 'hospital'
             needs_save = True
@@ -218,7 +251,6 @@ class HospitalResetPasswordView(APIView):
         except Hospital.DoesNotExist:
             return Response({'message': 'No hospital found with this mobile.'}, status=404)
 
-        # Also update the linked User password
         try:
             user = User.objects.get(mobile=mobile)
             user.set_password(password)
@@ -232,7 +264,7 @@ class HospitalResetPasswordView(APIView):
 
 
 class HospitalAdminListView(APIView):
-    """Admin only — list all hospitals including inactive ones."""
+    """Admin only — list ALL hospitals including pending and rejected."""
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
@@ -242,3 +274,65 @@ class HospitalAdminListView(APIView):
                 many=True
             ).data
         )
+
+
+class HospitalApproveView(APIView):
+    """
+    Admin only — approve or reject a hospital registration.
+    PATCH /api/hospitals/<pk>/approve/
+    Body: { "action": "approve" | "reject" }
+    """
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def patch(self, request, pk):
+        try:
+            hospital = Hospital.objects.get(pk=pk)
+        except Hospital.DoesNotExist:
+            return Response({'message': 'Hospital not found.'}, status=404)
+
+        action = request.data.get('action', '').strip().lower()
+        if action not in ('approve', 'reject'):
+            return Response(
+                {'message': 'action must be "approve" or "reject".'},
+                status=400
+            )
+
+        if action == 'approve':
+            hospital.status = 'active'
+            hospital.save(update_fields=['status'])
+
+            # Activate the linked Django User so they can log in
+            try:
+                user = User.objects.get(mobile=hospital.mobile)
+                if not user.is_active:
+                    user.is_active = True
+                    user.save(update_fields=['is_active'])
+            except User.DoesNotExist:
+                pass
+
+            logger.info('Admin %s approved hospital %s ("%s")',
+                        request.user.id, hospital.id, hospital.name)
+            return Response({
+                'message':  f'Hospital "{hospital.name}" has been approved and is now active.',
+                'hospital': HospitalSerializer(hospital).data,
+            })
+
+        else:  # reject
+            hospital.status = 'rejected'
+            hospital.save(update_fields=['status'])
+
+            # Keep the User inactive
+            try:
+                user = User.objects.get(mobile=hospital.mobile)
+                if user.is_active:
+                    user.is_active = False
+                    user.save(update_fields=['is_active'])
+            except User.DoesNotExist:
+                pass
+
+            logger.info('Admin %s rejected hospital %s ("%s")',
+                        request.user.id, hospital.id, hospital.name)
+            return Response({
+                'message':  f'Hospital "{hospital.name}" has been rejected.',
+                'hospital': HospitalSerializer(hospital).data,
+            })
