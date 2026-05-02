@@ -334,4 +334,80 @@ class BlockUserView(APIView):
         logger.info('User %s → %s (by admin %s)', pk, new_status, request.user.id)
         return Response(UserSerializer(user).data)
 
-        
+
+class CreateAdminView(APIView):
+    """
+    Web-based admin account creation — protected by ADMIN_SETUP_KEY.
+ 
+    POST /api/auth/create-admin/
+    Body: { setup_key, mobile, password, name }
+ 
+    Returns 201 (created) or 200 (updated existing account).
+    Returns 503 if ADMIN_SETUP_KEY is not configured.
+    Returns 403 on wrong key.
+    """
+    permission_classes = [AllowAny]
+ 
+    def post(self, request):
+        import re as _re
+ 
+        setup_key = request.data.get('setup_key', '').strip()
+        mobile    = request.data.get('mobile',    '').strip()
+        password  = request.data.get('password',  '').strip()
+        name      = request.data.get('name',      'Admin').strip()
+ 
+        # ── 1. Check that setup key is configured ─────────────────────────────
+        expected_key = getattr(settings, 'ADMIN_SETUP_KEY', '').strip()
+        if not expected_key:
+            return Response(
+                {'message': 'Admin setup is not enabled. Set ADMIN_SETUP_KEY in your environment.'},
+                status=503,
+            )        
+     # ── 2. Validate setup key ─────────────────────────────────────────────
+        if setup_key != expected_key:
+            logger.warning(
+                'Invalid admin setup key attempt from IP %s',
+                request.META.get('REMOTE_ADDR', 'unknown'),
+            )
+            return Response(
+                {'message': 'Invalid setup key. Check your ADMIN_SETUP_KEY environment variable.'},
+                status=403,
+            )
+ 
+        # ── 3. Validate inputs ────────────────────────────────────────────────
+        if not _re.match(r'^\d{10}$', mobile):
+            return Response({'message': 'Mobile must be exactly 10 digits.'}, status=400)
+        if len(password) < 8:
+            return Response({'message': 'Password must be at least 8 characters.'}, status=400)
+        if not name or len(name) < 2:
+            return Response({'message': 'Name must be at least 2 characters.'}, status=400)
+ 
+        # ── 4. Create or update admin ─────────────────────────────────────────
+        user, created = User.objects.get_or_create(
+            mobile=mobile,
+            defaults={
+                'username':     mobile,
+                'first_name':   name,
+                'is_staff':     True,
+                'is_superuser': True,
+            },
+        )
+ 
+        user.first_name   = name
+        user.role         = 'admin'
+        user.is_staff     = True
+        user.is_superuser = True
+        user.set_password(password)
+        user.save()
+ 
+        action = 'Created' if created else 'Updated'
+        logger.info('%s admin account for mobile ending ...%s', action, mobile[-4:])
+ 
+        return Response(
+            {
+                'message': f'Admin account {action.lower()} successfully. You can now log in at /2004.',
+                'action':  action.lower(),
+            },
+            status=201 if created else 200,
+        )
+ 

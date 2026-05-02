@@ -193,7 +193,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 RAZORPAY_KEY_ID     = config('RAZORPAY_KEY_ID',     default='')
 RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
 TWOFACTOR_API_KEY   = config('TWOFACTOR_API_KEY',   default='')
-
+ADMIN_SETUP_KEY = config('ADMIN_SETUP_KEY', default='')
 # ── Logging ───────────────────────────────────────────────────────────────────
 LOGGING = {
     'version':                  1,
