@@ -1,7 +1,11 @@
 import json
+from datetime import datetime
+
 from rest_framework import viewsets, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
+
 from .models import Doctor
 from .serializers import DoctorSerializer
 
@@ -11,56 +15,124 @@ class DoctorViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
 
     def get_queryset(self):
-        qs = Doctor.objects.select_related("hospital").all()
+        # Default ordering prevents UnorderedObjectListWarning with pagination
+        qs = Doctor.objects.select_related("hospital").order_by("id")
         hospital_id = self.request.query_params.get("hospital")
         if hospital_id:
             qs = qs.filter(hospital_id=hospital_id)
         return qs
 
+    # ── Slot availability endpoint ─────────────────────────────────────────────
+
+    @action(detail=True, methods=["get"], url_path="slot-availability")
+    def slot_availability(self, request, pk=None):
+        """
+        GET /api/doctors/{id}/slot-availability/?date=YYYY-MM-DD
+
+        Returns per-slot booking counts:
+            { "09:00 AM": { "booked": 2, "max": 10, "full": false }, ... }
+
+        Only counts bookings with status 'waiting' or 'in_progress' (active seats).
+        """
+        from bookings.models import Booking
+        from django.db.models import Count
+
+        doctor = self.get_object()
+        date   = request.query_params.get("date", "").strip()
+
+        # ── Validate date param ────────────────────────────────
+        if not date:
+            return Response(
+                {"error": "date query param is required (YYYY-MM-DD)"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            return Response(
+                {"error": "Invalid date format. Expected YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ── Aggregate active bookings per slot ─────────────────
+        counts = (
+            Booking.objects
+            .filter(doctor=doctor, date=date, status__in=["waiting", "in_progress"])
+            .values("slot")
+            .annotate(count=Count("id"))
+        )
+        booked_map = {row["slot"]: row["count"] for row in counts}
+
+        result = {
+            slot: {
+                "booked": booked_map.get(slot, 0),
+                "max":    doctor.max_per_slot,
+                "full":   booked_map.get(slot, 0) >= doctor.max_per_slot,
+            }
+            for slot in (doctor.slots or [])
+        }
+
+        return Response(result)
+
+    # ── Internal helpers ───────────────────────────────────────────────────────
+
     def _prepare_data(self, raw):
         """
-        Normalise multipart/form-data from the React dashboard.
-        Works with both QueryDict (multipart) and plain dict (JSON).
+        Normalise multipart/form-data sent from the React dashboard.
+        Handles both QueryDict (multipart) and plain dict (JSON body).
         """
-        # QueryDict needs .copy(); plain dict is already mutable
         try:
-            data = raw.copy()
+            data = raw.copy()          # QueryDict → mutable copy
         except AttributeError:
-            data = dict(raw)
+            data = dict(raw)           # plain dict fallback
 
-        # ── slots ──────────────────────────────────────────────
-        slots_raw = data.get("slots", None)
-        if slots_raw is not None:
-            if isinstance(slots_raw, str):
-                try:
-                    decoded = json.loads(slots_raw)
-                    if isinstance(decoded, list):
-                        # QueryDict path
-                        if hasattr(data, "setlist"):
-                            data.setlist("slots", decoded)
-                        else:
-                            data["slots"] = decoded
-                except (json.JSONDecodeError, ValueError):
+        # ── slots: JSON string → list ──────────────────────────
+        slots_raw = data.get("slots")
+        if slots_raw is not None and isinstance(slots_raw, str):
+            try:
+                decoded = json.loads(slots_raw)
+                if isinstance(decoded, list):
                     if hasattr(data, "setlist"):
-                        data.setlist("slots", [])
+                        data.setlist("slots", decoded)
                     else:
-                        data["slots"] = []
+                        data["slots"] = decoded
+                else:
+                    raise ValueError("slots JSON must be a list")
+            except (json.JSONDecodeError, ValueError):
+                if hasattr(data, "setlist"):
+                    data.setlist("slots", [])
+                else:
+                    data["slots"] = []
 
-        # ── available (string → bool) ──────────────────────────
-        avail = data.get("available", None)
+        # ── available: string → bool ───────────────────────────
+        avail = data.get("available")
         if avail is not None and isinstance(avail, str):
             data["available"] = avail.lower() not in ("false", "0", "no", "")
 
         # ── numeric fields ─────────────────────────────────────
-        for field, default in (("experience", 0), ("max_per_slot", 10), ("fee", 0)):
-            val = data.get(field, None)
+        # fee uses float to support decimal values (e.g. 99.99)
+        int_fields   = (("experience", 0), ("max_per_slot", 10))
+        float_fields = (("fee", 0.0),)
+
+        for field, default in int_fields:
+            val = data.get(field)
             if val is not None:
                 try:
                     data[field] = int(val)
                 except (ValueError, TypeError):
                     data[field] = default
 
+        for field, default in float_fields:
+            val = data.get(field)
+            if val is not None:
+                try:
+                    data[field] = float(val)
+                except (ValueError, TypeError):
+                    data[field] = default
+
         return data
+
+    # ── ViewSet action overrides ───────────────────────────────────────────────
 
     def create(self, request, *args, **kwargs):
         data = self._prepare_data(request.data)
@@ -81,22 +153,21 @@ class DoctorViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def partial_update(self, request, *args, **kwargs):
-        instance = self.get_object()
-
-        incoming = request.data
+        instance    = self.get_object()
+        incoming    = request.data
+        incoming_keys = set(incoming.keys())
 
         # ── Fast-path: availability-only toggle ────────────────
-        # Handles plain JSON { "available": true/false } sent by the
-        # dashboard toggle button. Skips _prepare_data entirely so
-        # slots are never touched.
-        incoming_keys = set(incoming.keys())
+        # Handles plain JSON { "available": true/false } from the
+        # dashboard toggle button; skips _prepare_data so slots are
+        # never accidentally overwritten.
         if incoming_keys == {"available"}:
             raw_val = incoming.get("available")
-            if isinstance(raw_val, bool):
-                new_val = raw_val
-            else:
-                new_val = str(raw_val).lower() not in ("false", "0", "no", "")
-
+            new_val = (
+                raw_val
+                if isinstance(raw_val, bool)
+                else str(raw_val).lower() not in ("false", "0", "no", "")
+            )
             instance.available = new_val
             instance.save(update_fields=["available"])
 
@@ -119,3 +190,24 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
         self.perform_update(serializer)
         return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Guard against deleting a doctor who still has active bookings.
+        """
+        from bookings.models import Booking
+
+        instance = self.get_object()
+        active   = Booking.objects.filter(
+            doctor=instance,
+            status__in=["waiting", "in_progress"],
+        ).exists()
+
+        if active:
+            return Response(
+                {"error": "Cannot delete a doctor with active bookings."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)

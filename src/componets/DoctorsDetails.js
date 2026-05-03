@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import API from '../services/api';
-import SEO from './SEO';
 
 function getNext7Days() {
   const days   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -28,9 +27,11 @@ export default function DoctorDetails() {
   const { id }   = useParams();
   const navigate = useNavigate();
 
-  const [doctor,  setDoctor]  = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [user,    setUser]    = useState(null);
+  const [doctor,       setDoctor]       = useState(null);
+  const [loading,      setLoading]      = useState(true);
+  const [user,         setUser]         = useState(null);
+  const [slotAvail,    setSlotAvail]    = useState({});   // { "09:00 AM": { booked, max, full } }
+  const [availLoading, setAvailLoading] = useState(false);
 
   const [selectedDate, setSelectedDate] = useState(DAYS[0].full);
   const [selectedSlot, setSelectedSlot] = useState('');
@@ -49,9 +50,44 @@ export default function DoctorDetails() {
       .finally(() => setLoading(false));
   }, [id, navigate]);
 
+  // Fetch slot availability whenever doctor or date changes
+  const fetchAvailability = useCallback(async (doctorId, date) => {
+    setAvailLoading(true);
+    try {
+      const { data } = await API.get(`/doctors/${doctorId}/slot-availability/?date=${date}`);
+      setSlotAvail(data);
+    } catch {
+      setSlotAvail({});
+    } finally {
+      setAvailLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!doctor) return;
+    fetchAvailability(doctor.id, selectedDate);
+  }, [doctor, selectedDate, fetchAvailability]);
+
+  const handleDateChange = (date) => {
+    setSelectedDate(date);
+    setSelectedSlot('');   // clear selected slot when date changes
+  };
+
+  const handleSlotClick = (slot) => {
+    const info = slotAvail[slot];
+    if (info?.full) return;   // blocked — do nothing
+    setSelectedSlot(slot);
+  };
+
   const handleBook = () => {
     if (!user) { navigate('/login'); return; }
     if (!selectedSlot) { alert('Please select a time slot'); return; }
+    // Double-check slot hasn't filled up since page load
+    if (slotAvail[selectedSlot]?.full) {
+      alert('This slot just filled up. Please choose another slot.');
+      setSelectedSlot('');
+      return;
+    }
     const plan = PLANS.find(p => p.key === selectedPlan);
     navigate('/payment', {
       state: {
@@ -73,6 +109,31 @@ export default function DoctorDetails() {
   const pm       = slots.filter(s => s.includes('PM'));
   const plan     = PLANS.find(p => p.key === selectedPlan);
   const dateLabel = DAYS.find(d => d.full === selectedDate);
+
+  // Returns slot visual state: 'available' | 'partial' | 'full' | 'selected'
+  const slotState = (slot) => {
+    if (slot === selectedSlot) return 'selected';
+    const info = slotAvail[slot];
+    if (!info) return 'available';
+    if (info.full) return 'full';
+    if (info.booked > 0) return 'partial';
+    return 'available';
+  };
+
+  const slotLabel = (slot) => {
+    const info = slotAvail[slot];
+    if (!info || info.booked === 0) return slot;
+    if (info.full) return slot;
+    return `${slot}`;
+  };
+
+  const slotSubtext = (slot) => {
+    const info = slotAvail[slot];
+    if (!info || info.booked === 0) return null;
+    if (info.full) return 'Full';
+    const left = info.max - info.booked;
+    return `${left} left`;
+  };
 
   /* ── Loading skeleton ── */
   if (loading) return (
@@ -99,13 +160,6 @@ export default function DoctorDetails() {
 
   return (
     <>
-    <SEO
-  title={`Dr. ${doctor.name} — ${doctor.specialization} in ${doctor.city}`}
-  description={`Book an appointment with Dr. ${doctor.name}, ${doctor.specialization} at ${doctor.hospital_name} in ${doctor.city}. ${doctor.experience} years experience. Get a digital token for ₹15.`}
-  keywords={`Dr. ${doctor.name}, ${doctor.specialization} ${doctor.city}, book ${doctor.specialization} online, ${doctor.hospital_name} appointment`}
-  url={`/doctor/${doctor.id}`}
-  image={doctor.hospital_image || undefined}
-/>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
 
@@ -316,17 +370,139 @@ export default function DoctorDetails() {
           grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
           gap: 7px;
         }
+
+        /* ── SLOT BUTTON: all states ── */
         .dd-slot {
-          padding: 9px 4px; border-radius: 9px;
-          border: 1px solid #B5D4F4; background: #F8FAFC;
-          font-size: 12px; font-weight: 500; color: #64748B;
-          cursor: pointer; transition: all 0.2s; text-align: center;
+          position: relative;
+          padding: 8px 4px 6px;
+          border-radius: 9px;
+          border: 1px solid #B5D4F4;
+          background: #F8FAFC;
+          font-size: 12px;
+          font-weight: 500;
+          color: #64748B;
+          cursor: pointer;
+          transition: all 0.18s;
+          text-align: center;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+          font-family: 'DM Sans', sans-serif;
         }
-        .dd-slot:hover { background: #E6F1FB; border-color: #378ADD; color: #185FA5; }
+
+        /* available — hover */
+        .dd-slot.available:hover {
+          background: #E6F1FB;
+          border-color: #378ADD;
+          color: #185FA5;
+        }
+
+        /* selected */
         .dd-slot.selected {
-          background: #E6F1FB; border-color: #185FA5; color: #185FA5;
-          font-weight: 600; box-shadow: 0 0 0 2px rgba(24,95,165,0.12);
+          background: #E6F1FB;
+          border-color: #185FA5;
+          color: #185FA5;
+          font-weight: 600;
+          box-shadow: 0 0 0 2px rgba(24,95,165,0.15);
         }
+
+        /* partial — some spots left (warm amber tint) */
+        .dd-slot.partial {
+          background: #FFF8ED;
+          border-color: #F0A030;
+          color: #854F0B;
+        }
+        .dd-slot.partial:hover {
+          background: #FFF0D6;
+          border-color: #D4820A;
+        }
+
+        /* full — completely booked */
+        .dd-slot.full {
+          background: #F8FAFC;
+          border-color: #E2E8F0;
+          color: #B0BAC6;
+          cursor: not-allowed;
+          text-decoration: line-through;
+          text-decoration-color: #C4CCDA;
+          text-decoration-thickness: 1.5px;
+          opacity: 0.7;
+        }
+        .dd-slot.full:hover {
+          background: #F8FAFC;
+          border-color: #E2E8F0;
+          color: #B0BAC6;
+          transform: none;
+        }
+
+        /* availability bar inside slot */
+        .dd-slot-bar {
+          width: 100%;
+          height: 3px;
+          border-radius: 2px;
+          background: #E2E8F0;
+          overflow: hidden;
+          margin-top: 2px;
+        }
+        .dd-slot-bar-fill {
+          height: 100%;
+          border-radius: 2px;
+          transition: width 0.3s;
+        }
+        .partial .dd-slot-bar-fill  { background: #F0A030; }
+        .full    .dd-slot-bar-fill  { background: #E2384B; }
+        .selected .dd-slot-bar-fill { background: #185FA5; }
+        .available .dd-slot-bar-fill { background: #4CAF7D; }
+
+        /* sub-label inside slot (e.g. "3 left", "Full") */
+        .dd-slot-sub {
+          font-size: 9px;
+          font-weight: 600;
+          letter-spacing: 0.3px;
+          line-height: 1;
+        }
+        .partial  .dd-slot-sub { color: #854F0B; }
+        .full     .dd-slot-sub { color: #B0BAC6; }
+        .selected .dd-slot-sub { color: #185FA5; }
+
+        /* "Full" tag badge in top-right corner */
+        .dd-slot-full-tag {
+          position: absolute;
+          top: 3px; right: 4px;
+          font-size: 7px;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+          color: #E2384B;
+          background: #FCEBEB;
+          border: 1px solid #F09595;
+          border-radius: 3px;
+          padding: 0px 3px;
+          line-height: 14px;
+        }
+
+        /* loading shimmer overlay on slots area */
+        .dd-slots-loading {
+          opacity: 0.5;
+          pointer-events: none;
+        }
+
+        /* ── LEGEND ── */
+        .dd-legend {
+          display: flex; gap: 14px; flex-wrap: wrap;
+          margin-bottom: 14px; padding: 10px 14px;
+          background: #F8FAFC; border: 1px solid #E6F1FB;
+          border-radius: 10px;
+        }
+        .dd-legend-item {
+          display: flex; align-items: center; gap: 5px;
+          font-size: 11px; color: #64748B;
+        }
+        .dd-legend-dot {
+          width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
+        }
+
         .dd-no-slots { text-align: center; padding: 24px; color: #94A3B8; font-size: 13px; }
 
         /* ── BOOKING CARD ── */
@@ -449,7 +625,6 @@ export default function DoctorDetails() {
           .dd-banner { height: 220px; }
           .dd-layout {
             grid-template-columns: 1fr;
-            /* Booking card first on tablet/mobile */
             direction: rtl;
           }
           .dd-layout > * { direction: ltr; }
@@ -500,7 +675,7 @@ export default function DoctorDetails() {
           .dd-date-month { font-size: 7px; }
 
           .dd-slots-grid { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
-          .dd-slot { padding: 8px 3px; font-size: 11px; }
+          .dd-slot { padding: 8px 3px 6px; font-size: 11px; }
 
           .dd-booking-card   { border-radius: 14px; }
           .dd-booking-header { padding: 13px 14px 11px; }
@@ -515,6 +690,9 @@ export default function DoctorDetails() {
           .dd-plan-price     { font-size: 15px; }
           .dd-total-amount   { font-size: 1.25rem; }
           .dd-book-btn       { padding: 12px; font-size: 14px; }
+
+          .dd-legend { gap: 10px; padding: 8px 10px; }
+          .dd-legend-item { font-size: 10px; }
         }
 
         /* ── VERY SMALL (≤ 360px) ── */
@@ -578,10 +756,6 @@ export default function DoctorDetails() {
           </div>
 
           {/* ── MAIN LAYOUT ── */}
-          {/*
-            On desktop: [slots col] [booking col]
-            On mobile:  direction:rtl flips to [booking col] first, then [slots col]
-          */}
           <div className="dd-layout">
 
             {/* LEFT — Date + Slots */}
@@ -597,7 +771,7 @@ export default function DoctorDetails() {
                     <button
                       key={day.full}
                       className={`dd-date-chip ${selectedDate === day.full ? 'selected' : ''}`}
-                      onClick={() => { setSelectedDate(day.full); setSelectedSlot(''); }}
+                      onClick={() => handleDateChange(day.full)}
                     >
                       <span className="dd-date-day">{day.label}</span>
                       <span className="dd-date-num">{day.num}</span>
@@ -612,28 +786,71 @@ export default function DoctorDetails() {
                 <div className="dd-block-title">
                   <div className="dd-block-title-icon">🕐</div>
                   Select Time Slot
-                  {selectedSlot && (
+                  {availLoading && (
+                    <span style={{ marginLeft: 8, fontSize: 11, color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ width: 12, height: 12, border: '2px solid #B5D4F4', borderTopColor: '#185FA5', borderRadius: '50%', display: 'inline-block', animation: 'ddSpin 0.7s linear infinite' }} />
+                      Checking availability…
+                    </span>
+                  )}
+                  {selectedSlot && !availLoading && (
                     <span style={{ marginLeft:'auto', fontSize:12, color:'#185FA5', fontWeight:600 }}>
                       ✓ {selectedSlot}
                     </span>
                   )}
                 </div>
 
+                {/* Legend */}
+                {slots.length > 0 && (
+                  <div className="dd-legend">
+                    <div className="dd-legend-item">
+                      <div className="dd-legend-dot" style={{ background: '#E6F1FB', border: '1px solid #185FA5' }} />
+                      Available
+                    </div>
+                    <div className="dd-legend-item">
+                      <div className="dd-legend-dot" style={{ background: '#FFF8ED', border: '1px solid #F0A030' }} />
+                      Filling up
+                    </div>
+                    <div className="dd-legend-item">
+                      <div className="dd-legend-dot" style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', textDecoration: 'line-through' }} />
+                      Fully booked
+                    </div>
+                  </div>
+                )}
+
                 {slots.length === 0 ? (
                   <div className="dd-no-slots">No slots configured. Contact the hospital directly.</div>
                 ) : (
-                  <>
+                  <div className={availLoading ? 'dd-slots-loading' : ''}>
                     {am.length > 0 && (
                       <div className="dd-slot-section">
                         <div className="dd-slot-period">🌅 Morning</div>
                         <div className="dd-slots-grid">
-                          {am.map(s => (
-                            <button
-                              key={s}
-                              className={`dd-slot ${selectedSlot === s ? 'selected' : ''}`}
-                              onClick={() => setSelectedSlot(s)}
-                            >{s}</button>
-                          ))}
+                          {am.map(s => {
+                            const state = slotState(s);
+                            const sub   = slotSubtext(s);
+                            const info  = slotAvail[s];
+                            const pct   = info ? Math.min(100, (info.booked / info.max) * 100) : 0;
+                            return (
+                              <button
+                                key={s}
+                                className={`dd-slot ${state}`}
+                                onClick={() => handleSlotClick(s)}
+                                disabled={state === 'full'}
+                                title={state === 'full' ? 'This slot is fully booked' : sub ? `${sub} slots remaining` : ''}
+                              >
+                                {state === 'full' && <span className="dd-slot-full-tag">Full</span>}
+                                <span>{slotLabel(s)}</span>
+                                {sub && state !== 'full' && (
+                                  <span className="dd-slot-sub">{sub}</span>
+                                )}
+                                {(state === 'partial' || state === 'selected' || (state === 'available' && pct > 0)) && (
+                                  <div className="dd-slot-bar">
+                                    <div className="dd-slot-bar-fill" style={{ width: `${pct}%` }} />
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -641,17 +858,36 @@ export default function DoctorDetails() {
                       <div className="dd-slot-section">
                         <div className="dd-slot-period">🌇 Afternoon / Evening</div>
                         <div className="dd-slots-grid">
-                          {pm.map(s => (
-                            <button
-                              key={s}
-                              className={`dd-slot ${selectedSlot === s ? 'selected' : ''}`}
-                              onClick={() => setSelectedSlot(s)}
-                            >{s}</button>
-                          ))}
+                          {pm.map(s => {
+                            const state = slotState(s);
+                            const sub   = slotSubtext(s);
+                            const info  = slotAvail[s];
+                            const pct   = info ? Math.min(100, (info.booked / info.max) * 100) : 0;
+                            return (
+                              <button
+                                key={s}
+                                className={`dd-slot ${state}`}
+                                onClick={() => handleSlotClick(s)}
+                                disabled={state === 'full'}
+                                title={state === 'full' ? 'This slot is fully booked' : sub ? `${sub} slots remaining` : ''}
+                              >
+                                {state === 'full' && <span className="dd-slot-full-tag">Full</span>}
+                                <span>{slotLabel(s)}</span>
+                                {sub && state !== 'full' && (
+                                  <span className="dd-slot-sub">{sub}</span>
+                                )}
+                                {(state === 'partial' || state === 'selected' || (state === 'available' && pct > 0)) && (
+                                  <div className="dd-slot-bar">
+                                    <div className="dd-slot-bar-fill" style={{ width: `${pct}%` }} />
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
             </div>
@@ -716,12 +952,14 @@ export default function DoctorDetails() {
                     <button
                       className="dd-book-btn"
                       onClick={handleBook}
-                      disabled={!selectedSlot || !doctor.available}
+                      disabled={!selectedSlot || !doctor.available || (selectedSlot && slotAvail[selectedSlot]?.full)}
                     >
                       {!doctor.available
                         ? '⛔ Doctor Unavailable'
                         : !selectedSlot
                         ? 'Select a Slot First'
+                        : slotAvail[selectedSlot]?.full
+                        ? '⛔ Slot is Full'
                         : `💳 Pay ₹${plan?.price} & Book`}
                     </button>
                   ) : (
@@ -740,6 +978,8 @@ export default function DoctorDetails() {
 
           </div>
         </div>
+
+        <style>{`@keyframes ddSpin { to { transform: rotate(360deg); } }`}</style>
       </div>
     </>
   );
