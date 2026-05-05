@@ -4,77 +4,149 @@ from datetime import datetime
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from .models import Doctor
 from .serializers import DoctorSerializer
 
 
 class DoctorViewSet(viewsets.ModelViewSet):
-    serializer_class   = DoctorSerializer
+    serializer_class = DoctorSerializer
     permission_classes = [AllowAny]
 
     def get_queryset(self):
         # Default ordering prevents UnorderedObjectListWarning with pagination
-        qs = Doctor.objects.select_related("hospital").order_by("id")
-        hospital_id = self.request.query_params.get("hospital")
+        qs = Doctor.objects.select_related('hospital').order_by('id')
+        hospital_id = self.request.query_params.get('hospital')
         if hospital_id:
             qs = qs.filter(hospital_id=hospital_id)
         return qs
 
-    # ── Slot availability endpoint ─────────────────────────────────────────────
+    # ── Slot availability ─────────────────────────────────────────────────────
 
-    @action(detail=True, methods=["get"], url_path="slot-availability")
+    @action(detail=True, methods=['get'], url_path='slot-availability')
     def slot_availability(self, request, pk=None):
         """
-        GET /api/doctors/{id}/slot-availability/?date=YYYY-MM-DD
+        GET /api/doctors/<id>/slot-availability/?date=YYYY-MM-DD
 
         Returns per-slot booking counts:
             { "09:00 AM": { "booked": 2, "max": 10, "full": false }, ... }
 
-        Only counts bookings with status 'waiting' or 'in_progress' (active seats).
+        Only counts bookings with status 'waiting' or 'in_progress'.
         """
         from bookings.models import Booking
         from django.db.models import Count
 
         doctor = self.get_object()
-        date   = request.query_params.get("date", "").strip()
+        date = request.query_params.get('date', '').strip()
 
-        # ── Validate date param ────────────────────────────────
         if not date:
             return Response(
-                {"error": "date query param is required (YYYY-MM-DD)"},
+                {'error': 'date query param is required (YYYY-MM-DD)'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            datetime.strptime(date, "%Y-%m-%d")
+            datetime.strptime(date, '%Y-%m-%d')
         except ValueError:
             return Response(
-                {"error": "Invalid date format. Expected YYYY-MM-DD."},
+                {'error': 'Invalid date format. Expected YYYY-MM-DD.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # ── Aggregate active bookings per slot ─────────────────
         counts = (
             Booking.objects
-            .filter(doctor=doctor, date=date, status__in=["waiting", "in_progress"])
-            .values("slot")
-            .annotate(count=Count("id"))
+            .filter(doctor=doctor, date=date, status__in=['waiting', 'in_progress'])
+            .values('slot')
+            .annotate(count=Count('id'))
         )
-        booked_map = {row["slot"]: row["count"] for row in counts}
+        booked_map = {row['slot']: row['count'] for row in counts}
 
         result = {
             slot: {
-                "booked": booked_map.get(slot, 0),
-                "max":    doctor.max_per_slot,
-                "full":   booked_map.get(slot, 0) >= doctor.max_per_slot,
+                'booked': booked_map.get(slot, 0),
+                'max': doctor.max_per_slot,
+                'full': booked_map.get(slot, 0) >= doctor.max_per_slot,
             }
             for slot in (doctor.slots or [])
         }
-
         return Response(result)
 
-    # ── Internal helpers ───────────────────────────────────────────────────────
+    # ── Booking summary (admin only) ──────────────────────────────────────────
+
+    @action(
+        detail=True,
+        methods=['get'],
+        url_path='booking-summary',
+        permission_classes=[IsAuthenticated],
+    )
+    def booking_summary(self, request, pk=None):
+        """
+        GET /api/doctors/<id>/booking-summary/
+        Admin only — returns booking counts for a doctor.
+        Used by the admin frontend before showing the delete confirmation modal.
+        """
+        from bookings.models import Booking
+
+        if not (request.user.is_authenticated and
+                getattr(request.user, 'role', None) == 'admin'):
+            return Response({'message': 'Admin access required.'}, status=403)
+
+        doctor = self.get_object()
+        qs = Booking.objects.filter(doctor=doctor)
+        return Response({
+            'total': qs.count(),
+            'active': qs.filter(status__in=['waiting', 'in_progress']).count(),
+            'waiting': qs.filter(status='waiting').count(),
+            'in_progress': qs.filter(status='in_progress').count(),
+            'completed': qs.filter(status='completed').count(),
+            'cancelled': qs.filter(status='cancelled').count(),
+        })
+
+    # ── Force delete (admin only) ─────────────────────────────────────────────
+
+    @action(
+        detail=True,
+        methods=['delete'],
+        url_path='force-delete',
+        permission_classes=[IsAuthenticated],
+    )
+    def force_delete(self, request, pk=None):
+        """
+        DELETE /api/doctors/<id>/force-delete/
+        Admin only — cancels all active bookings, deletes all booking records,
+        then deletes the doctor. Bypasses the on_delete=PROTECT guard.
+        """
+        from bookings.models import Booking
+        from django.db import transaction
+
+        if not (request.user.is_authenticated and
+                getattr(request.user, 'role', None) == 'admin'):
+            return Response({'message': 'Admin access required.'}, status=403)
+
+        doctor = self.get_object()
+
+        with transaction.atomic():
+            cancelled = Booking.objects.filter(
+                doctor=doctor,
+                status__in=['waiting', 'in_progress'],
+            ).update(status='cancelled')
+
+            total_deleted = Booking.objects.filter(doctor=doctor).delete()[0]
+
+            name = doctor.name
+            doctor.delete()
+
+        return Response({
+            'message': (
+                f'Dr. {name} deleted. '
+                f'{cancelled} active booking(s) were cancelled. '
+                f'{total_deleted} total booking records removed.'
+            ),
+            'cancelled_bookings': cancelled,
+            'deleted_records': total_deleted,
+        })
+
+    # ── Internal helpers ──────────────────────────────────────────────────────
 
     def _prepare_data(self, raw):
         """
@@ -82,37 +154,36 @@ class DoctorViewSet(viewsets.ModelViewSet):
         Handles both QueryDict (multipart) and plain dict (JSON body).
         """
         try:
-            data = raw.copy()          # QueryDict → mutable copy
+            data = raw.copy()       # QueryDict → mutable copy
         except AttributeError:
-            data = dict(raw)           # plain dict fallback
+            data = dict(raw)        # plain dict fallback
 
-        # ── slots: JSON string → list ──────────────────────────
-        slots_raw = data.get("slots")
+        # slots: JSON string → list
+        slots_raw = data.get('slots')
         if slots_raw is not None and isinstance(slots_raw, str):
             try:
                 decoded = json.loads(slots_raw)
                 if isinstance(decoded, list):
-                    if hasattr(data, "setlist"):
-                        data.setlist("slots", decoded)
+                    if hasattr(data, 'setlist'):
+                        data.setlist('slots', decoded)
                     else:
-                        data["slots"] = decoded
+                        data['slots'] = decoded
                 else:
-                    raise ValueError("slots JSON must be a list")
+                    raise ValueError('slots JSON must be a list')
             except (json.JSONDecodeError, ValueError):
-                if hasattr(data, "setlist"):
-                    data.setlist("slots", [])
+                if hasattr(data, 'setlist'):
+                    data.setlist('slots', [])
                 else:
-                    data["slots"] = []
+                    data['slots'] = []
 
-        # ── available: string → bool ───────────────────────────
-        avail = data.get("available")
+        # available: string → bool
+        avail = data.get('available')
         if avail is not None and isinstance(avail, str):
-            data["available"] = avail.lower() not in ("false", "0", "no", "")
+            data['available'] = avail.lower() not in ('false', '0', 'no', '')
 
-        # ── numeric fields ─────────────────────────────────────
-        # fee uses float to support decimal values (e.g. 99.99)
-        int_fields   = (("experience", 0), ("max_per_slot", 10))
-        float_fields = (("fee", 0.0),)
+        # numeric fields
+        int_fields = (('experience', 0), ('max_per_slot', 10))
+        float_fields = (('fee', 0.0),)
 
         for field, default in int_fields:
             val = data.get(field)
@@ -132,20 +203,20 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
         return data
 
-    # ── ViewSet action overrides ───────────────────────────────────────────────
+    # ── ViewSet action overrides ──────────────────────────────────────────────
 
     def create(self, request, *args, **kwargs):
         data = self._prepare_data(request.data)
 
-        print("=== POST /api/doctors/ ===")
-        print("DATA  :", dict(data))
-        print("FILES :", request.FILES)
+        print('=== POST /api/doctors/ ===')
+        print('DATA  :', dict(data))
+        print('FILES :', request.FILES)
 
         serializer = self.get_serializer(data=data)
         if not serializer.is_valid():
-            print("ERRORS:", serializer.errors)
+            print('ERRORS:', serializer.errors)
             return Response(
-                {"message": "Validation failed", "errors": serializer.errors},
+                {'message': 'Validation failed', 'errors': serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -153,38 +224,37 @@ class DoctorViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def partial_update(self, request, *args, **kwargs):
-        instance    = self.get_object()
-        incoming    = request.data
+        instance = self.get_object()
+        incoming = request.data
         incoming_keys = set(incoming.keys())
 
-        # ── Fast-path: availability-only toggle ────────────────
-        # Handles plain JSON { "available": true/false } from the
-        # dashboard toggle button; skips _prepare_data so slots are
-        # never accidentally overwritten.
-        if incoming_keys == {"available"}:
-            raw_val = incoming.get("available")
+        # Fast-path: availability-only toggle
+        # Handles plain JSON { "available": true/false } from the dashboard toggle;
+        # skips _prepare_data so slots are never accidentally overwritten.
+        if incoming_keys == {'available'}:
+            raw_val = incoming.get('available')
             new_val = (
                 raw_val
                 if isinstance(raw_val, bool)
-                else str(raw_val).lower() not in ("false", "0", "no", "")
+                else str(raw_val).lower() not in ('false', '0', 'no', '')
             )
             instance.available = new_val
-            instance.save(update_fields=["available"])
+            instance.save(update_fields=['available'])
 
-            print(f"=== TOGGLE /api/doctors/{instance.id}/ available={new_val} ===")
+            print(f'=== TOGGLE /api/doctors/{instance.id}/ available={new_val} ===')
             return Response(DoctorSerializer(instance).data)
 
-        # ── Full / partial form update (multipart FormData) ────
+        # Full / partial form update (multipart FormData)
         data = self._prepare_data(incoming)
 
-        print(f"=== PATCH /api/doctors/{instance.id}/ ===")
-        print("DATA  :", dict(data))
+        print(f'=== PATCH /api/doctors/{instance.id}/ ===')
+        print('DATA  :', dict(data))
 
         serializer = self.get_serializer(instance, data=data, partial=True)
         if not serializer.is_valid():
-            print("ERRORS:", serializer.errors)
+            print('ERRORS:', serializer.errors)
             return Response(
-                {"message": "Validation failed", "errors": serializer.errors},
+                {'message': 'Validation failed', 'errors': serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -192,20 +262,18 @@ class DoctorViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
-        """
-        Guard against deleting a doctor who still has active bookings.
-        """
+        """Guard against deleting a doctor who still has active bookings."""
         from bookings.models import Booking
 
         instance = self.get_object()
-        active   = Booking.objects.filter(
+        active = Booking.objects.filter(
             doctor=instance,
-            status__in=["waiting", "in_progress"],
+            status__in=['waiting', 'in_progress'],
         ).exists()
 
         if active:
             return Response(
-                {"error": "Cannot delete a doctor with active bookings."},
+                {'error': 'Cannot delete a doctor with active bookings.'},
                 status=status.HTTP_409_CONFLICT,
             )
 
