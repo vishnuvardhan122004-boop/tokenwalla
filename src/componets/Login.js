@@ -3,9 +3,10 @@ import { Link, useNavigate } from 'react-router';
 import API from '../services/api';
 import { authCSS } from './authStyles';
 import SEO from './SEO';
+
 export default function Login() {
   const navigate = useNavigate();
-  const [details,    setDetails]    = useState({ mobile: '', password: '' })
+  const [details,    setDetails]    = useState({ mobile: '', password: '' });
   const [loading,    setLoading]    = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpSent,    setOtpSent]    = useState(false);
@@ -15,18 +16,50 @@ export default function Login() {
 
   const requestOTP = async () => {
     if (!details.mobile) { setError('Enter mobile number first'); return; }
-    setOtpLoading(true); setError('');
+    if (!/^[6-9]\d{9}$/.test(details.mobile)) {
+      setError('Enter a valid 10-digit mobile number');
+      return;
+    }
+
+    setOtpLoading(true);
+    setError('');
+
     try {
+      // ── Step 1: Verify the account exists before sending an OTP ──────────
+      const { data: check } = await API.post('/auth/check-mobile/', {
+        mobile: details.mobile,
+        type: 'patient',
+      });
+
+      if (!check.exists) {
+        setError('This mobile number is not registered. Please create an account first.');
+        return;
+      }
+
+      if (check.status === 'blocked') {
+        setError('This account has been blocked. Please contact support.');
+        return;
+      }
+
+      // ── Step 2: Account confirmed — send OTP ──────────────────────────────
       await API.post('/auth/otp/request/', { mobile: details.mobile });
       setOtpSent(true);
-    } catch { setError('OTP failed. Try again.'); }
-    finally { setOtpLoading(false); }
+
+    } catch (err) {
+      setError(err?.response?.data?.message || 'OTP failed. Please try again.');
+    } finally {
+      setOtpLoading(false);
+    }
   };
 
   const submitHandler = async e => {
     e.preventDefault();
-    if (!details.mobile || !details.password) { setError('Enter mobile & password / OTP'); return; }
-    setLoading(true); setError('');
+    if (!details.mobile || !details.password) {
+      setError('Enter your mobile and password / OTP');
+      return;
+    }
+    setLoading(true);
+    setError('');
     try {
       const { data } = await API.post('/auth/login/', details);
       localStorage.setItem('access',  data.access);
@@ -35,17 +68,19 @@ export default function Login() {
       navigate('/alldoctor');
     } catch (err) {
       setError(err?.response?.data?.message || 'Invalid credentials');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <>
-    <SEO
-     title="Patient Login — TokenWalla"
-     description="Log in to your TokenWalla account to view bookings, track your queue position, and book new doctor appointments online."
-      url="/login"
-      noIndex={false}
-   />
+      <SEO
+        title="Patient Login — TokenWalla"
+        description="Log in to your TokenWalla account to view bookings, track your queue position, and book new doctor appointments online."
+        url="/login"
+        noIndex={false}
+      />
       <style>{authCSS}</style>
       <div className="auth-page">
 
@@ -68,9 +103,9 @@ export default function Login() {
 
             <div className="auth-features">
               {[
-                { icon: '🎫', title: 'Instant Token',       desc: 'Get your token immediately after booking'   },
-                { icon: '📍', title: 'Live Queue Tracking', desc: 'Know your exact position in the queue'       },
-                { icon: '🔐', title: 'Secure & Private',    desc: 'Your data is encrypted and never shared'     },
+                { icon: '🎫', title: 'Instant Token',       desc: 'Get your token immediately after booking'  },
+                { icon: '📍', title: 'Live Queue Tracking', desc: 'Know your exact position in the queue'      },
+                { icon: '🔐', title: 'Secure & Private',    desc: 'Your data is encrypted and never shared'    },
               ].map((f, i) => (
                 <div className="auth-feature" key={i}>
                   <div className="auth-feature-icon">{f.icon}</div>
@@ -102,7 +137,8 @@ export default function Login() {
                 <span className="auth-input-icon">📱</span>
                 <input
                   className="auth-input"
-                  type="text" name="mobile"
+                  type="text"
+                  name="mobile"
                   placeholder="10-digit mobile number"
                   value={details.mobile}
                   onChange={handleChange}
@@ -118,13 +154,19 @@ export default function Login() {
                   <span className="auth-input-icon">🔑</span>
                   <input
                     className="auth-input"
-                    type="password" name="password"
+                    type="password"
+                    name="password"
                     placeholder={otpSent ? 'Enter OTP sent to your mobile' : 'Password or OTP'}
                     value={details.password}
                     onChange={handleChange}
                   />
                 </div>
-                <button type="button" className="auth-otp-btn" onClick={requestOTP} disabled={otpLoading}>
+                <button
+                  type="button"
+                  className="auth-otp-btn"
+                  onClick={requestOTP}
+                  disabled={otpLoading}
+                >
                   {otpLoading ? '...' : otpSent ? 'Resend' : 'Get OTP'}
                 </button>
               </div>

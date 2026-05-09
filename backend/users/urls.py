@@ -4,6 +4,7 @@ from .auth_views import (
     CreateAdminView, RegisterView, LoginView, LogoutView,
     MeView, RequestOTPView, VerifyOTPView,
     AllUsersView, BlockUserView, ResetPasswordView,
+    CheckMobileView,
 )
 
 urlpatterns = [
@@ -17,5 +18,6 @@ urlpatterns = [
     path('users/',                AllUsersView.as_view()),
     path('users/<int:pk>/block/', BlockUserView.as_view()),
     path('reset-password/',       ResetPasswordView.as_view()),
-    path('create-admin/',         CreateAdminView.as_view()), 
+    path('create-admin/',         CreateAdminView.as_view()),
+    path('check-mobile/',         CheckMobileView.as_view()),   # ← NEW
 ]

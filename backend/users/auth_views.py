@@ -29,17 +29,15 @@ def send_otp(mobile, otp, via='sms'):
     """
     Send OTP via 2factor.in.
     When TWOFACTOR_API_KEY is empty, runs in dev mode:
-    the OTP is stored in Redis cache and printed clearly to the console.
+    the OTP is stored in cache and printed clearly to the console.
     """
     api_key = getattr(settings, 'TWOFACTOR_API_KEY', '')
 
     if not api_key:
         # ── DEV MODE ──────────────────────────────────────────────────────────
-        # Store OTP in cache so verify_otp() can read it
         cache.set(f'otp_session:{mobile}', str(otp), timeout=300)
         cache.set(f'otp_via:{mobile}',     via,       timeout=300)
 
-        # Print clearly so you can see it during development
         border = "─" * 50
         print(f"\n┌{border}┐")
         print(f"│  📱 DEV OTP  │  Mobile: {mobile}  │  OTP: {otp}  │")
@@ -63,8 +61,6 @@ def send_otp(mobile, otp, via='sms'):
         data = res.json()
 
         if data.get('Status') == 'Success':
-            # For voice OTP, store the raw OTP (verified by comparison)
-            # For SMS OTP, store the session ID (verified via 2Factor API)
             stored = str(otp) if via == 'voice' else data.get('Details')
             cache.set(f'otp_session:{mobile}', stored, timeout=300)
             cache.set(f'otp_via:{mobile}',     via,    timeout=300)
@@ -84,7 +80,7 @@ def send_otp(mobile, otp, via='sms'):
 
 def verify_otp(mobile, otp_entered):
     """
-    Verify OTP from Redis cache.
+    Verify OTP from cache.
     Returns True on success (and clears the cache entry).
     Returns False if OTP is wrong or expired.
     """
@@ -212,9 +208,59 @@ class LogoutView(APIView):
             return Response({'message': 'Invalid or expired token.'}, status=400)
 
 
+class CheckMobileView(APIView):
+    """
+    POST /api/auth/check-mobile/
+    Body: { "mobile": "9876543210", "type": "patient" | "hospital" }
+
+    Checks whether a mobile number is registered before sending an OTP.
+    Called by the login pages so the user gets a clear error immediately
+    instead of receiving an OTP and then seeing "not registered" on submit.
+
+    Returns:
+        200  { "exists": true,  "status": "active" | "blocked" | "pending" | "rejected" }
+        200  { "exists": false }
+
+    Never reveals passwords, tokens, or any sensitive data.
+    Throttled to prevent enumeration attacks.
+    """
+    permission_classes = [AllowAny]
+    throttle_classes   = [OTPRateThrottle]
+
+    def post(self, request):
+        mobile       = request.data.get('mobile', '').strip()
+        account_type = request.data.get('type',   'patient').strip().lower()
+
+        if not re.match(r'^[6-9]\d{9}$', mobile):
+            return Response({'message': 'Invalid mobile number.'}, status=400)
+
+        if account_type == 'hospital':
+            # ── Check hospital account ────────────────────────────────────────
+            from hospitals.models import Hospital
+            try:
+                hospital = Hospital.objects.get(mobile=mobile)
+                return Response({
+                    'exists': True,
+                    'status': hospital.status,   # active | pending | rejected
+                })
+            except Hospital.DoesNotExist:
+                return Response({'exists': False})
+
+        else:
+            # ── Check patient / admin account ─────────────────────────────────
+            try:
+                user = User.objects.get(mobile=mobile)
+                return Response({
+                    'exists': True,
+                    'status': getattr(user, 'status', 'active'),
+                })
+            except User.DoesNotExist:
+                return Response({'exists': False})
+
+
 class RequestOTPView(APIView):
-    permission_classes  = [AllowAny]
-    throttle_classes    = [OTPRateThrottle]
+    permission_classes = [AllowAny]
+    throttle_classes   = [OTPRateThrottle]
 
     def post(self, request):
         mobile = request.data.get('mobile', '').strip()
@@ -247,7 +293,6 @@ class VerifyOTPView(APIView):
             return Response({'message': 'Mobile and OTP are required.'}, status=400)
 
         if verify_otp(mobile, otp):
-            # Store verification flag so reset-password can use it
             cache.set(f'otp_verified:{mobile}', True, timeout=600)
             return Response({'message': 'OTP verified.', 'verified': True})
 
@@ -338,32 +383,33 @@ class BlockUserView(APIView):
 class CreateAdminView(APIView):
     """
     Web-based admin account creation — protected by ADMIN_SETUP_KEY.
- 
+
     POST /api/auth/create-admin/
     Body: { setup_key, mobile, password, name }
- 
+
     Returns 201 (created) or 200 (updated existing account).
     Returns 503 if ADMIN_SETUP_KEY is not configured.
     Returns 403 on wrong key.
     """
     permission_classes = [AllowAny]
- 
+
     def post(self, request):
         import re as _re
- 
+
         setup_key = request.data.get('setup_key', '').strip()
         mobile    = request.data.get('mobile',    '').strip()
         password  = request.data.get('password',  '').strip()
         name      = request.data.get('name',      'Admin').strip()
- 
+
         # ── 1. Check that setup key is configured ─────────────────────────────
         expected_key = getattr(settings, 'ADMIN_SETUP_KEY', '').strip()
         if not expected_key:
             return Response(
                 {'message': 'Admin setup is not enabled. Set ADMIN_SETUP_KEY in your environment.'},
                 status=503,
-            )        
-     # ── 2. Validate setup key ─────────────────────────────────────────────
+            )
+
+        # ── 2. Validate setup key ─────────────────────────────────────────────
         if setup_key != expected_key:
             logger.warning(
                 'Invalid admin setup key attempt from IP %s',
@@ -373,7 +419,7 @@ class CreateAdminView(APIView):
                 {'message': 'Invalid setup key. Check your ADMIN_SETUP_KEY environment variable.'},
                 status=403,
             )
- 
+
         # ── 3. Validate inputs ────────────────────────────────────────────────
         if not _re.match(r'^\d{10}$', mobile):
             return Response({'message': 'Mobile must be exactly 10 digits.'}, status=400)
@@ -381,7 +427,7 @@ class CreateAdminView(APIView):
             return Response({'message': 'Password must be at least 8 characters.'}, status=400)
         if not name or len(name) < 2:
             return Response({'message': 'Name must be at least 2 characters.'}, status=400)
- 
+
         # ── 4. Create or update admin ─────────────────────────────────────────
         user, created = User.objects.get_or_create(
             mobile=mobile,
@@ -392,17 +438,17 @@ class CreateAdminView(APIView):
                 'is_superuser': True,
             },
         )
- 
+
         user.first_name   = name
         user.role         = 'admin'
         user.is_staff     = True
         user.is_superuser = True
         user.set_password(password)
         user.save()
- 
+
         action = 'Created' if created else 'Updated'
         logger.info('%s admin account for mobile ending ...%s', action, mobile[-4:])
- 
+
         return Response(
             {
                 'message': f'Admin account {action.lower()} successfully. You can now log in at /2004.',
@@ -410,4 +456,3 @@ class CreateAdminView(APIView):
             },
             status=201 if created else 200,
         )
- 

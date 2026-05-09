@@ -15,18 +15,55 @@ export default function Hlogin() {
 
   const requestOTP = async () => {
     if (!details.mobile) { setError('Enter mobile number first'); return; }
-    setOtpLoading(true); setError('');
+    if (!/^[6-9]\d{9}$/.test(details.mobile)) {
+      setError('Enter a valid 10-digit mobile number');
+      return;
+    }
+
+    setOtpLoading(true);
+    setError('');
+
     try {
+      // ── Step 1: Verify the hospital account exists before sending OTP ─────
+      const { data: check } = await API.post('/auth/check-mobile/', {
+        mobile: details.mobile,
+        type: 'hospital',
+      });
+
+      if (!check.exists) {
+        setError('This mobile is not registered as a hospital. Please register first.');
+        return;
+      }
+
+      if (check.status === 'pending') {
+        setError('Your hospital registration is under review. Please wait for admin approval.');
+        return;
+      }
+
+      if (check.status === 'rejected') {
+        setError('Your hospital registration was not approved. Please contact support at tokentraq@gmail.com.');
+        return;
+      }
+
+      // ── Step 2: Account confirmed and active — send OTP ───────────────────
       await API.post('/auth/otp/request/', { mobile: details.mobile });
       setOtpSent(true);
-    } catch (err) { setError(err?.response?.data?.message || 'OTP failed. Try again.'); }
-    finally { setOtpLoading(false); }
+
+    } catch (err) {
+      setError(err?.response?.data?.message || 'OTP failed. Please try again.');
+    } finally {
+      setOtpLoading(false);
+    }
   };
 
   const submitHandler = async e => {
     e.preventDefault();
-    if (!details.mobile || !details.password) { setError('Enter mobile & password / OTP'); return; }
-    setLoading(true); setError('');
+    if (!details.mobile || !details.password) {
+      setError('Enter mobile & password / OTP');
+      return;
+    }
+    setLoading(true);
+    setError('');
     try {
       const { data } = await API.post('/hospitals/login/', details);
       localStorage.clear();
@@ -34,8 +71,11 @@ export default function Hlogin() {
       localStorage.setItem('refresh', data.refresh);
       localStorage.setItem('user',    JSON.stringify(data.user));
       navigate('/Hdashboard');
-    } catch (err) { setError(err?.response?.data?.message || 'Invalid credentials'); }
-    finally { setLoading(false); }
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Invalid credentials');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -62,9 +102,9 @@ export default function Hlogin() {
 
             <div className="auth-features">
               {[
-                { icon: '🏥', title: 'Queue Management',   desc: 'View and manage waiting, in-progress & completed patients'  },
-                { icon: '👨‍⚕️', title: 'Doctor Management', desc: 'Add doctors, set slots and manage availability'              },
-                { icon: '📊', title: 'Live Dashboard',     desc: 'Real-time stats updated every 10 seconds'                    },
+                { icon: '🏥', title: 'Queue Management',   desc: 'View and manage waiting, in-progress & completed patients' },
+                { icon: '👨‍⚕️', title: 'Doctor Management', desc: 'Add doctors, set slots and manage availability'             },
+                { icon: '📊', title: 'Live Dashboard',     desc: 'Real-time stats updated every 10 seconds'                   },
               ].map((f, i) => (
                 <div className="auth-feature" key={i}>
                   <div className="auth-feature-icon">{f.icon}</div>
@@ -92,7 +132,8 @@ export default function Hlogin() {
                 <span className="auth-input-icon">📱</span>
                 <input
                   className="auth-input"
-                  type="text" name="mobile"
+                  type="text"
+                  name="mobile"
                   placeholder="Registered mobile number"
                   value={details.mobile}
                   onChange={handleChange}
@@ -108,13 +149,19 @@ export default function Hlogin() {
                   <span className="auth-input-icon">🔑</span>
                   <input
                     className="auth-input"
-                    type="password" name="password"
+                    type="password"
+                    name="password"
                     placeholder={otpSent ? 'Enter OTP sent to your mobile' : 'Password or OTP'}
                     value={details.password}
                     onChange={handleChange}
                   />
                 </div>
-                <button type="button" className="auth-otp-btn" onClick={requestOTP} disabled={otpLoading}>
+                <button
+                  type="button"
+                  className="auth-otp-btn"
+                  onClick={requestOTP}
+                  disabled={otpLoading}
+                >
                   {otpLoading ? '...' : otpSent ? 'Resend' : 'Get OTP'}
                 </button>
               </div>
@@ -127,7 +174,9 @@ export default function Hlogin() {
           </form>
 
           <div style={{ textAlign: 'right', marginTop: 8 }}>
-            <Link to="/Hforgot-password" style={{ fontSize: 13, color: 'var(--blue-600)' }}>Forgot Password?</Link>
+            <Link to="/Hforgot-password" style={{ fontSize: 13, color: 'var(--blue-600)' }}>
+              Forgot Password?
+            </Link>
           </div>
 
           <div className="auth-divider">or</div>
@@ -139,7 +188,9 @@ export default function Hlogin() {
           <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid var(--blue-50)', textAlign: 'center' }}>
             <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>
               Are you a patient?{' '}
-              <Link to="/login" style={{ color: 'var(--blue-600)', fontWeight: 600, textDecoration: 'none' }}>Patient Login →</Link>
+              <Link to="/login" style={{ color: 'var(--blue-600)', fontWeight: 600, textDecoration: 'none' }}>
+                Patient Login →
+              </Link>
             </span>
           </div>
         </div>

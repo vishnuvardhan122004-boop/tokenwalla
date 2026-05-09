@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import SEO from './SEO';
 
-const WHATSAPP_NUMBER = '91000000000'; // Replace with real support number
+const WHATSAPP_NUMBER = '917286995933'; // Replace with real support number
 
 const Contact = () => {
   const [form, setForm]       = useState({ name: '', mobile: '', subject: '', message: '' });
@@ -55,7 +55,7 @@ const Contact = () => {
     <>
     <SEO
   title="Contact TokenWalla — Support & Help"
-  description="Get in touch with TokenWalla support. Email us at tokentraq@gmail.com or call +91-9000000001 for help with bookings, hospitals, or technical issues."
+  description="Get in touch with TokenWalla support. Email us at tokentraq@gmail.com or call +91-7286995933 for help with bookings, hospitals, or technical issues."
   url="/contact"
      />
       <style>{`
@@ -170,7 +170,7 @@ const Contact = () => {
               <div>
                 <div className="ct-contact-label">Phone</div>
                 <div className="ct-contact-value">
-                  <a href="tel:+919000000001">+91-9000000001</a>
+                  <a href="tel:+917286995933">+91-7286995933</a>
                 </div>
               </div>
             </div>
@@ -187,7 +187,7 @@ const Contact = () => {
               <div className="ct-contact-label" style={{ marginBottom: 10 }}>Support hours</div>
               {[
                 { day: 'Mon – Fri', time: '9:00 AM – 6:00 PM' },
-                { day: 'Saturday',  time: '9:00 AM – 1:00 PM' },
+                { day: 'Saturday',  time: 'Closed' },
                 { day: 'Sunday',    time: 'Closed' },
               ].map((h) => (
                 <div className="ct-hours-row" key={h.day}>
