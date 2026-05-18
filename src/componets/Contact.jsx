@@ -35,13 +35,13 @@ const Contact = () => {
         `Name: ${form.name}\nMobile: ${form.mobile}\n\n${form.message}`
       );
       window.open(
-        `mailto:tokentraq@gmail.com?subject=${mailSubject}&body=${mailBody}`,
+        `mailto:support@tokenwalla.com?subject=${mailSubject}&body=${mailBody}`,
         '_blank'
       );
 
       setStatus({
         type: 'success',
-        msg: "Your message has been prepared. If a new window didn't open, please email tokentraq@gmail.com directly.",
+        msg: "Your message has been prepared. If a new window didn't open, please email support@tokenwalla.com directly.",
       });
       setForm({ name: '', mobile: '', subject: '', message: '' });
     } catch {
@@ -55,7 +55,7 @@ const Contact = () => {
     <>
     <SEO
   title="Contact TokenWalla — Support & Help"
-  description="Get in touch with TokenWalla support. Email us at tokentraq@gmail.com or call +91-7286995933 for help with bookings, hospitals, or technical issues."
+  description="Get in touch with TokenWalla support. Email us at support@tokenwalla.com or call +91-7286995933 for help with bookings, hospitals, or technical issues."
   url="/contact"
      />
       <style>{`
@@ -160,7 +160,7 @@ const Contact = () => {
               <div>
                 <div className="ct-contact-label">Email</div>
                 <div className="ct-contact-value">
-                  <a href="mailto:tokentraq@gmail.com">tokentraq@gmail.com</a>
+                  <a href="mailto:support@tokenwalla.com">support@tokenwalla.com</a>
                 </div>
               </div>
             </div>

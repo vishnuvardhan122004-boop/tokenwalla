@@ -22,7 +22,7 @@ const Terms = () => {
 
       <div className="p-3 rounded" style={{ background: '#E6F1FB', border: '1px solid #B5D4F4', marginTop: 32 }}>
         <strong>Questions?</strong> Email us at{' '}
-        <a href="mailto:tokentraq@gmail.com" style={{ color: '#185FA5' }}>tokentraq@gmail.com</a>
+        <a href="mailto:support@tokenwalla.com" style={{ color: '#185FA5' }}>support@tokenwalla.com</a>
       </div>
     </div>
   );
