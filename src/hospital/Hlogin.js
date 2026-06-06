@@ -41,7 +41,7 @@ export default function Hlogin() {
       }
 
       if (check.status === 'rejected') {
-        setError('Your hospital registration was not approved. Please contact support at tokentraq@gmail.com.');
+        setError('Your hospital registration was not approved. Please contact support at support@tokenwalla.com.');
         return;
       }
 

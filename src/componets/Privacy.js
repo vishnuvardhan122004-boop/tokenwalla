@@ -421,7 +421,7 @@ const Privacy = () => {
                 <div className="pp-step-num">1</div>
                 <div className="pp-step-text">
                   <strong>By email:</strong> Send a deletion request to{' '}
-                  <a href="mailto:tokentraq@gmail.com" style={{ color: '#185FA5' }}>tokentraq@gmail.com</a>{' '}
+                  <a href="mailto:support@tokenwalla.com" style={{ color: '#185FA5' }}>support@tokenwalla.com</a>{' '}
                   from your registered mobile's linked email, or include your registered mobile number in the request. Use the subject line: <em>"Account Deletion Request"</em>.
                 </div>
               </div>
@@ -516,7 +516,7 @@ const Privacy = () => {
               <span className="pp-warn-icon">⚠️</span>
               <span><strong>TokenWalla is not intended for users under the age of 18.</strong> Our service involves medical appointments and financial transactions, which require adult legal capacity under Indian law.</span>
             </div>
-            <p>We do not knowingly collect personal information from anyone under 18 years of age. If you are a parent or guardian and believe your child has provided us with personal information, please contact us immediately at <a href="mailto:tokentraq@gmail.com" style={{ color: '#185FA5' }}>tokentraq@gmail.com</a>. We will promptly delete any such data upon verification.</p>
+            <p>We do not knowingly collect personal information from anyone under 18 years of age. If you are a parent or guardian and believe your child has provided us with personal information, please contact us immediately at <a href="mailto:support@tokenwalla.com" style={{ color: '#185FA5' }}>support@tokenwalla.com</a>. We will promptly delete any such data upon verification.</p>
             <p>If we discover that a user is under 18, we will immediately suspend their account and delete all associated data.</p>
           </div>
 
@@ -574,7 +574,7 @@ const Privacy = () => {
               <li><span className="pp-list-dot" /><span><strong>Right to portability:</strong> Request your booking history in a machine-readable format (CSV or JSON).</span></li>
               <li><span className="pp-list-dot" /><span><strong>Right to withdraw consent:</strong> You may stop using TokenWalla and request deletion at any time. Withdrawal does not affect the lawfulness of prior processing.</span></li>
             </ul>
-            <p>To exercise any of these rights, email <a href="mailto:tokentraq@gmail.com" style={{ color: '#185FA5', fontWeight: 600 }}>tokentraq@gmail.com</a>. We will respond within <strong>30 calendar days</strong>.</p>
+            <p>To exercise any of these rights, email <a href="mailto:support@tokenwalla.com" style={{ color: '#185FA5', fontWeight: 600 }}>support@tokenwalla.com</a>. We will respond within <strong>30 calendar days</strong>.</p>
           </div>
 
           {/* 11. Policy Updates */}
@@ -593,7 +593,7 @@ const Privacy = () => {
               <li><span className="pp-list-dot" /><span>For significant changes affecting your rights, send an OTP-verified notice to your registered mobile number if technically feasible.</span></li>
             </ul>
             <p>Continued use of TokenWalla after the effective date of an updated policy constitutes your acceptance of the changes. We recommend reviewing this page periodically.</p>
-            <p>Previous versions of this policy are available upon request by emailing <a href="mailto:tokentraq@gmail.com" style={{ color: '#185FA5' }}>tokentraq@gmail.com</a>.</p>
+            <p>Previous versions of this policy are available upon request by emailing <a href="mailto:support@tokenwalla.com" style={{ color: '#185FA5' }}>support@tokenwalla.com</a>.</p>
           </div>
 
           <div className="pp-hr" />
@@ -611,7 +611,7 @@ const Privacy = () => {
                   <div>
                     <div className="pp-contact-item-label">Email</div>
                     <div className="pp-contact-item-val">
-                      <a href="mailto:tokentraq@gmail.com">tokentraq@gmail.com</a>
+                      <a href="mailto:support@tokenwalla.com">support@tokenwalla.com</a>
                     </div>
                   </div>
                 </div>

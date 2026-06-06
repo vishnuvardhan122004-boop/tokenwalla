@@ -56,7 +56,7 @@ const Support = () => {
 
       <div className="sp-contact-grid">
         {[
-          { icon: '📧', label: 'Email Support', content: <a href="mailto:tokentraq@gmail.com">tokentraq@gmail.com</a> },
+          { icon: '📧', label: 'Email Support', content: <a href="mailto:support@tokenwalla.com">support@tokenwalla.com</a> },
           { icon: '📞', label: 'Phone Support', content: <a href="tel:+919000000001">+91-9000000001</a> },
           { icon: '🏢', label: 'Office',        content: <span style={{ color: 'var(--gray-600)' }}>Hindupur – Nimpalli Road, AP – 515201</span> },
         ].map(c => (

@@ -40,7 +40,7 @@ const LegalPage = ({ title, sections }) => (
         ))}
         <div className="legal-contact">
           <div className="legal-contact-title">Questions about this policy?</div>
-          <p>Contact us at <a href="mailto:tokentraq@gmail.com">tokentraq@gmail.com</a> or write to us at Hindupur – Nimpalli Road, AP – 515201.</p>
+          <p>Contact us at <a href="mailto:support@tokenwalla.com">support@tokenwalla.com</a> or write to us at Hindupur – Nimpalli Road, AP – 515201.</p>
         </div>
       </div>
     </div>
@@ -138,7 +138,7 @@ export const Privacy = () => (
       },
       {
         title: 'Your rights',
-        content: <p>You may request access to, correction of, or deletion of your personal data at any time by contacting us at tokentraq@gmail.com. We will respond within 30 days.</p>,
+        content: <p>You may request access to, correction of, or deletion of your personal data at any time by contacting us at support@tokenwalla.com. We will respond within 30 days.</p>,
       },
       {
         title: 'Regulatory compliance & monitoring',
@@ -182,7 +182,7 @@ export const Refund = () => (
       },
       {
         title: 'Business information',
-        content: <p>TokenWalla is operated by tokentraq@gmail.com. Registered address: Hindupur – Nimpalli Road, AP – 515201. This service is intended for legitimate outpatient appointment booking only and not for emergency medical situations. For medical emergencies, call 108.</p>,
+        content: <p>TokenWalla is operated by support@tokenwalla.com. Registered address: Hindupur – Nimpalli Road, AP – 515201. This service is intended for legitimate outpatient appointment booking only and not for emergency medical situations. For medical emergencies, call 108.</p>,
       },
     ]}
   />

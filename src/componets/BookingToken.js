@@ -276,7 +276,7 @@ export default function BookingToken() {
 
           <p className="bt-note">
             Keep this token handy. You'll need it at the hospital reception.<br />
-            For support, contact us at tokentraq@gmail.com
+            For support, contact us at support@tokenwalla.com
           </p>
         </div>
       </div>

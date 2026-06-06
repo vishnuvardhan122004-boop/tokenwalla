@@ -15,7 +15,7 @@ const Refund = () => {
         },
         {
           title: 'Emergency cancellations',
-          body: 'Emergency cancellations due to documented medical reasons may be considered on a case-by-case basis. Contact tokentraq@gmail.com with documentation.',
+          body: 'Emergency cancellations due to documented medical reasons may be considered on a case-by-case basis. Contact support@tokenwalla.com with documentation.',
         },
         {
           title: 'Payment partner rights',
@@ -34,7 +34,7 @@ const Refund = () => {
 
       <div className="p-3 rounded" style={{ background: '#E6F1FB', border: '1px solid #B5D4F4', marginTop: 32 }}>
         <strong>Questions?</strong> Email us at{' '}
-        <a href="mailto:tokentraq@gmail.com" style={{ color: '#185FA5' }}>tokentraq@gmail.com</a>
+        <a href="mailto:support@tokenwalla.com" style={{ color: '#185FA5' }}>support@tokenwalla.com</a>
         {' '}· Address: Hindupur – Nimpalli Road, AP – 515201
       </div>
     </div>
