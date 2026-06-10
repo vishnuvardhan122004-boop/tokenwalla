@@ -20,7 +20,8 @@ python-decouple==3.8
 PyJWT==2.10.1
 
 # ── Payments ──────────────────────────────────────────────────────────────────
-razorpay==1.4.2
+# razorpay 2.0.1: removed pkg_resources dep, compatible with Python 3.12-3.14
+razorpay==2.0.1
 
 # ── HTTP ──────────────────────────────────────────────────────────────────────
 requests==2.32.3
@@ -35,3 +36,5 @@ sqlparse==0.5.3
 python-dateutil==2.9.0.post0
 six==1.17.0
 packaging==24.2
+# setuptools provides pkg_resources - needed by some deps on Python 3.14
+setuptools>=68.0.0
