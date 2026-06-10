@@ -1,38 +1,37 @@
 # ── Django core ───────────────────────────────────────────────────────────────
-Django==6.0.2
-djangorestframework==3.16.1
-djangorestframework_simplejwt==5.5.1
-django-cors-headers==4.9.0
-whitenoise==6.12.0
-gunicorn==25.1.0
+Django==5.2.1
+djangorestframework==3.16.0
+djangorestframework_simplejwt==5.4.0
+django-cors-headers==4.7.0
+whitenoise==6.9.0
+gunicorn==23.0.0
 
 # ── Database ──────────────────────────────────────────────────────────────────
-psycopg2-binary==2.9.11
-dj-database-url==3.1.2
-
+psycopg2-binary==2.9.10
+dj-database-url==2.3.0
 
 # ── Storage ───────────────────────────────────────────────────────────────────
-cloudinary==1.44.1
+cloudinary==1.41.0
 django-cloudinary-storage==0.3.0
-pillow==12.1.1
+pillow==11.1.0
 
-# ── Auth / Config ──────────────────────────────────────────────────────────────
+# ── Auth / Config ─────────────────────────────────────────────────────────────
 python-decouple==3.8
-PyJWT==2.11.0
+PyJWT==2.10.1
 
 # ── Payments ──────────────────────────────────────────────────────────────────
-razorpay==2.0.0
+razorpay==1.4.2
 
 # ── HTTP ──────────────────────────────────────────────────────────────────────
-requests==2.32.5
-urllib3==2.6.3
-certifi==2026.2.25
-charset-normalizer==3.4.5
-idna==3.11
+requests==2.32.3
+urllib3==2.3.0
+certifi==2025.1.31
+charset-normalizer==3.4.1
+idna==3.10
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
-asgiref==3.11.1
-sqlparse==0.5.5
+asgiref==3.8.1
+sqlparse==0.5.3
 python-dateutil==2.9.0.post0
 six==1.17.0
-packaging==26.0
+packaging==24.2
