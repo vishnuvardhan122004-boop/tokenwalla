@@ -12,3 +12,12 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.payment_id} — ₹{self.amount}"
+class ReschedulePayment(models.Model):
+    booking    = models.ForeignKey(Booking, on_delete=models.CASCADE,
+                                   related_name='reschedule_payments')
+    order_id   = models.CharField(max_length=100)
+    payment_id = models.CharField(max_length=100, unique=True)
+    signature  = models.CharField(max_length=300, blank=True)
+    amount     = models.IntegerField()
+    status     = models.CharField(max_length=20, default='success')
+    created    = models.DateTimeField(auto_now_add=True)
