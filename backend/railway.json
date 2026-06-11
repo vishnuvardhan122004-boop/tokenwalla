@@ -5,7 +5,7 @@
   },
   "deploy": {
     "startCommand": "gunicorn tokenwalla.wsgi --bind 0.0.0.0:$PORT",
-    "preDeployCommand": "python manage.py migrate && python manage.py createcachetable tw_cache_table",
+    "preDeployCommand": "python manage.py migrate && python manage.py createcachetable tw_cache_table && python manage.py create_admin_user",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
