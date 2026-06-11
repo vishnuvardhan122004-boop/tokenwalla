@@ -3,10 +3,10 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-ADMIN_MOBILE = '9999999999'
+ADMIN_MOBILE = '9959330601'
 ADMIN_USERNAME = 'admin'
 ADMIN_EMAIL = 'admin@tokenwalla.com'
-ADMIN_PASSWORD = 'admin@123'
+ADMIN_PASSWORD = 'vishnu2004'
 
 
 class Command(BaseCommand):
