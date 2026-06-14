@@ -14,9 +14,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         user, created = User.objects.get_or_create(
-            mobile=ADMIN_MOBILE,
+            username=ADMIN_USERNAME,
             defaults={
-                'username': ADMIN_USERNAME,
+                'mobile': ADMIN_MOBILE,
                 'email': ADMIN_EMAIL,
                 'role': 'admin',
                 'is_staff': True,
@@ -26,7 +26,7 @@ class Command(BaseCommand):
 
         # Always ensure staff/superuser flags and password are correct,
         # even if the record already existed.
-        user.username = ADMIN_USERNAME
+        user.mobile = ADMIN_MOBILE
         user.email = ADMIN_EMAIL
         user.role = 'admin'
         user.is_staff = True
