@@ -8,31 +8,19 @@ class Command(BaseCommand):
     help = 'Create or update the default admin user'
 
     def handle(self, *args, **options):
-        user, created = User.objects.get_or_create(
-            mobile=ADMIN_MOBILE,
-            defaults={
-                'username': ADMIN_USERNAME,
-                'email': ADMIN_EMAIL,
-                'role': 'admin',
-                'is_staff': True,
-                'is_superuser': True,
-            },
-        )
+        ADMIN_MOBILE = os.environ.get('ADMIN_MOBILE', '9959330601')
+        ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'changeme123')
 
-        # Always ensure staff/superuser flags and password are correct,
-        # even if the record already existed.
-        user.username = ADMIN_USERNAME
-        user.email = ADMIN_EMAIL
-        user.role = 'admin'
-        user.is_staff = True
-        user.is_superuser = True
-        user.set_password(ADMIN_PASSWORD)
-        user.save()
-
-        action = 'Created' if created else 'Updated'
-        self.stdout.write(
-            self.style.SUCCESS(
-                f'{action} admin user — mobile: {ADMIN_MOBILE}, '
-                f'login at /secure-admin-tw/'
+        try:
+            user = User.objects.get(mobile=ADMIN_MOBILE)
+            user.is_staff = True
+            user.is_superuser = True
+            user.set_password(ADMIN_PASSWORD)
+            user.save(update_fields=['is_staff', 'is_superuser', 'password'])
+            self.stdout.write(self.style.WARNING('Admin user already exists — updated.'))
+        except User.DoesNotExist:
+            User.objects.create_superuser(
+                mobile=ADMIN_MOBILE,
+                password=ADMIN_PASSWORD,
             )
-        )
+            self.stdout.write(self.style.SUCCESS('Admin user created successfully.'))
