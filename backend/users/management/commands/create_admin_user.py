@@ -1,22 +1,17 @@
+import os
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-ADMIN_MOBILE = '9959330601'
-ADMIN_USERNAME = 'admin'
-ADMIN_EMAIL = 'admin@tokenwalla.com'
-ADMIN_PASSWORD = 'vishnu2004'
-
-
 class Command(BaseCommand):
-    help = 'Idempotently create the default TokenWalla superuser for admin panel access'
+    help = 'Create or update the default admin user'
 
     def handle(self, *args, **options):
         user, created = User.objects.get_or_create(
-            username=ADMIN_USERNAME,
+            mobile=ADMIN_MOBILE,
             defaults={
-                'mobile': ADMIN_MOBILE,
+                'username': ADMIN_USERNAME,
                 'email': ADMIN_EMAIL,
                 'role': 'admin',
                 'is_staff': True,
@@ -26,7 +21,7 @@ class Command(BaseCommand):
 
         # Always ensure staff/superuser flags and password are correct,
         # even if the record already existed.
-        user.mobile = ADMIN_MOBILE
+        user.username = ADMIN_USERNAME
         user.email = ADMIN_EMAIL
         user.role = 'admin'
         user.is_staff = True
