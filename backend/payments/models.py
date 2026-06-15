@@ -21,3 +21,27 @@ class ReschedulePayment(models.Model):
     amount     = models.IntegerField()
     status     = models.CharField(max_length=20, default='success')
     created    = models.DateTimeField(auto_now_add=True)
+
+class ReschedulePayment(models.Model):
+    """
+    Stores the ₹5 reschedule fee payment separately from the main Payment,
+    because Payment has a OneToOneField → Booking and cannot be reused.
+    A single booking can be rescheduled multiple times, so this is ForeignKey.
+    """
+    booking    = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name='reschedule_payments',
+    )
+    order_id   = models.CharField(max_length=100)
+    payment_id = models.CharField(max_length=100, unique=True)  # idempotency key
+    signature  = models.TextField()
+    amount     = models.PositiveIntegerField(default=5)          # ₹5 INR
+    status     = models.CharField(max_length=20, default='success')
+    created    = models.DateTimeField(auto_now_add=True)
+ 
+    class Meta:
+        ordering = ['-created']
+ 
+    def __str__(self):
+        return f'Reschedule ₹{self.amount} for Booking#{self.booking_id} [{self.payment_id}]'
