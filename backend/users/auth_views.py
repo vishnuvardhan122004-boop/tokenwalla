@@ -325,7 +325,17 @@ class ResetPasswordView(APIView):
         cache.delete(f'otp_verified:{mobile}')
         logger.info('Password reset for user %s', user.id)
         return Response({'message': 'Password reset successfully.'})
+    
+class WhatsAppOptInView(APIView):
+    permission_classes = [IsAuthenticated]
 
+    def patch(self, request):
+        opted_in = request.data.get('whatsapp_opt_in')
+        if not isinstance(opted_in, bool):
+            return Response({'message': 'whatsapp_opt_in must be true or false.'}, status=400)
+        request.user.whatsapp_opt_in = opted_in
+        request.user.save(update_fields=['whatsapp_opt_in'])
+        return Response({'whatsapp_opt_in': opted_in})
 
 class MeView(APIView):
     permission_classes = [IsAuthenticated]

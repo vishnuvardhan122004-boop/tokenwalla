@@ -7,6 +7,7 @@ class User(AbstractUser):
                choices=[('patient','Patient'),('hospital','Hospital'),('admin','Admin')],
                default='patient')
     status = models.CharField(max_length=20, default='active')
+    whatsapp_opt_in = models.BooleanField(default=True)
     USERNAME_FIELD  = 'mobile'
     REQUIRED_FIELDS = ['username']
 

@@ -38,7 +38,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = User
-        fields = ['id', 'name', 'mobile', 'status', 'role']
+        fields = ['id', 'name', 'mobile', 'status', 'role', 'whatsapp_opt_in']
 
     def get_name(self, obj):
         return obj.first_name or obj.username

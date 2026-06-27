@@ -24,6 +24,7 @@ class Booking(models.Model):
     order_id     = models.CharField(max_length=100, blank=True)
     amount       = models.IntegerField(default=0)
     queue_access = models.BooleanField(default=False)
+    reminder_sent = models.BooleanField(default=False)
     created      = models.DateTimeField(auto_now_add=True)
 
     class Meta:

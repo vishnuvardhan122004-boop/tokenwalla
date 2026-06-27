@@ -5,6 +5,7 @@ from .auth_views import (
     MeView, RequestOTPView, VerifyOTPView,
     AllUsersView, BlockUserView, ResetPasswordView,
     CheckMobileView,
+    WhatsAppOptInView,
 )
 
 urlpatterns = [
@@ -20,4 +21,5 @@ urlpatterns = [
     path('reset-password/',       ResetPasswordView.as_view()),
     path('create-admin/',         CreateAdminView.as_view()),
     path('check-mobile/',         CheckMobileView.as_view()),   # ← NEW
+    path('me/whatsapp-opt-in/',   WhatsAppOptInView.as_view()),
 ]

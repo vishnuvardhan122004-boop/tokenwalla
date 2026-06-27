@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'hospitals',
     'bookings',
     'payments',
+    'notifications',
 ]
 
 # ── Middleware ─────────────────────────────────────────────────────────────────
@@ -193,6 +194,13 @@ MEDIA_ROOT = BASE_DIR / 'media'
 RAZORPAY_KEY_ID     = config('RAZORPAY_KEY_ID',     default='')
 RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
 TWOFACTOR_API_KEY   = config('TWOFACTOR_API_KEY',   default='')
+WHATSAPP_ACCESS_TOKEN            = config('WHATSAPP_ACCESS_TOKEN', default='')
+WHATSAPP_PHONE_NUMBER_ID         = config('WHATSAPP_PHONE_NUMBER_ID', default='')
+WHATSAPP_BUSINESS_ACCOUNT_ID     = config('WHATSAPP_BUSINESS_ACCOUNT_ID', default='')
+WHATSAPP_API_VERSION             = config('WHATSAPP_API_VERSION', default='v21.0')
+WHATSAPP_TEMPLATE_BOOKING_CONFIRM = config('WHATSAPP_TEMPLATE_BOOKING_CONFIRM', default='booking_confirmation')
+WHATSAPP_TEMPLATE_REMINDER       = config('WHATSAPP_TEMPLATE_REMINDER', default='appointment_reminder')
+WHATSAPP_TEMPLATE_LANG           = config('WHATSAPP_TEMPLATE_LANG', default='en')
 ADMIN_SETUP_KEY = config('ADMIN_SETUP_KEY', default='')
 # ── Logging ───────────────────────────────────────────────────────────────────
 LOGGING = {

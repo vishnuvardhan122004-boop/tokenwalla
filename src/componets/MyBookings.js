@@ -122,6 +122,23 @@ export default function MyBookings() {
   const amSlots     = doctorSlots.filter(s => s.includes('AM'));
   const pmSlots     = doctorSlots.filter(s => s.includes('PM'));
 
+  const [waOptIn, setWaOptIn] = useState(true);
+
+useEffect(() => {
+  API.get('/auth/me/').then(({ data }) => setWaOptIn(data.whatsapp_opt_in ?? true)).catch(() => {});
+}, []);
+
+const toggleWaOptIn = async () => {
+  const next = !waOptIn;
+  setWaOptIn(next);
+  try {
+    await API.patch('/auth/me/whatsapp-opt-in/', { whatsapp_opt_in: next });
+  } catch {
+    setWaOptIn(!next);
+    showToast('Failed to update WhatsApp preference.', 'error');
+  }
+};
+
   return (
     <>
       <style>{`
@@ -200,6 +217,7 @@ export default function MyBookings() {
         <div className="mb-header">
           <div className="mb-header-grid" />
           <div className="tw-container mb-header-inner">
+           <div className="tw-container" style={{ paddingTop: 32 }}></div>
             <div className="tw-section-label">Patient Portal</div>
             <h1 className="mb-title">My <span className="accent">Bookings</span></h1>
             <p className="mb-sub">

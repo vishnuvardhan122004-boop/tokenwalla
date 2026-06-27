@@ -45,7 +45,7 @@ import uuid
 import logging
 
 from datetime import datetime
-
+from notifications.whatsapp import send_booking_confirmation
 from django.conf import settings
 from django.db import transaction, IntegrityError
 from rest_framework.views import APIView
@@ -268,6 +268,10 @@ class VerifyPaymentView(APIView):
                     amount     = amount_inr,
                     status     = 'success',
                 )
+                try:
+                    send_booking_confirmation(new_booking)
+                except Exception as exc:
+                    logger.warning('WhatsApp confirmation send failed for booking %s: %s', new_booking.id, exc)
 
             logger.info(
                 'Booking %s created for user %s doctor %s',
