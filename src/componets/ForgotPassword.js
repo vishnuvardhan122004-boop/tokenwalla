@@ -19,8 +19,8 @@ export default function ForgotPassword({ type = 'patient' }) {
     if (!mobile || mobile.length !== 10) { setError('Enter a valid 10-digit mobile number'); return; }
     setLoading(true); setError('');
     try {
-      await API.post('/auth/otp/request/', { mobile, via: 'voice' });
-      setSuccess(`📞 A voice call is being placed to ${mobile} with your OTP.`);
+      await API.post('/auth/otp/request/', { mobile, via: 'sms' });
+      setSuccess(`📞 A text message is being sent to ${mobile} with your OTP.`);
       setStep(2);
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to send OTP. Try again.');
@@ -28,7 +28,7 @@ export default function ForgotPassword({ type = 'patient' }) {
   };
 
   const verifyOTP = async () => {
-    if (!otp || otp.length < 4) { setError('Enter the OTP from the call'); return; }
+    if (!otp || otp.length < 4) { setError('Enter the OTP from the text message'); return; }
     setLoading(true); setError(''); setSuccess('');
     try {
       const { data } = await API.post('/auth/otp/verify/', { mobile, otp });
@@ -221,7 +221,7 @@ export default function ForgotPassword({ type = 'patient' }) {
           {step === 1 && (
             <>
               <div className="fp-title">Forgot Password?</div>
-              <div className="fp-sub">Enter your registered mobile. We'll call you with an OTP.</div>
+              <div className="fp-sub">Enter your registered mobile. We'll send you an OTP.</div>
               {error && <div className="fp-error"><span>⚠️</span> {error}</div>}
               <div className="fp-field">
                 <label>Mobile Number</label>
@@ -232,11 +232,11 @@ export default function ForgotPassword({ type = 'patient' }) {
                 </div>
               </div>
               <div className="fp-call-info">
-                <span className="fp-call-icon">📞</span>
-                <span>We'll place a <strong>voice call</strong> to your mobile. Note down the OTP spoken to you.</span>
+                <span className="fp-call-icon">💬</span>
+                <span>We'll send a <strong>text message</strong> Sms to your mobile. Note down the OTP sent to you.</span>
               </div>
               <button className="fp-btn" onClick={requestOTP} disabled={loading}>
-                {loading ? <><div className="fp-spinner" /> Calling…</> : '📞 Call Me with OTP →'}
+                {loading ? <><div className="fp-spinner" /> Sending…</> : ' Send OTP →'}
               </button>
             </>
           )}
@@ -245,11 +245,11 @@ export default function ForgotPassword({ type = 'patient' }) {
           {step === 2 && (
             <>
               <div className="fp-title">Enter OTP</div>
-              <div className="fp-sub">Answer the call to <strong>{mobile}</strong> and enter the OTP you heard.</div>
+              <div className="fp-sub">Enter the OTP sent to <strong>{mobile}</strong>.</div>
               {error   && <div className="fp-error"><span>⚠️</span> {error}</div>}
               {success && <div className="fp-success">{success}</div>}
               <div className="fp-field">
-                <label>OTP from Voice Call</label>
+                <label>OTP from Text Message</label>
                 <div className="fp-wrap">
                   <span className="fp-icon">🔢</span>
                   <input className="fp-input" type="text" placeholder="Enter 4-digit OTP"
@@ -262,7 +262,7 @@ export default function ForgotPassword({ type = 'patient' }) {
               <button className="fp-btn-ghost" onClick={() => { setStep(1); setError(''); setSuccess(''); setOtp(''); }}>
                 ← Change Mobile Number
               </button>
-              <button className="fp-btn-ghost" onClick={requestOTP} disabled={loading}>📞 Call Me Again</button>
+              <button className="fp-btn-ghost" onClick={requestOTP} disabled={loading}>� Send OTP Again</button>
             </>
           )}
 

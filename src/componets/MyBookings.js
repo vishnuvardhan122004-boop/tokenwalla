@@ -17,10 +17,32 @@ const TABS = [
   { key: 'completed', label: 'Completed' },
 ];
 
+// ── Reschedule payment constants (mirrors mobile RescheduleModal.tsx) ──────
+const RAZORPAY_KEY_ID  = 'rzp_test_T1a7C8nkCLHgZo';
+const RESCHEDULE_PAISE = 500;   // ₹5 in paise — must match backend VALID_AMOUNTS_PAISE
+const RESCHEDULE_FEE   = 5;     // display only
+
 function filterBookings(bookings, tab) {
   if (tab === 'active')    return bookings.filter(b => b.status === 'waiting' || b.status === 'in_progress');
   if (tab === 'completed') return bookings.filter(b => b.status === 'completed' || b.status === 'cancelled');
   return bookings;
+}
+
+function loadRazorpayScript() {
+  return new Promise((resolve) => {
+    if (window.Razorpay) return resolve(true);
+    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true));
+      existing.addEventListener('error', () => resolve(false));
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
 }
 
 const today = new Date().toISOString().split('T')[0];
@@ -37,7 +59,9 @@ export default function MyBookings() {
   const [newDate,           setNewDate]           = useState('');
   const [newSlot,           setNewSlot]           = useState('');
   const [rescheduling,      setRescheduling]      = useState(false);
+  const [payingReschedule,  setPayingReschedule]  = useState(false);
   const [doctorSlots,       setDoctorSlots]       = useState([]);
+  const [waOptIn,           setWaOptIn]           = useState(true);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -68,6 +92,21 @@ export default function MyBookings() {
   const hasActive = bookings.some(b => b.status === 'waiting' || b.status === 'in_progress');
   useVisiblePolling(() => fetchBookings(true), 15000, hasActive);
 
+  useEffect(() => {
+    API.get('/auth/me/').then(({ data }) => setWaOptIn(data.whatsapp_opt_in ?? true)).catch(() => {});
+  }, []);
+
+  const toggleWaOptIn = async () => {
+    const next = !waOptIn;
+    setWaOptIn(next);
+    try {
+      await API.patch('/auth/me/whatsapp-opt-in/', { whatsapp_opt_in: next });
+    } catch {
+      setWaOptIn(!next);
+      showToast('Failed to update WhatsApp preference.', 'error');
+    }
+  };
+
   const handleCancel = async (booking) => {
     if (!window.confirm(`Cancel appointment with Dr. ${booking.doctor_name}?\n\nRefunds are processed within 5–7 business days.`)) return;
     setCancelling(booking.id);
@@ -94,19 +133,94 @@ export default function MyBookings() {
     }
   };
 
+  // ── Reschedule: create ₹5 order → open Razorpay Checkout → verify → confirm ──
   const handleReschedule = async () => {
+    if (!rescheduleBooking) return;
     if (!newDate) { showToast('Please select a new date', 'error'); return; }
     if (!newSlot) { showToast('Please select a time slot', 'error'); return; }
+
     setRescheduling(true);
     try {
-      await API.patch(`/bookings/reschedule/${rescheduleBooking.id}/`, { date: newDate, slot: newSlot });
-      setRescheduleBooking(null);
-      await fetchBookings(true);
-      showToast('Appointment rescheduled successfully!');
+      const loaded = await loadRazorpayScript();
+      if (!loaded || !window.Razorpay) {
+        showToast('Could not load payment gateway. Check your connection.', 'error');
+        setRescheduling(false);
+        return;
+      }
+
+      // Step 1: create ₹5 order (same endpoint mobile uses)
+      const { data: order } = await API.post('/payment/create-order/', {
+        amount: RESCHEDULE_PAISE,
+        currency: 'INR',
+        notes: { type: 'reschedule', booking_id: rescheduleBooking.id },
+      });
+      if (!order?.order_id) throw new Error('No order_id returned from server.');
+
+      let user = {};
+      try { user = JSON.parse(localStorage.getItem('user') || '{}'); } catch { user = {}; }
+
+      setPayingReschedule(true);
+
+      const rzp = new window.Razorpay({
+        key: RAZORPAY_KEY_ID,
+        amount: Number(order.amount),
+        currency: 'INR',
+        name: 'TokenWalla',
+        description: `Reschedule fee - Dr. ${rescheduleBooking.doctor_name}`,
+        order_id: String(order.order_id),
+        prefill: {
+          name: user?.name || user?.username || '',
+          contact: user?.mobile ? `91${user.mobile}` : '',
+        },
+        theme: { color: '#185FA5' },
+        modal: {
+          ondismiss: () => {
+            setPayingReschedule(false);
+            setRescheduling(false);
+            showToast('Payment cancelled.', 'error');
+          },
+        },
+        handler: async (response) => {
+          // Step 2: verify payment + apply reschedule
+          try {
+            const { data } = await API.post('/payment/verify/', {
+              razorpay_order_id:   response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature:  response.razorpay_signature,
+              booking: {
+                booking_id: rescheduleBooking.id,
+                date:       newDate,
+                slot:       newSlot,
+              },
+            });
+
+            if (data.success) {
+              setRescheduleBooking(null);
+              await fetchBookings(true);
+              showToast('Appointment rescheduled successfully!');
+            } else {
+              showToast(data.message || 'Reschedule verification failed. Contact support.', 'error');
+            }
+          } catch (err) {
+            showToast(err?.response?.data?.message || 'Verification error. Contact support.', 'error');
+          } finally {
+            setPayingReschedule(false);
+            setRescheduling(false);
+          }
+        },
+      });
+
+      rzp.on('payment.failed', (resp) => {
+        setPayingReschedule(false);
+        setRescheduling(false);
+        showToast(resp?.error?.description || 'Payment failed. Please try again.', 'error');
+      });
+
+      rzp.open();
     } catch (err) {
-      showToast(err?.response?.data?.message || 'Reschedule failed.', 'error');
-    } finally {
+      showToast(err?.response?.data?.message || err?.message || 'Could not create payment order.', 'error');
       setRescheduling(false);
+      setPayingReschedule(false);
     }
   };
 
@@ -121,23 +235,6 @@ export default function MyBookings() {
   const activeCount = bookings.filter(b => b.status === 'waiting' || b.status === 'in_progress').length;
   const amSlots     = doctorSlots.filter(s => s.includes('AM'));
   const pmSlots     = doctorSlots.filter(s => s.includes('PM'));
-
-  const [waOptIn, setWaOptIn] = useState(true);
-
-useEffect(() => {
-  API.get('/auth/me/').then(({ data }) => setWaOptIn(data.whatsapp_opt_in ?? true)).catch(() => {});
-}, []);
-
-const toggleWaOptIn = async () => {
-  const next = !waOptIn;
-  setWaOptIn(next);
-  try {
-    await API.patch('/auth/me/whatsapp-opt-in/', { whatsapp_opt_in: next });
-  } catch {
-    setWaOptIn(!next);
-    showToast('Failed to update WhatsApp preference.', 'error');
-  }
-};
 
   return (
     <>
@@ -201,6 +298,7 @@ const toggleWaOptIn = async () => {
         .mb-slot-btn { padding: 8px 4px; border-radius: 9px; border: 1px solid var(--blue-100); background: var(--gray-50); font-size: 12px; font-weight: 500; color: var(--gray-600); cursor: pointer; transition: all 0.15s; text-align: center; font-family: 'DM Sans', sans-serif; }
         .mb-slot-btn:hover { background: var(--blue-50); border-color: var(--blue-300); color: var(--blue-700); }
         .mb-slot-btn.selected { background: var(--blue-50); border-color: var(--blue-500); color: var(--blue-700); font-weight: 600; }
+        .mb-fee-note { background: var(--blue-50); border: 1px solid var(--blue-200); border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; font-size: 12px; color: var(--blue-700); line-height: 1.5; }
         .mb-modal-actions { display: flex; gap: 10px; }
         .mb-modal-cancel { flex: 1; padding: 12px; border-radius: 11px; border: 1px solid var(--blue-100); background: var(--gray-50); color: var(--gray-600); font-family: 'DM Sans', sans-serif; font-size: 14px; cursor: pointer; }
         .mb-modal-confirm { flex: 2; padding: 12px; border-radius: 11px; border: none; background: var(--blue-600); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; }
@@ -336,7 +434,7 @@ const toggleWaOptIn = async () => {
                       <div className="mb-action-panel">
                         <div>
                           <div className="mb-action-title">📅 Reschedule Appointment</div>
-                          <div className="mb-action-desc">Change your date or time slot — free</div>
+                          <div className="mb-action-desc">Change your date or time slot — ₹{RESCHEDULE_FEE} fee</div>
                         </div>
                         <button className="mb-reschedule-btn" onClick={() => openReschedule(booking)}>Reschedule →</button>
                       </div>
@@ -369,7 +467,7 @@ const toggleWaOptIn = async () => {
 
       {/* ── RESCHEDULE MODAL ── */}
       {rescheduleBooking && (
-        <div className="mb-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setRescheduleBooking(null); }}>
+        <div className="mb-modal-overlay" onClick={e => { if (e.target === e.currentTarget && !rescheduling) setRescheduleBooking(null); }}>
           <div className="mb-modal">
             <div className="mb-modal-title">📅 Reschedule Appointment</div>
             <div className="mb-modal-sub">Dr. {rescheduleBooking.doctor_name} · {rescheduleBooking.hospital_name}</div>
@@ -377,6 +475,7 @@ const toggleWaOptIn = async () => {
             <input
               type="date" className="mb-modal-input" min={today} value={newDate}
               onChange={e => { setNewDate(e.target.value); setNewSlot(''); }}
+              disabled={rescheduling}
             />
             <label className="mb-modal-label">
               Select New Time Slot
@@ -388,18 +487,51 @@ const toggleWaOptIn = async () => {
               <div className="mb-slots-grid">
                 {amSlots.length > 0 && <>
                   <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 600, color: 'var(--gray-400)', letterSpacing: 1 }}>🌅 Morning</div>
-                  {amSlots.map(s => <button key={s} className={`mb-slot-btn ${newSlot === s ? 'selected' : ''}`} onClick={() => setNewSlot(s)}>{s}</button>)}
+                  {amSlots.map(s => (
+                    <button
+                      key={s}
+                      className={`mb-slot-btn ${newSlot === s ? 'selected' : ''}`}
+                      onClick={() => setNewSlot(s)}
+                      disabled={rescheduling}
+                    >
+                      {s}
+                    </button>
+                  ))}
                 </>}
                 {pmSlots.length > 0 && <>
                   <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 600, color: 'var(--gray-400)', letterSpacing: 1, marginTop: 8 }}>🌇 Afternoon / Evening</div>
-                  {pmSlots.map(s => <button key={s} className={`mb-slot-btn ${newSlot === s ? 'selected' : ''}`} onClick={() => setNewSlot(s)}>{s}</button>)}
+                  {pmSlots.map(s => (
+                    <button
+                      key={s}
+                      className={`mb-slot-btn ${newSlot === s ? 'selected' : ''}`}
+                      onClick={() => setNewSlot(s)}
+                      disabled={rescheduling}
+                    >
+                      {s}
+                    </button>
+                  ))}
                 </>}
               </div>
             )}
+
+            <div className="mb-fee-note">
+              💡 A ₹{RESCHEDULE_FEE} reschedule fee applies. Razorpay will open after you confirm.
+            </div>
+
             <div className="mb-modal-actions">
-              <button className="mb-modal-cancel" onClick={() => setRescheduleBooking(null)}>Cancel</button>
-              <button className="mb-modal-confirm" onClick={handleReschedule} disabled={rescheduling || !newDate || !newSlot}>
-                {rescheduling ? '⏳ Saving…' : '✓ Confirm Reschedule'}
+              <button className="mb-modal-cancel" onClick={() => setRescheduleBooking(null)} disabled={rescheduling}>
+                Cancel
+              </button>
+              <button
+                className="mb-modal-confirm"
+                onClick={handleReschedule}
+                disabled={rescheduling || !newDate || !newSlot}
+              >
+                {payingReschedule
+                  ? '⏳ Opening Razorpay…'
+                  : rescheduling
+                    ? '⏳ Processing…'
+                    : `💳 Pay ₹${RESCHEDULE_FEE} & Reschedule`}
               </button>
             </div>
           </div>
