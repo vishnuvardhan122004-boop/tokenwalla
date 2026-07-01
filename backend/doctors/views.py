@@ -150,13 +150,30 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
     def _prepare_data(self, raw):
         """
-        Normalise multipart/form-data sent from the React dashboard.
+        Normalise multipart/form-data sent from the React dashboard / mobile app.
         Handles both QueryDict (multipart) and plain dict (JSON body).
+
+        IMPORTANT: When a file is uploaded, DRF merges the uploaded file object
+        directly into `request.data` (via QueryDict.update(files)). Calling
+        `raw.copy()` on a QueryDict triggers Django's __deepcopy__, which tries
+        to copy.deepcopy() every value — including open file handles
+        (BufferedRandom), which cannot be pickled/deepcopied and crashes with:
+            TypeError: cannot pickle 'BufferedRandom' instances
+
+        Fix: rebuild the QueryDict manually using setlist() (no deepcopy),
+        re-referencing the same original values — including file objects —
+        without ever calling .copy() on a dict that may contain files.
         """
-        try:
-            data = raw.copy()       # QueryDict → mutable copy
-        except AttributeError:
-            data = dict(raw)        # plain dict fallback
+        from django.http import QueryDict
+
+        if hasattr(raw, 'lists'):
+            # QueryDict (multipart or urlencoded) — safe manual rebuild, no deepcopy
+            data = QueryDict('', mutable=True)
+            for key, values in raw.lists():
+                data.setlist(key, list(values))
+        else:
+            # Plain dict (JSON body) — shallow copy is fine, no file objects possible
+            data = dict(raw)
 
         # slots: JSON string → list
         slots_raw = data.get('slots')
