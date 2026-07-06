@@ -28,7 +28,14 @@ export default function Footer() {
           border: 1px solid rgba(147,181,215,0.3);
           border-radius: 100px; padding: 5px 14px;
           font-size: 12px; color: var(--blue-200);
+          margin-bottom: 16px;
         }
+        .footer-playstore img {
+          height: 44px;
+          display: block;
+          transition: opacity 0.15s;
+        }
+        .footer-playstore:hover img { opacity: 0.85; }
         .footer-col h6 {
           font-family: 'Plus Jakarta Sans', sans-serif;
           font-size: 12px; font-weight: 700; letter-spacing: 1.5px;
@@ -73,6 +80,20 @@ export default function Footer() {
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3B6D11', animation: 'twPulse 2s infinite' }} />
                 Live in AP & Telangana
               </div>
+
+              {/* Play Store link */}
+              <a
+                href="https://play.google.com/store/apps/details?id=com.vishnu2004.Tokenwalla"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="footer-playstore"
+                style={{ display: 'inline-block' }}
+              >
+                <img
+                  src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
+                  alt="Get it on Google Play"
+                />
+              </a>
             </div>
 
             {/* Product */}

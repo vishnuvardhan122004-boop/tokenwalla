@@ -18,7 +18,7 @@ const TABS = [
 ];
 
 // ── Reschedule payment constants (mirrors mobile RescheduleModal.tsx) ──────
-const RAZORPAY_KEY_ID  = 'rzp_test_T1a7C8nkCLHgZo';
+const RAZORPAY_KEY_ID  = 'rzp_live_SoKq7xISlxWRoY';
 const RESCHEDULE_PAISE = 500;   // ₹5 in paise — must match backend VALID_AMOUNTS_PAISE
 const RESCHEDULE_FEE   = 5;     // display only
 
