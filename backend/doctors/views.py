@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from .models import Doctor
 from .serializers import DoctorSerializer
+from tokenwalla.utils import is_slot_bookable
 
 
 class DoctorViewSet(viewsets.ModelViewSet):
@@ -30,7 +31,13 @@ class DoctorViewSet(viewsets.ModelViewSet):
         GET /api/doctors/<id>/slot-availability/?date=YYYY-MM-DD
 
         Returns per-slot booking counts:
-            { "09:00 AM": { "booked": 2, "max": 10, "full": false }, ... }
+            { "09:00 AM": { "booked": 2, "max": 10, "full": false, "too_soon": false } }
+
+        A slot is also marked 'full' — the same flag the web + mobile UI
+        already use to grey out / strike-through a slot and block selection —
+        if it starts within BOOKING_CUTOFF_HOURS (3h) of right now. This means
+        patients can no longer book a slot that's about to happen, without
+        needing any frontend changes.
 
         Only counts bookings with status 'waiting' or 'in_progress'.
         """
@@ -61,14 +68,17 @@ class DoctorViewSet(viewsets.ModelViewSet):
         )
         booked_map = {row['slot']: row['count'] for row in counts}
 
-        result = {
-            slot: {
-                'booked': booked_map.get(slot, 0),
+        result = {}
+        for slot in (doctor.slots or []):
+            booked = booked_map.get(slot, 0)
+            capacity_full = booked >= doctor.max_per_slot
+            too_soon = not is_slot_bookable(date, slot)
+            result[slot] = {
+                'booked': booked,
                 'max': doctor.max_per_slot,
-                'full': booked_map.get(slot, 0) >= doctor.max_per_slot,
+                'too_soon': too_soon,
+                'full': capacity_full or too_soon,
             }
-            for slot in (doctor.slots or [])
-        }
         return Response(result)
 
     # ── Booking summary (admin only) ──────────────────────────────────────────
