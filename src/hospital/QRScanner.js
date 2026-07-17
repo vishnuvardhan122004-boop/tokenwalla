@@ -4,23 +4,8 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import jsQR from 'jsqr';
 import API from '../services/api';
-
-// ── Load jsQR from CDN ────────────────────────────────────────────────────────
-function loadJsQR(cb) {
-  if (window.jsQR) { cb(); return; }
-  if (document.querySelector('script[data-jqsr]')) {
-    const poll = setInterval(() => {
-      if (window.jsQR) { clearInterval(poll); cb(); }
-    }, 100);
-    return;
-  }
-  const s = document.createElement('script');
-  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
-  s.setAttribute('data-jqsr', '1');
-  s.onload = cb;
-  document.head.appendChild(s);
-}
 
 // ── Extract token from QR data ────────────────────────────────────────────────
 function extractToken(raw) {
@@ -96,13 +81,13 @@ export default function QRScanner() {
       if (canvas.width  !== video.videoWidth)  canvas.width  = video.videoWidth;
       if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
 
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
       // attemptBoth catches normal + inverted QR codes (common on phone screens)
-      const code = window.jsQR?.(imageData.data, imageData.width, imageData.height, {
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
         inversionAttempts: 'attemptBoth',
       });
 
@@ -130,6 +115,17 @@ export default function QRScanner() {
     scanCooldown.current   = false;
     scanActiveRef.current  = false;
     cancelAnimationFrame(animFrameRef.current);
+
+    // Camera API needs a secure context (HTTPS or localhost). On plain HTTP
+    // navigator.mediaDevices is undefined — give a clear message instead of a
+    // cryptic "cannot read getUserMedia of undefined".
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError(
+        'Camera needs a secure (HTTPS) connection. Open this page over https:// ' +
+        'or use manual token entry below.'
+      );
+      return;
+    }
 
     // MOBILE FIX: try rear camera first, fall back to any camera
     // exact:environment fails hard on some Android — ideal+fallback is safest
@@ -167,9 +163,7 @@ export default function QRScanner() {
         .then(() => {
           scanActiveRef.current = true;
           setScanning(true);
-          loadJsQR(() => {
-            if (scanActiveRef.current) runScanLoop();
-          });
+          runScanLoop();   // jsQR is bundled — no CDN wait needed
         })
         .catch(err => {
           setCameraError('Could not play video: ' + err.message);
