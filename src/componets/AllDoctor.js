@@ -42,12 +42,15 @@ export default function AllDoctor() {
   const actualSpecs = ['All', ...new Set(doctors.map(d => d.specialization).filter(Boolean))];
 
   const filtered = doctors.filter(doc => {
-    const q = search.toLowerCase();
-    const matchSearch = !search ||
-      (doc.name || '').toLowerCase().includes(q) ||
-      (doc.specialization || '').toLowerCase().includes(q) ||
-      (doc.hospital_name || '').toLowerCase().includes(q) ||
-      (doc.city || '').toLowerCase().includes(q);
+    // Keyword search: every space-separated word must match somewhere in the
+    // doctor's searchable text (name, specialization, hospital, city, location).
+    // e.g. "cardiologist mumbai" → cardiologists in Mumbai.
+    const haystack = [
+      doc.name, doc.specialization, doc.hospital_name,
+      doc.city, doc.hospital_location, doc.hospital_address,
+    ].filter(Boolean).join(' ').toLowerCase();
+    const keywords = search.toLowerCase().split(/\s+/).filter(Boolean);
+    const matchSearch = keywords.every(word => haystack.includes(word));
     const matchCity  = !city || (doc.city || '').toLowerCase().includes(city.toLowerCase());
     const matchSpec  = specFilter === 'All' || (doc.specialization || '').toLowerCase().includes(specFilter.toLowerCase());
     const matchAvail = !availOnly || doc.available;
@@ -228,7 +231,7 @@ export default function AllDoctor() {
                 <span className="search-icon">🔍</span>
                 <input
                   className="search-input"
-                  placeholder="Search doctor, specialization, hospital..."
+                  placeholder="Search by doctor, specialization, hospital, city, location..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                 />

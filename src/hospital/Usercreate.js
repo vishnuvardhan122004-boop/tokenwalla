@@ -6,7 +6,7 @@ const Husercreate = () => {
   const navigate = useNavigate();
 
   const [hospital, setHospital] = useState({
-    name: '', city: '', address: '', mobile: '', password: '', confirmPassword: '',
+    name: '', city: '', address: '', location: '', mobile: '', password: '', confirmPassword: '',
   });
 
   const [loading,     setLoading]     = useState(false);
@@ -74,6 +74,7 @@ const Husercreate = () => {
         name:     hospital.name,
         city:     hospital.city,
         address:  hospital.address,
+        location: hospital.location.trim(),
         mobile:   hospital.mobile,
         password: hospital.password,
       });
@@ -111,6 +112,13 @@ const Husercreate = () => {
             placeholder="Full Address" rows="2"
             value={hospital.address} onChange={handleChange} />
           <small className="text-danger d-block mb-2">{errors.address}</small>
+
+          <input type="text" name="location" className="form-control mb-1"
+            placeholder="Location / Google Maps link (optional)"
+            value={hospital.location} onChange={handleChange} />
+          <small className="text-muted d-block mb-2">
+            Paste a Google Maps link or landmark so patients can find you easily.
+          </small>
 
           <input type="text" name="mobile" className="form-control mb-1"
             placeholder="Mobile Number" value={hospital.mobile} onChange={handleChange} />

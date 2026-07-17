@@ -102,6 +102,7 @@ class HospitalRegisterView(APIView):
             name=name,
             city=data.get('city', '').strip(),
             address=data.get('address', '').strip(),
+            location=data.get('location', '').strip(),
             mobile=mobile,
             password=make_password(password),
             status='pending',

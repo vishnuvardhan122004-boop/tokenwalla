@@ -30,5 +30,5 @@ test('unauthenticated user is redirected from /my-bookings to /login', () => {
     </MemoryRouter>
   );
   // Should be redirected — login form is present
-  expect(screen.queryByText(/sign in/i)).toBeTruthy();
+  expect(screen.getByText(/sign in/i)).toBeTruthy();
 });

@@ -3,7 +3,9 @@ from .models import Doctor
 
 
 class DoctorSerializer(serializers.ModelSerializer):
-    hospital_name  = serializers.CharField(source="hospital.name", read_only=True)
+    hospital_name     = serializers.CharField(source="hospital.name",     read_only=True)
+    hospital_location = serializers.CharField(source="hospital.location", read_only=True)
+    hospital_address  = serializers.CharField(source="hospital.address",  read_only=True)
 
     # Read-only fields for returning full Cloudinary URLs
     image_url          = serializers.SerializerMethodField()
@@ -28,7 +30,7 @@ class DoctorSerializer(serializers.ModelSerializer):
             "mobile", "available", "fee", "slots", "days", "max_per_slot",
             "image", "hospital_image",
             "image_url", "hospital_image_url",
-            "hospital", "hospital_name", "city",
+            "hospital", "hospital_name", "hospital_location", "hospital_address", "city",
         ]
         extra_kwargs = {
             "image":          {"required": False, "allow_null": True, "write_only": False},

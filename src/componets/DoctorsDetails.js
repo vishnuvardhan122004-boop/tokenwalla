@@ -748,6 +748,16 @@ export default function DoctorDetails() {
                 </span>
               </div>
               <div className="dd-hospital-name">🏥 {doctor.hospital_name}</div>
+              {doctor.hospital_location && (
+                <div className="dd-hospital-name">
+                  📍 {/^https?:\/\//i.test(doctor.hospital_location)
+                    ? <a href={doctor.hospital_location} target="_blank" rel="noreferrer"
+                         style={{ color: '#185FA5', fontWeight: 600, textDecoration: 'none' }}>
+                        View on map →
+                      </a>
+                    : doctor.hospital_location}
+                </div>
+              )}
             </div>
           </div>
 
