@@ -290,8 +290,19 @@ class DoctorViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
-        """Guard against deleting a doctor who still has active bookings."""
+        """
+        Delete a doctor.
+
+        - Blocks (409) if the doctor still has ACTIVE bookings
+          (waiting / in_progress) — those must be completed or cancelled first.
+        - Otherwise removes the doctor's historical (completed / cancelled)
+          bookings in the same transaction. This is required because the
+          Booking -> Doctor FK uses on_delete=PROTECT, so any leftover booking
+          row would otherwise raise ProtectedError and make deletion fail.
+        """
         from bookings.models import Booking
+        from django.db import transaction
+        from django.db.models import ProtectedError
 
         instance = self.get_object()
         active = Booking.objects.filter(
@@ -301,9 +312,27 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
         if active:
             return Response(
-                {'error': 'Cannot delete a doctor with active bookings.'},
+                {
+                    'error': 'Cannot delete a doctor with active bookings. '
+                             'Please complete or cancel them first.',
+                    'message': 'Cannot delete a doctor with active bookings. '
+                               'Please complete or cancel them first.',
+                },
                 status=status.HTTP_409_CONFLICT,
             )
 
-        self.perform_destroy(instance)
+        try:
+            with transaction.atomic():
+                # Remove historical bookings first so PROTECT doesn't block.
+                Booking.objects.filter(doctor=instance).delete()
+                self.perform_destroy(instance)
+        except ProtectedError:
+            return Response(
+                {
+                    'error': 'This doctor has linked records and cannot be deleted.',
+                    'message': 'This doctor has linked records and cannot be deleted.',
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         return Response(status=status.HTTP_204_NO_CONTENT)

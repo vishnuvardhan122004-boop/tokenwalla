@@ -297,7 +297,8 @@ const Hdashboard = () => {
       loadDoctors();
       showToast("Doctor deleted.");
     } catch (err) {
-      showToast(err?.response?.data?.message || "Failed to delete doctor", "error");
+      const data = err?.response?.data;
+      showToast(data?.message || data?.error || "Failed to delete doctor", "error");
     }
   };
 
