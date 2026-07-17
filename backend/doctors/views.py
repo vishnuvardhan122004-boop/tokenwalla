@@ -185,23 +185,24 @@ class DoctorViewSet(viewsets.ModelViewSet):
             # Plain dict (JSON body) — shallow copy is fine, no file objects possible
             data = dict(raw)
 
-        # slots: JSON string → list
-        slots_raw = data.get('slots')
-        if slots_raw is not None and isinstance(slots_raw, str):
-            try:
-                decoded = json.loads(slots_raw)
-                if isinstance(decoded, list):
-                    if hasattr(data, 'setlist'):
-                        data.setlist('slots', decoded)
+        # slots & days: JSON string → list
+        for list_field in ('slots', 'days'):
+            raw_val = data.get(list_field)
+            if raw_val is not None and isinstance(raw_val, str):
+                try:
+                    decoded = json.loads(raw_val)
+                    if isinstance(decoded, list):
+                        if hasattr(data, 'setlist'):
+                            data.setlist(list_field, decoded)
+                        else:
+                            data[list_field] = decoded
                     else:
-                        data['slots'] = decoded
-                else:
-                    raise ValueError('slots JSON must be a list')
-            except (json.JSONDecodeError, ValueError):
-                if hasattr(data, 'setlist'):
-                    data.setlist('slots', [])
-                else:
-                    data['slots'] = []
+                        raise ValueError(f'{list_field} JSON must be a list')
+                except (json.JSONDecodeError, ValueError):
+                    if hasattr(data, 'setlist'):
+                        data.setlist(list_field, [])
+                    else:
+                        data[list_field] = []
 
         # available: string → bool
         avail = data.get('available')

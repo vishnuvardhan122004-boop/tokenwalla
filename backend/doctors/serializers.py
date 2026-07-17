@@ -15,11 +15,17 @@ class DoctorSerializer(serializers.ModelSerializer):
         required=False,
     )
 
+    days = serializers.ListField(
+        child=serializers.CharField(),
+        default=list,
+        required=False,
+    )
+
     class Meta:
         model  = Doctor
         fields = [
             "id", "name", "specialization", "experience",
-            "mobile", "available", "fee", "slots", "max_per_slot",
+            "mobile", "available", "fee", "slots", "days", "max_per_slot",
             "image", "hospital_image",
             "image_url", "hospital_image_url",
             "hospital", "hospital_name", "city",

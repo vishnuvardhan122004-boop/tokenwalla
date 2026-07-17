@@ -14,6 +14,8 @@ class Doctor(models.Model):
     fee            = models.IntegerField(default=0)          # consultation fee in ₹
     # Must be JSONField — stores ["09:00 AM", "09:30 AM", ...]
     slots          = models.JSONField(default=list, blank=True)
+    # Available days of the week, e.g. ["Mon", "Tue", "Wed"]
+    days           = models.JSONField(default=list, blank=True)
     max_per_slot   = models.IntegerField(default=10)
     city           = models.CharField(max_length=100, blank=True)
     image          = models.ImageField(upload_to="doctors/",          null=True, blank=True)

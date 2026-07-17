@@ -23,14 +23,16 @@ const SLOT_SECTIONS = [
   { label: "🌙 Night",                      slots: DEFAULT_SLOTS.slice(40, 48) },
 ];
 
+const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
 const EMPTY_DOCTOR = {
   name: "", specialization: "", experience: "",
-  mobile: "", available: true, slots: [], max_per_slot: 10,
+  mobile: "", available: true, slots: [], days: [], max_per_slot: 10,
 };
 
 const EMPTY_ERRORS = {
   name: "", specialization: "", mobile: "", experience: "",
-  max_per_slot: "", slots: "",
+  max_per_slot: "", slots: "", days: "",
 };
 
 const validate = (formData) => {
@@ -46,6 +48,7 @@ const validate = (formData) => {
   if (formData.max_per_slot !== "" && (isNaN(formData.max_per_slot) || Number(formData.max_per_slot) < 1))
     { errors.max_per_slot = "Must be at least 1 patient per slot"; valid = false; }
   if (formData.slots.length === 0) { errors.slots = "Select at least one time slot"; valid = false; }
+  if (formData.days.length === 0) { errors.days = "Select at least one available day"; valid = false; }
   return { errors, valid };
 };
 
@@ -189,6 +192,7 @@ const Hdashboard = () => {
       mobile:         doctor.mobile         || "",
       available:      doctor.available      ?? true,
       slots:          doctor.slots          || [],
+      days:           doctor.days           || [],
       max_per_slot:   doctor.max_per_slot   || 10,
     });
     setErrors(EMPTY_ERRORS);
@@ -207,6 +211,16 @@ const Hdashboard = () => {
         : [...prev.slots, slot],
     }));
     if (errors.slots) setErrors(prev => ({ ...prev, slots: "" }));
+  };
+
+  const toggleDay = (day) => {
+    setFormData(prev => ({
+      ...prev,
+      days: prev.days.includes(day)
+        ? prev.days.filter(d => d !== day)
+        : [...prev.days, day],
+    }));
+    if (errors.days) setErrors(prev => ({ ...prev, days: "" }));
   };
 
   const handleChange = (field, value) => {
@@ -230,6 +244,7 @@ const Hdashboard = () => {
       fd.append("available",      formData.available);
       fd.append("max_per_slot",   Number(formData.max_per_slot) || 10);
       fd.append("slots",          JSON.stringify(formData.slots));
+      fd.append("days",           JSON.stringify(formData.days));
 
       if (!editDoctor) {
         fd.append("hospital", hospital.id);
@@ -578,6 +593,48 @@ const Hdashboard = () => {
                       </div>
                     </div>
 
+                    {/* Days Selector */}
+                    <div className="col-12">
+                      <label className="form-label fw-semibold">
+                        📅 Available Days *
+                        <small className="text-muted ms-2">
+                          ({formData.days.length} of {DAYS_OF_WEEK.length} selected)
+                        </small>
+                      </label>
+                      <div className="d-flex flex-wrap gap-2">
+                        {DAYS_OF_WEEK.map(day => (
+                          <button
+                            key={day} type="button"
+                            className={`btn btn-sm ${formData.days.includes(day) ? "btn-primary" : "btn-outline-secondary"}`}
+                            onClick={() => toggleDay(day)}
+                          >
+                            {day}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="d-flex gap-2 mt-2">
+                        <button
+                          type="button" className="btn btn-sm btn-outline-primary"
+                          onClick={() => { setFormData(p => ({ ...p, days: [...DAYS_OF_WEEK] })); setErrors(p => ({ ...p, days: "" })); }}
+                        >
+                          All Days
+                        </button>
+                        <button
+                          type="button" className="btn btn-sm btn-outline-primary"
+                          onClick={() => { setFormData(p => ({ ...p, days: DAYS_OF_WEEK.slice(0, 6) })); setErrors(p => ({ ...p, days: "" })); }}
+                        >
+                          Mon–Sat
+                        </button>
+                        <button
+                          type="button" className="btn btn-sm btn-outline-danger"
+                          onClick={() => setFormData(p => ({ ...p, days: [] }))}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <FieldError msg={errors.days} />
+                    </div>
+
                     {/* Slot Selector */}
                     <div className="col-12">
                       <label className="form-label fw-semibold">
@@ -689,6 +746,19 @@ const Hdashboard = () => {
                           <div className="small text-muted mb-1">⏳ {doc.experience} yrs exp</div>
                           <div className="small text-muted mb-2">
                             👥 Max {doc.max_per_slot || 10} patients/slot
+                          </div>
+                          <div className="mb-2">
+                            <small className="fw-semibold text-muted d-block mb-1">
+                              📅 Days ({doc.days?.length || 0})
+                            </small>
+                            <div className="d-flex flex-wrap gap-1">
+                              {(doc.days || []).map(d => (
+                                <span key={d} className="badge bg-light text-dark border small">{d}</span>
+                              ))}
+                              {(doc.days || []).length === 0 && (
+                                <span className="text-danger small">No days set</span>
+                              )}
+                            </div>
                           </div>
                           <div className="mb-3">
                             <small className="fw-semibold text-muted d-block mb-1">
