@@ -114,6 +114,10 @@ class CreateOrderView(APIView):
                 'order_id': order['id'],
                 'amount':   order['amount'],
                 'currency': order['currency'],
+                # Return the public key so the frontend checkout ALWAYS uses the
+                # same key (mode) the order was created with. Prevents test/live
+                # mismatch — the order and checkout must be in the same mode.
+                'key_id':   settings.RAZORPAY_KEY_ID,
             })
         except Exception as exc:
             logger.error('Razorpay order creation failed: %s', exc)

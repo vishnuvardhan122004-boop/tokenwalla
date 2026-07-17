@@ -48,7 +48,9 @@ export default function Payment() {
       });
 
       const options = {
-        key:         RAZORPAY_KEY_ID,
+        // Prefer the key returned by the backend so the checkout is always in
+        // the same mode (test/live) as the order. Falls back to env/hardcoded.
+        key:         orderData.key_id || RAZORPAY_KEY_ID,
         amount:      orderData.amount,
         currency:    orderData.currency,
         name:        'TokenWalla',
