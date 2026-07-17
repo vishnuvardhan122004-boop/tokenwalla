@@ -45,7 +45,12 @@ function loadRazorpayScript() {
   });
 }
 
-const today = new Date().toISOString().split('T')[0];
+// Local YYYY-MM-DD (avoid toISOString — it uses UTC and shifts the date back
+// a day for IST users at night, which would let a past date be picked).
+const today = (() => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+})();
 
 export default function MyBookings() {
   const navigate = useNavigate();

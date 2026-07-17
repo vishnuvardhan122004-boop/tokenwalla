@@ -612,26 +612,6 @@ const Hdashboard = () => {
                           </button>
                         ))}
                       </div>
-                      <div className="d-flex gap-2 mt-2">
-                        <button
-                          type="button" className="btn btn-sm btn-outline-primary"
-                          onClick={() => { setFormData(p => ({ ...p, days: [...DAYS_OF_WEEK] })); setErrors(p => ({ ...p, days: "" })); }}
-                        >
-                          All Days
-                        </button>
-                        <button
-                          type="button" className="btn btn-sm btn-outline-primary"
-                          onClick={() => { setFormData(p => ({ ...p, days: DAYS_OF_WEEK.slice(0, 6) })); setErrors(p => ({ ...p, days: "" })); }}
-                        >
-                          Mon–Sat
-                        </button>
-                        <button
-                          type="button" className="btn btn-sm btn-outline-danger"
-                          onClick={() => setFormData(p => ({ ...p, days: [] }))}
-                        >
-                          Clear
-                        </button>
-                      </div>
                       <FieldError msg={errors.days} />
                     </div>
 

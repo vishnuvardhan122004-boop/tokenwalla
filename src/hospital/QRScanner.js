@@ -211,6 +211,11 @@ export default function QRScanner() {
         const data = err?.response?.data;
         if (data?.booking) { setScanResult(data); setScanState('already_done'); }
         else { setErrorMsg('This patient has already been attended.'); setScanState('error'); }
+      } else if (status === 403) {
+        setErrorMsg(
+          '⛔ This token belongs to a different hospital. You can only scan patients booked at your hospital.'
+        );
+        setScanState('error');
       } else if (status === 404) {
         setErrorMsg(`Token "${token}" not found. Please check and try again.`);
         setScanState('error');
@@ -456,15 +461,22 @@ export default function QRScanner() {
 
               <div className="qs-result-body">
                 {[
+                  { label: 'Hospital',       value: `🏥 ${booking.hospital_name}`           },
                   { label: 'Patient',        value: `👤 ${booking.patient_name}`           },
                   { label: 'Mobile',         value: booking.patient_mobile, mono: true      },
                   { label: 'Doctor',         value: `Dr. ${booking.doctor_name}`            },
                   { label: 'Specialization', value: booking.specialization                  },
                   { label: 'Date',           value: `📅 ${booking.date}`                   },
                   { label: 'Slot',           value: `🕐 ${booking.slot}`                   },
+                  booking.queue_position != null &&
+                    { label: 'Queue Position', value: `#${booking.queue_position}`, bold: true },
                   { label: 'Token',          value: booking.token, mono: true, blue: true   },
                   { label: 'Amount Paid',    value: `₹${booking.amount}`, bold: true, blue: true },
-                ].map(({ label, value, mono, blue, bold }) => (
+                  booking.payment_id &&
+                    { label: 'Payment Ref',  value: booking.payment_id, mono: true          },
+                  booking.created &&
+                    { label: 'Booked On',    value: booking.created                         },
+                ].filter(Boolean).map(({ label, value, mono, blue, bold }) => (
                   <div className="qs-result-row" key={label}>
                     <span className="qs-result-label">{label}</span>
                     <span className="qs-result-value" style={{

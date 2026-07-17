@@ -35,7 +35,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
         A slot is also marked 'full' — the same flag the web + mobile UI
         already use to grey out / strike-through a slot and block selection —
-        if it starts within BOOKING_CUTOFF_HOURS (3h) of right now. This means
+        if it starts within BOOKING_CUTOFF_HOURS (2h) of right now. This means
         patients can no longer book a slot that's about to happen, without
         needing any frontend changes.
 

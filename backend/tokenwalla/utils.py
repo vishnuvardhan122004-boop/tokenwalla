@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, date as date_cls
 from django.utils import timezone
 
 SLOT_TIME_FORMAT = '%I:%M %p'   # e.g. "09:00 AM", "12:30 PM"
-BOOKING_CUTOFF_HOURS = 3        # slots within this window of "now" cannot be booked
+BOOKING_CUTOFF_HOURS = 2        # slots within this window of "now" cannot be booked
 
 
 def parse_slot_datetime(date_val, slot_str):

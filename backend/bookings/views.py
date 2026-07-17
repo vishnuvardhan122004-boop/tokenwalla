@@ -261,6 +261,23 @@ class ScanQRView(APIView):
     @staticmethod
     def _serialize_booking(booking):
         """Consistent payload used by both GET and POST responses."""
+        # Queue position: how many patients are ahead (incl. this one) for the
+        # same doctor + date + slot who are still waiting. Helps hospital staff
+        # understand where the patient stands. None once no longer waiting.
+        queue_position = None
+        if booking.status == 'waiting':
+            queue_position = (
+                Booking.objects
+                .filter(
+                    doctor_id=booking.doctor_id,
+                    date=booking.date,
+                    slot=booking.slot,
+                    status='waiting',
+                    created__lte=booking.created,
+                )
+                .count()
+            )
+
         return {
             'id':             booking.id,
             'token':          booking.token,
@@ -269,11 +286,14 @@ class ScanQRView(APIView):
             'patient_mobile': booking.user.mobile,
             'doctor_name':    booking.doctor.name,
             'specialization': booking.doctor.specialization,
+            'doctor_fee':     booking.doctor.fee,
             'hospital_name':  booking.hospital.name,
             'date':           str(booking.date),
             'slot':           booking.slot,
             'amount':         booking.amount,
+            'queue_position': queue_position,
             'queue_access':   booking.queue_access,
+            'payment_id':     booking.payment_id or '',
             'created':        booking.created.strftime('%d %b %Y, %I:%M %p'),
         }
  

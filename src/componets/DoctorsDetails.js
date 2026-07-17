@@ -2,6 +2,16 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import API from '../services/api';
 
+// Local YYYY-MM-DD — must NOT use toISOString() (that converts to UTC and
+// for IST users at night shifts the date back a day, making every slot look
+// "past" and therefore fully booked).
+function toLocalYMD(d) {
+  const y  = d.getFullYear();
+  const m  = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
 function getNext7Days() {
   const days   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -12,7 +22,7 @@ function getNext7Days() {
       label: i === 0 ? 'Today' : days[d.getDay()],
       num:   d.getDate(),
       month: months[d.getMonth()],
-      full:  d.toISOString().split('T')[0],
+      full:  toLocalYMD(d),
     };
   });
 }
