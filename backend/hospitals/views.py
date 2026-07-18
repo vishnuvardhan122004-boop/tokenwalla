@@ -243,7 +243,11 @@ class HospitalLoginView(APIView):
 
 
 class HospitalDetailView(APIView):
-    """Public — fetch a single hospital by PK."""
+    """
+    GET  — public: fetch a single hospital by PK.
+    PATCH — the owning hospital (or an admin) updates its own details:
+            name, city, address, location (maps), and mobile (OTP-verified).
+    """
     permission_classes = [AllowAny]
 
     def get(self, request, pk):
@@ -251,6 +255,59 @@ class HospitalDetailView(APIView):
             hospital = Hospital.objects.get(pk=pk)
         except Hospital.DoesNotExist:
             return Response({'message': 'Not found.'}, status=404)
+        return Response(HospitalSerializer(hospital).data)
+
+    def patch(self, request, pk):
+        try:
+            hospital = Hospital.objects.get(pk=pk)
+        except Hospital.DoesNotExist:
+            return Response({'message': 'Not found.'}, status=404)
+
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({'message': 'Authentication required.'}, status=401)
+
+        # The linked hospital user stores the hospital id in last_name.
+        is_owner = getattr(user, 'role', None) == 'hospital' and str(getattr(user, 'last_name', '')) == str(hospital.id)
+        is_admin = getattr(user, 'role', None) == 'admin' or user.is_staff
+        if not (is_owner or is_admin):
+            return Response({'message': 'You can only edit your own hospital.'}, status=403)
+
+        for field in ('name', 'city', 'address', 'location', 'instagram', 'youtube',
+                      'facebook', 'announcement', 'open_time', 'close_time'):
+            if field in request.data:
+                setattr(hospital, field, str(request.data[field]).strip())
+
+        if 'services' in request.data:
+            svc = request.data.get('services')
+            if isinstance(svc, list):
+                hospital.services = [str(s).strip() for s in svc if str(s).strip()]
+
+        raw_mobile = request.data.get('mobile')
+        new_mobile = str(raw_mobile).strip() if raw_mobile else None
+        if new_mobile and new_mobile != hospital.mobile:
+            def _valid(m):
+                return len(m) == 10 and m.isdigit() and m[0] in '6789'
+            if not _valid(new_mobile):
+                return Response({'message': 'Invalid mobile number.'}, status=400)
+            if not cache.get(f'otp_verified:{new_mobile}'):
+                return Response({'message': 'Please verify the new mobile with OTP first.'}, status=400)
+            if Hospital.objects.filter(mobile=new_mobile).exclude(pk=hospital.pk).exists():
+                return Response({'message': 'This mobile is already in use.'}, status=400)
+            old_mobile = hospital.mobile
+            hospital.mobile = new_mobile
+            cache.delete(f'otp_verified:{new_mobile}')
+            # keep the linked hospital user's mobile in sync
+            try:
+                u = User.objects.get(mobile=old_mobile)
+                u.mobile = new_mobile
+                u.username = new_mobile
+                u.save(update_fields=['mobile', 'username'])
+            except User.DoesNotExist:
+                pass
+
+        hospital.save()
+        logger.info('Hospital %s updated details', hospital.id)
         return Response(HospitalSerializer(hospital).data)
 
 

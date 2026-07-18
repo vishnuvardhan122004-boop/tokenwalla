@@ -353,6 +353,37 @@ class MeView(APIView):
                 pass
         return Response(user_data)
 
+    def patch(self, request):
+        """
+        Update the logged-in user's own profile.
+          - name   → updated directly (User.first_name)
+          - mobile → only changes if the NEW number has been OTP-verified
+                     (client calls /auth/otp/request/ then /auth/otp/verify/,
+                     which sets the `otp_verified:<mobile>` cache flag).
+        """
+        user = request.user
+
+        name = request.data.get('name')
+        if name is not None and str(name).strip():
+            user.first_name = str(name).strip()
+
+        raw_mobile = request.data.get('mobile')
+        new_mobile = str(raw_mobile).strip() if raw_mobile else None
+        if new_mobile and new_mobile != user.mobile:
+            if not re.match(r'^[6-9]\d{9}$', new_mobile):
+                return Response({'message': 'Invalid mobile number.'}, status=400)
+            if not cache.get(f'otp_verified:{new_mobile}'):
+                return Response({'message': 'Please verify the new mobile with OTP first.'}, status=400)
+            if User.objects.filter(mobile=new_mobile).exclude(pk=user.pk).exists():
+                return Response({'message': 'This mobile is already in use.'}, status=400)
+            user.mobile = new_mobile
+            user.username = new_mobile
+            cache.delete(f'otp_verified:{new_mobile}')
+
+        user.save()
+        logger.info('Profile updated for user %s', user.id)
+        return Response(UserSerializer(user).data)
+
 
 class AllUsersView(APIView):
     """Admin only — list all users (paginated)."""
