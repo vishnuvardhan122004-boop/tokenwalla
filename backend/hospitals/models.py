@@ -8,7 +8,8 @@ class Hospital(models.Model):
     location = models.CharField(max_length=500, blank=True)
     mobile   = models.CharField(max_length=15, unique=True)
     email    = models.EmailField(blank=True)
-    image    = models.ImageField(upload_to='hospitals/', blank=True)
+    image    = models.ImageField(upload_to='hospitals/', blank=True)          # banner
+    logo     = models.ImageField(upload_to='hospital_logos/', null=True, blank=True)
     # Social / web presence shown to patients on the doctor page
     instagram = models.CharField(max_length=300, blank=True)
     youtube   = models.CharField(max_length=300, blank=True)
@@ -26,3 +27,16 @@ class Hospital(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class HospitalPhoto(models.Model):
+    """A facility photo in a hospital's gallery, shown to patients."""
+    hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name='photos')
+    image    = models.ImageField(upload_to='hospital_gallery/')
+    created  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created']
+
+    def __str__(self):
+        return f'Photo #{self.id} for {self.hospital_id}'

@@ -11,8 +11,17 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Hospital
+from .models import Hospital, HospitalPhoto
 from .serializers import HospitalSerializer
+
+
+def _is_owner_or_admin(user, hospital):
+    """True if `user` is the hospital's own account or an admin."""
+    if not user or not user.is_authenticated:
+        return False
+    is_owner = getattr(user, 'role', None) == 'hospital' and str(getattr(user, 'last_name', '')) == str(hospital.id)
+    is_admin = getattr(user, 'role', None) == 'admin' or user.is_staff
+    return is_owner or is_admin
 from tokenwalla.permissions import IsAdmin
 
 logger = logging.getLogger('tokenwalla')
@@ -283,6 +292,12 @@ class HospitalDetailView(APIView):
             if isinstance(svc, list):
                 hospital.services = [str(s).strip() for s in svc if str(s).strip()]
 
+        # Banner / logo image uploads (multipart)
+        if 'image' in request.FILES:
+            hospital.image = request.FILES['image']
+        if 'logo' in request.FILES:
+            hospital.logo = request.FILES['logo']
+
         raw_mobile = request.data.get('mobile')
         new_mobile = str(raw_mobile).strip() if raw_mobile else None
         if new_mobile and new_mobile != hospital.mobile:
@@ -309,6 +324,52 @@ class HospitalDetailView(APIView):
         hospital.save()
         logger.info('Hospital %s updated details', hospital.id)
         return Response(HospitalSerializer(hospital).data)
+
+
+class HospitalPhotoView(APIView):
+    """
+    Gallery photos for a hospital.
+      GET  /api/hospitals/<pk>/photos/  — public: list photos
+      POST /api/hospitals/<pk>/photos/  — owner/admin: add a photo (multipart 'image')
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, pk):
+        photos = HospitalPhoto.objects.filter(hospital_id=pk)
+        return Response([
+            {'id': p.id, 'url': (p.image.url if p.image else '')}
+            for p in photos
+        ])
+
+    def post(self, request, pk):
+        try:
+            hospital = Hospital.objects.get(pk=pk)
+        except Hospital.DoesNotExist:
+            return Response({'message': 'Not found.'}, status=404)
+        if not _is_owner_or_admin(request.user, hospital):
+            return Response({'message': 'Not allowed.'}, status=403)
+        img = request.FILES.get('image')
+        if not img:
+            return Response({'message': 'No image provided.'}, status=400)
+        if hospital.photos.count() >= 12:
+            return Response({'message': 'Gallery limit reached (12 photos).'}, status=400)
+        photo = HospitalPhoto.objects.create(hospital=hospital, image=img)
+        return Response({'id': photo.id, 'url': (photo.image.url if photo.image else '')}, status=201)
+
+
+class HospitalPhotoDeleteView(APIView):
+    """DELETE /api/hospitals/<pk>/photos/<photo_id>/ — owner/admin: remove a photo."""
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk, photo_id):
+        try:
+            hospital = Hospital.objects.get(pk=pk)
+        except Hospital.DoesNotExist:
+            return Response({'message': 'Not found.'}, status=404)
+        if not _is_owner_or_admin(request.user, hospital):
+            return Response({'message': 'Not allowed.'}, status=403)
+        HospitalPhoto.objects.filter(pk=photo_id, hospital=hospital).delete()
+        return Response({'message': 'Deleted.'})
 
 
 class HospitalResetPasswordView(APIView):
