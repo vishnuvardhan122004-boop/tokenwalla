@@ -299,7 +299,7 @@ export default function AllDoctor() {
 
                     <div className="card-body">
                       <div className="card-spec">{doc.specialization}</div>
-                      <div className="card-name">Dr. {doc.name}</div>
+                      <div className="card-name">{doc.name}</div>
                       <div className="card-meta">
                         <div className="meta-item">
                           <div className="meta-icon">📍</div>
