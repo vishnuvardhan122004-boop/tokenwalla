@@ -3,8 +3,9 @@ from .models import Booking
 
 
 class BookingSerializer(serializers.ModelSerializer):
-    doctor_name   = serializers.CharField(source='doctor.name',     read_only=True)
-    hospital_name = serializers.CharField(source='hospital.name',   read_only=True)
+    doctor_name    = serializers.CharField(source='doctor.name',     read_only=True)
+    hospital_name  = serializers.CharField(source='hospital.name',   read_only=True)
+    hospital_mobile = serializers.CharField(source='hospital.mobile', read_only=True)
     # user.first_name is set to the patient's real name at registration
     user_name     = serializers.CharField(source='user.first_name', read_only=True)
     # patient_name also uses first_name (was incorrectly using username = mobile)
@@ -18,7 +19,7 @@ class BookingSerializer(serializers.ModelSerializer):
             'id', 'token', 'status', 'date', 'slot', 'amount',
             'payment_id', 'order_id', 'created',
             'queue_access', 'queue_position',
-            'doctor', 'doctor_name', 'hospital', 'hospital_name',
+            'doctor', 'doctor_name', 'hospital', 'hospital_name', 'hospital_mobile',
             'user', 'user_name', 'patient_name', 'user_mobile',
         ]
 

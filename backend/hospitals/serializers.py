@@ -13,7 +13,7 @@ class HospitalSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'city', 'address', 'location', 'mobile', 'status',
             'instagram', 'youtube', 'facebook', 'services',
-            'announcement', 'open_time', 'close_time',
+            'description', 'announcement', 'open_time', 'close_time',
             'image', 'logo', 'gallery',
         ]
 

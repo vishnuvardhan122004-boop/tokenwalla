@@ -16,6 +16,8 @@ class Hospital(models.Model):
     facebook  = models.CharField(max_length=300, blank=True)
     # List of services the hospital offers (e.g. ["X-Ray", "Pharmacy", "ICU"])
     services  = models.JSONField(default=list, blank=True)
+    # About the hospital, shown to patients on the doctor page
+    description  = models.TextField(blank=True)
     # Short notice shown to patients (e.g. "Dr. X on leave Friday")
     announcement = models.CharField(max_length=300, blank=True)
     # Working hours in 24h "HH:MM" (blank = not set)

@@ -283,7 +283,7 @@ class HospitalDetailView(APIView):
             return Response({'message': 'You can only edit your own hospital.'}, status=403)
 
         for field in ('name', 'city', 'address', 'location', 'instagram', 'youtube',
-                      'facebook', 'announcement', 'open_time', 'close_time'):
+                      'facebook', 'description', 'announcement', 'open_time', 'close_time'):
             if field in request.data:
                 setattr(hospital, field, str(request.data[field]).strip())
 
