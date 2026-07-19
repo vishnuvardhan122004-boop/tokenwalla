@@ -46,6 +46,7 @@ import logging
 
 from datetime import datetime
 from notifications.whatsapp import send_booking_confirmation
+from notifications.push import push_new_booking_to_hospital
 from django.conf import settings
 from django.db import transaction, IntegrityError
 from rest_framework.views import APIView
@@ -276,6 +277,13 @@ class VerifyPaymentView(APIView):
                     send_booking_confirmation(new_booking)
                 except Exception as exc:
                     logger.warning('WhatsApp confirmation send failed for booking %s: %s', new_booking.id, exc)
+
+                # Push the hospital a new-booking alert (independent of the
+                # dashboard being open). Best-effort — never blocks the booking.
+                try:
+                    push_new_booking_to_hospital(new_booking)
+                except Exception as exc:
+                    logger.warning('Push new-booking alert failed for booking %s: %s', new_booking.id, exc)
 
             logger.info(
                 'Booking %s created for user %s doctor %s',

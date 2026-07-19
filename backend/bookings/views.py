@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404
 from .models import Booking
 from .serializers import BookingSerializer, build_queue_map
 from tokenwalla.permissions import IsAdmin, IsHospitalStaff
+from notifications.push import push_booking_in_progress
 
 logger = logging.getLogger('tokenwalla')
 
@@ -99,6 +100,7 @@ class CallNextView(APIView):
         booking.status = 'in_progress'
         booking.save(update_fields=['status'])
         logger.info('Booking %s called by hospital %s', pk, user_hospital_id)
+        push_booking_in_progress(booking)  # patient "you're next" alert
         return Response(BookingSerializer(booking, context={'request': request}).data)
 
 
@@ -403,11 +405,12 @@ class ScanQRView(APIView):
         # ── Mark as in_progress ──
         booking.status = 'in_progress'
         booking.save(update_fields=['status'])
- 
+
         logger.info(
             'QR scan: booking %s → in_progress by user %s (hospital %s)',
             booking.id, request.user.id, self._get_hospital_id(request.user),
         )
+        push_booking_in_progress(booking)  # patient "you're next" alert
  
         patient = booking.user.first_name or booking.user.username
         return Response({
