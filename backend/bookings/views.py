@@ -127,6 +127,36 @@ class CompleteBookingView(APIView):
         return Response(BookingSerializer(booking, context={'request': request}).data)
 
 
+# ── Hospital: mark no-show (hospital staff only) ─────────────────────────────
+class NoShowView(APIView):
+    """
+    Patient never turned up — drop them from the queue without completing.
+
+    Distinct from CancelBookingView, which is the patient cancelling their own
+    booking (it filters on user=request.user, so hospital staff get a 404 there).
+    Recorded as 'cancelled'; there is no separate no-show status yet.
+    """
+    permission_classes = [IsAuthenticated, IsHospitalStaff]
+
+    def patch(self, request, pk):
+        booking          = get_object_or_404(Booking, pk=pk)
+        user_hospital_id = _get_user_hospital_id(request.user)
+
+        if user_hospital_id != booking.hospital_id and request.user.role != 'admin':
+            return Response({'message': 'Access denied.'}, status=403)
+
+        if booking.status not in ('waiting', 'in_progress'):
+            return Response(
+                {'message': f'Cannot mark a booking with status "{booking.status}" as no-show.'},
+                status=400
+            )
+
+        booking.status = 'cancelled'
+        booking.save(update_fields=['status'])
+        logger.info('Booking %s marked no-show by hospital %s', pk, user_hospital_id)
+        return Response(BookingSerializer(booking, context={'request': request}).data)
+
+
 # ── Admin: all bookings (admin only) ─────────────────────────────────────────
 class AllBookingsView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]

@@ -26,7 +26,12 @@ def _send(tokens, title, body, data=None):
     """POST messages to Expo in chunks; prune tokens Expo says are dead."""
     tokens = sorted({t for t in tokens if t})
     if not tokens:
+        # Reaching nobody is indistinguishable from success without this —
+        # e.g. the recipient never registered, or their token was reassigned
+        # to another role (DeviceToken is unique on expo_token).
+        logger.info('[push] no registered devices for: %s', title)
         return
+    logger.info('[push] sending "%s" to %d device(s)', title, len(tokens))
 
     payload_data = data or {}
     for i in range(0, len(tokens), _CHUNK):
