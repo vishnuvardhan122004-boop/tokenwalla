@@ -37,7 +37,8 @@ class RegisterDeviceView(APIView):
 
         DeviceToken.objects.update_or_create(
             expo_token=token,
-            defaults={'user': request.user, 'role': role},
+            role=role,
+            defaults={'user': request.user},
         )
         logger.info('[push] device registered for user %s (role %s)', request.user.id, role)
         return Response({'success': True})

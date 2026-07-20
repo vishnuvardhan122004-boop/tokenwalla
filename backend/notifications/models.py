@@ -8,20 +8,28 @@ class DeviceToken(models.Model):
     An Expo push token registered by the mobile app for a signed-in user.
 
     A single physical device maps to one Expo token; the app re-registers it on
-    every launch (idempotent upsert), so we key on `expo_token` and keep the
-    `user` + `role` current. `role` lets us target patient- vs hospital-side
-    pushes even though a device could, in theory, be used for both.
+    every launch (idempotent upsert), so we key on (`expo_token`, `role`) and
+    keep the `user` current.
+
+    Keyed on the pair rather than the token alone so one device can hold both a
+    patient and a hospital registration. With `expo_token` unique on its own,
+    signing into the hospital side silently destroyed the patient registration
+    (and vice versa), and the lost side then received no pushes at all.
     """
     ROLE_CHOICES = [('patient', 'Patient'), ('hospital', 'Hospital')]
 
     user       = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                                    related_name='device_tokens')
-    expo_token = models.CharField(max_length=255, unique=True)
+    expo_token = models.CharField(max_length=255)
     role       = models.CharField(max_length=20, choices=ROLE_CHOICES, default='patient')
     updated    = models.DateTimeField(auto_now=True)
     created    = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['expo_token', 'role'],
+                                    name='uniq_device_token_per_role'),
+        ]
         indexes = [
             models.Index(fields=['user', 'role']),
         ]

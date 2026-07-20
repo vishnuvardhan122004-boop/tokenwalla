@@ -10,6 +10,10 @@ from .models import Doctor
 from .serializers import DoctorSerializer
 from tokenwalla.utils import is_slot_bookable
 
+import logging
+
+logger = logging.getLogger('tokenwalla')
+
 
 class DoctorViewSet(viewsets.ModelViewSet):
     serializer_class = DoctorSerializer
@@ -236,13 +240,9 @@ class DoctorViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         data = self._prepare_data(request.data)
 
-        print('=== POST /api/doctors/ ===')
-        print('DATA  :', dict(data))
-        print('FILES :', request.FILES)
-
         serializer = self.get_serializer(data=data)
         if not serializer.is_valid():
-            print('ERRORS:', serializer.errors)
+            logger.warning('Doctor create validation failed: %s', serializer.errors)
             return Response(
                 {'message': 'Validation failed', 'errors': serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -269,18 +269,15 @@ class DoctorViewSet(viewsets.ModelViewSet):
             instance.available = new_val
             instance.save(update_fields=['available'])
 
-            print(f'=== TOGGLE /api/doctors/{instance.id}/ available={new_val} ===')
+            logger.info('Doctor %s availability set to %s', instance.id, new_val)
             return Response(DoctorSerializer(instance).data)
 
         # Full / partial form update (multipart FormData)
         data = self._prepare_data(incoming)
 
-        print(f'=== PATCH /api/doctors/{instance.id}/ ===')
-        print('DATA  :', dict(data))
-
         serializer = self.get_serializer(instance, data=data, partial=True)
         if not serializer.is_valid():
-            print('ERRORS:', serializer.errors)
+            logger.warning('Doctor %s update validation failed: %s', instance.id, serializer.errors)
             return Response(
                 {'message': 'Validation failed', 'errors': serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST,
