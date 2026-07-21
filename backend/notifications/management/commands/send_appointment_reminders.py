@@ -38,12 +38,21 @@ class Command(BaseCommand):
         window_start = now + timedelta(hours=1, minutes=50)
         window_end   = now + timedelta(hours=2, minutes=10)
 
+        # booking.date is a local (Asia/Kolkata) calendar date, so derive the
+        # candidate dates in the active timezone - not UTC. Using .date() on the
+        # UTC-aware window bounds makes an evening run (when the UTC date is still
+        # "yesterday") filter out appointments that fall on "tomorrow" locally.
+        candidate_dates = sorted({
+            timezone.localtime(window_start).date(),
+            timezone.localtime(window_end).date(),
+        })
+
         candidates = (
             Booking.objects
             .filter(
                 status='waiting',
                 reminder_sent=False,
-                date__in=[window_start.date(), window_end.date()],
+                date__in=candidate_dates,
             )
             .select_related('user', 'doctor', 'hospital')
         )
