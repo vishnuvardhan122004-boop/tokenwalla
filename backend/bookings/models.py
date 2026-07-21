@@ -9,6 +9,7 @@ User = get_user_model()
 class Booking(models.Model):
     STATUS = [
         ('waiting',     'Waiting'),
+        ('held',        'On Hold'),
         ('in_progress', 'In Progress'),
         ('completed',   'Completed'),
         ('cancelled',   'Cancelled'),
@@ -25,6 +26,10 @@ class Booking(models.Model):
     amount       = models.IntegerField(default=0)
     queue_access = models.BooleanField(default=False)
     reminder_sent = models.BooleanField(default=False)
+    # Set True when the hospital marks the doctor unavailable — grants the
+    # patient a ONE-TIME reschedule with the ₹5 fee waived. Consumed (reset to
+    # False) once they reschedule.
+    free_reschedule = models.BooleanField(default=False)
     created      = models.DateTimeField(auto_now_add=True)
 
     class Meta:

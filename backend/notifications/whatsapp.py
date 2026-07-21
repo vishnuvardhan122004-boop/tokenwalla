@@ -111,6 +111,41 @@ def send_booking_confirmation(booking):
     )
 
 
+def send_doctor_unavailable(booking):
+    """Tell the patient their doctor is unavailable and they can reschedule free.
+
+    Template body (see notifications/WHATSAPP_TEMPLATES.md) params:
+      {{1}} patient name  {{2}} doctor  {{3}} hospital
+      {{4}} date          {{5}} slot    {{6}} token
+    """
+    from .models import WhatsAppLog
+
+    user = booking.user
+    if not getattr(user, 'whatsapp_opt_in', True):
+        return
+
+    patient_name = user.first_name or user.username
+    result = send_template(
+        to_mobile=user.mobile,
+        template_name=settings.WHATSAPP_TEMPLATE_DOCTOR_UNAVAILABLE,
+        params=[
+            patient_name,
+            booking.doctor.name,
+            booking.hospital.name,
+            str(booking.date),
+            booking.slot,
+            booking.token,
+        ],
+    )
+    WhatsAppLog.objects.create(
+        booking=booking,
+        event_type='doctor_unavailable',
+        status='sent' if result['success'] else 'failed',
+        wa_message_id=result.get('message_id') or '',
+        error=result.get('error') or '',
+    )
+
+
 def send_appointment_reminder(booking):
     from .models import WhatsAppLog
 

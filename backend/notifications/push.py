@@ -100,6 +100,35 @@ def push_to_user(user, title, body, data=None, role='patient'):
 
 # ── Event helpers used by the views ──────────────────────────────────────────
 
+def push_doctor_unavailable(booking):
+    """Patient alert when the doctor is marked unavailable — offers a free reschedule.
+
+    The `data.screen` deep-links to my-bookings; `reschedule: 'free'` tells the
+    app to open the reschedule flow with the ₹5 fee waived.
+    """
+    try:
+        push_to_user(
+            booking.user,
+            title='⚠️ Doctor unavailable',
+            body=(
+                f'Dr. {booking.doctor.name} is unavailable on {booking.date}. '
+                f'Tap to reschedule token {booking.token} for FREE.'
+            ),
+            data={
+                'screen': 'my-bookings',
+                'type': 'doctor_unavailable',
+                'reschedule': 'free',
+                'bookingId': str(booking.id),
+                'appId': f'unavail-{booking.id}',
+                'audience': 'patient',
+                'token': booking.token,
+            },
+            role='patient',
+        )
+    except Exception as exc:
+        logger.warning('[push] doctor_unavailable push failed for booking %s: %s', booking.id, exc)
+
+
 def push_booking_in_progress(booking):
     """Patient 'your turn' alert when a booking moves waiting → in_progress."""
     try:

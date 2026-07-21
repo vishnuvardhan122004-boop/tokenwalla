@@ -18,7 +18,7 @@ class BookingSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'token', 'status', 'date', 'slot', 'amount',
             'payment_id', 'order_id', 'created',
-            'queue_access', 'queue_position',
+            'queue_access', 'queue_position', 'free_reschedule',
             'doctor', 'doctor_name', 'hospital', 'hospital_name', 'hospital_mobile',
             'user', 'user_name', 'patient_name', 'user_mobile',
         ]

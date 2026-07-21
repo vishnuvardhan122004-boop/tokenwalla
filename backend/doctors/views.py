@@ -11,8 +11,53 @@ from .serializers import DoctorSerializer
 from tokenwalla.utils import is_slot_bookable
 
 import logging
+import threading
 
 logger = logging.getLogger('tokenwalla')
+
+
+def _notify_doctor_unavailable(doctor_id):
+    """Flag today's active bookings for a just-unavailable doctor as eligible for
+    a free reschedule, and notify each patient (push + WhatsApp) off-thread.
+
+    Runs in a background thread so the availability toggle responds instantly and
+    slow external APIs (push/WhatsApp) can never block or fail it. Best-effort.
+    """
+    def _run():
+        from django.db import connection
+        from django.utils import timezone
+        from bookings.models import Booking
+        from notifications.push import push_doctor_unavailable
+        from notifications.whatsapp import send_doctor_unavailable
+        try:
+            today = timezone.localdate()
+            affected = list(
+                Booking.objects
+                .filter(doctor_id=doctor_id, date=today, status__in=['waiting', 'held'])
+                .select_related('user', 'doctor', 'hospital')
+            )
+            if not affected:
+                return
+            # Flag them all first so the free-reschedule CTA is live even if a
+            # notification send is slow or fails.
+            Booking.objects.filter(id__in=[b.id for b in affected]).update(free_reschedule=True)
+            for b in affected:
+                b.free_reschedule = True
+                try:
+                    push_doctor_unavailable(b)
+                except Exception as exc:
+                    logger.warning('doctor_unavailable push failed for booking %s: %s', b.id, exc)
+                try:
+                    send_doctor_unavailable(b)
+                except Exception as exc:
+                    logger.warning('doctor_unavailable WhatsApp failed for booking %s: %s', b.id, exc)
+            logger.info('Doctor %s unavailable — notified %d patient(s) for %s', doctor_id, len(affected), today)
+        except Exception as exc:
+            logger.exception('doctor_unavailable dispatch failed for doctor %s: %s', doctor_id, exc)
+        finally:
+            connection.close()
+
+    threading.Thread(target=_run, name=f'doc-unavail-{doctor_id}', daemon=True).start()
 
 
 class DoctorViewSet(viewsets.ModelViewSet):
@@ -266,10 +311,18 @@ class DoctorViewSet(viewsets.ModelViewSet):
                 if isinstance(raw_val, bool)
                 else str(raw_val).lower() not in ('false', '0', 'no', '')
             )
+            was_available = instance.available
             instance.available = new_val
             instance.save(update_fields=['available'])
 
             logger.info('Doctor %s availability set to %s', instance.id, new_val)
+
+            # Became unavailable → notify today's booked patients + offer a free
+            # reschedule. Only on a true→false transition, so re-saving 'off'
+            # doesn't re-notify.
+            if was_available and not new_val:
+                _notify_doctor_unavailable(instance.id)
+
             return Response(DoctorSerializer(instance).data)
 
         # Full / partial form update (multipart FormData)

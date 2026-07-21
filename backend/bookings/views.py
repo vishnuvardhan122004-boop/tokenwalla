@@ -69,6 +69,10 @@ class HospitalQueueView(APIView):
                 base.filter(status='waiting').order_by('created'),
                 many=True, context={'request': request}
             ).data,
+            'onHold':     BookingSerializer(
+                base.filter(status='held').order_by('created'),
+                many=True, context={'request': request}
+            ).data,
             'inProgress': BookingSerializer(
                 base.filter(status='in_progress').order_by('created'),
                 many=True, context={'request': request}
@@ -157,6 +161,41 @@ class NoShowView(APIView):
         return Response(BookingSerializer(booking, context={'request': request}).data)
 
 
+# ── Hospital: hold / resume a waiting patient (hospital staff only) ───────────
+class HoldBookingView(APIView):
+    """
+    Toggle a patient between the active queue and 'On Hold'.
+
+    Use when a waiting patient isn't ready (stepped out) — Hold skips them so
+    staff can call the next person, without cancelling the booking. Resume puts
+    them back in the waiting line. This is NOT a no-show (which cancels).
+        waiting -> held   (hold / skip)
+        held    -> waiting (resume)
+    """
+    permission_classes = [IsAuthenticated, IsHospitalStaff]
+
+    def patch(self, request, pk):
+        booking          = get_object_or_404(Booking, pk=pk)
+        user_hospital_id = _get_user_hospital_id(request.user)
+
+        if user_hospital_id != booking.hospital_id and request.user.role != 'admin':
+            return Response({'message': 'Access denied.'}, status=403)
+
+        if booking.status == 'waiting':
+            booking.status = 'held'
+        elif booking.status == 'held':
+            booking.status = 'waiting'
+        else:
+            return Response(
+                {'message': f'Cannot hold/resume a booking with status "{booking.status}".'},
+                status=400
+            )
+
+        booking.save(update_fields=['status'])
+        logger.info('Booking %s set to %s by hospital %s', pk, booking.status, user_hospital_id)
+        return Response(BookingSerializer(booking, context={'request': request}).data)
+
+
 # ── Admin: all bookings (admin only) ─────────────────────────────────────────
 class AllBookingsView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
@@ -225,8 +264,15 @@ class CancelBookingView(APIView):
         })
 
 
-# ── Reschedule booking ────────────────────────────────────────────────────────
+# ── Reschedule booking (FREE path) ────────────────────────────────────────────
 class RescheduleBookingView(APIView):
+    """
+    Free, no-payment reschedule. Only permitted when the booking was flagged
+    `free_reschedule` — which happens when the hospital marks the doctor
+    unavailable (see doctors.views.DoctorViewSet.partial_update). Every other
+    reschedule goes through the paid ₹5 flow (payments._handle_reschedule), so
+    this endpoint can't be used to dodge that fee. The flag is consumed on use.
+    """
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, pk):
@@ -236,6 +282,12 @@ class RescheduleBookingView(APIView):
             return Response(
                 {'message': 'Only waiting bookings can be rescheduled.'},
                 status=400
+            )
+
+        if not booking.free_reschedule:
+            return Response(
+                {'message': 'This booking is not eligible for a free reschedule.'},
+                status=403
             )
 
         new_date = request.data.get('date', '').strip()
@@ -255,7 +307,9 @@ class RescheduleBookingView(APIView):
 
         booking.date = new_date
         booking.slot = new_slot
-        booking.save(update_fields=['date', 'slot'])
+        booking.free_reschedule = False  # one-time waiver, consumed
+        booking.save(update_fields=['date', 'slot', 'free_reschedule'])
+        logger.info('Booking %s free-rescheduled by user %s', pk, request.user.id)
 
         return Response({
             'message': 'Appointment rescheduled successfully.',
