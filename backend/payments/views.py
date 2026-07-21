@@ -43,12 +43,13 @@ import hmac as hmac_lib
 import hashlib
 import uuid
 import logging
+import threading
 
 from datetime import datetime
 from notifications.whatsapp import send_booking_confirmation
 from notifications.push import push_new_booking_to_hospital
 from django.conf import settings
-from django.db import transaction, IntegrityError
+from django.db import transaction, IntegrityError, connection
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -80,6 +81,40 @@ def _generate_token() -> str:
         if not Booking.objects.filter(token=token).exists():
             return token
     raise RuntimeError('Could not generate a unique token after 5 attempts.')
+
+
+def _dispatch_booking_notifications(booking):
+    """Fire WhatsApp + hospital-push alerts on a background thread.
+
+    These are external HTTP calls (up to 10s each). Running them synchronously
+    inside the verify request made the whole response take ~20s+, so the mobile
+    client (25s axios timeout) — or Railway's proxy — dropped the connection and
+    the patient saw "Network Error" AFTER a successful payment. Worse, when they
+    lived inside transaction.atomic() a hang could roll the booking back even
+    though money was taken.
+
+    The booking is already committed by the time this runs, so both alerts are
+    best-effort: any failure is logged and never surfaces to the user.
+    """
+    def _run():
+        try:
+            try:
+                send_booking_confirmation(booking)
+            except Exception as exc:
+                logger.warning('WhatsApp confirmation send failed for booking %s: %s', booking.id, exc)
+            try:
+                push_new_booking_to_hospital(booking)
+            except Exception as exc:
+                logger.warning('Push new-booking alert failed for booking %s: %s', booking.id, exc)
+        finally:
+            # Threads get their own DB connection; close it so we don't leak.
+            connection.close()
+
+    threading.Thread(
+        target=_run,
+        name=f'booking-notify-{booking.id}',
+        daemon=True,
+    ).start()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -273,17 +308,12 @@ class VerifyPaymentView(APIView):
                     amount     = amount_inr,
                     status     = 'success',
                 )
-                try:
-                    send_booking_confirmation(new_booking)
-                except Exception as exc:
-                    logger.warning('WhatsApp confirmation send failed for booking %s: %s', new_booking.id, exc)
 
-                # Push the hospital a new-booking alert (independent of the
-                # dashboard being open). Best-effort — never blocks the booking.
-                try:
-                    push_new_booking_to_hospital(new_booking)
-                except Exception as exc:
-                    logger.warning('Push new-booking alert failed for booking %s: %s', new_booking.id, exc)
+            # Notifications fire only AFTER the booking + payment are durably
+            # committed, and on a background thread so slow external APIs
+            # (WhatsApp/push, up to 10s each) never delay this response or roll
+            # the booking back. Fixes the "Network Error after payment" timeout.
+            _dispatch_booking_notifications(new_booking)
 
             logger.info(
                 'Booking %s created for user %s doctor %s',
