@@ -3,6 +3,12 @@ import { Link } from 'react-router';
 import API from '../services/api';
 import SEO from './SEO';
 
+// Test hospitals are named like "[TEST] Demo Hospital" — kept out of the
+// public doctor list (mirrors the app's TEST_HOSPITAL_MARKER).
+function isTestHospital(hospitalName) {
+  return !!hospitalName && hospitalName.toUpperCase().includes('[TEST]');
+}
+
 function SkeletonCard() {
   return (
     <div style={{ background: '#fff', border: '1px solid var(--blue-100)', borderRadius: 18, overflow: 'hidden' }}>
@@ -65,11 +71,13 @@ export default function AllDoctor() {
   useEffect(() => {
     setLoading(true);
     API.get('/doctors/')
-  .then(({ data }) => {
-    const doctors = Array.isArray(data) ? data : (data.results || []);
-    setDoctors(doctors);
-    setCities([...new Set(doctors.map(d => d.city).filter(Boolean))]);
-  })
+      .then(({ data }) => {
+        const all  = Array.isArray(data) ? data : (data.results || []);
+        // Hide test hospitals (name contains "[TEST]") from the public list.
+        const list = all.filter(d => !isTestHospital(d.hospital_name));
+        setDoctors(list);
+        setCities([...new Set(list.map(d => d.city).filter(Boolean))]);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
