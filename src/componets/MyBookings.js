@@ -144,6 +144,26 @@ export default function MyBookings() {
     if (!newDate) { showToast('Please select a new date', 'error'); return; }
     if (!newSlot) { showToast('Please select a time slot', 'error'); return; }
 
+    // ── Free path: hospital marked the doctor unavailable, so the ₹5 fee is
+    // waived. Skip Razorpay and call the no-payment reschedule endpoint. ──
+    if (rescheduleBooking.free_reschedule) {
+      setRescheduling(true);
+      try {
+        await API.patch(`/bookings/reschedule/${rescheduleBooking.id}/`, {
+          date: newDate,
+          slot: newSlot,
+        });
+        setRescheduleBooking(null);
+        await fetchBookings(true);
+        showToast('Appointment rescheduled at no charge.');
+      } catch (err) {
+        showToast(err?.response?.data?.message || 'Could not reschedule. Please try again.', 'error');
+      } finally {
+        setRescheduling(false);
+      }
+      return;
+    }
+
     setRescheduling(true);
     try {
       const loaded = await loadRazorpayScript();
@@ -285,6 +305,9 @@ export default function MyBookings() {
         .mb-cancel-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .mb-reschedule-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--blue-50); border: 1px solid var(--blue-200); border-radius: 9px; padding: 8px 16px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--blue-700); cursor: pointer; transition: all 0.15s; }
         .mb-reschedule-btn:hover { background: var(--blue-100); border-color: var(--blue-400); }
+        .mb-reschedule-btn.free { background: var(--color-success-bg); border-color: var(--color-success-border); color: var(--color-success-text); }
+        .mb-reschedule-btn.free:hover { background: #cdeed7; border-color: var(--color-success-text); }
+        .mb-unavail-banner { border-top: 1px solid var(--blue-50); padding: 12px 20px; background: #FFF6E5; color: #8A6100; font-size: 13px; font-weight: 600; }
         .mb-empty { text-align: center; padding: 80px 20px; }
         .mb-empty-icon { font-size: 4rem; opacity: 0.35; margin-bottom: 16px; display: block; }
         .mb-empty-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.3rem; font-weight: 700; color: var(--gray-500); margin-bottom: 8px; }
@@ -434,14 +457,30 @@ export default function MyBookings() {
                       </div>
                     )}
 
+                    {/* ── DOCTOR-UNAVAILABLE BANNER ── */}
+                    {booking.status === 'waiting' && booking.free_reschedule && (
+                      <div className="mb-unavail-banner">
+                        ⚠️ Dr. {booking.doctor_name} is unavailable. Reschedule below at no charge.
+                      </div>
+                    )}
+
                     {/* ── RESCHEDULE PANEL ── */}
                     {booking.status === 'waiting' && (
                       <div className="mb-action-panel">
                         <div>
                           <div className="mb-action-title">📅 Reschedule Appointment</div>
-                          <div className="mb-action-desc">Change your date or time slot — ₹{RESCHEDULE_FEE} fee</div>
+                          <div className="mb-action-desc">
+                            {booking.free_reschedule
+                              ? 'Change your date or time slot — no charge'
+                              : `Change your date or time slot — ₹${RESCHEDULE_FEE} fee`}
+                          </div>
                         </div>
-                        <button className="mb-reschedule-btn" onClick={() => openReschedule(booking)}>Reschedule →</button>
+                        <button
+                          className={`mb-reschedule-btn ${booking.free_reschedule ? 'free' : ''}`}
+                          onClick={() => openReschedule(booking)}
+                        >
+                          {booking.free_reschedule ? 'Reschedule FREE →' : 'Reschedule →'}
+                        </button>
                       </div>
                     )}
 
@@ -520,7 +559,9 @@ export default function MyBookings() {
             )}
 
             <div className="mb-fee-note">
-              💡 A ₹{RESCHEDULE_FEE} reschedule fee applies. Razorpay will open after you confirm.
+              {rescheduleBooking.free_reschedule
+                ? '✅ Free reschedule — your doctor was marked unavailable, so there is no charge.'
+                : `💡 A ₹${RESCHEDULE_FEE} reschedule fee applies. Razorpay will open after you confirm.`}
             </div>
 
             <div className="mb-modal-actions">
@@ -536,7 +577,9 @@ export default function MyBookings() {
                   ? '⏳ Opening Razorpay…'
                   : rescheduling
                     ? '⏳ Processing…'
-                    : `💳 Pay ₹${RESCHEDULE_FEE} & Reschedule`}
+                    : rescheduleBooking.free_reschedule
+                      ? '✅ Confirm Reschedule (FREE)'
+                      : `💳 Pay ₹${RESCHEDULE_FEE} & Reschedule`}
               </button>
             </div>
           </div>

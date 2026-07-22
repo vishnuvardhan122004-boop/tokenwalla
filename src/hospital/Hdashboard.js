@@ -57,7 +57,11 @@ const Hdashboard = () => {
 
   const [hospital,             setHospital]             = useState(null);
   const [activeTab,            setActiveTab]            = useState("queue");
-  const [queue,                setQueue]                = useState({ waiting: [], inProgress: [], completed: [] });
+  // Which day's bookings the queue shows. The queue endpoint returns bookings
+  // from ALL dates mixed together, so staff need to split them by day.
+  const [dayFilter,            setDayFilter]            = useState("today");
+  const [tokenDetail,          setTokenDetail]          = useState(null);
+  const [queue,                setQueue]                = useState({ waiting: [], onHold: [], inProgress: [], completed: [] });
   const [doctors,              setDoctors]              = useState([]);
   const [loading,              setLoading]              = useState(false);
   const [showForm,             setShowForm]             = useState(false);
@@ -97,6 +101,7 @@ const Hdashboard = () => {
       const { data } = await API.get(`/bookings/queue/${hospital.id}/`);
       setQueue({
         waiting:    data.waiting    || [],
+        onHold:     data.onHold     || [],
         inProgress: data.inProgress || [],
         completed:  data.completed  || [],
       });
@@ -136,6 +141,22 @@ const Hdashboard = () => {
   const handleComplete = async (id) => {
     try { await API.patch(`/bookings/complete/${id}/`); loadQueue(); }
     catch (err) { showToast(err?.response?.data?.message || "Failed to complete booking", "error"); }
+  };
+  // Skip a patient who isn't ready without cancelling them. The same endpoint
+  // toggles: waiting → held (hold), held → waiting (resume).
+  const handleHold    = async (id) => {
+    try { await API.patch(`/bookings/hold/${id}/`); loadQueue(); }
+    catch (err) { showToast(err?.response?.data?.message || "Failed to update hold status", "error"); }
+  };
+  // Patient never turned up — drops them from the queue (can't be undone here).
+  const handleNoShow  = async (id) => {
+    if (!window.confirm("Mark this patient as no-show?\nThey will be removed from the queue.")) return;
+    try {
+      await API.patch(`/bookings/no-show/${id}/`);
+      setTokenDetail(null);
+      loadQueue();
+      showToast("Marked as no-show.");
+    } catch (err) { showToast(err?.response?.data?.message || "Failed to mark no-show", "error"); }
   };
 
   // ── Toggle Availability ─────────────────────────────────────────────────────
@@ -303,7 +324,37 @@ const Hdashboard = () => {
   };
 
   const logout      = () => logoutUser();
-  const totalToday  = queue.waiting.length + queue.inProgress.length + queue.completed.length;
+
+  // ── Day filtering (Today / Tomorrow / All) ──────────────────────────────────
+  // Local calendar dates as "YYYY-MM-DD" to match the backend's date strings.
+  const toYMD       = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const todayYMD    = toYMD(new Date());
+  const tomorrowYMD = toYMD(new Date(Date.now() + 86400000));
+
+  const dayLabelFor = (date) => {
+    if (!date) return "No date";
+    if (date === todayYMD)    return "Today";
+    if (date === tomorrowYMD) return "Tomorrow";
+    return date;
+  };
+  const matchesDay  = (p) => dayFilter === "all"
+    ? true
+    : (p.date || "") === (dayFilter === "today" ? todayYMD : tomorrowYMD);
+
+  const countForDay = (day) => {
+    const all = [...queue.waiting, ...queue.onHold, ...queue.inProgress, ...queue.completed];
+    if (day === "all") return all.length;
+    const target = day === "today" ? todayYMD : tomorrowYMD;
+    return all.filter(p => (p.date || "") === target).length;
+  };
+
+  const fWaiting    = queue.waiting.filter(matchesDay);
+  const fOnHold     = queue.onHold.filter(matchesDay);
+  const fInProgress = queue.inProgress.filter(matchesDay);
+  const fCompleted  = queue.completed.filter(matchesDay);
+  const filteredTotal = fWaiting.length + fOnHold.length + fInProgress.length + fCompleted.length;
+  const dayWord     = dayFilter === "all" ? "All" : dayFilter === "today" ? "Today" : "Tomorrow";
+
   const FieldError  = ({ msg }) => msg
     ? <small style={{ color: '#dc3545', display: 'block', marginTop: 3 }}>⚠️ {msg}</small>
     : null;
@@ -327,6 +378,36 @@ const Hdashboard = () => {
       )}
       <style>{`@keyframes fadeInToast{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}`}</style>
 
+      {/* Token detail popup — handy for reading the token aloud or confirming
+          the patient at the counter. */}
+      {tokenDetail && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setTokenDetail(null); }}
+          style={{
+            position: "fixed", inset: 0, zIndex: 9998,
+            background: "rgba(0,0,0,0.45)", display: "flex",
+            alignItems: "center", justifyContent: "center", padding: 16,
+          }}
+        >
+          <div className="card border-0 shadow-lg p-4" style={{ width: "100%", maxWidth: 360, borderRadius: 16 }}>
+            <div className="d-flex justify-content-between align-items-start mb-3">
+              <h5 className="fw-bold mb-0 text-primary">🎫 Token {tokenDetail.token ?? "—"}</h5>
+              <button className="btn-close" onClick={() => setTokenDetail(null)} />
+            </div>
+            <div className="small mb-1"><span className="text-muted">Patient:</span> <strong>{tokenDetail.user_name || "Patient"}</strong></div>
+            {tokenDetail.user_mobile && <div className="small mb-1"><span className="text-muted">Mobile:</span> {tokenDetail.user_mobile}</div>}
+            {tokenDetail.doctor_name && <div className="small mb-1"><span className="text-muted">Doctor:</span> {tokenDetail.doctor_name}</div>}
+            {tokenDetail.slot && <div className="small mb-1"><span className="text-muted">Slot:</span> {tokenDetail.slot}</div>}
+            <div className="small mb-3"><span className="text-muted">Day:</span> {dayLabelFor(tokenDetail.date)}</div>
+            {tokenDetail.status !== "completed" && (
+              <button className="btn btn-outline-danger btn-sm w-100" onClick={() => handleNoShow(tokenDetail.id)}>
+                🚫 Mark as No-show
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Navbar */}
       <nav className="navbar bg-white shadow-sm px-4 py-2">
         <div className="d-flex align-items-center gap-2">
@@ -344,10 +425,10 @@ const Hdashboard = () => {
         {/* Stats */}
         <div className="row g-3 mb-4">
           {[
-            { label: "Total Today",  val: totalToday,               color: "primary" },
-            { label: "Waiting",      val: queue.waiting.length,     color: "warning" },
-            { label: "In Progress",  val: queue.inProgress.length,  color: "info"    },
-            { label: "Completed",    val: queue.completed.length,   color: "success" },
+            { label: `${dayWord} Total`, val: filteredTotal,      color: "primary" },
+            { label: "Waiting",      val: fWaiting.length,        color: "warning" },
+            { label: "In Progress",  val: fInProgress.length,     color: "info"    },
+            { label: "Completed",    val: fCompleted.length,      color: "success" },
           ].map(({ label, val, color }) => (
             <div key={label} className="col-6 col-md-3">
               <div className="card shadow-sm p-3 text-center border-0">
@@ -388,69 +469,166 @@ const Hdashboard = () => {
 
         {/* ── Queue Tab ── */}
         {activeTab === "queue" && (
-          <div className="row g-3">
-            {[
-              {
-                title: "⏳ Waiting",
-                color: "warning",
-                items: queue.waiting,
-                btn:   { label: "Call Patient",  action: handleCall,     cls: "btn-primary" },
-              },
-              {
-                title: "🔄 In Progress",
-                color: "info",
-                items: queue.inProgress,
-                btn:   { label: "Mark Complete", action: handleComplete, cls: "btn-success" },
-              },
-              {
-                title: "✅ Completed",
-                color: "success",
-                items: queue.completed,
-                btn:   null,
-              },
-            ].map(({ title, color, items, btn }) => (
-              <div key={title} className="col-md-4">
+          <>
+            {/* Day filter: Today / Tomorrow / All — the queue mixes dates, so
+                split them for clarity. Each pill shows its count. */}
+            <div className="d-flex flex-wrap gap-2 mb-3">
+              {[
+                { key: "today",    label: "📅 Today",    cls: "primary" },
+                { key: "tomorrow", label: "⏭️ Tomorrow", cls: "info"    },
+                { key: "all",      label: "🗓️ All",      cls: "secondary" },
+              ].map(({ key, label, cls }) => {
+                const active = dayFilter === key;
+                return (
+                  <button
+                    key={key}
+                    className={`btn btn-sm ${active ? `btn-${cls}` : `btn-outline-${cls}`}`}
+                    onClick={() => setDayFilter(key)}
+                  >
+                    {label}
+                    <span className={`badge ms-2 ${active ? "bg-white text-dark" : `bg-${cls}`} ${active ? "" : "text-white"}`}>
+                      {countForDay(key)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="row g-3">
+              {/* ── Waiting ── */}
+              <div className="col-md-4">
                 <div className="card border-0 shadow-sm h-100">
-                  <div className={`card-header bg-${color} text-white fw-bold`}>
-                    {title} ({items.length})
+                  <div className="card-header bg-warning text-white fw-bold">
+                    ⏳ Waiting ({fWaiting.length})
                   </div>
                   <div className="card-body p-2">
-                    {items.length === 0 && (
+                    {fWaiting.length === 0 && (
                       <p className="text-muted text-center small mt-3">No patients</p>
                     )}
-                    {items.map(p => (
+                    {fWaiting.map(p => (
                       <div key={p.id} className="border rounded p-2 mb-2 bg-light">
                         <div className="fw-semibold">{p.user_name || "Patient"}</div>
                         <div className="small text-muted">📞 {p.user_mobile || "N/A"}</div>
                         <div className="small text-muted">🩺 {p.doctor_name}</div>
-                        <div className="small text-muted">🕐 {p.slot}</div>
-                        <div className="small text-primary fw-bold">Token: {p.token}</div>
-
-                        {/* Action button (Call / Mark Complete) */}
-                        {btn && (
-                          <button
-                            className={`btn ${btn.cls} btn-sm w-100 mt-2`}
-                            onClick={() => btn.action(p.id)}
-                          >
-                            {btn.label}
-                          </button>
-                        )}
-
-                        {/* ── QR Scan shortcut button ── */}
+                        <div className="small text-muted">🕐 {p.slot}  ·  📅 {dayLabelFor(p.date)}</div>
                         <button
-                          className="btn btn-outline-secondary btn-sm w-100 mt-1"
-                          onClick={() => setActiveTab("scanner")}
-                          title="Open QR Scanner"
+                          className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
+                          onClick={() => setTokenDetail(p)}
+                          title="Tap for details"
                         >
-                          📷 Scan QR
+                          🎫 Token: {p.token}
+                        </button>
+                        <button className="btn btn-primary btn-sm w-100 mt-2" onClick={() => handleCall(p.id)}>
+                          Call Patient
+                        </button>
+                        <div className="d-flex gap-1 mt-1">
+                          <button className="btn btn-outline-secondary btn-sm flex-grow-1" onClick={() => handleHold(p.id)} title="Skip to next patient">
+                            ⏸ Hold
+                          </button>
+                          <button className="btn btn-outline-secondary btn-sm flex-grow-1" onClick={() => setActiveTab("scanner")} title="Open QR Scanner">
+                            📷 Scan
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── In Progress ── */}
+              <div className="col-md-4">
+                <div className="card border-0 shadow-sm h-100">
+                  <div className="card-header bg-info text-white fw-bold">
+                    🔄 In Progress ({fInProgress.length})
+                  </div>
+                  <div className="card-body p-2">
+                    {fInProgress.length === 0 && (
+                      <p className="text-muted text-center small mt-3">No patients</p>
+                    )}
+                    {fInProgress.map(p => (
+                      <div key={p.id} className="border rounded p-2 mb-2 bg-light">
+                        <div className="fw-semibold">{p.user_name || "Patient"}</div>
+                        <div className="small text-muted">🩺 {p.doctor_name}</div>
+                        <div className="small text-muted">🕐 {p.slot}  ·  📅 {dayLabelFor(p.date)}</div>
+                        <button
+                          className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
+                          onClick={() => setTokenDetail(p)}
+                          title="Tap for details"
+                        >
+                          🎫 Token: {p.token}
+                        </button>
+                        <button className="btn btn-success btn-sm w-100 mt-2" onClick={() => handleComplete(p.id)}>
+                          Mark Complete
                         </button>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+
+              {/* ── Completed ── */}
+              <div className="col-md-4">
+                <div className="card border-0 shadow-sm h-100">
+                  <div className="card-header bg-success text-white fw-bold">
+                    ✅ Completed ({fCompleted.length})
+                  </div>
+                  <div className="card-body p-2">
+                    {fCompleted.length === 0 && (
+                      <p className="text-muted text-center small mt-3">No patients</p>
+                    )}
+                    {fCompleted.map(p => (
+                      <div key={p.id} className="border rounded p-2 mb-2 bg-light">
+                        <div className="fw-semibold">{p.user_name || "Patient"}</div>
+                        <div className="small text-muted">🩺 {p.doctor_name}</div>
+                        <div className="small text-muted">🕐 {p.slot}  ·  📅 {dayLabelFor(p.date)}</div>
+                        <button
+                          className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
+                          onClick={() => setTokenDetail(p)}
+                          title="Tap for details"
+                        >
+                          🎫 Token: {p.token}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── On Hold (only when someone is held) ── */}
+              {fOnHold.length > 0 && (
+                <div className="col-12">
+                  <div className="card border-0 shadow-sm">
+                    <div className="card-header bg-secondary text-white fw-bold">
+                      ⏸ On Hold ({fOnHold.length})
+                    </div>
+                    <div className="card-body p-2">
+                      <div className="row g-2">
+                        {fOnHold.map(p => (
+                          <div key={p.id} className="col-md-4">
+                            <div className="border rounded p-2 bg-light h-100">
+                              <div className="fw-semibold">{p.user_name || "Patient"}</div>
+                              <div className="small text-muted">🩺 {p.doctor_name}</div>
+                              <div className="small text-muted">🕐 {p.slot}  ·  📅 {dayLabelFor(p.date)}</div>
+                              <button
+                                className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
+                                onClick={() => setTokenDetail(p)}
+                                title="Tap for details"
+                              >
+                                🎫 Token: {p.token}
+                              </button>
+                              <button className="btn btn-outline-success btn-sm w-100 mt-2" onClick={() => handleHold(p.id)}>
+                                ▶ Resume
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         {/* ── Doctors Tab ── */}
