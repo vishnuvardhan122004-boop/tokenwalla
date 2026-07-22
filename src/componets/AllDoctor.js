@@ -3,8 +3,10 @@ import { Link } from 'react-router';
 import API from '../services/api';
 import SEO from './SEO';
 
-// Test hospitals are named like "[TEST] Demo Hospital" — kept out of the
-// public doctor list (mirrors the app's TEST_HOSPITAL_MARKER).
+// Test hospitals are named like "[TEST] Demo Hospital". They're hidden from
+// the public doctor list in production, but kept visible in local dev builds
+// so a tester can still use them (mirrors the app's __DEV__ / TEST marker).
+const HIDE_TEST_HOSPITALS = process.env.NODE_ENV === 'production';
 function isTestHospital(hospitalName) {
   return !!hospitalName && hospitalName.toUpperCase().includes('[TEST]');
 }
@@ -73,8 +75,10 @@ export default function AllDoctor() {
     API.get('/doctors/')
       .then(({ data }) => {
         const all  = Array.isArray(data) ? data : (data.results || []);
-        // Hide test hospitals (name contains "[TEST]") from the public list.
-        const list = all.filter(d => !isTestHospital(d.hospital_name));
+        // Hide test hospitals from the public list (production only).
+        const list = HIDE_TEST_HOSPITALS
+          ? all.filter(d => !isTestHospital(d.hospital_name))
+          : all;
         setDoctors(list);
         setCities([...new Set(list.map(d => d.city).filter(Boolean))]);
       })
