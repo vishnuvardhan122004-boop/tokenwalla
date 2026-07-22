@@ -416,6 +416,7 @@ const Hdashboard = () => {
         </div>
         <div className="d-flex align-items-center gap-3">
           <span className="text-muted small">🏥 {hospital?.name}</span>
+          <button className="btn btn-outline-primary btn-sm" onClick={() => navigate("/Hprofile")}>👤 Profile</button>
           <button className="btn btn-outline-danger btn-sm" onClick={logout}>Logout</button>
         </div>
       </nav>

@@ -29,15 +29,61 @@ function getNext7Days() {
 
 const DAYS = getNext7Days();
 
+// Is the hospital open right now? Returns true/false, or null if hours unknown.
+// Handles overnight ranges (e.g. 22:00 – 06:00).
+function hmToMinutes(hm) {
+  if (!hm || typeof hm !== 'string') return null;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hm.trim());
+  if (!m) return null;
+  const h = Number(m[1]), min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+function isOpenNow(open, close, now = new Date()) {
+  const o = hmToMinutes(open);
+  const c = hmToMinutes(close);
+  if (o == null || c == null) return null;
+  const cur = now.getHours() * 60 + now.getMinutes();
+  return o <= c ? (cur >= o && cur < c) : (cur >= o || cur < c);
+}
+
 const PLANS = [
   { key: 'queue', name: 'Queue View', desc: 'Token + live queue position tracking', price: 15, fee: 1500, popular: true },
 ];
+
+const socialBtn = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  background: '#EAF3FF', border: '1px solid #cfe2f3', color: '#185FA5',
+  borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 600, textDecoration: 'none',
+};
+const servicesLabel = {
+  fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: 1, marginBottom: 8, marginTop: 4,
+};
+const mapBtn = {
+  display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8,
+  background: '#185FA5', color: '#fff', borderRadius: 10,
+  padding: '9px 16px', fontSize: 13, fontWeight: 700, textDecoration: 'none',
+};
+
+// Build a Google Maps URL for a hospital. Prefers exact coordinates (from the
+// location autocomplete); else an existing maps link; else a name/location
+// search query so a landmark/address still opens the right place.
+function mapUrl(location, name, lat, lng) {
+  if (typeof lat === 'number' && typeof lng === 'number') {
+    return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  }
+  const loc = String(location || '').trim();
+  if (/^https?:\/\//i.test(loc)) return loc;
+  const q = encodeURIComponent([name, loc].filter(Boolean).join(' '));
+  return `https://www.google.com/maps/search/?api=1&query=${q}`;
+}
 
 export default function DoctorDetails() {
   const { id }   = useParams();
   const navigate = useNavigate();
 
   const [doctor,       setDoctor]       = useState(null);
+  const [hospitalInfo, setHospitalInfo] = useState(null);
   const [loading,      setLoading]      = useState(true);
   const [user,         setUser]         = useState(null);
   const [slotAvail,    setSlotAvail]    = useState({});   // { "09:00 AM": { booked, max, full } }
@@ -54,8 +100,18 @@ export default function DoctorDetails() {
 
   useEffect(() => {
     setLoading(true);
+    setHospitalInfo(null);
     API.get(`/doctors/${id}/`)
-      .then(({ data }) => setDoctor(data))
+      .then(({ data }) => {
+        setDoctor(data);
+        // Fetch the hospital for announcement, about, hours, socials,
+        // services & gallery — the doctor payload doesn't include them.
+        if (data?.hospital) {
+          API.get(`/hospitals/${data.hospital}/`)
+            .then(({ data: h }) => setHospitalInfo(h))
+            .catch(() => {});
+        }
+      })
       .catch(() => navigate('/alldoctor'))
       .finally(() => setLoading(false));
   }, [id, navigate]);
@@ -748,15 +804,19 @@ export default function DoctorDetails() {
                 </span>
               </div>
               <div className="dd-hospital-name">🏥 {doctor.hospital_name}</div>
-              {doctor.hospital_location && (
-                <div className="dd-hospital-name">
-                  📍 {/^https?:\/\//i.test(doctor.hospital_location)
-                    ? <a href={doctor.hospital_location} target="_blank" rel="noreferrer"
-                         style={{ color: '#185FA5', fontWeight: 600, textDecoration: 'none' }}>
-                        View on map →
-                      </a>
-                    : doctor.hospital_location}
-                </div>
+              {/* Show the landmark/address text when it isn't a bare link… */}
+              {doctor.hospital_location && !/^https?:\/\//i.test(doctor.hospital_location) && (
+                <div className="dd-hospital-name">📍 {doctor.hospital_location}</div>
+              )}
+              {/* …and always give one clear button to open it on the map. */}
+              {(doctor.hospital_location || doctor.hospital_address) && (
+                <a
+                  href={mapUrl(doctor.hospital_location || doctor.hospital_address, doctor.hospital_name, hospitalInfo?.latitude, hospitalInfo?.longitude)}
+                  target="_blank" rel="noreferrer"
+                  style={mapBtn}
+                >
+                  📍 View on Map
+                </a>
               )}
             </div>
           </div>
@@ -774,6 +834,87 @@ export default function DoctorDetails() {
               </div>
             ))}
           </div>
+
+          {/* ── HOSPITAL ANNOUNCEMENT ── */}
+          {hospitalInfo?.announcement && (
+            <div style={{
+              display: 'flex', gap: 10, alignItems: 'flex-start',
+              background: '#FFF6E5', border: '1px solid #F0D080', color: '#8A6100',
+              borderRadius: 12, padding: '12px 16px', margin: '0 0 16px', fontSize: 14, fontWeight: 500,
+            }}>
+              <span style={{ fontSize: 16 }}>📢</span>
+              <span>{hospitalInfo.announcement}</span>
+            </div>
+          )}
+
+          {/* ── ABOUT THE HOSPITAL ── */}
+          {hospitalInfo && (hospitalInfo.description || hospitalInfo.open_time || hospitalInfo.instagram || hospitalInfo.youtube || hospitalInfo.facebook || (hospitalInfo.services?.length > 0) || (hospitalInfo.gallery?.length > 0)) && (() => {
+            const openNow = isOpenNow(hospitalInfo.open_time, hospitalInfo.close_time);
+            const validImg = (u) => u && String(u).startsWith('http') && !String(u).includes('placehold');
+            return (
+              <div className="dd-block" style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {validImg(hospitalInfo.logo) && (
+                      <img src={hospitalInfo.logo} alt="Logo" style={{ width: 38, height: 38, borderRadius: 10, objectFit: 'cover', border: '1px solid #cfe2f3' }} />
+                    )}
+                    <div className="dd-block-title" style={{ marginBottom: 0 }}>
+                      <div className="dd-block-title-icon">🏥</div>
+                      About the Hospital
+                    </div>
+                  </div>
+                  {openNow != null && (
+                    <span style={{
+                      fontSize: 12, fontWeight: 700, borderRadius: 100, padding: '4px 12px', whiteSpace: 'nowrap',
+                      background: openNow ? '#EAF3DE' : '#FCEBEB',
+                      color: openNow ? '#3B6D11' : '#A32D2D',
+                      border: `1px solid ${openNow ? '#97C459' : '#F09595'}`,
+                    }}>
+                      {openNow ? '🟢 Open now' : '🔴 Closed'}
+                    </span>
+                  )}
+                </div>
+
+                {hospitalInfo.open_time && hospitalInfo.close_time && (
+                  <div style={{ fontSize: 14, color: '#475569', marginBottom: 10 }}>🕐 {hospitalInfo.open_time} – {hospitalInfo.close_time}</div>
+                )}
+
+                {hospitalInfo.description && (
+                  <p style={{ fontSize: 14, color: '#334155', lineHeight: 1.55, margin: '0 0 12px' }}>{hospitalInfo.description}</p>
+                )}
+
+                {(hospitalInfo.instagram || hospitalInfo.youtube || hospitalInfo.facebook) && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                    {hospitalInfo.instagram && <a href={hospitalInfo.instagram} target="_blank" rel="noreferrer" className="dd-social-btn" style={socialBtn}>📸 Instagram</a>}
+                    {hospitalInfo.youtube   && <a href={hospitalInfo.youtube}   target="_blank" rel="noreferrer" className="dd-social-btn" style={socialBtn}>▶️ YouTube</a>}
+                    {hospitalInfo.facebook  && <a href={hospitalInfo.facebook}  target="_blank" rel="noreferrer" className="dd-social-btn" style={socialBtn}>👍 Facebook</a>}
+                  </div>
+                )}
+
+                {hospitalInfo.services?.length > 0 && (
+                  <>
+                    <div style={servicesLabel}>SERVICES</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                      {hospitalInfo.services.map(s => (
+                        <span key={s} style={{ background: '#EAF3FF', border: '1px solid #cfe2f3', color: '#185FA5', borderRadius: 100, padding: '5px 12px', fontSize: 12, fontWeight: 600 }}>{s}</span>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {hospitalInfo.gallery?.length > 0 && (
+                  <>
+                    <div style={servicesLabel}>PHOTOS</div>
+                    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
+                      {hospitalInfo.gallery.map(p => (
+                        <img key={p.id} src={p.url} alt="Facility" style={{ width: 150, height: 110, objectFit: 'cover', borderRadius: 12, border: '1px solid #e0e0e0', flexShrink: 0 }} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── MAIN LAYOUT ── */}
           <div className="dd-layout">

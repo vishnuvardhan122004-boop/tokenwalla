@@ -14,6 +14,7 @@ const STANDALONE_PATHS = [
   '/Hlogin',
   '/Husercreate',
   '/Hdashboard',
+  '/Hprofile',
   '/forgot-password',
   '/Hforgot-password',
   '/2004',

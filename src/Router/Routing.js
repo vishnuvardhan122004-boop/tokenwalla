@@ -19,6 +19,7 @@ import MyBookings     from '../componets/MyBookings';
 import HLogin      from '../hospital/Hlogin';
 import Husercreate from '../hospital/Usercreate';
 import Hdashboard  from '../hospital/Hdashboard';
+import Hprofile    from '../hospital/Hprofile';
 
 import Adashboard     from '../ADMIN/Adashboard';
 import Admin          from '../ADMIN/Admin';
@@ -84,6 +85,7 @@ const Routing = () => (
     <Route path="/Hlogin"      element={<HLogin />} />
     <Route path="/Husercreate" element={<Husercreate />} />
     <Route path="/Hdashboard"  element={<RequireHospital><Hdashboard /></RequireHospital>} />
+    <Route path="/Hprofile"    element={<RequireHospital><Hprofile /></RequireHospital>} />
 
     {/* Admin gateway — login page */}
     <Route path="/2004" element={<Admin />} />

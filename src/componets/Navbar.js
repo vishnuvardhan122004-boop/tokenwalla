@@ -172,6 +172,9 @@ export default function Navbar() {
                       <Link to="/Hdashboard" className="nav-drop-item" onClick={() => setHospDrop(false)}>
                         <div className="nav-drop-icon">🏥</div> Dashboard
                       </Link>
+                      <Link to="/Hprofile" className="nav-drop-item" onClick={() => setHospDrop(false)}>
+                        <div className="nav-drop-icon">👤</div> Profile
+                      </Link>
                       <div className="nav-drop-divider" />
                       <button className="nav-drop-item danger" onClick={logout}>
                         <div className="nav-drop-icon" style={{ background: 'var(--color-error-bg)' }}>🚪</div>

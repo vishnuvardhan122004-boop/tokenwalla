@@ -26,6 +26,41 @@ export default function AllDoctor() {
   const [specFilter, setSpecFilter] = useState('All');
   const [availOnly,  setAvailOnly]  = useState(false);
   const [cities,     setCities]     = useState([]);
+  const [locating,   setLocating]   = useState(false);
+  const [showSuggest, setShowSuggest] = useState(false);
+
+  // "Near Me" — detect the user's city from the browser and apply the city
+  // filter. Reverse-geocodes via OpenStreetMap (free, no key), then matches
+  // the detected place against the cities we actually have doctors in.
+  const detectCity = () => {
+    if (!navigator.geolocation) { alert('Location is not supported by your browser.'); return; }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res  = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`, { headers: { Accept: 'application/json' } });
+          const data = await res.json();
+          const a = data.address || {};
+          const detected = a.city || a.town || a.village || a.county || a.state_district || a.state || '';
+          if (!detected) { alert('Could not detect your city. Please pick it manually.'); return; }
+          const match = cities.find(c => c.toLowerCase() === detected.toLowerCase())
+            || cities.find(c => detected.toLowerCase().includes(c.toLowerCase()) || c.toLowerCase().includes(detected.toLowerCase()));
+          if (match) { setCity(match); }
+          else { setCity(''); setSearch(detected); }   // no match → search the detected place
+        } catch {
+          alert('Could not detect your location. Please try again.');
+        } finally { setLocating(false); }
+      },
+      (err) => {
+        setLocating(false);
+        alert(err.code === err.PERMISSION_DENIED
+          ? 'Location permission denied. Please pick your city manually.'
+          : 'Could not get your location. Please try again.');
+      },
+      { timeout: 10000, enableHighAccuracy: false },
+    );
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -40,6 +75,23 @@ export default function AllDoctor() {
   }, []);
 
   const actualSpecs = ['All', ...new Set(doctors.map(d => d.specialization).filter(Boolean))];
+
+  // Keyword pool from the real data (specializations + cities + hospitals) so
+  // every suggestion returns results.
+  const keywordPool = [...new Set([
+    ...doctors.map(d => d.specialization),
+    ...doctors.map(d => d.city),
+    ...doctors.map(d => d.hospital_name),
+  ].filter(Boolean))];
+
+  // Suggestions shown under the search box while typing — filtered to what the
+  // user is typing and kept short (max 6).
+  const suggestList = (() => {
+    const q = search.trim().toLowerCase();
+    return keywordPool
+      .filter(kw => kw.toLowerCase() !== q && (!q || kw.toLowerCase().includes(q)))
+      .slice(0, 6);
+  })();
 
   const filtered = doctors.filter(doc => {
     // Keyword search: every space-separated word must match somewhere in the
@@ -133,6 +185,33 @@ export default function AllDoctor() {
         .toggle-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
         .results-count { font-size: 13px; color: var(--gray-400); margin-left: auto; white-space: nowrap; }
 
+        /* Near Me button */
+        .near-me-btn {
+          display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+          padding: 11px 16px; border-radius: 12px;
+          border: 1px solid var(--blue-200); background: var(--blue-50); color: var(--blue-700);
+          font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
+          cursor: pointer; transition: all 0.15s;
+        }
+        .near-me-btn:hover { background: var(--blue-100); border-color: var(--blue-400); }
+        .near-me-btn:disabled { opacity: 0.6; cursor: default; }
+
+        /* Search suggestions dropdown */
+        .search-suggest {
+          position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 120;
+          background: #fff; border: 1px solid var(--blue-100); border-radius: 12px;
+          padding: 6px; box-shadow: 0 8px 28px rgba(24,95,165,0.14);
+        }
+        .suggest-item {
+          display: flex; align-items: center; gap: 10px; width: 100%;
+          padding: 9px 12px; border: none; background: none; border-radius: 8px;
+          font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--gray-700);
+          cursor: pointer; text-align: left; transition: all 0.12s;
+        }
+        .suggest-item:hover { background: var(--blue-50); color: var(--blue-800); }
+        .suggest-icon { font-size: 12px; opacity: 0.7; }
+        .suggest-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
         /* Grid */
         .ad-body { padding: 40px 0 80px; }
         .doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 22px; }
@@ -178,7 +257,10 @@ export default function AllDoctor() {
         .slot-chip { font-size: 11px; background: var(--blue-50); border: 1px solid var(--blue-200); border-radius: 6px; padding: 3px 8px; color: var(--blue-700); }
         .slot-more { font-size: 11px; color: var(--blue-500); padding: 3px 4px; }
         .card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--blue-50); }
-        .card-slots-count { font-size: 13px; color: var(--gray-400); }
+        .card-slots-count { font-size: 12px; color: var(--gray-400); margin-bottom: 10px; }
+        .card-fee { display: flex; flex-direction: column; line-height: 1.1; }
+        .card-fee-amount { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.25rem; font-weight: 800; color: var(--blue-600); }
+        .card-fee-sub { font-size: 10px; color: var(--gray-400); }
         .book-btn {
           display: inline-flex; align-items: center; gap: 6px;
           background: var(--blue-600); color: #fff;
@@ -233,13 +315,34 @@ export default function AllDoctor() {
                   className="search-input"
                   placeholder="Search by doctor, specialization, hospital, city, location..."
                   value={search}
-                  onChange={e => setSearch(e.target.value)}
+                  onChange={e => { setSearch(e.target.value); setShowSuggest(true); }}
+                  onFocus={() => setShowSuggest(true)}
+                  onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
                 />
+                {/* Keyword suggestions while searching */}
+                {showSuggest && suggestList.length > 0 && (
+                  <div className="search-suggest">
+                    {suggestList.map(kw => (
+                      <button
+                        key={kw}
+                        type="button"
+                        className="suggest-item"
+                        onMouseDown={() => { setSearch(kw); setShowSuggest(false); }}
+                      >
+                        <span className="suggest-icon">🔎</span>
+                        <span className="suggest-text">{kw}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <select className="filter-select" value={city} onChange={e => setCity(e.target.value)}>
                 <option value="">All Cities</option>
                 {cities.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
+              <button className="near-me-btn" onClick={detectCity} disabled={locating} title="Find doctors in your city">
+                {locating ? '📍 Locating…' : '📍 Near Me'}
+              </button>
               <button className={`avail-toggle ${availOnly ? 'active' : ''}`} onClick={() => setAvailOnly(p => !p)}>
                 <span className="toggle-dot" />
                 Available Only
@@ -316,10 +419,14 @@ export default function AllDoctor() {
                           {doc.slots.length > 3 && <span className="slot-more">+{doc.slots.length - 3}</span>}
                         </div>
                       )}
+                      <div className="card-slots-count">
+                        {doc.slots?.length > 0 ? `${doc.slots.length} slots today` : 'Contact hospital'}
+                      </div>
                       <div className="card-footer">
-                        <span className="card-slots-count">
-                          {doc.slots?.length > 0 ? `${doc.slots.length} slots today` : 'Contact hospital'}
-                        </span>
+                        <div className="card-fee">
+                          <span className="card-fee-amount">₹{doc.fee || 15}</span>
+                          <span className="card-fee-sub">per visit</span>
+                        </div>
                         <span className="book-btn">Book Now →</span>
                       </div>
                     </div>

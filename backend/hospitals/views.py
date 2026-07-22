@@ -107,11 +107,19 @@ class HospitalRegisterView(APIView):
                 status=400,
             )
 
+        def _coord(v):
+            try:
+                return float(v) if v not in (None, '') else None
+            except (TypeError, ValueError):
+                return None
+
         hospital = Hospital.objects.create(
             name=name,
             city=data.get('city', '').strip(),
             address=data.get('address', '').strip(),
             location=data.get('location', '').strip(),
+            latitude=_coord(data.get('latitude')),
+            longitude=_coord(data.get('longitude')),
             mobile=mobile,
             password=make_password(password),
             status='pending',
@@ -286,6 +294,18 @@ class HospitalDetailView(APIView):
                       'facebook', 'description', 'announcement', 'open_time', 'close_time'):
             if field in request.data:
                 setattr(hospital, field, str(request.data[field]).strip())
+
+        # Geocoded coordinates from the location autocomplete (numeric / nullable).
+        for coord in ('latitude', 'longitude'):
+            if coord in request.data:
+                raw = request.data.get(coord)
+                if raw in (None, ''):
+                    setattr(hospital, coord, None)
+                else:
+                    try:
+                        setattr(hospital, coord, float(raw))
+                    except (TypeError, ValueError):
+                        return Response({'message': f'Invalid {coord}.'}, status=400)
 
         if 'services' in request.data:
             svc = request.data.get('services')

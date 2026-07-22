@@ -6,6 +6,10 @@ class Hospital(models.Model):
     address  = models.TextField(blank=True)
     # Optional map link (e.g. Google Maps URL) or landmark, shown to patients
     location = models.CharField(max_length=500, blank=True)
+    # Geocoded coordinates (from the location autocomplete) — power accurate
+    # map pins, directions and "near me" distance. Null when not picked yet.
+    latitude  = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
     mobile   = models.CharField(max_length=15, unique=True)
     email    = models.EmailField(blank=True)
     image    = models.ImageField(upload_to='hospitals/', blank=True)          # banner
