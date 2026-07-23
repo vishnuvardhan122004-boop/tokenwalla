@@ -36,6 +36,42 @@ function getLoginPath() {
   return '/login';
 }
 
+// ── Single-flight token refresh ───────────────────────────────────────────────
+// The backend rotates refresh tokens and blacklists the old one on every use
+// (ROTATE_REFRESH_TOKENS + BLACKLIST_AFTER_ROTATION). If several requests 401 at
+// the same time (the dashboards fire many parallel calls), each firing its own
+// refresh would burn the same refresh token — the first call rotates it, the
+// rest hit a now-blacklisted token and get logged out. So we share ONE in-flight
+// refresh: the first 401 performs it, every concurrent 401 awaits the same
+// promise and then retries with the freshly issued access token.
+let refreshPromise = null;
+
+function refreshAccessToken() {
+  if (refreshPromise) return refreshPromise;
+
+  const refresh = localStorage.getItem('refresh');
+  if (!refresh) return Promise.reject(new Error('No refresh token'));
+
+  // Use a bare axios instance (not API) to avoid interceptor recursion.
+  refreshPromise = axios
+    .post(
+      `${BASE}/auth/token/refresh/`,
+      { refresh },
+      { headers: { 'Content-Type': 'application/json' } }
+    )
+    .then(({ data }) => {
+      localStorage.setItem('access', data.access);
+      if (data.refresh) localStorage.setItem('refresh', data.refresh);
+      return data.access;
+    })
+    .finally(() => {
+      // Clear so the NEXT expiry starts a fresh single-flight refresh.
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
+}
+
 // ── Response: auto-refresh on 401, then redirect on failure ──────────────────
 API.interceptors.response.use(
   (res) => res,
@@ -48,23 +84,10 @@ API.interceptors.response.use(
 
     if (err.response?.status === 401 && !original._retry) {
       original._retry = true;
-      const refresh = localStorage.getItem('refresh');
-
-      if (!refresh) {
-        clearSessionAndRedirect();
-        return Promise.reject(err);
-      }
 
       try {
-        // Use a fresh axios instance (not API) to avoid interceptor loops
-        const { data } = await axios.post(
-          `${BASE}/auth/token/refresh/`,
-          { refresh },
-          { headers: { 'Content-Type': 'application/json' } }
-        );
-        localStorage.setItem('access', data.access);
-        if (data.refresh) localStorage.setItem('refresh', data.refresh);
-        original.headers.Authorization = `Bearer ${data.access}`;
+        const access = await refreshAccessToken();
+        original.headers.Authorization = `Bearer ${access}`;
         return API(original);
       } catch {
         clearSessionAndRedirect();

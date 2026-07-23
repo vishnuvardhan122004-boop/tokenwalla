@@ -48,7 +48,7 @@ function RequireAuth({ children, redirectTo = '/login' }) {
 function RequireHospital({ children }) {
   const user = getUser();
   const location = useLocation();
-  if (!user || user.role !== 'hospital') {
+  if (!user || user.role !== 'hospital' || !localStorage.getItem('access')) {
     return <Navigate to="/Hlogin" state={{ from: location }} replace />;
   }
   return children;
@@ -57,7 +57,7 @@ function RequireHospital({ children }) {
 function RequireAdmin({ children }) {
   const user = getUser();
   const location = useLocation();
-  if (!user || user.role !== 'admin') {
+  if (!user || user.role !== 'admin' || !localStorage.getItem('access')) {
     return <Navigate to="/2004" state={{ from: location }} replace />;
   }
   return children;

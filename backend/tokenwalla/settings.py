@@ -118,7 +118,7 @@ REST_FRAMEWORK = {
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME':    timedelta(hours=2),
+    'ACCESS_TOKEN_LIFETIME':    timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME':   timedelta(days=14),
     'ROTATE_REFRESH_TOKENS':    True,
     'BLACKLIST_AFTER_ROTATION': True,
@@ -201,6 +201,7 @@ WHATSAPP_API_VERSION             = config('WHATSAPP_API_VERSION', default='v21.0
 WHATSAPP_TEMPLATE_BOOKING_CONFIRM = config('WHATSAPP_TEMPLATE_BOOKING_CONFIRM', default='booking_confirmation')
 WHATSAPP_TEMPLATE_REMINDER       = config('WHATSAPP_TEMPLATE_REMINDER', default='appointment_reminder')
 WHATSAPP_TEMPLATE_DOCTOR_UNAVAILABLE = config('WHATSAPP_TEMPLATE_DOCTOR_UNAVAILABLE', default='doctor_unavailable')
+WHATSAPP_TEMPLATE_HOSPITAL_NEW_BOOKING = config('WHATSAPP_TEMPLATE_HOSPITAL_NEW_BOOKING', default='hospital_new_booking')
 WHATSAPP_TEMPLATE_LANG           = config('WHATSAPP_TEMPLATE_LANG', default='en')
 ADMIN_SETUP_KEY = config('ADMIN_SETUP_KEY', default='')
 # ── Logging ───────────────────────────────────────────────────────────────────

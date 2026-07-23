@@ -57,13 +57,63 @@ Thank you for your patience.
 
 ---
 
-## 2. `booking_confirmation` (existing — for reference)
+## 2. `hospital_new_booking`  ← NEW
+
+Sent to the **hospital team** (the hospital's own WhatsApp number,
+`hospital.mobile`) the moment a patient's booking is paid and confirmed. This
+runs alongside the Expo push the hospital app already receives — WhatsApp lands
+even when the hospital app is closed or its push token is stale.
+Sender: `notifications.whatsapp.send_hospital_new_booking(booking)`.
+
+| Field | Value |
+|-------|-------|
+| **Name** | `hospital_new_booking` |
+| **Category** | **Utility** (transactional) |
+| **Language** | English (`en`) |
+| **Header** | None |
+| **Footer** | `TokenWalla` |
+| **Buttons** | None |
+
+**Body** (paste exactly):
+
+```
+New appointment at {{1}}.
+
+Patient: {{2}}
+Doctor: Dr. {{3}}
+Date: {{4}} ({{5}})
+Token: {{6}}
+
+Open the TokenWalla hospital app to view the queue.
+```
+
+**Variable mapping** (order matters — matches the `params` list in code):
+
+| Placeholder | Meaning | Sample value for review |
+|-------------|---------|-------------------------|
+| `{{1}}` | Hospital name  | City Care Clinic |
+| `{{2}}` | Patient name   | Rahul |
+| `{{3}}` | Doctor name    | Anita Rao |
+| `{{4}}` | Appointment date | 2026-07-22 |
+| `{{5}}` | Slot           | 10:30 AM |
+| `{{6}}` | Booking token  | TW-024607-E90BC0 |
+
+> This message is NOT gated on `whatsapp_opt_in` (that flag belongs to the
+> patient) — the hospital always wants to hear about a new booking. If the
+> hospital has no `mobile` on file the sender simply no-ops.
+
+> Set `WHATSAPP_TEMPLATE_HOSPITAL_NEW_BOOKING` (default `hospital_new_booking`)
+> only if you submit the template under a different name.
+
+---
+
+## 3. `booking_confirmation` (existing — for reference)
 
 Sender: `send_booking_confirmation(booking)`. Category: **Utility**, lang `en`.
 Params, in order: `{{1}}` patient, `{{2}}` doctor, `{{3}}` hospital,
 `{{4}}` date, `{{5}}` slot, `{{6}}` token.
 
-## 3. `appointment_reminder` (existing — for reference)
+## 4. `appointment_reminder` (existing — for reference)
 
 Sender: `send_appointment_reminder(booking)`. Category: **Utility**, lang `en`.
 Params, in order: `{{1}}` patient, `{{2}}` doctor, `{{3}}` hospital,

@@ -43,6 +43,7 @@ class WhatsAppLog(models.Model):
         ('booking_confirmation', 'Booking Confirmation'),
         ('appointment_reminder', 'Appointment Reminder'),
         ('doctor_unavailable',   'Doctor Unavailable'),
+        ('hospital_new_booking', 'Hospital New Booking'),
     ]
     STATUS_CHOICES = [
         ('sent',   'Sent'),

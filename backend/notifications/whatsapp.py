@@ -146,6 +146,46 @@ def send_doctor_unavailable(booking):
     )
 
 
+def send_hospital_new_booking(booking):
+    """Alert the hospital team on WhatsApp that a new appointment was booked.
+
+    Goes to the hospital's own number (booking.hospital.mobile), NOT the patient,
+    so it is never gated on the patient's whatsapp_opt_in. This complements the
+    Expo push the hospital app already receives — WhatsApp lands even when the
+    hospital app is closed or the push token is stale.
+
+    Template body (see notifications/WHATSAPP_TEMPLATES.md) params:
+      {{1}} hospital name  {{2}} patient name  {{3}} doctor
+      {{4}} date           {{5}} slot          {{6}} token
+    """
+    from .models import WhatsAppLog
+
+    hospital = booking.hospital
+    if not hospital.mobile:
+        return
+
+    patient_name = booking.user.first_name or booking.user.username
+    result = send_template(
+        to_mobile=hospital.mobile,
+        template_name=settings.WHATSAPP_TEMPLATE_HOSPITAL_NEW_BOOKING,
+        params=[
+            hospital.name,
+            patient_name,
+            booking.doctor.name,
+            str(booking.date),
+            booking.slot,
+            booking.token,
+        ],
+    )
+    WhatsAppLog.objects.create(
+        booking=booking,
+        event_type='hospital_new_booking',
+        status='sent' if result['success'] else 'failed',
+        wa_message_id=result.get('message_id') or '',
+        error=result.get('error') or '',
+    )
+
+
 def send_appointment_reminder(booking):
     from .models import WhatsAppLog
 
