@@ -1,40 +1,32 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import API from '../services/api';
 import SEO from './SEO';
 
-const STEPS = [
-  { icon: '🔍', title: 'Find a Doctor',   desc: 'Browse by specialization, city, or hospital. See real-time availability and time slots.' },
-  { icon: '📅', title: 'Pick a Slot',     desc: 'Choose your preferred date and time. Confirm your appointment in under 60 seconds.' },
-  { icon: '💳', title: 'Pay Securely',    desc: 'Pay ₹15 via UPI, cards or wallets. Your token and queue position are confirmed instantly.' },
-  { icon: '🏥', title: 'Walk In on Time', desc: 'Arrive when your number is called. Track live position from anywhere.' },
-];
-
-const FEATURES = [
-  { icon: '📍', title: 'Live Queue Tracking',   desc: 'See your exact position in real time. No more guessing when to arrive.' },
-  { icon: '🔐', title: 'Secure Payments',        desc: 'Razorpay-powered. UPI, cards, net banking, wallets — all encrypted.' },
-  { icon: '🏥', title: 'Multi-Hospital Network', desc: 'Works across hospitals in your city. One platform, all doctors.' },
-  { icon: '♻️', title: 'Easy Cancellation',     desc: 'Cancel 2 hours before your slot for a full refund — no questions asked.' },
-  { icon: '🩺', title: 'Verified Doctors',       desc: 'All doctors are registered and managed by their hospitals directly.' },
-  { icon: '📱', title: 'Works on Any Device',    desc: 'Fully responsive — book from your phone, tablet, or desktop in seconds.' },
-];
+const STEP_ICONS = ['🔍', '📅', '💳', '🏥'];
+const FEATURE_ICONS = ['📍', '🔐', '🏥', '♻️', '🩺', '📱'];
 
 const DEMO_QUEUE = [
-  { initials: 'RK', name: 'Ravi K.',  token: 'TW-001', status: 'In Consultation', active: true  },
-  { initials: 'PS', name: 'Priya S.', token: 'TW-002', status: 'Waiting',         active: false },
-  { initials: 'AM', name: 'Arjun M.', token: 'TW-003', status: 'Waiting',         active: false },
-];
-
-const STATS = [
-  { num: '2,400+', label: 'Tokens Issued'  },
-  { num: '18',     label: 'Hospitals'      },
-  { num: '94%',    label: 'On-time Rate'   },
-  { num: '4.8★',   label: 'Patient Rating' },
+  { initials: 'RK', name: 'Ravi K.',  token: 'TW-001', statusKey: 'inConsultation', active: true  },
+  { initials: 'PS', name: 'Priya S.', token: 'TW-002', statusKey: 'waiting',        active: false },
+  { initials: 'AM', name: 'Arjun M.', token: 'TW-003', statusKey: 'waiting',        active: false },
 ];
 
 export default function Hero() {
+  const { t } = useTranslation();
   const [doctors,   setDoctors]   = useState([]);
   const [activeIdx, setActiveIdx] = useState(0);
+
+  const STATS = [
+    { num: '2,400+', label: t('hero.stats.tokensIssued') },
+    { num: '18',     label: t('hero.stats.hospitals') },
+    { num: '94%',    label: t('hero.stats.onTimeRate') },
+    { num: '4.8★',   label: t('hero.stats.patientRating') },
+  ];
+
+  const STEPS = t('hero.process.steps', { returnObjects: true }).map((s, i) => ({ ...s, icon: STEP_ICONS[i] }));
+  const FEATURES = t('hero.features.items', { returnObjects: true }).map((f, i) => ({ ...f, icon: FEATURE_ICONS[i] }));
 
   useEffect(() => {
 API.get('/doctors/').then(({ data }) => {
@@ -44,10 +36,10 @@ API.get('/doctors/').then(({ data }) => {
   }, []);
 
   useEffect(() => {
-    const t = setInterval(() => setActiveIdx(p => (p + 1) % 3), 2600);
-    return () => clearInterval(t);
+    const interval = setInterval(() => setActiveIdx(p => (p + 1) % 3), 2600);
+    return () => clearInterval(interval);
   }, []);
-  
+
   return (
     <>
     <SEO
@@ -57,7 +49,7 @@ API.get('/doctors/').then(({ data }) => {
     url="/"
     /> 
       <style>{`
-        .hero-root { font-family: 'DM Sans', sans-serif; background: #fff; color: var(--gray-900); }
+        .hero-root { font-family: 'DM Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; background: #fff; color: var(--gray-900); }
 
         /* ── HERO ── */
         .hero-section {
@@ -91,7 +83,7 @@ API.get('/doctors/').then(({ data }) => {
           animation: twPulse 2s ease-in-out infinite;
         }
         .hero-title {
-          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif;
           font-size: clamp(2.4rem, 5.5vw, 4rem);
           font-weight: 800; line-height: 1.1; margin-bottom: 20px; color: var(--gray-900);
         }
@@ -113,7 +105,7 @@ API.get('/doctors/').then(({ data }) => {
         }
         .stat-item:first-child { border-left: none; padding-left: 0; }
         .stat-num {
-          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif;
           font-size: 1.7rem; font-weight: 800; color: var(--blue-600); line-height: 1;
         }
         .stat-label { font-size: 13px; color: var(--gray-500); margin-top: 3px; }
@@ -155,7 +147,7 @@ API.get('/doctors/').then(({ data }) => {
         .demo-avatar {
           width: 34px; height: 34px; border-radius: 50%;
           display: flex; align-items: center; justify-content: center;
-          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif;
           font-size: 12px; font-weight: 700; flex-shrink: 0;
         }
         .demo-avatar.active { background: var(--blue-600); color: #fff; }
@@ -189,7 +181,7 @@ API.get('/doctors/').then(({ data }) => {
         .step-card:last-child { border-right: none; }
         .step-card:hover { background: var(--blue-50); }
         .step-num {
-          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif;
           font-size: 3rem; font-weight: 800; color: var(--blue-100);
           line-height: 1; margin-bottom: 16px;
         }
@@ -199,7 +191,7 @@ API.get('/doctors/').then(({ data }) => {
           display: flex; align-items: center; justify-content: center;
           font-size: 20px; margin-bottom: 18px;
         }
-        .step-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--gray-900); }
+        .step-title { font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--gray-900); }
         .step-desc  { font-size: 14px; color: var(--gray-500); line-height: 1.65; }
 
         /* ── DOCTORS ── */
@@ -227,7 +219,7 @@ API.get('/doctors/').then(({ data }) => {
         }
         .doc-info { padding: 14px; }
         .doc-spec { font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--blue-600); margin-bottom: 4px; }
-        .doc-name { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 14px; font-weight: 700; margin-bottom: 6px; color: var(--gray-900); }
+        .doc-name { font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; font-size: 14px; font-weight: 700; margin-bottom: 6px; color: var(--gray-900); }
         .doc-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--gray-500); }
 
         /* ── FEATURES ── */
@@ -245,7 +237,7 @@ API.get('/doctors/').then(({ data }) => {
           display: flex; align-items: center; justify-content: center;
           font-size: 22px; margin-bottom: 18px;
         }
-        .feature-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--gray-900); }
+        .feature-title { font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--gray-900); }
         .feature-desc  { font-size: 14px; color: var(--gray-500); line-height: 1.65; }
 
         /* ── PRICING ── */
@@ -268,7 +260,7 @@ API.get('/doctors/').then(({ data }) => {
           color: rgba(255,255,255,0.9); margin-bottom: 20px;
         }
         .price-name { font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.7); margin-bottom: 12px; }
-        .price-amount { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 4rem; font-weight: 800; line-height: 1; margin-bottom: 6px; }
+        .price-amount { font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; font-size: 4rem; font-weight: 800; line-height: 1; margin-bottom: 6px; }
         .price-amount sup { font-size: 1.5rem; vertical-align: super; font-weight: 600; }
         .price-sub { font-size: 13px; color: rgba(255,255,255,0.55); margin-bottom: 28px; }
         .price-features { list-style: none; padding: 0; margin: 0 0 32px; display: flex; flex-direction: column; gap: 11px; }
@@ -289,14 +281,14 @@ API.get('/doctors/').then(({ data }) => {
             linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
           background-size: 48px 48px;
         }
-        .cta-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(1.8rem, 4vw, 3rem); font-weight: 800; margin-bottom: 16px; position: relative; }
+        .cta-title { font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; font-size: clamp(1.8rem, 4vw, 3rem); font-weight: 800; margin-bottom: 16px; position: relative; }
         .cta-sub { color: rgba(255,255,255,0.65); font-size: 1.05rem; margin-bottom: 36px; position: relative; }
         .cta-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; position: relative; }
         .btn-white {
           display: inline-flex; align-items: center; gap: 8px;
           background: #fff; color: var(--blue-700);
           border: none; border-radius: 12px; padding: 14px 28px;
-          font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600;
+          font-family: 'DM Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; font-size: 15px; font-weight: 600;
           cursor: pointer; text-decoration: none; transition: all 0.2s;
         }
         .btn-white:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.15); color: var(--blue-800); text-decoration: none; }
@@ -304,7 +296,7 @@ API.get('/doctors/').then(({ data }) => {
           display: inline-flex; align-items: center; gap: 8px;
           background: transparent; color: rgba(255,255,255,0.9);
           border: 1px solid rgba(255,255,255,0.35); border-radius: 12px; padding: 14px 28px;
-          font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500;
+          font-family: 'DM Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; font-size: 15px; font-weight: 500;
           cursor: pointer; text-decoration: none; transition: all 0.2s;
         }
         .btn-white-outline:hover { border-color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.08); color: #fff; text-decoration: none; }
@@ -336,24 +328,22 @@ API.get('/doctors/').then(({ data }) => {
               <div className="col-lg-6 fade-up">
                 <div className="hero-badge">
                   <span className="hero-badge-dot" />
-                  Now live in Andhra Pradesh & Telangana
+                  {t('hero.badge')}
                 </div>
                 <h1 className="hero-title">
-                  Skip the Queue.<br />
-                  <span className="accent">Book Your Token</span><br />
-                  Online.
+                  {t('hero.titleLine1')}<br />
+                  <span className="accent">{t('hero.titleLine2')}</span><br />
+                  {t('hero.titleLine3')}
                 </h1>
                 <p className="hero-sub">
-                  TokenWalla connects patients with doctors digitally.
-                  Book a slot, get a token, walk in right on time —
-                  no more waiting rooms for hours.
+                  {t('hero.subtitle')}
                 </p>
                 <div className="hero-actions">
                   <Link to="/alldoctor" className="btn-primary" style={{ padding: '14px 28px', fontSize: 15 }}>
-                    Book Appointment →
+                    {t('hero.bookAppointment')}
                   </Link>
                   <Link to="/Hlogin" className="btn-outline" style={{ padding: '14px 28px', fontSize: 15 }}>
-                    Hospital Login
+                    {t('hero.hospitalLogin')}
                   </Link>
                 </div>
 
@@ -371,20 +361,20 @@ API.get('/doctors/').then(({ data }) => {
               {/* Right — Token card */}
               <div className="col-lg-6 fade-up" style={{ animationDelay: '0.15s' }}>
                 <div style={{ position: 'relative', maxWidth: 420, marginLeft: 'auto' }}>
-                  <div className="float-chip float-chip-1">✅ Confirmed · TW-2847</div>
-                  <div className="float-chip float-chip-2">⏱ Est. wait: ~12 mins</div>
+                  <div className="float-chip float-chip-1">{t('hero.tokenCard.confirmedChip')}</div>
+                  <div className="float-chip float-chip-2">{t('hero.tokenCard.waitChip')}</div>
 
                   <div className="token-card-visual">
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
                       <div>
-                        <div className="token-label">Your Token</div>
+                        <div className="token-label">{t('hero.tokenCard.yourToken')}</div>
                         <div className="token-live-badge">
                           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3B6D11', animation: 'twPulse 2s infinite', flexShrink: 0 }} />
-                          Queue Access Active
+                          {t('hero.tokenCard.queueActive')}
                         </div>
                         <div className="token-number">#007</div>
-                        <div className="token-doctor-info">Dr. Kana · City Care Hospital</div>
-                        <div style={{ fontSize: 13, color: 'var(--gray-400)', marginTop: 2 }}>Today · 10:30 AM slot</div>
+                        <div className="token-doctor-info">{t('hero.tokenCard.doctorInfo')}</div>
+                        <div style={{ fontSize: 13, color: 'var(--gray-400)', marginTop: 2 }}>{t('hero.tokenCard.todaySlot')}</div>
                       </div>
                       <div style={{
                         width: 60, height: 60, borderRadius: 16,
@@ -404,7 +394,7 @@ API.get('/doctors/').then(({ data }) => {
                             <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>{p.token}</div>
                           </div>
                           <div className={`demo-status ${i === activeIdx ? 'active' : 'idle'}`}>
-                            {p.status}
+                            {t(`hero.demoStatus.${p.statusKey}`)}
                           </div>
                         </div>
                       ))}
@@ -420,10 +410,10 @@ API.get('/doctors/').then(({ data }) => {
         <section className="steps-section">
           <div className="tw-container">
             <div style={{ maxWidth: 560 }}>
-              <div className="tw-section-label">Process</div>
-              <h2 style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>How TokenWalla Works</h2>
+              <div className="tw-section-label">{t('hero.process.label')}</div>
+              <h2 style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>{t('hero.process.heading')}</h2>
               <p style={{ color: 'var(--gray-500)', fontSize: '1.05rem', lineHeight: 1.7 }}>
-                From browsing doctors to walking in on time — the entire process takes under 2 minutes.
+                {t('hero.process.sub')}
               </p>
             </div>
             <div className="steps-grid">
@@ -445,11 +435,11 @@ API.get('/doctors/').then(({ data }) => {
             <div className="tw-container">
               <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
                 <div>
-                  <div className="tw-section-label">Doctors</div>
-                  <h2 style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', margin: 0 }}>Available Near You</h2>
+                  <div className="tw-section-label">{t('hero.doctorsPreview.label')}</div>
+                  <h2 style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', margin: 0 }}>{t('hero.doctorsPreview.heading')}</h2>
                 </div>
                 <Link to="/alldoctor" className="btn-outline" style={{ padding: '10px 20px', fontSize: 14 }}>
-                  View All →
+                  {t('hero.doctorsPreview.viewAll')}
                 </Link>
               </div>
               <div className="doctors-scroll">
@@ -464,7 +454,7 @@ API.get('/doctors/').then(({ data }) => {
                       <div className="doc-name">Dr. {doc.name}</div>
                       <div className="doc-meta">
                         <span>📍 {doc.city}</span>
-                        <span>{doc.experience}y exp</span>
+                        <span>{t('hero.doctorsPreview.yearsExp', { count: doc.experience })}</span>
                       </div>
                     </div>
                   </Link>
@@ -478,10 +468,10 @@ API.get('/doctors/').then(({ data }) => {
         <section className="features-section">
           <div className="tw-container">
             <div style={{ maxWidth: 560, margin: '0 auto', textAlign: 'center' }}>
-              <div className="tw-section-label">Why TokenWalla</div>
-              <h2 style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>Built for Modern Healthcare</h2>
+              <div className="tw-section-label">{t('hero.features.label')}</div>
+              <h2 style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>{t('hero.features.heading')}</h2>
               <p style={{ color: 'var(--gray-500)', fontSize: '1.05rem', lineHeight: 1.7 }}>
-                We handle the technology so hospitals can focus on what matters — patient care.
+                {t('hero.features.sub')}
               </p>
             </div>
             <div className="features-grid">
@@ -500,22 +490,22 @@ API.get('/doctors/').then(({ data }) => {
         <section className="pricing-section">
           <div className="tw-container">
             <div style={{ maxWidth: 560, margin: '0 auto', textAlign: 'center' }}>
-              <div className="tw-section-label">Pricing</div>
-              <h2 style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>Simple, Transparent Pricing</h2>
-              <p style={{ color: 'var(--gray-500)' }}>No hidden fees. Pay only for what you need.</p>
+              <div className="tw-section-label">{t('hero.pricing.label')}</div>
+              <h2 style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>{t('hero.pricing.heading')}</h2>
+              <p style={{ color: 'var(--gray-500)' }}>{t('hero.pricing.sub')}</p>
             </div>
             <div className="price-card">
-              <div className="price-badge">Best Value</div>
-              <div className="price-name">Queue View</div>
+              <div className="price-badge">{t('hero.pricing.badge')}</div>
+              <div className="price-name">{t('hero.pricing.planName')}</div>
               <div className="price-amount"><sup>₹</sup>15</div>
-              <div className="price-sub">Per appointment · No hidden fees</div>
+              <div className="price-sub">{t('hero.pricing.planSub')}</div>
               <ul className="price-features">
-                {['Confirmed token number', 'Appointment details', 'Doctor & hospital info', 'Live queue position', 'Instant confirmation'].map(f => (
+                {t('hero.pricing.features', { returnObjects: true }).map(f => (
                   <li key={f}><span className="price-check">✓</span> {f}</li>
                 ))}
               </ul>
               <Link to="/alldoctor" className="btn-white-outline" style={{ width: '100%', justifyContent: 'center' }}>
-                Book Appointment →
+                {t('hero.pricing.cta')}
               </Link>
             </div>
           </div>
@@ -525,11 +515,11 @@ API.get('/doctors/').then(({ data }) => {
         <section className="cta-section">
           <div className="tw-container">
             <div className="cta-box">
-              <h2 className="cta-title">Ready to Skip the Queue?</h2>
-              <p className="cta-sub">Join thousands of patients who book smarter with TokenWalla.</p>
+              <h2 className="cta-title">{t('hero.cta.title')}</h2>
+              <p className="cta-sub">{t('hero.cta.sub')}</p>
               <div className="cta-actions">
-                <Link to="/alldoctor" className="btn-white-outline">Book Appointment Now →</Link>
-                <Link to="/Husercreate" className="btn-white-outline">Register Your Hospital</Link>
+                <Link to="/alldoctor" className="btn-white-outline">{t('hero.cta.bookNow')}</Link>
+                <Link to="/Husercreate" className="btn-white-outline">{t('hero.cta.registerHospital')}</Link>
               </div>
             </div>
           </div>
