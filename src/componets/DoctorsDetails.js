@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import API from '../services/api';
+import { isTestHospital } from '../services/testHospitals';
 
 // Local YYYY-MM-DD — must NOT use toISOString() (that converts to UTC and
 // for IST users at night shifts the date back a day, making every slot look
@@ -103,6 +104,12 @@ export default function DoctorDetails() {
     setHospitalInfo(null);
     API.get(`/doctors/${id}/`)
       .then(({ data }) => {
+        // A test-hospital doctor reached via a direct/shared URL — hide it,
+        // same as a missing doctor.
+        if (isTestHospital(data?.hospital_name)) {
+          navigate('/alldoctor');
+          return;
+        }
         setDoctor(data);
         // Fetch the hospital for announcement, about, hours, socials,
         // services & gallery — the doctor payload doesn't include them.
@@ -205,10 +212,10 @@ export default function DoctorDetails() {
   if (loading) return (
     <>
       <style>{`
-        .dd-skel-root { background: #F4F9FF; min-height: 100vh; }
-        .dd-skel-banner { height: 220px; background: linear-gradient(90deg,#E6F1FB 25%,#B5D4F4 50%,#E6F1FB 75%); background-size:200% 100%; animation:ddShimmer 1.4s infinite; }
+        .dd-skel-root { background: var(--color-surface); min-height: 100vh; }
+        .dd-skel-banner { height: 220px; background: linear-gradient(90deg,var(--blue-50) 25%,var(--blue-100) 50%,var(--blue-50) 75%); background-size:200% 100%; animation:ddShimmer 1.4s infinite; }
         .dd-skel-body { max-width:1100px; margin:0 auto; padding:16px 12px; }
-        .dd-skel-line { border-radius:10px; background:linear-gradient(90deg,#E6F1FB 25%,#B5D4F4 50%,#E6F1FB 75%); background-size:200% 100%; animation:ddShimmer 1.4s infinite; margin-bottom:14px; }
+        .dd-skel-line { border-radius:10px; background:linear-gradient(90deg,var(--blue-50) 25%,var(--blue-100) 50%,var(--blue-50) 75%); background-size:200% 100%; animation:ddShimmer 1.4s infinite; margin-bottom:14px; }
         @keyframes ddShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
       `}</style>
       <div className="dd-skel-root">
@@ -227,13 +234,12 @@ export default function DoctorDetails() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
-
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        /* Fonts + box-sizing come from the global design system (index.css). */
+        .dd-root, .dd-root *, .dd-root *::before, .dd-root *::after { margin: 0; padding: 0; }
 
         .dd-root {
-          font-family: 'DM Sans', sans-serif;
-          background: #F4F9FF;
+          font-family: var(--font-body);
+          background: var(--color-surface);
           min-height: 100vh;
           padding-bottom: 60px;
         }
@@ -243,7 +249,7 @@ export default function DoctorDetails() {
           position: relative;
           height: 240px;
           overflow: hidden;
-          background: linear-gradient(160deg, #E6F1FB 0%, #B5D4F4 100%);
+          background: linear-gradient(160deg, var(--blue-50) 0%, var(--blue-100) 100%);
         }
         .dd-banner-img {
           width: 100%; height: 100%; object-fit: cover;
@@ -269,13 +275,13 @@ export default function DoctorDetails() {
           position: absolute; top: 14px; left: 14px; z-index: 10;
           display: inline-flex; align-items: center; gap: 6px;
           background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
-          border: 1px solid #B5D4F4; border-radius: 10px;
-          padding: 8px 14px; font-size: 13px; color: #185FA5;
+          border: 1px solid var(--blue-100); border-radius: 10px;
+          padding: 8px 14px; font-size: 13px; color: var(--blue-600);
           cursor: pointer; transition: all 0.2s;
-          font-family: 'DM Sans', sans-serif;
+          font-family: var(--font-body);
           white-space: nowrap;
         }
-        .dd-back:hover { background: #fff; border-color: #378ADD; }
+        .dd-back:hover { background: #fff; border-color: var(--blue-400); }
 
         /* ── WRAPPER ── */
         .dd-wrap {
@@ -287,7 +293,7 @@ export default function DoctorDetails() {
         /* ── PROFILE CARD ── */
         .dd-profile-card {
           background: #fff;
-          border: 1px solid #B5D4F4;
+          border: 1px solid var(--blue-100);
           border-radius: 18px;
           padding: 18px;
           display: flex;
@@ -302,27 +308,27 @@ export default function DoctorDetails() {
         .dd-profile-card::before {
           content: '';
           position: absolute; top: 0; left: 0; right: 0; height: 3px;
-          background: linear-gradient(90deg, #185FA5, #378ADD, #85B7EB);
+          background: linear-gradient(90deg, var(--blue-600), var(--blue-400), var(--blue-200));
         }
         .dd-doctor-avatar {
           width: 76px; height: 76px; border-radius: 14px;
-          object-fit: cover; border: 2px solid #B5D4F4; flex-shrink: 0;
+          object-fit: cover; border: 2px solid var(--blue-100); flex-shrink: 0;
         }
         .dd-doctor-avatar-placeholder {
           width: 76px; height: 76px; border-radius: 14px;
-          background: #E6F1FB; border: 2px solid #B5D4F4;
+          background: var(--blue-50); border: 2px solid var(--blue-100);
           display: flex; align-items: center; justify-content: center;
           font-size: 2rem; flex-shrink: 0;
         }
         .dd-profile-info { flex: 1; min-width: 0; }
         .dd-spec-badge {
           font-size: 10px; font-weight: 600; letter-spacing: 1.8px;
-          text-transform: uppercase; color: #185FA5;
+          text-transform: uppercase; color: var(--blue-600);
           margin-bottom: 4px; display: block;
         }
         .dd-doctor-name {
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 1.25rem; font-weight: 800; color: #0F172A;
+          font-family: var(--font-display);
+          font-size: 1.25rem; font-weight: 800; color: var(--gray-900);
           margin-bottom: 8px; line-height: 1.2;
         }
         .dd-profile-pills {
@@ -330,9 +336,9 @@ export default function DoctorDetails() {
         }
         .dd-pill {
           display: inline-flex; align-items: center; gap: 4px;
-          background: #E6F1FB; border: 1px solid #B5D4F4;
+          background: var(--blue-50); border: 1px solid var(--blue-100);
           border-radius: 100px; padding: 3px 10px;
-          font-size: 11px; color: #185FA5; font-weight: 500;
+          font-size: 11px; color: var(--blue-600); font-weight: 500;
           white-space: nowrap;
         }
         .dd-avail-pill {
@@ -340,13 +346,13 @@ export default function DoctorDetails() {
           border-radius: 100px; padding: 3px 10px;
           font-size: 11px; font-weight: 600; white-space: nowrap;
         }
-        .dd-avail-pill.yes { background: #EAF3DE; border: 1px solid #97C459; color: #3B6D11; }
-        .dd-avail-pill.no  { background: #FCEBEB; border: 1px solid #F09595; color: #A32D2D; }
+        .dd-avail-pill.yes { background: var(--color-success-bg); border: 1px solid var(--color-success-border); color: var(--color-success-text); }
+        .dd-avail-pill.no  { background: var(--color-error-bg); border: 1px solid var(--color-error-border); color: var(--color-error-text); }
         .dd-avail-dot {
           width: 6px; height: 6px; border-radius: 50%;
           background: currentColor; animation: ddPulse 2s infinite; flex-shrink: 0;
         }
-        .dd-hospital-name { font-size: 12px; color: #64748B; margin-top: 2px; }
+        .dd-hospital-name { font-size: 12px; color: var(--gray-600); margin-top: 2px; }
 
         /* ── STATS ── */
         .dd-stats-row {
@@ -356,15 +362,15 @@ export default function DoctorDetails() {
           margin-top: 14px;
         }
         .dd-stat-box {
-          background: #fff; border: 1px solid #B5D4F4;
+          background: #fff; border: 1px solid var(--blue-100);
           border-radius: 12px; padding: 14px 10px;
           text-align: center;
         }
         .dd-stat-val {
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 1.3rem; font-weight: 800; color: #185FA5; margin-bottom: 2px;
+          font-family: var(--font-display);
+          font-size: 1.3rem; font-weight: 800; color: var(--blue-600); margin-bottom: 2px;
         }
-        .dd-stat-lbl { font-size: 11px; color: #64748B; }
+        .dd-stat-lbl { font-size: 11px; color: var(--gray-600); }
 
         /* ── MAIN LAYOUT ── */
         .dd-layout {
@@ -377,20 +383,20 @@ export default function DoctorDetails() {
 
         /* ── BLOCKS ── */
         .dd-block {
-          background: #fff; border: 1px solid #B5D4F4;
+          background: #fff; border: 1px solid var(--blue-100);
           border-radius: 16px; padding: 18px;
           margin-bottom: 14px;
         }
         .dd-block:last-child { margin-bottom: 0; }
         .dd-block-title {
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 14px; font-weight: 700; color: #0F172A;
+          font-family: var(--font-display);
+          font-size: 14px; font-weight: 700; color: var(--gray-900);
           margin-bottom: 14px;
           display: flex; align-items: center; gap: 8px;
         }
         .dd-block-title-icon {
           width: 28px; height: 28px; border-radius: 7px;
-          background: #E6F1FB; display: flex; align-items: center;
+          background: var(--blue-50); display: flex; align-items: center;
           justify-content: center; font-size: 13px; flex-shrink: 0;
         }
 
@@ -404,33 +410,33 @@ export default function DoctorDetails() {
           flex-shrink: 0; display: flex; flex-direction: column;
           align-items: center; gap: 2px;
           padding: 9px 12px; border-radius: 11px;
-          border: 1px solid #B5D4F4; background: #F8FAFC;
+          border: 1px solid var(--blue-100); background: var(--gray-50);
           cursor: pointer; transition: all 0.2s;
           min-width: 52px;
         }
-        .dd-date-chip:hover { background: #E6F1FB; border-color: #378ADD; }
-        .dd-date-chip.selected { background: #E6F1FB; border-color: #185FA5; }
+        .dd-date-chip:hover { background: var(--blue-50); border-color: var(--blue-400); }
+        .dd-date-chip.selected { background: var(--blue-50); border-color: var(--blue-600); }
         .dd-date-day {
           font-size: 9px; font-weight: 600; text-transform: uppercase;
-          letter-spacing: 0.8px; color: #94A3B8;
+          letter-spacing: 0.8px; color: var(--gray-400);
         }
-        .dd-date-chip.selected .dd-date-day { color: #185FA5; }
+        .dd-date-chip.selected .dd-date-day { color: var(--blue-600); }
         .dd-date-num {
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 1.1rem; font-weight: 800; color: #1E293B; line-height: 1;
+          font-family: var(--font-display);
+          font-size: 1.1rem; font-weight: 800; color: var(--gray-800); line-height: 1;
         }
-        .dd-date-chip.selected .dd-date-num { color: #185FA5; }
-        .dd-date-month { font-size: 8px; color: #94A3B8; text-transform: uppercase; }
+        .dd-date-chip.selected .dd-date-num { color: var(--blue-600); }
+        .dd-date-month { font-size: 8px; color: var(--gray-400); text-transform: uppercase; }
 
         /* ── SLOTS ── */
         .dd-slot-section { margin-bottom: 14px; }
         .dd-slot-section:last-child { margin-bottom: 0; }
         .dd-slot-period {
           font-size: 10px; font-weight: 600; letter-spacing: 1.2px;
-          text-transform: uppercase; color: #94A3B8; margin-bottom: 8px;
+          text-transform: uppercase; color: var(--gray-400); margin-bottom: 8px;
           display: flex; align-items: center; gap: 7px;
         }
-        .dd-slot-period::after { content:''; flex:1; height:1px; background:#E6F1FB; }
+        .dd-slot-period::after { content:''; flex:1; height:1px; background:var(--blue-50); }
         .dd-slots-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
@@ -442,11 +448,11 @@ export default function DoctorDetails() {
           position: relative;
           padding: 8px 4px 6px;
           border-radius: 9px;
-          border: 1px solid #B5D4F4;
-          background: #F8FAFC;
+          border: 1px solid var(--blue-100);
+          background: var(--gray-50);
           font-size: 12px;
           font-weight: 500;
-          color: #64748B;
+          color: var(--gray-600);
           cursor: pointer;
           transition: all 0.18s;
           text-align: center;
@@ -454,21 +460,21 @@ export default function DoctorDetails() {
           flex-direction: column;
           align-items: center;
           gap: 2px;
-          font-family: 'DM Sans', sans-serif;
+          font-family: var(--font-body);
         }
 
         /* available — hover */
         .dd-slot.available:hover {
-          background: #E6F1FB;
-          border-color: #378ADD;
-          color: #185FA5;
+          background: var(--blue-50);
+          border-color: var(--blue-400);
+          color: var(--blue-600);
         }
 
         /* selected */
         .dd-slot.selected {
-          background: #E6F1FB;
-          border-color: #185FA5;
-          color: #185FA5;
+          background: var(--blue-50);
+          border-color: var(--blue-600);
+          color: var(--blue-600);
           font-weight: 600;
           box-shadow: 0 0 0 2px rgba(24,95,165,0.15);
         }
@@ -477,7 +483,7 @@ export default function DoctorDetails() {
         .dd-slot.partial {
           background: #FFF8ED;
           border-color: #F0A030;
-          color: #854F0B;
+          color: var(--color-warning-text);
         }
         .dd-slot.partial:hover {
           background: #FFF0D6;
@@ -486,8 +492,8 @@ export default function DoctorDetails() {
 
         /* full — completely booked */
         .dd-slot.full {
-          background: #F8FAFC;
-          border-color: #E2E8F0;
+          background: var(--gray-50);
+          border-color: var(--gray-200);
           color: #B0BAC6;
           cursor: not-allowed;
           text-decoration: line-through;
@@ -496,8 +502,8 @@ export default function DoctorDetails() {
           opacity: 0.7;
         }
         .dd-slot.full:hover {
-          background: #F8FAFC;
-          border-color: #E2E8F0;
+          background: var(--gray-50);
+          border-color: var(--gray-200);
           color: #B0BAC6;
           transform: none;
         }
@@ -507,7 +513,7 @@ export default function DoctorDetails() {
           width: 100%;
           height: 3px;
           border-radius: 2px;
-          background: #E2E8F0;
+          background: var(--gray-200);
           overflow: hidden;
           margin-top: 2px;
         }
@@ -518,7 +524,7 @@ export default function DoctorDetails() {
         }
         .partial .dd-slot-bar-fill  { background: #F0A030; }
         .full    .dd-slot-bar-fill  { background: #E2384B; }
-        .selected .dd-slot-bar-fill { background: #185FA5; }
+        .selected .dd-slot-bar-fill { background: var(--blue-600); }
         .available .dd-slot-bar-fill { background: #4CAF7D; }
 
         /* sub-label inside slot (e.g. "3 left", "Full") */
@@ -528,9 +534,9 @@ export default function DoctorDetails() {
           letter-spacing: 0.3px;
           line-height: 1;
         }
-        .partial  .dd-slot-sub { color: #854F0B; }
+        .partial  .dd-slot-sub { color: var(--color-warning-text); }
         .full     .dd-slot-sub { color: #B0BAC6; }
-        .selected .dd-slot-sub { color: #185FA5; }
+        .selected .dd-slot-sub { color: var(--blue-600); }
 
         /* "Full" tag badge in top-right corner */
         .dd-slot-full-tag {
@@ -541,8 +547,8 @@ export default function DoctorDetails() {
           letter-spacing: 0.5px;
           text-transform: uppercase;
           color: #E2384B;
-          background: #FCEBEB;
-          border: 1px solid #F09595;
+          background: var(--color-error-bg);
+          border: 1px solid var(--color-error-border);
           border-radius: 3px;
           padding: 0px 3px;
           line-height: 14px;
@@ -558,121 +564,121 @@ export default function DoctorDetails() {
         .dd-legend {
           display: flex; gap: 14px; flex-wrap: wrap;
           margin-bottom: 14px; padding: 10px 14px;
-          background: #F8FAFC; border: 1px solid #E6F1FB;
+          background: var(--gray-50); border: 1px solid var(--blue-50);
           border-radius: 10px;
         }
         .dd-legend-item {
           display: flex; align-items: center; gap: 5px;
-          font-size: 11px; color: #64748B;
+          font-size: 11px; color: var(--gray-600);
         }
         .dd-legend-dot {
           width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
         }
 
-        .dd-no-slots { text-align: center; padding: 24px; color: #94A3B8; font-size: 13px; }
+        .dd-no-slots { text-align: center; padding: 24px; color: var(--gray-400); font-size: 13px; }
 
         /* ── BOOKING CARD ── */
         .dd-booking-card {
-          background: #fff; border: 1px solid #B5D4F4;
+          background: #fff; border: 1px solid var(--blue-100);
           border-radius: 18px; overflow: hidden;
           box-shadow: 0 6px 24px rgba(24,95,165,0.09);
           position: sticky; top: 80px;
         }
         .dd-booking-header {
           padding: 16px 18px 12px;
-          border-bottom: 1px solid #E6F1FB;
-          background: linear-gradient(160deg, #F4F9FF, #EAF3FF);
+          border-bottom: 1px solid var(--blue-50);
+          background: linear-gradient(160deg, var(--color-surface), #EAF3FF);
           position: relative; overflow: hidden;
         }
         .dd-booking-header::before {
           content:''; position:absolute; top:0; left:0; right:0; height:3px;
-          background: linear-gradient(90deg, #185FA5, #378ADD, #85B7EB);
+          background: linear-gradient(90deg, var(--blue-600), var(--blue-400), var(--blue-200));
         }
         .dd-booking-header-title {
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 15px; font-weight: 800; color: #0F172A; margin-bottom: 2px;
+          font-family: var(--font-display);
+          font-size: 15px; font-weight: 800; color: var(--gray-900); margin-bottom: 2px;
         }
-        .dd-booking-header-sub { font-size: 12px; color: #64748B; }
+        .dd-booking-header-sub { font-size: 12px; color: var(--gray-600); }
         .dd-booking-body { padding: 14px 18px; }
 
         .dd-summary-row {
           display: flex; justify-content: space-between; align-items: center;
-          padding: 8px 0; border-bottom: 1px solid #F1F5F9;
+          padding: 8px 0; border-bottom: 1px solid var(--gray-100);
           font-size: 13px; gap: 8px;
         }
         .dd-summary-row:last-of-type { border-bottom: none; }
-        .dd-summary-label { color: #64748B; flex-shrink: 0; }
-        .dd-summary-value { font-weight: 500; color: #0F172A; text-align: right; }
-        .dd-summary-value.empty { color: #94A3B8; font-style: italic; }
+        .dd-summary-label { color: var(--gray-600); flex-shrink: 0; }
+        .dd-summary-value { font-weight: 500; color: var(--gray-900); text-align: right; }
+        .dd-summary-value.empty { color: var(--gray-400); font-style: italic; }
 
         .dd-plans { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
         .dd-plan {
           display: flex; align-items: center; gap: 10px;
           padding: 11px 12px; border-radius: 11px;
-          border: 1.5px solid #B5D4F4; cursor: pointer; transition: all 0.2s;
-          position: relative; background: #F8FAFC;
+          border: 1.5px solid var(--blue-100); cursor: pointer; transition: all 0.2s;
+          position: relative; background: var(--gray-50);
         }
-        .dd-plan:hover { border-color: #378ADD; background: #E6F1FB; }
-        .dd-plan.selected { border-color: #185FA5; background: #E6F1FB; }
+        .dd-plan:hover { border-color: var(--blue-400); background: var(--blue-50); }
+        .dd-plan.selected { border-color: var(--blue-600); background: var(--blue-50); }
         .dd-plan-radio {
           width: 17px; height: 17px; border-radius: 50%;
-          border: 2px solid #B5D4F4;
+          border: 2px solid var(--blue-100);
           display: flex; align-items: center; justify-content: center;
           flex-shrink: 0; transition: border-color 0.2s;
         }
-        .dd-plan.selected .dd-plan-radio { border-color: #185FA5; }
+        .dd-plan.selected .dd-plan-radio { border-color: var(--blue-600); }
         .dd-plan-radio-dot {
           width: 7px; height: 7px; border-radius: 50%;
-          background: #185FA5; opacity: 0; transition: opacity 0.2s;
+          background: var(--blue-600); opacity: 0; transition: opacity 0.2s;
         }
         .dd-plan.selected .dd-plan-radio-dot { opacity: 1; }
         .dd-plan-info { flex: 1; min-width: 0; }
-        .dd-plan-name { font-size: 12px; font-weight: 600; color: #0F172A; margin-bottom: 1px; }
-        .dd-plan-desc { font-size: 11px; color: #64748B; }
+        .dd-plan-name { font-size: 12px; font-weight: 600; color: var(--gray-900); margin-bottom: 1px; }
+        .dd-plan-desc { font-size: 11px; color: var(--gray-600); }
         .dd-plan-price {
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 1rem; font-weight: 800; color: #185FA5; flex-shrink: 0;
+          font-family: var(--font-display);
+          font-size: 1rem; font-weight: 800; color: var(--blue-600); flex-shrink: 0;
         }
         .dd-plan-popular {
           position: absolute; top: -8px; right: 10px;
-          background: #185FA5; color: #fff;
+          background: var(--blue-600); color: #fff;
           font-size: 9px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;
           padding: 2px 8px; border-radius: 100px;
         }
 
         .dd-total-row {
           display: flex; justify-content: space-between; align-items: center;
-          padding: 12px 0; border-top: 1px solid #E6F1FB; margin-bottom: 12px;
+          padding: 12px 0; border-top: 1px solid var(--blue-50); margin-bottom: 12px;
         }
-        .dd-total-label { font-size: 13px; font-weight: 600; color: #64748B; }
+        .dd-total-label { font-size: 13px; font-weight: 600; color: var(--gray-600); }
         .dd-total-amount {
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 1.4rem; font-weight: 800; color: #185FA5;
+          font-family: var(--font-display);
+          font-size: 1.4rem; font-weight: 800; color: var(--blue-600);
         }
 
         .dd-book-btn {
           width: 100%; padding: 13px; border-radius: 11px; border: none;
-          background: #185FA5; color: #fff;
-          font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
+          background: var(--blue-600); color: #fff;
+          font-family: var(--font-body); font-size: 14px; font-weight: 600;
           cursor: pointer; transition: all 0.25s;
           box-shadow: 0 4px 14px rgba(24,95,165,0.22);
           display: flex; align-items: center; justify-content: center; gap: 7px;
         }
         .dd-book-btn:hover:not(:disabled) {
-          background: #0C447C;
+          background: var(--blue-800);
           box-shadow: 0 6px 20px rgba(24,95,165,0.3);
           transform: translateY(-1px);
         }
         .dd-book-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
         .dd-book-btn.outline {
-          background: transparent; color: #185FA5;
-          border: 1.5px solid #B5D4F4; box-shadow: none;
+          background: transparent; color: var(--blue-600);
+          border: 1.5px solid var(--blue-100); box-shadow: none;
         }
         .dd-book-btn.outline:hover {
-          background: #E6F1FB; border-color: #378ADD; transform: none;
+          background: var(--blue-50); border-color: var(--blue-400); transform: none;
         }
         .dd-book-note {
-          font-size: 11px; color: #94A3B8; text-align: center;
+          font-size: 11px; color: var(--gray-400); text-align: center;
           margin-top: 10px; line-height: 1.6;
         }
 
