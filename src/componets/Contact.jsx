@@ -60,13 +60,13 @@ const Contact = () => {
      />
       <style>{`
         .ct-root {
-          font-family: 'DM Sans', sans-serif;
-          background: linear-gradient(160deg, #F4F9FF 0%, #EAF3FF 60%, #F8FBFF 100%);
+          font-family: var(--font-body);
+          background: linear-gradient(160deg, var(--color-surface) 0%, #EAF3FF 60%, #F8FBFF 100%);
           min-height: 100vh; padding: 72px 0 96px;
         }
         .ct-hero { text-align: center; margin-bottom: 52px; }
         .ct-label { font-size: 11px; font-weight: 600; letter-spacing: 2.5px; text-transform: uppercase; color: var(--blue-600); margin-bottom: 12px; }
-        .ct-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(2rem, 4vw, 2.8rem); font-weight: 800; color: var(--gray-900); margin-bottom: 12px; }
+        .ct-title { font-family: var(--font-display); font-size: clamp(2rem, 4vw, 2.8rem); font-weight: 800; color: var(--gray-900); margin-bottom: 12px; }
         .ct-sub { font-size: 16px; color: var(--gray-500); max-width: 500px; margin: 0 auto; line-height: 1.7; }
 
         .ct-grid { display: grid; grid-template-columns: 1fr 1.6fr; gap: 32px; max-width: 900px; margin: 0 auto; padding: 0 20px; }
@@ -75,7 +75,7 @@ const Contact = () => {
           background: #fff; border: 1px solid var(--blue-100);
           border-radius: 22px; padding: 32px; box-shadow: var(--shadow-sm);
         }
-        .ct-info-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 22px; }
+        .ct-info-title { font-family: var(--font-display); font-size: 1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 22px; }
         .ct-contact-item {
           display: flex; align-items: flex-start; gap: 14px; margin-bottom: 22px;
         }
@@ -96,7 +96,7 @@ const Contact = () => {
           display: flex; align-items: center; justify-content: center; gap: 10px;
           width: 100%; padding: 13px;
           background: #25D366; color: #fff; border: none; border-radius: 12px;
-          font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
+          font-family: var(--font-body); font-size: 14px; font-weight: 600;
           cursor: pointer; text-decoration: none; margin-top: 22px;
           transition: all 0.2s;
         }
@@ -106,7 +106,7 @@ const Contact = () => {
           background: #fff; border: 1px solid var(--blue-100);
           border-radius: 22px; padding: 36px; box-shadow: var(--shadow-sm);
         }
-        .ct-form-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
+        .ct-form-title { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
         .ct-form-sub { font-size: 14px; color: var(--gray-500); margin-bottom: 28px; }
 
         .ct-field { margin-bottom: 18px; }
@@ -114,7 +114,7 @@ const Contact = () => {
         .ct-input {
           width: 100%; background: var(--gray-50); border: 1px solid var(--blue-100);
           border-radius: 11px; padding: 12px 14px;
-          font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--gray-900);
+          font-family: var(--font-body); font-size: 14px; color: var(--gray-900);
           outline: none; transition: all 0.15s;
         }
         .ct-input::placeholder { color: var(--gray-400); }
@@ -131,7 +131,7 @@ const Contact = () => {
         .ct-submit {
           width: 100%; padding: 14px;
           background: var(--blue-600); color: #fff; border: none; border-radius: 12px;
-          font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600;
+          font-family: var(--font-body); font-size: 15px; font-weight: 600;
           cursor: pointer; transition: all 0.2s; box-shadow: var(--shadow-sm);
         }
         .ct-submit:hover:not(:disabled) { background: var(--blue-800); transform: translateY(-1px); }
