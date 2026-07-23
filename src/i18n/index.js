@@ -7,7 +7,15 @@ import te from './te.json';
 export const LANG_STORAGE_KEY = 'tw_lang';
 export const SUPPORTED_LANGS = ['en', 'hi', 'te'];
 
-const storedLang = localStorage.getItem(LANG_STORAGE_KEY);
+function readStoredLang() {
+  try { return localStorage.getItem(LANG_STORAGE_KEY); } catch { return null; }
+}
+
+function writeStoredLang(lng) {
+  try { localStorage.setItem(LANG_STORAGE_KEY, lng); } catch { /* storage unavailable */ }
+}
+
+const storedLang = readStoredLang();
 const initialLang = SUPPORTED_LANGS.includes(storedLang) ? storedLang : 'en';
 
 i18n
@@ -23,8 +31,6 @@ i18n
     interpolation: { escapeValue: false },
   });
 
-i18n.on('languageChanged', (lng) => {
-  localStorage.setItem(LANG_STORAGE_KEY, lng);
-});
+i18n.on('languageChanged', writeStoredLang);
 
 export default i18n;
