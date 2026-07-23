@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import API from '../services/api';
+import { filterTestDoctors } from '../services/testHospitals';
 import SEO from './SEO';
 
 const STEPS = [
@@ -39,7 +40,7 @@ export default function Hero() {
   useEffect(() => {
 API.get('/doctors/').then(({ data }) => {
   const doctors = Array.isArray(data) ? data : (data.results || []);
-  setDoctors(doctors.slice(0, 6));
+  setDoctors(filterTestDoctors(doctors).slice(0, 6));
 }).catch(() => {});
   }, []);
 
@@ -57,14 +58,14 @@ API.get('/doctors/').then(({ data }) => {
     url="/"
     /> 
       <style>{`
-        .hero-root { font-family: 'DM Sans', sans-serif; background: #fff; color: var(--gray-900); }
+        .hero-root { font-family: var(--font-body); background: #fff; color: var(--gray-900); }
 
         /* ── HERO ── */
         .hero-section {
           position: relative; overflow: hidden;
           padding: 90px 0 80px; min-height: 90vh;
           display: flex; align-items: center;
-          background: linear-gradient(160deg, #F4F9FF 0%, #EAF3FF 50%, #F8FBFF 100%);
+          background: linear-gradient(160deg, var(--color-surface) 0%, #EAF3FF 50%, #F8FBFF 100%);
         }
         .hero-grid-bg {
           position: absolute; inset: 0;
@@ -87,11 +88,11 @@ API.get('/doctors/').then(({ data }) => {
           margin-bottom: 22px;
         }
         .hero-badge-dot {
-          width: 7px; height: 7px; border-radius: 50%; background: #3B6D11;
+          width: 7px; height: 7px; border-radius: 50%; background: var(--color-success-text);
           animation: twPulse 2s ease-in-out infinite;
         }
         .hero-title {
-          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-family: var(--font-display);
           font-size: clamp(2.4rem, 5.5vw, 4rem);
           font-weight: 800; line-height: 1.1; margin-bottom: 20px; color: var(--gray-900);
         }
@@ -113,7 +114,7 @@ API.get('/doctors/').then(({ data }) => {
         }
         .stat-item:first-child { border-left: none; padding-left: 0; }
         .stat-num {
-          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-family: var(--font-display);
           font-size: 1.7rem; font-weight: 800; color: var(--blue-600); line-height: 1;
         }
         .stat-label { font-size: 13px; color: var(--gray-500); margin-top: 3px; }
@@ -137,7 +138,7 @@ API.get('/doctors/').then(({ data }) => {
           color: var(--color-success-text); margin-bottom: 10px;
         }
         .token-number {
-          font-family: 'DM Mono', monospace;
+          font-family: var(--font-mono);
           font-size: 3.5rem; font-weight: 500; color: var(--blue-600);
           line-height: 1; margin-bottom: 8px; letter-spacing: -1px;
         }
@@ -155,7 +156,7 @@ API.get('/doctors/').then(({ data }) => {
         .demo-avatar {
           width: 34px; height: 34px; border-radius: 50%;
           display: flex; align-items: center; justify-content: center;
-          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-family: var(--font-display);
           font-size: 12px; font-weight: 700; flex-shrink: 0;
         }
         .demo-avatar.active { background: var(--blue-600); color: #fff; }
@@ -189,7 +190,7 @@ API.get('/doctors/').then(({ data }) => {
         .step-card:last-child { border-right: none; }
         .step-card:hover { background: var(--blue-50); }
         .step-num {
-          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-family: var(--font-display);
           font-size: 3rem; font-weight: 800; color: var(--blue-100);
           line-height: 1; margin-bottom: 16px;
         }
@@ -199,7 +200,7 @@ API.get('/doctors/').then(({ data }) => {
           display: flex; align-items: center; justify-content: center;
           font-size: 20px; margin-bottom: 18px;
         }
-        .step-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--gray-900); }
+        .step-title { font-family: var(--font-display); font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--gray-900); }
         .step-desc  { font-size: 14px; color: var(--gray-500); line-height: 1.65; }
 
         /* ── DOCTORS ── */
@@ -227,7 +228,7 @@ API.get('/doctors/').then(({ data }) => {
         }
         .doc-info { padding: 14px; }
         .doc-spec { font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--blue-600); margin-bottom: 4px; }
-        .doc-name { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 14px; font-weight: 700; margin-bottom: 6px; color: var(--gray-900); }
+        .doc-name { font-family: var(--font-display); font-size: 14px; font-weight: 700; margin-bottom: 6px; color: var(--gray-900); }
         .doc-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--gray-500); }
 
         /* ── FEATURES ── */
@@ -245,7 +246,7 @@ API.get('/doctors/').then(({ data }) => {
           display: flex; align-items: center; justify-content: center;
           font-size: 22px; margin-bottom: 18px;
         }
-        .feature-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--gray-900); }
+        .feature-title { font-family: var(--font-display); font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--gray-900); }
         .feature-desc  { font-size: 14px; color: var(--gray-500); line-height: 1.65; }
 
         /* ── PRICING ── */
@@ -268,7 +269,7 @@ API.get('/doctors/').then(({ data }) => {
           color: rgba(255,255,255,0.9); margin-bottom: 20px;
         }
         .price-name { font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.7); margin-bottom: 12px; }
-        .price-amount { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 4rem; font-weight: 800; line-height: 1; margin-bottom: 6px; }
+        .price-amount { font-family: var(--font-display); font-size: 4rem; font-weight: 800; line-height: 1; margin-bottom: 6px; }
         .price-amount sup { font-size: 1.5rem; vertical-align: super; font-weight: 600; }
         .price-sub { font-size: 13px; color: rgba(255,255,255,0.55); margin-bottom: 28px; }
         .price-features { list-style: none; padding: 0; margin: 0 0 32px; display: flex; flex-direction: column; gap: 11px; }
@@ -289,14 +290,14 @@ API.get('/doctors/').then(({ data }) => {
             linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
           background-size: 48px 48px;
         }
-        .cta-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(1.8rem, 4vw, 3rem); font-weight: 800; margin-bottom: 16px; position: relative; }
+        .cta-title { font-family: var(--font-display); font-size: clamp(1.8rem, 4vw, 3rem); font-weight: 800; margin-bottom: 16px; position: relative; }
         .cta-sub { color: rgba(255,255,255,0.65); font-size: 1.05rem; margin-bottom: 36px; position: relative; }
         .cta-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; position: relative; }
         .btn-white {
           display: inline-flex; align-items: center; gap: 8px;
           background: #fff; color: var(--blue-700);
           border: none; border-radius: 12px; padding: 14px 28px;
-          font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600;
+          font-family: var(--font-body); font-size: 15px; font-weight: 600;
           cursor: pointer; text-decoration: none; transition: all 0.2s;
         }
         .btn-white:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.15); color: var(--blue-800); text-decoration: none; }
@@ -304,7 +305,7 @@ API.get('/doctors/').then(({ data }) => {
           display: inline-flex; align-items: center; gap: 8px;
           background: transparent; color: rgba(255,255,255,0.9);
           border: 1px solid rgba(255,255,255,0.35); border-radius: 12px; padding: 14px 28px;
-          font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500;
+          font-family: var(--font-body); font-size: 15px; font-weight: 500;
           cursor: pointer; text-decoration: none; transition: all 0.2s;
         }
         .btn-white-outline:hover { border-color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.08); color: #fff; text-decoration: none; }
@@ -379,7 +380,7 @@ API.get('/doctors/').then(({ data }) => {
                       <div>
                         <div className="token-label">Your Token</div>
                         <div className="token-live-badge">
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3B6D11', animation: 'twPulse 2s infinite', flexShrink: 0 }} />
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-success-text)', animation: 'twPulse 2s infinite', flexShrink: 0 }} />
                           Queue Access Active
                         </div>
                         <div className="token-number">#007</div>
