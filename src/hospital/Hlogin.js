@@ -1,10 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import API from '../services/api';
 import { authCSS } from '../componets/authStyles';
 
 export default function Hlogin() {
   const navigate = useNavigate();
+
+  // Already signed in as a hospital? Skip the login page.
+  useEffect(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || 'null');
+      if (user?.role === 'hospital' && localStorage.getItem('access')) {
+        navigate('/Hdashboard', { replace: true });
+      }
+    } catch { /* ignore malformed storage */ }
+  }, [navigate]);
+
   const [details,    setDetails]    = useState({ mobile: '', password: '' });
   const [loading,    setLoading]    = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);

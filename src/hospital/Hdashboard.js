@@ -376,7 +376,33 @@ const Hdashboard = () => {
           {toast.msg}
         </div>
       )}
-      <style>{`@keyframes fadeInToast{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}`}</style>
+      <style>{`
+        @keyframes fadeInToast{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+        /* ── Cleaner navbar ── */
+        .tw-navbar{position:sticky;top:0;z-index:1020;background:rgba(255,255,255,.85);backdrop-filter:saturate(180%) blur(8px);-webkit-backdrop-filter:saturate(180%) blur(8px);border-bottom:1px solid #eceef1}
+        .tw-back{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid #e4e8ec;background:#fff;color:#5b6672;border-radius:10px;font-size:18px;line-height:1;transition:all .15s ease;cursor:pointer}
+        .tw-back:hover{background:#f4f6f8;color:#0d6efd;border-color:#d4dbe1}
+        .tw-brand{font-weight:700;letter-spacing:-.02em;color:#0d6efd;font-size:16px}
+        .tw-hosp{display:inline-flex;align-items:center;gap:6px;background:#f4f6f8;color:#5b6672;font-size:13px;font-weight:500;padding:6px 13px;border-radius:999px}
+        .tw-nav-btn{display:inline-flex;align-items:center;gap:5px;border:1px solid #e4e8ec;background:#fff;color:#5b6672;font-size:13px;font-weight:600;padding:7px 15px;border-radius:10px;transition:all .15s ease;cursor:pointer}
+        .tw-nav-btn:hover{background:#f4f6f8;color:#212529}
+        .tw-nav-btn--danger{color:#A32D2D}
+        .tw-nav-btn--danger:hover{background:#fdecec;border-color:#f3c9c9}
+
+        /* ── Cleaner stat cards ── */
+        .tw-stat{position:relative;background:#fff;border:1px solid #edf0f2;border-radius:16px;padding:18px 18px 16px 22px;overflow:hidden;transition:transform .15s ease,box-shadow .15s ease}
+        .tw-stat:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(16,24,40,.06)}
+        .tw-stat__accent{position:absolute;left:0;top:0;bottom:0;width:4px}
+        .tw-stat__label{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#8a94a1;margin:0 0 6px}
+        .tw-stat__val{font-size:32px;font-weight:700;line-height:1;letter-spacing:-.02em;margin:0}
+
+        /* ── Segmented tabs ── */
+        .tw-tabs{display:inline-flex;gap:4px;background:#f1f3f5;border-radius:12px;padding:4px;flex-wrap:wrap}
+        .tw-tab{border:0;background:transparent;color:#5b6672;font-size:14px;font-weight:600;padding:8px 16px;border-radius:9px;transition:all .15s ease;white-space:nowrap;cursor:pointer}
+        .tw-tab:hover{color:#212529}
+        .tw-tab--active{background:#fff;color:#0d6efd;box-shadow:0 1px 3px rgba(16,24,40,.12)}
+      `}</style>
 
       {/* Token detail popup — handy for reading the token aloud or confirming
           the patient at the counter. */}
@@ -409,15 +435,16 @@ const Hdashboard = () => {
       )}
 
       {/* Navbar */}
-      <nav className="navbar bg-white shadow-sm px-4 py-2">
+      <nav className="tw-navbar navbar px-4 py-2">
         <div className="d-flex align-items-center gap-2">
+          <button className="tw-back" onClick={() => navigate("/")} title="Back to home" aria-label="Back to home">←</button>
           <img src="/logo.png" alt="TW" style={{ width: 32, borderRadius: 8 }} />
-          <span className="fw-bold text-primary">TokenWalla</span>
+          <span className="tw-brand">TokenWalla</span>
         </div>
-        <div className="d-flex align-items-center gap-3">
-          <span className="text-muted small">🏥 {hospital?.name}</span>
-          <button className="btn btn-outline-primary btn-sm" onClick={() => navigate("/Hprofile")}>👤 Profile</button>
-          <button className="btn btn-outline-danger btn-sm" onClick={logout}>Logout</button>
+        <div className="d-flex align-items-center gap-2 gap-md-3">
+          <span className="tw-hosp d-none d-sm-inline-flex">🏥 {hospital?.name}</span>
+          <button className="tw-nav-btn" onClick={() => navigate("/Hprofile")}>👤 Profile</button>
+          <button className="tw-nav-btn tw-nav-btn--danger" onClick={logout}>Logout</button>
         </div>
       </nav>
 
@@ -426,47 +453,37 @@ const Hdashboard = () => {
         {/* Stats */}
         <div className="row g-3 mb-4">
           {[
-            { label: `${dayWord} Total`, val: filteredTotal,      color: "primary" },
-            { label: "Waiting",      val: fWaiting.length,        color: "warning" },
-            { label: "In Progress",  val: fInProgress.length,     color: "info"    },
-            { label: "Completed",    val: fCompleted.length,      color: "success" },
-          ].map(({ label, val, color }) => (
+            { label: `${dayWord} Total`, val: filteredTotal,  hex: "#2563eb" },
+            { label: "Waiting",      val: fWaiting.length,    hex: "#d97706" },
+            { label: "In Progress",  val: fInProgress.length, hex: "#0ea5e9" },
+            { label: "Completed",    val: fCompleted.length,  hex: "#16a34a" },
+          ].map(({ label, val, hex }) => (
             <div key={label} className="col-6 col-md-3">
-              <div className="card shadow-sm p-3 text-center border-0">
-                <h6 className="text-muted mb-1">{label}</h6>
-                <h3 className={`fw-bold text-${color}`}>{val}</h3>
+              <div className="tw-stat">
+                <span className="tw-stat__accent" style={{ background: hex }} />
+                <p className="tw-stat__label">{label}</p>
+                <p className="tw-stat__val" style={{ color: hex }}>{val}</p>
               </div>
             </div>
           ))}
         </div>
 
         {/* ── Tabs ── */}
-        <ul className="nav nav-tabs mb-4">
-          <li className="nav-item">
+        <div className="tw-tabs mb-4">
+          {[
+            { key: "queue",   label: "🏥 Queue Management" },
+            { key: "doctors", label: "👨‍⚕️ Doctors" },
+            { key: "scanner", label: "📷 QR Scanner" },
+          ].map(({ key, label }) => (
             <button
-              className={`nav-link ${activeTab === "queue" ? "active" : ""}`}
-              onClick={() => setActiveTab("queue")}
+              key={key}
+              className={`tw-tab ${activeTab === key ? "tw-tab--active" : ""}`}
+              onClick={() => setActiveTab(key)}
             >
-              🏥 Queue Management
+              {label}
             </button>
-          </li>
-          <li className="nav-item">
-            <button
-              className={`nav-link ${activeTab === "doctors" ? "active" : ""}`}
-              onClick={() => setActiveTab("doctors")}
-            >
-              👨‍⚕️ Doctors
-            </button>
-          </li>
-          <li className="nav-item">
-            <button
-              className={`nav-link ${activeTab === "scanner" ? "active" : ""}`}
-              onClick={() => setActiveTab("scanner")}
-            >
-              📷 QR Scanner
-            </button>
-          </li>
-        </ul>
+          ))}
+        </div>
 
         {/* ── Queue Tab ── */}
         {activeTab === "queue" && (
