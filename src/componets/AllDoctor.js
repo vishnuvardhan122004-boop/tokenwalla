@@ -1,15 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import API from '../services/api';
+import { filterTestDoctors } from '../services/testHospitals';
 import SEO from './SEO';
-
-// Test hospitals are named like "[TEST] Demo Hospital". They're hidden from
-// the public doctor list in production, but kept visible in local dev builds
-// so a tester can still use them (mirrors the app's __DEV__ / TEST marker).
-const HIDE_TEST_HOSPITALS = process.env.NODE_ENV === 'production';
-function isTestHospital(hospitalName) {
-  return !!hospitalName && hospitalName.toUpperCase().includes('[TEST]');
-}
 
 function SkeletonCard() {
   return (
@@ -76,9 +69,7 @@ export default function AllDoctor() {
       .then(({ data }) => {
         const all  = Array.isArray(data) ? data : (data.results || []);
         // Hide test hospitals from the public list (production only).
-        const list = HIDE_TEST_HOSPITALS
-          ? all.filter(d => !isTestHospital(d.hospital_name))
-          : all;
+        const list = filterTestDoctors(all);
         setDoctors(list);
         setCities([...new Set(list.map(d => d.city).filter(Boolean))]);
       })
@@ -131,11 +122,11 @@ export default function AllDoctor() {
   url="/alldoctor"
     />
       <style>{`
-        .ad-root { font-family: 'DM Sans', sans-serif; background: #fff; min-height: 100vh; }
+        .ad-root { font-family: var(--font-body); background: #fff; min-height: 100vh; }
 
         /* Header */
         .ad-header {
-          background: linear-gradient(160deg, #F4F9FF 0%, #EAF3FF 60%, #F8FBFF 100%);
+          background: linear-gradient(160deg, var(--color-surface) 0%, #EAF3FF 60%, #F8FBFF 100%);
           padding: 64px 0 0; border-bottom: 1px solid var(--blue-100);
           position: relative; overflow: hidden;
         }
@@ -145,7 +136,7 @@ export default function AllDoctor() {
           background-size: 48px 48px; opacity: 0.35;
         }
         .ad-header-inner { position: relative; padding-bottom: 28px; }
-        .ad-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800; color: var(--gray-900); margin-bottom: 8px; }
+        .ad-title { font-family: var(--font-display); font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800; color: var(--gray-900); margin-bottom: 8px; }
         .ad-sub { font-size: 15px; color: var(--gray-500); }
 
         /* Spec pills */
@@ -171,7 +162,7 @@ export default function AllDoctor() {
         .search-input {
           width: 100%; background: var(--gray-50); border: 1px solid var(--blue-100);
           border-radius: 12px; padding: 11px 14px 11px 40px;
-          font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--gray-800);
+          font-family: var(--font-body); font-size: 14px; color: var(--gray-800);
           outline: none; transition: all 0.15s;
         }
         .search-input::placeholder { color: var(--gray-400); }
@@ -179,7 +170,7 @@ export default function AllDoctor() {
         .filter-select {
           background: var(--gray-50); border: 1px solid var(--blue-100);
           border-radius: 12px; padding: 11px 34px 11px 14px;
-          font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--gray-700);
+          font-family: var(--font-body); font-size: 14px; color: var(--gray-700);
           outline: none; cursor: pointer; transition: all 0.15s; min-width: 140px;
           appearance: none;
           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394A3B8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
@@ -202,7 +193,7 @@ export default function AllDoctor() {
           display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
           padding: 11px 16px; border-radius: 12px;
           border: 1px solid var(--blue-200); background: var(--blue-50); color: var(--blue-700);
-          font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
+          font-family: var(--font-body); font-size: 14px; font-weight: 600;
           cursor: pointer; transition: all 0.15s;
         }
         .near-me-btn:hover { background: var(--blue-100); border-color: var(--blue-400); }
@@ -217,7 +208,7 @@ export default function AllDoctor() {
         .suggest-item {
           display: flex; align-items: center; gap: 10px; width: 100%;
           padding: 9px 12px; border: none; background: none; border-radius: 8px;
-          font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--gray-700);
+          font-family: var(--font-body); font-size: 14px; color: var(--gray-700);
           cursor: pointer; text-align: left; transition: all 0.12s;
         }
         .suggest-item:hover { background: var(--blue-50); color: var(--blue-800); }
@@ -261,7 +252,7 @@ export default function AllDoctor() {
 
         .card-body { padding: 18px 20px 20px; flex: 1; display: flex; flex-direction: column; }
         .card-spec { font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--blue-600); margin-bottom: 5px; }
-        .card-name { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 12px; }
+        .card-name { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 12px; }
         .card-meta { display: flex; gap: 14px; margin-bottom: 14px; }
         .meta-item { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--gray-500); }
         .meta-icon { width: 24px; height: 24px; border-radius: 6px; background: var(--blue-50); display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
@@ -271,13 +262,13 @@ export default function AllDoctor() {
         .card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--blue-50); }
         .card-slots-count { font-size: 12px; color: var(--gray-400); margin-bottom: 10px; }
         .card-fee { display: flex; flex-direction: column; line-height: 1.1; }
-        .card-fee-amount { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.25rem; font-weight: 800; color: var(--blue-600); }
+        .card-fee-amount { font-family: var(--font-display); font-size: 1.25rem; font-weight: 800; color: var(--blue-600); }
         .card-fee-sub { font-size: 10px; color: var(--gray-400); }
         .book-btn {
           display: inline-flex; align-items: center; gap: 6px;
           background: var(--blue-600); color: #fff;
           border: none; border-radius: 10px; padding: 9px 18px;
-          font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+          font-family: var(--font-body); font-size: 13px; font-weight: 500;
           cursor: pointer; transition: all 0.15s;
         }
         .book-btn:hover { background: var(--blue-800); }
@@ -285,7 +276,7 @@ export default function AllDoctor() {
         /* Empty */
         .empty-state { text-align: center; padding: 80px 20px; }
         .empty-icon { font-size: 4rem; opacity: 0.35; margin-bottom: 16px; display: block; }
-        .empty-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.4rem; font-weight: 700; color: var(--gray-500); margin-bottom: 8px; }
+        .empty-title { font-family: var(--font-display); font-size: 1.4rem; font-weight: 700; color: var(--gray-500); margin-bottom: 8px; }
         .empty-sub { color: var(--gray-400); font-size: 15px; }
 
         @keyframes twPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
