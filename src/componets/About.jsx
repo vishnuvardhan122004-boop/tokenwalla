@@ -22,10 +22,10 @@ const About = () => {
   url="/about"
       />
       <style>{`
-        .ab-root { font-family: 'DM Sans', sans-serif; background: #fff; }
+        .ab-root { font-family: var(--font-body); background: #fff; }
 
         .ab-hero {
-          background: linear-gradient(160deg, #F4F9FF 0%, #EAF3FF 60%, #F8FBFF 100%);
+          background: linear-gradient(160deg, var(--color-surface) 0%, #EAF3FF 60%, #F8FBFF 100%);
           padding: 88px 0 72px; border-bottom: 1px solid var(--blue-100);
           position: relative; overflow: hidden;
         }
@@ -37,7 +37,7 @@ const About = () => {
         }
         .ab-hero-inner { position: relative; max-width: 700px; margin: 0 auto; padding: 0 24px; text-align: center; }
         .ab-label { font-size: 11px; font-weight: 600; letter-spacing: 2.5px; text-transform: uppercase; color: var(--blue-600); margin-bottom: 14px; }
-        .ab-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(2rem, 4vw, 3rem); font-weight: 800; color: var(--gray-900); margin-bottom: 18px; line-height: 1.1; }
+        .ab-title { font-family: var(--font-display); font-size: clamp(2rem, 4vw, 3rem); font-weight: 800; color: var(--gray-900); margin-bottom: 18px; line-height: 1.1; }
         .ab-title .accent { color: var(--blue-600); }
         .ab-sub { font-size: 1.05rem; color: var(--gray-500); line-height: 1.75; max-width: 560px; margin: 0 auto; }
 
@@ -51,12 +51,12 @@ const About = () => {
           border-right: 1px solid var(--blue-100);
         }
         .ab-stat:last-child { border-right: none; }
-        .ab-stat-num { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 2rem; font-weight: 800; color: var(--blue-600); margin-bottom: 4px; }
+        .ab-stat-num { font-family: var(--font-display); font-size: 2rem; font-weight: 800; color: var(--blue-600); margin-bottom: 4px; }
         .ab-stat-label { font-size: 14px; color: var(--gray-500); }
 
         .ab-section { max-width: 900px; margin: 0 auto; padding: 80px 24px; }
         .ab-section-label { font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--blue-600); margin-bottom: 12px; }
-        .ab-section-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 800; color: var(--gray-900); margin-bottom: 18px; }
+        .ab-section-title { font-family: var(--font-display); font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 800; color: var(--gray-900); margin-bottom: 18px; }
         .ab-section-body { font-size: 15px; color: var(--gray-600); line-height: 1.8; }
         .ab-section-body p { margin-bottom: 16px; }
         .ab-section-body p:last-child { margin-bottom: 0; }
@@ -65,7 +65,7 @@ const About = () => {
         .ab-value-card { background: #fff; border: 1px solid var(--blue-100); border-radius: 18px; padding: 28px; transition: all 0.2s; }
         .ab-value-card:hover { border-color: var(--blue-300); box-shadow: var(--shadow-md); transform: translateY(-3px); }
         .ab-value-icon { width: 48px; height: 48px; border-radius: 13px; background: var(--blue-50); border: 1px solid var(--blue-200); display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 16px; }
-        .ab-value-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 8px; }
+        .ab-value-title { font-family: var(--font-display); font-size: 1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 8px; }
         .ab-value-desc { font-size: 14px; color: var(--gray-500); line-height: 1.65; }
 
         .ab-divider { height: 1px; background: var(--blue-100); margin: 0 24px; }
@@ -81,13 +81,13 @@ const About = () => {
             linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
           background-size: 48px 48px;
         }
-        .ab-cta-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 800; margin-bottom: 12px; position: relative; }
+        .ab-cta-title { font-family: var(--font-display); font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 800; margin-bottom: 12px; position: relative; }
         .ab-cta-sub { font-size: 15px; color: rgba(255,255,255,0.7); margin-bottom: 28px; position: relative; }
         .ab-cta-btn {
           display: inline-flex; align-items: center; gap: 8px;
           background: #fff; color: var(--blue-700); border: none;
           border-radius: 12px; padding: 13px 28px;
-          font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600;
+          font-family: var(--font-body); font-size: 15px; font-weight: 600;
           cursor: pointer; text-decoration: none; transition: all 0.2s; position: relative;
         }
         .ab-cta-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.15); color: var(--blue-800); text-decoration: none; }
