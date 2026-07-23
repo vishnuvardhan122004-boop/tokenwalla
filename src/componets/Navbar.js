@@ -143,13 +143,6 @@ export default function Navbar() {
               ))}
             </ul>
           )}
-          {isHospital && (
-            <ul className="nav-links">
-              <li>
-                <Link to="/Hdashboard" className={`nav-link ${isActive('/Hdashboard') ? 'active' : ''}`}>🏥 Dashboard</Link>
-              </li>
-            </ul>
-          )}
 
           <div className="nav-right">
             {isHospital && (
