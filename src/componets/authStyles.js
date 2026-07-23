@@ -5,7 +5,7 @@
 
 export const authCSS = `
   .auth-page {
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     min-height: 100vh;
     background: #fff;
     display: flex;
@@ -50,11 +50,11 @@ export const authCSS = `
   }
   .auth-brand:hover .auth-brand-logo { transform: rotate(-6deg) scale(1.08); }
   .auth-brand-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .auth-brand-name { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.2rem; font-weight: 800; color: var(--gray-900); }
+  .auth-brand-name { font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; color: var(--gray-900); }
   .auth-brand-name .accent { color: var(--blue-600); }
 
   .auth-panel-label { font-size: 11px; font-weight: 600; letter-spacing: 2.5px; text-transform: uppercase; color: var(--blue-600); margin-bottom: 12px; }
-  .auth-panel-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(1.8rem, 3vw, 2.6rem); font-weight: 800; color: var(--gray-900); line-height: 1.1; margin-bottom: 16px; }
+  .auth-panel-title { font-family: var(--font-display); font-size: clamp(1.8rem, 3vw, 2.6rem); font-weight: 800; color: var(--gray-900); line-height: 1.1; margin-bottom: 16px; }
   .auth-panel-title .accent { color: var(--blue-600); }
   .auth-panel-sub { font-size: 15px; color: var(--gray-500); line-height: 1.7; margin-bottom: 44px; max-width: 380px; }
 
@@ -77,7 +77,7 @@ export const authCSS = `
     padding: 52px 44px; overflow-y: auto;
   }
 
-  .auth-form-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.55rem; font-weight: 800; color: var(--gray-900); margin-bottom: 4px; }
+  .auth-form-title { font-family: var(--font-display); font-size: 1.55rem; font-weight: 800; color: var(--gray-900); margin-bottom: 4px; }
   .auth-form-sub   { font-size: 14px; color: var(--gray-500); margin-bottom: 30px; }
 
   /* Error alert */
@@ -104,7 +104,7 @@ export const authCSS = `
     width: 100%;
     background: var(--gray-50); border: 1px solid var(--blue-100);
     border-radius: 12px; padding: 12px 14px 12px 42px;
-    font-family: 'DM Sans', sans-serif; font-size: 15px; color: var(--gray-900);
+    font-family: var(--font-body); font-size: 15px; color: var(--gray-900);
     outline: none; transition: all 0.15s;
   }
   .auth-input::placeholder { color: var(--gray-400); }
@@ -117,7 +117,7 @@ export const authCSS = `
   .auth-otp-btn {
     flex-shrink: 0; background: var(--blue-50); border: 1px solid var(--blue-200);
     border-radius: 12px; padding: 12px 16px;
-    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+    font-family: var(--font-body); font-size: 13px; font-weight: 600;
     color: var(--blue-700); cursor: pointer; transition: all 0.15s; white-space: nowrap;
   }
   .auth-otp-btn:hover:not(:disabled) { background: var(--blue-100); border-color: var(--blue-400); }
@@ -136,7 +136,7 @@ export const authCSS = `
     width: 100%; padding: 14px;
     border-radius: 12px; border: none;
     background: var(--blue-600); color: #fff;
-    font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600;
+    font-family: var(--font-body); font-size: 15px; font-weight: 600;
     cursor: pointer; transition: all 0.2s;
     box-shadow: 0 4px 14px rgba(24,95,165,0.2);
     margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 9px;
