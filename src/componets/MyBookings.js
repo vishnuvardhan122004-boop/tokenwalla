@@ -264,19 +264,19 @@ export default function MyBookings() {
   return (
     <>
       <style>{`
-        .mb-root { font-family: 'DM Sans', sans-serif; background: var(--gray-50); min-height: 100vh; padding-bottom: 80px; }
+        .mb-root { font-family: var(--font-body); background: var(--gray-50); min-height: 100vh; padding-bottom: 80px; }
         .mb-header { background: linear-gradient(160deg, var(--blue-50) 0%, #EAF3FF 60%, #F8FBFF 100%); border-bottom: 1px solid var(--blue-100); padding: 52px 0 36px; position: relative; overflow: hidden; }
         .mb-header-grid { position: absolute; inset: 0; background-image: linear-gradient(var(--blue-100) 1px, transparent 1px), linear-gradient(90deg, var(--blue-100) 1px, transparent 1px); background-size: 48px 48px; opacity: 0.4; }
         .mb-header-inner { position: relative; }
-        .mb-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(1.7rem, 4vw, 2.4rem); font-weight: 800; color: var(--gray-900); margin-bottom: 6px; }
+        .mb-title { font-family: var(--font-display); font-size: clamp(1.7rem, 4vw, 2.4rem); font-weight: 800; color: var(--gray-900); margin-bottom: 6px; }
         .mb-title .accent { color: var(--blue-600); }
         .mb-sub { font-size: 15px; color: var(--gray-500); }
         .mb-tabs { display: flex; gap: 4px; background: var(--blue-50); border: 1px solid var(--blue-100); border-radius: 12px; padding: 4px; width: fit-content; }
-        .mb-tab { padding: 8px 18px; border-radius: 9px; font-size: 14px; font-weight: 500; border: none; background: none; color: var(--gray-500); cursor: pointer; transition: all 0.15s; font-family: 'DM Sans', sans-serif; white-space: nowrap; }
+        .mb-tab { padding: 8px 18px; border-radius: 9px; font-size: 14px; font-weight: 500; border: none; background: none; color: var(--gray-500); cursor: pointer; transition: all 0.15s; font-family: var(--font-body); white-space: nowrap; }
         .mb-tab.active { background: #fff; color: var(--blue-700); font-weight: 600; box-shadow: var(--shadow-sm); }
         .mb-tab:hover:not(.active) { color: var(--blue-600); }
         .mb-tab-badge { display: inline-block; margin-left: 6px; background: var(--blue-100); color: var(--blue-700); font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 100px; }
-        .mb-refresh { display: flex; align-items: center; gap: 7px; background: #fff; border: 1px solid var(--blue-100); border-radius: 10px; padding: 8px 14px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--gray-500); cursor: pointer; transition: all 0.15s; }
+        .mb-refresh { display: flex; align-items: center; gap: 7px; background: #fff; border: 1px solid var(--blue-100); border-radius: 10px; padding: 8px 14px; font-family: var(--font-body); font-size: 13px; color: var(--gray-500); cursor: pointer; transition: all 0.15s; }
         .mb-refresh:hover { border-color: var(--blue-300); color: var(--blue-700); }
         .mb-refresh.spinning svg { animation: mbSpin 0.9s linear infinite; }
         @keyframes mbSpin { to { transform: rotate(360deg); } }
@@ -285,51 +285,51 @@ export default function MyBookings() {
         .mb-card-top { display: flex; align-items: stretch; }
         .mb-token-col { width: 110px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 14px; border-right: 1px solid var(--blue-50); background: var(--blue-50); }
         .mb-token-label { font-size: 10px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--blue-400); margin-bottom: 6px; }
-        .mb-token-num { font-family: 'DM Mono', monospace; font-size: 1.4rem; font-weight: 500; color: var(--blue-700); line-height: 1; text-align: center; word-break: break-all; }
+        .mb-token-num { font-family: var(--font-mono); font-size: 1.4rem; font-weight: 500; color: var(--blue-700); line-height: 1; text-align: center; word-break: break-all; }
         .mb-info-col { flex: 1; padding: 18px 22px; min-width: 0; }
-        .mb-doctor-name { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.05rem; font-weight: 700; color: var(--gray-900); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mb-doctor-name { font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; color: var(--gray-900); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .mb-hospital-name { font-size: 13px; color: var(--gray-500); margin-bottom: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .mb-meta { display: flex; flex-wrap: wrap; gap: 12px; }
         .mb-meta-chip { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--gray-500); }
         .mb-meta-icon { width: 22px; height: 22px; border-radius: 5px; background: var(--blue-50); display: flex; align-items: center; justify-content: center; font-size: 11px; }
         .mb-amount { font-size: 13px; font-weight: 600; color: var(--blue-600); background: var(--blue-50); border: 1px solid var(--blue-200); border-radius: 7px; padding: 3px 10px; }
         .mb-queue-panel { border-top: 1px solid var(--blue-50); padding: 14px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: #F0F9FF; }
-        .mb-queue-circle { width: 48px; height: 48px; border-radius: 50%; background: var(--blue-50); border: 2px solid var(--blue-300); display: flex; align-items: center; justify-content: center; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.2rem; font-weight: 800; color: var(--blue-600); flex-shrink: 0; }
+        .mb-queue-circle { width: 48px; height: 48px; border-radius: 50%; background: var(--blue-50); border: 2px solid var(--blue-300); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; color: var(--blue-600); flex-shrink: 0; }
         .mb-queue-label { font-size: 12px; color: var(--gray-400); margin-bottom: 2px; }
         .mb-queue-desc { font-size: 14px; font-weight: 500; color: var(--blue-700); }
         .mb-action-panel { border-top: 1px solid var(--blue-50); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
         .mb-action-title { font-size: 14px; font-weight: 600; color: var(--gray-700); margin-bottom: 2px; }
         .mb-action-desc { font-size: 12px; color: var(--gray-400); }
-        .mb-cancel-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--color-error-bg); border: 1px solid var(--color-error-border); border-radius: 9px; padding: 8px 16px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--color-error-text); cursor: pointer; transition: all 0.15s; }
+        .mb-cancel-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--color-error-bg); border: 1px solid var(--color-error-border); border-radius: 9px; padding: 8px 16px; font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--color-error-text); cursor: pointer; transition: all 0.15s; }
         .mb-cancel-btn:hover { background: #f7c1c1; }
         .mb-cancel-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .mb-reschedule-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--blue-50); border: 1px solid var(--blue-200); border-radius: 9px; padding: 8px 16px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--blue-700); cursor: pointer; transition: all 0.15s; }
+        .mb-reschedule-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--blue-50); border: 1px solid var(--blue-200); border-radius: 9px; padding: 8px 16px; font-family: var(--font-body); font-size: 13px; font-weight: 600; color: var(--blue-700); cursor: pointer; transition: all 0.15s; }
         .mb-reschedule-btn:hover { background: var(--blue-100); border-color: var(--blue-400); }
         .mb-reschedule-btn.free { background: var(--color-success-bg); border-color: var(--color-success-border); color: var(--color-success-text); }
         .mb-reschedule-btn.free:hover { background: #cdeed7; border-color: var(--color-success-text); }
         .mb-unavail-banner { border-top: 1px solid var(--blue-50); padding: 12px 20px; background: #FFF6E5; color: #8A6100; font-size: 13px; font-weight: 600; }
         .mb-empty { text-align: center; padding: 80px 20px; }
         .mb-empty-icon { font-size: 4rem; opacity: 0.35; margin-bottom: 16px; display: block; }
-        .mb-empty-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.3rem; font-weight: 700; color: var(--gray-500); margin-bottom: 8px; }
+        .mb-empty-title { font-family: var(--font-display); font-size: 1.3rem; font-weight: 700; color: var(--gray-500); margin-bottom: 8px; }
         .mb-skel { background: #fff; border: 1px solid var(--blue-100); border-radius: 18px; overflow: hidden; height: 140px; }
         .mb-skel-shine { height: 100%; background: linear-gradient(90deg, var(--gray-100) 25%, var(--gray-200) 50%, var(--gray-100) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
         @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
         .mb-modal-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(4,44,83,0.45); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px; }
         .mb-modal { background: #fff; border: 1px solid var(--blue-100); border-radius: 22px; padding: 28px; width: 100%; max-width: 480px; position: relative; box-shadow: var(--shadow-lg); }
         .mb-modal::before { content:''; position:absolute; top:0;left:0;right:0;height:3px; background: linear-gradient(90deg, var(--blue-600), var(--blue-400)); border-radius:22px 22px 0 0; }
-        .mb-modal-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.15rem; font-weight: 800; color: var(--gray-900); margin-bottom: 4px; }
+        .mb-modal-title { font-family: var(--font-display); font-size: 1.15rem; font-weight: 800; color: var(--gray-900); margin-bottom: 4px; }
         .mb-modal-sub { font-size: 13px; color: var(--gray-400); margin-bottom: 22px; }
         .mb-modal-label { font-size: 12px; font-weight: 600; color: var(--gray-600); margin-bottom: 7px; display: block; }
-        .mb-modal-input { width: 100%; background: var(--gray-50); border: 1px solid var(--blue-100); border-radius: 11px; padding: 11px 14px; font-family: 'DM Sans', sans-serif; font-size: 15px; color: var(--gray-900); outline: none; transition: all 0.15s; color-scheme: light; margin-bottom: 18px; }
+        .mb-modal-input { width: 100%; background: var(--gray-50); border: 1px solid var(--blue-100); border-radius: 11px; padding: 11px 14px; font-family: var(--font-body); font-size: 15px; color: var(--gray-900); outline: none; transition: all 0.15s; color-scheme: light; margin-bottom: 18px; }
         .mb-modal-input:focus { border-color: var(--blue-400); background: #fff; box-shadow: 0 0 0 3px rgba(55,138,221,0.12); }
         .mb-slots-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 7px; margin-bottom: 20px; max-height: 200px; overflow-y: auto; }
-        .mb-slot-btn { padding: 8px 4px; border-radius: 9px; border: 1px solid var(--blue-100); background: var(--gray-50); font-size: 12px; font-weight: 500; color: var(--gray-600); cursor: pointer; transition: all 0.15s; text-align: center; font-family: 'DM Sans', sans-serif; }
+        .mb-slot-btn { padding: 8px 4px; border-radius: 9px; border: 1px solid var(--blue-100); background: var(--gray-50); font-size: 12px; font-weight: 500; color: var(--gray-600); cursor: pointer; transition: all 0.15s; text-align: center; font-family: var(--font-body); }
         .mb-slot-btn:hover { background: var(--blue-50); border-color: var(--blue-300); color: var(--blue-700); }
         .mb-slot-btn.selected { background: var(--blue-50); border-color: var(--blue-500); color: var(--blue-700); font-weight: 600; }
         .mb-fee-note { background: var(--blue-50); border: 1px solid var(--blue-200); border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; font-size: 12px; color: var(--blue-700); line-height: 1.5; }
         .mb-modal-actions { display: flex; gap: 10px; }
-        .mb-modal-cancel { flex: 1; padding: 12px; border-radius: 11px; border: 1px solid var(--blue-100); background: var(--gray-50); color: var(--gray-600); font-family: 'DM Sans', sans-serif; font-size: 14px; cursor: pointer; }
-        .mb-modal-confirm { flex: 2; padding: 12px; border-radius: 11px; border: none; background: var(--blue-600); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; }
+        .mb-modal-cancel { flex: 1; padding: 12px; border-radius: 11px; border: 1px solid var(--blue-100); background: var(--gray-50); color: var(--gray-600); font-family: var(--font-body); font-size: 14px; cursor: pointer; }
+        .mb-modal-confirm { flex: 2; padding: 12px; border-radius: 11px; border: none; background: var(--blue-600); color: #fff; font-family: var(--font-body); font-size: 14px; font-weight: 600; cursor: pointer; }
         .mb-modal-confirm:hover:not(:disabled) { background: var(--blue-800); }
         .mb-modal-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
         .mb-toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 12px; font-size: 14px; font-weight: 500; z-index: 9999; white-space: nowrap; box-shadow: var(--shadow-lg); }
