@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import API from '../services/api';
 import { filterTestDoctors } from '../services/testHospitals';
 import SEO from './SEO';
@@ -20,6 +21,7 @@ function SkeletonCard() {
 }
 
 export default function AllDoctor() {
+  const { t } = useTranslation();
   const [doctors,    setDoctors]    = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState('');
@@ -34,7 +36,7 @@ export default function AllDoctor() {
   // filter. Reverse-geocodes via OpenStreetMap (free, no key), then matches
   // the detected place against the cities we actually have doctors in.
   const detectCity = () => {
-    if (!navigator.geolocation) { alert('Location is not supported by your browser.'); return; }
+    if (!navigator.geolocation) { alert(t('doctors.geoNotSupported')); return; }
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -44,20 +46,20 @@ export default function AllDoctor() {
           const data = await res.json();
           const a = data.address || {};
           const detected = a.city || a.town || a.village || a.county || a.state_district || a.state || '';
-          if (!detected) { alert('Could not detect your city. Please pick it manually.'); return; }
+          if (!detected) { alert(t('doctors.geoNoCityDetected')); return; }
           const match = cities.find(c => c.toLowerCase() === detected.toLowerCase())
             || cities.find(c => detected.toLowerCase().includes(c.toLowerCase()) || c.toLowerCase().includes(detected.toLowerCase()));
           if (match) { setCity(match); }
           else { setCity(''); setSearch(detected); }   // no match → search the detected place
         } catch {
-          alert('Could not detect your location. Please try again.');
+          alert(t('doctors.geoFailed'));
         } finally { setLocating(false); }
       },
       (err) => {
         setLocating(false);
         alert(err.code === err.PERMISSION_DENIED
-          ? 'Location permission denied. Please pick your city manually.'
-          : 'Could not get your location. Please try again.');
+          ? t('doctors.geoDenied')
+          : t('doctors.geoError'));
       },
       { timeout: 10000, enableHighAccuracy: false },
     );
@@ -289,10 +291,10 @@ export default function AllDoctor() {
         <div className="ad-header">
           <div className="ad-header-grid" />
           <div className="tw-container ad-header-inner">
-            <div className="tw-section-label">Find Your Doctor</div>
-            <h1 className="ad-title">Book a <span style={{ color: 'var(--blue-600)' }}>Doctor Appointment</span></h1>
+            <div className="tw-section-label">{t('doctors.findYourDoctor')}</div>
+            <h1 className="ad-title">{t('doctors.titlePrefix')} <span style={{ color: 'var(--blue-600)' }}>{t('doctors.titleAccent')}</span></h1>
             <p className="ad-sub">
-              {loading ? 'Loading doctors...' : `${doctors.length} doctors across ${cities.length} cities`}
+              {loading ? t('doctors.loading') : t('doctors.summary', { count: doctors.length, cities: cities.length })}
             </p>
             <div className="spec-pills">
               {actualSpecs.map(spec => (
@@ -316,7 +318,7 @@ export default function AllDoctor() {
                 <span className="search-icon">🔍</span>
                 <input
                   className="search-input"
-                  placeholder="Search by doctor, specialization, hospital, city, location..."
+                  placeholder={t('doctors.searchPlaceholder')}
                   value={search}
                   onChange={e => { setSearch(e.target.value); setShowSuggest(true); }}
                   onFocus={() => setShowSuggest(true)}
@@ -340,18 +342,18 @@ export default function AllDoctor() {
                 )}
               </div>
               <select className="filter-select" value={city} onChange={e => setCity(e.target.value)}>
-                <option value="">All Cities</option>
+                <option value="">{t('doctors.allCities')}</option>
                 {cities.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <button className="near-me-btn" onClick={detectCity} disabled={locating} title="Find doctors in your city">
-                {locating ? '📍 Locating…' : '📍 Near Me'}
+              <button className="near-me-btn" onClick={detectCity} disabled={locating} title={t('doctors.nearMeTitle')}>
+                {locating ? t('doctors.locating') : t('doctors.nearMe')}
               </button>
               <button className={`avail-toggle ${availOnly ? 'active' : ''}`} onClick={() => setAvailOnly(p => !p)}>
                 <span className="toggle-dot" />
-                Available Only
+                {t('doctors.availableOnly')}
               </button>
               <span className="results-count">
-                {loading ? '...' : `${filtered.length} result${filtered.length !== 1 ? 's' : ''}`}
+                {loading ? '...' : t('doctors.results', { count: filtered.length })}
               </span>
             </div>
           </div>
@@ -370,14 +372,14 @@ export default function AllDoctor() {
             {!loading && filtered.length === 0 && (
               <div className="empty-state">
                 <span className="empty-icon">🔍</span>
-                <div className="empty-title">No doctors found</div>
-                <p className="empty-sub">Try adjusting your search or filters</p>
+                <div className="empty-title">{t('doctors.noResults')}</div>
+                <p className="empty-sub">{t('doctors.adjustFilters')}</p>
                 <button
                   className="btn-outline"
                   style={{ marginTop: 20 }}
                   onClick={() => { setSearch(''); setCity(''); setSpecFilter('All'); setAvailOnly(false); }}
                 >
-                  Clear all filters
+                  {t('doctors.clearFilters')}
                 </button>
               </div>
             )}
@@ -398,9 +400,9 @@ export default function AllDoctor() {
                       }
                       <div className={`card-avail ${doc.available ? 'yes' : 'no'}`}>
                         <span className="avail-dot" />
-                        {doc.available ? 'Available' : 'Unavailable'}
+                        {doc.available ? t('doctors.available') : t('doctors.unavailable')}
                       </div>
-                      <div className="hospital-tag">🏥 {doc.hospital_name || 'Hospital'}</div>
+                      <div className="hospital-tag">🏥 {doc.hospital_name || t('footer.hospital')}</div>
                     </div>
 
                     <div className="card-body">
@@ -413,7 +415,7 @@ export default function AllDoctor() {
                         </div>
                         <div className="meta-item">
                           <div className="meta-icon">⏳</div>
-                          {doc.experience} yrs
+                          {t('doctors.yearsExp', { count: doc.experience })}
                         </div>
                       </div>
                       {doc.slots && doc.slots.length > 0 && (
@@ -423,14 +425,14 @@ export default function AllDoctor() {
                         </div>
                       )}
                       <div className="card-slots-count">
-                        {doc.slots?.length > 0 ? `${doc.slots.length} slots today` : 'Contact hospital'}
+                        {doc.slots?.length > 0 ? t('doctors.slotsToday', { count: doc.slots.length }) : t('doctors.contactHospital')}
                       </div>
                       <div className="card-footer">
                         <div className="card-fee">
                           <span className="card-fee-amount">₹{doc.fee || 15}</span>
-                          <span className="card-fee-sub">per visit</span>
+                          <span className="card-fee-sub">{t('doctors.perVisit')}</span>
                         </div>
-                        <span className="book-btn">Book Now →</span>
+                        <span className="book-btn">{t('doctors.bookNow')}</span>
                       </div>
                     </div>
                   </Link>

@@ -1,0 +1,153 @@
+{
+  "nav": {
+    "home": "Home",
+    "findDoctors": "Find Doctors",
+    "about": "About",
+    "contact": "Contact",
+    "login": "Login →",
+    "loginMobile": "Login to TokenWalla →",
+    "myBookings": "My Bookings",
+    "adminPanel": "Admin Panel",
+    "dashboard": "Dashboard",
+    "profile": "Profile",
+    "logout": "Logout",
+    "hospitalAdminRole": "Hospital Admin",
+    "patientRole": "Patient",
+    "language": "Language"
+  },
+  "languages": {
+    "en": "English",
+    "hi": "हिंदी",
+    "te": "తెలుగు"
+  },
+  "hero": {
+    "badge": "Now live in Andhra Pradesh & Telangana",
+    "titleLine1": "Skip the Queue.",
+    "titleLine2": "Book Your Token",
+    "titleLine3": "Online.",
+    "subtitle": "TokenWalla connects patients with doctors digitally. Book a slot, get a token, walk in right on time — no more waiting rooms for hours.",
+    "bookAppointment": "Book Appointment →",
+    "hospitalLogin": "Hospital Login",
+    "tokenCard": {
+      "yourToken": "Your Token",
+      "queueActive": "Queue Access Active",
+      "doctorInfo": "Dr. Kana · City Care Hospital",
+      "todaySlot": "Today · 10:30 AM slot",
+      "confirmedChip": "✅ Confirmed · TW-2847",
+      "waitChip": "⏱ Est. wait: ~12 mins"
+    },
+    "stats": {
+      "tokensIssued": "Tokens Issued",
+      "hospitals": "Hospitals",
+      "onTimeRate": "On-time Rate",
+      "patientRating": "Patient Rating"
+    },
+    "demoStatus": {
+      "inConsultation": "In Consultation",
+      "waiting": "Waiting"
+    },
+    "process": {
+      "label": "Process",
+      "heading": "How TokenWalla Works",
+      "sub": "From browsing doctors to walking in on time — the entire process takes under 2 minutes.",
+      "steps": [
+        { "title": "Find a Doctor", "desc": "Browse by specialization, city, or hospital. See real-time availability and time slots." },
+        { "title": "Pick a Slot", "desc": "Choose your preferred date and time. Confirm your appointment in under 60 seconds." },
+        { "title": "Pay Securely", "desc": "Pay ₹15 via UPI, cards or wallets. Your token and queue position are confirmed instantly." },
+        { "title": "Walk In on Time", "desc": "Arrive when your number is called. Track live position from anywhere." }
+      ]
+    },
+    "doctorsPreview": {
+      "label": "Doctors",
+      "heading": "Available Near You",
+      "viewAll": "View All →",
+      "yearsExp": "{{count}}y exp"
+    },
+    "features": {
+      "label": "Why TokenWalla",
+      "heading": "Built for Modern Healthcare",
+      "sub": "We handle the technology so hospitals can focus on what matters — patient care.",
+      "items": [
+        { "title": "Live Queue Tracking", "desc": "See your exact position in real time. No more guessing when to arrive." },
+        { "title": "Secure Payments", "desc": "Razorpay-powered. UPI, cards, net banking, wallets — all encrypted." },
+        { "title": "Multi-Hospital Network", "desc": "Works across hospitals in your city. One platform, all doctors." },
+        { "title": "Easy Cancellation", "desc": "Cancel 2 hours before your slot for a full refund — no questions asked." },
+        { "title": "Verified Doctors", "desc": "All doctors are registered and managed by their hospitals directly." },
+        { "title": "Works on Any Device", "desc": "Fully responsive — book from your phone, tablet, or desktop in seconds." }
+      ]
+    },
+    "pricing": {
+      "label": "Pricing",
+      "heading": "Simple, Transparent Pricing",
+      "sub": "No hidden fees. Pay only for what you need.",
+      "badge": "Best Value",
+      "planName": "Queue View",
+      "planSub": "Per appointment · No hidden fees",
+      "features": [
+        "Confirmed token number",
+        "Appointment details",
+        "Doctor & hospital info",
+        "Live queue position",
+        "Instant confirmation"
+      ],
+      "cta": "Book Appointment →"
+    },
+    "cta": {
+      "title": "Ready to Skip the Queue?",
+      "sub": "Join thousands of patients who book smarter with TokenWalla.",
+      "bookNow": "Book Appointment Now →",
+      "registerHospital": "Register Your Hospital"
+    }
+  },
+  "doctors": {
+    "titlePrefix": "Book a",
+    "titleAccent": "Doctor Appointment",
+    "loading": "Loading doctors...",
+    "summary": "{{count}} doctors across {{cities}} cities",
+    "findYourDoctor": "Find Your Doctor",
+    "searchPlaceholder": "Search by doctor, specialization, hospital, city, location...",
+    "allCities": "All Cities",
+    "nearMe": "📍 Near Me",
+    "nearMeTitle": "Find doctors in your city",
+    "locating": "📍 Locating…",
+    "availableOnly": "Available Only",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results",
+    "available": "Available",
+    "unavailable": "Unavailable",
+    "yearsExp": "{{count}} yrs",
+    "slotsToday": "{{count}} slots today",
+    "contactHospital": "Contact hospital",
+    "perVisit": "per visit",
+    "bookNow": "Book Now →",
+    "noResults": "No doctors found",
+    "adjustFilters": "Try adjusting your search or filters",
+    "clearFilters": "Clear all filters",
+    "geoNotSupported": "Location is not supported by your browser.",
+    "geoNoCityDetected": "Could not detect your city. Please pick it manually.",
+    "geoFailed": "Could not detect your location. Please try again.",
+    "geoDenied": "Location permission denied. Please pick your city manually.",
+    "geoError": "Could not get your location. Please try again."
+  },
+  "footer": {
+    "desc": "Smart hospital token & queue management platform helping patients and hospitals reduce waiting time.",
+    "liveBadge": "Live in AP & Telangana",
+    "product": "Product",
+    "hospital": "Hospital",
+    "company": "Company",
+    "findDoctors": "Find Doctors",
+    "patientLogin": "Patient Login",
+    "register": "Register",
+    "myBookings": "My Bookings",
+    "hospitalLogin": "Hospital Login",
+    "registerHospital": "Register Hospital",
+    "dashboard": "Dashboard",
+    "aboutUs": "About Us",
+    "contact": "Contact",
+    "terms": "Terms",
+    "privacy": "Privacy",
+    "refundPolicy": "Refund Policy",
+    "rights": "© {{year}} TokenWalla. All rights reserved.",
+    "tagline": "Built with ❤ for better healthcare"
+  }
+}

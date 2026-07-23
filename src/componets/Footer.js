@@ -1,6 +1,8 @@
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
 
 export default function Footer() {
+  const { t } = useTranslation();
   return (
     <>
       <style>{`
@@ -74,11 +76,11 @@ export default function Footer() {
                 <span className="footer-brand-name"><span className="accent">Token</span>walla</span>
               </div>
               <p className="footer-desc">
-                Smart hospital token & queue management platform helping patients and hospitals reduce waiting time.
+                {t('footer.desc')}
               </p>
               <div className="footer-badge">
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-success-text)', animation: 'twPulse 2s infinite' }} />
-                Live in AP & Telangana
+                {t('footer.liveBadge')}
               </div>
 
               {/* Play Store link */}
@@ -98,36 +100,36 @@ export default function Footer() {
 
             {/* Product */}
             <div className="footer-col" style={{ minWidth: 120, flex: '1 1 120px' }}>
-              <h6>Product</h6>
-              <Link to="/alldoctor">Find Doctors</Link>
-              <Link to="/login">Patient Login</Link>
-              <Link to="/profilecreate">Register</Link>
-              <Link to="/my-bookings">My Bookings</Link>
+              <h6>{t('footer.product')}</h6>
+              <Link to="/alldoctor">{t('footer.findDoctors')}</Link>
+              <Link to="/login">{t('footer.patientLogin')}</Link>
+              <Link to="/profilecreate">{t('footer.register')}</Link>
+              <Link to="/my-bookings">{t('footer.myBookings')}</Link>
             </div>
 
             {/* Hospital */}
             <div className="footer-col" style={{ minWidth: 120, flex: '1 1 120px' }}>
-              <h6>Hospital</h6>
-              <Link to="/Hlogin">Hospital Login</Link>
-              <Link to="/Husercreate">Register Hospital</Link>
-              <Link to="/Hdashboard">Dashboard</Link>
+              <h6>{t('footer.hospital')}</h6>
+              <Link to="/Hlogin">{t('footer.hospitalLogin')}</Link>
+              <Link to="/Husercreate">{t('footer.registerHospital')}</Link>
+              <Link to="/Hdashboard">{t('footer.dashboard')}</Link>
             </div>
 
             {/* Company */}
             <div className="footer-col" style={{ minWidth: 120, flex: '1 1 120px' }}>
-              <h6>Company</h6>
-              <Link to="/about">About Us</Link>
-              <Link to="/contact">Contact</Link>
-              <Link to="/terms">Terms</Link>
-              <Link to="/privacy">Privacy</Link>
-              <Link to="/refund">Refund Policy</Link>
+              <h6>{t('footer.company')}</h6>
+              <Link to="/about">{t('footer.aboutUs')}</Link>
+              <Link to="/contact">{t('footer.contact')}</Link>
+              <Link to="/terms">{t('footer.terms')}</Link>
+              <Link to="/privacy">{t('footer.privacy')}</Link>
+              <Link to="/refund">{t('footer.refundPolicy')}</Link>
             </div>
 
           </div>
 
           <div className="footer-bottom">
-            <span>© {new Date().getFullYear()} TokenWalla. All rights reserved.</span>
-            <span>Built with ❤ for better healthcare</span>
+            <span>{t('footer.rights', { year: new Date().getFullYear() })}</span>
+            <span>{t('footer.tagline')}</span>
           </div>
         </div>
       </footer>
