@@ -131,7 +131,7 @@ export default function Navbar() {
           background: rgba(255,255,255,0.97);
           border-bottom: 1px solid transparent;
           transition: border-color 0.2s, box-shadow 0.2s;
-          font-family: 'DM Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif;
+          font-family: 'DM Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif;
         }
         .nav-root.scrolled { border-color: var(--blue-100); box-shadow: 0 1px 16px rgba(24,95,165,0.08); }
         .nav-inner { max-width: 1200px; margin: 0 auto; padding: 0 24px; height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
@@ -139,7 +139,7 @@ export default function Navbar() {
         .nav-logo { width: 36px; height: 36px; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(24,95,165,0.2); transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1); }
         .nav-brand:hover .nav-logo { transform: rotate(-6deg) scale(1.08); }
         .nav-logo img { width:100%;height:100%;object-fit:cover;display:block; }
-        .nav-wordmark { font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; font-size: 1.15rem; font-weight: 800; color: var(--gray-900); }
+        .nav-wordmark { font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif; font-size: 1.15rem; font-weight: 800; color: var(--gray-900); }
         .nav-wordmark .accent { color: var(--blue-600); }
         .nav-links { display: flex; align-items: center; gap: 2px; list-style: none; margin: 0; padding: 0; }
         .nav-link { padding: 7px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--gray-600); text-decoration: none; transition: all 0.15s; white-space: nowrap; }
@@ -150,29 +150,29 @@ export default function Navbar() {
         .hosp-dot { width: 7px; height: 7px; border-radius: 50%; background: #3B6D11; flex-shrink: 0; animation: twPulse 2s ease-in-out infinite; }
         .hosp-profile-trigger { display: flex; align-items: center; gap: 9px; padding: 5px 12px 5px 5px; background: #fff; border: 1px solid var(--blue-100); border-radius: 100px; cursor: pointer; transition: all 0.15s; }
         .hosp-profile-trigger:hover { border-color: var(--blue-300); background: var(--blue-50); }
-        .hosp-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-600); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+        .hosp-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-600); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif; font-size: 11px; font-weight: 700; flex-shrink: 0; }
         .hosp-name { font-size: 13px; font-weight: 500; color: var(--gray-800); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .hosp-chevron { font-size: 9px; color: var(--gray-400); transition: transform 0.2s; }
         .hosp-chevron.open { transform: rotate(180deg); }
         .user-trigger { display: flex; align-items: center; gap: 9px; padding: 5px 12px 5px 5px; background: #fff; border: 1px solid var(--blue-100); border-radius: 100px; cursor: pointer; transition: all 0.15s; }
         .user-trigger:hover { border-color: var(--blue-300); background: var(--blue-50); }
-        .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-600); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+        .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-600); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif; font-size: 11px; font-weight: 700; flex-shrink: 0; }
         .user-name { font-size: 13px; font-weight: 500; color: var(--gray-800); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .user-chevron { font-size: 9px; color: var(--gray-400); transition: transform 0.2s; }
         .user-chevron.open { transform: rotate(180deg); }
         .nav-dropdown { position: absolute; top: calc(100% + 8px); right: 0; width: 220px; background: #fff; border: 1px solid var(--blue-100); border-radius: 14px; padding: 6px; z-index: 1100; box-shadow: 0 8px 32px rgba(24,95,165,0.14); animation: dropIn 0.18s cubic-bezier(0.34,1.56,0.64,1) both; }
         @keyframes dropIn { from{opacity:0;transform:translateY(-6px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
         .nav-drop-header { padding: 10px 12px; border-bottom: 1px solid var(--blue-50); margin-bottom: 4px; }
-        .nav-drop-name { font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; font-weight: 700; font-size: 14px; color: var(--gray-900); margin-bottom: 2px; }
+        .nav-drop-name { font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif; font-weight: 700; font-size: 14px; color: var(--gray-900); margin-bottom: 2px; }
         .nav-drop-role { font-size: 11px; color: var(--blue-600); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
-        .nav-drop-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; font-size: 14px; color: var(--gray-700); text-decoration: none; cursor: pointer; transition: all 0.12s; border: none; background: none; width: 100%; text-align: left; font-family: 'DM Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; }
+        .nav-drop-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; font-size: 14px; color: var(--gray-700); text-decoration: none; cursor: pointer; transition: all 0.12s; border: none; background: none; width: 100%; text-align: left; font-family: 'DM Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif; }
         .nav-drop-item:hover { background: var(--blue-50); color: var(--blue-800); text-decoration: none; }
         .nav-drop-item.danger { color: var(--color-error-text); }
         .nav-drop-item.danger:hover { background: var(--color-error-bg); }
         .nav-drop-icon { width: 26px; height: 26px; border-radius: 7px; background: var(--gray-100); display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
         .nav-drop-divider { height: 1px; background: var(--blue-50); margin: 4px 0; }
         .lang-switch { position: relative; }
-        .lang-trigger { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: #fff; border: 1px solid var(--blue-100); border-radius: 100px; cursor: pointer; transition: all 0.15s; font-family: 'DM Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; }
+        .lang-trigger { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: #fff; border: 1px solid var(--blue-100); border-radius: 100px; cursor: pointer; transition: all 0.15s; font-family: 'DM Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif; }
         .lang-trigger:hover { border-color: var(--blue-300); background: var(--blue-50); }
         .lang-globe { font-size: 14px; line-height: 1; }
         .lang-code { font-size: 12px; font-weight: 700; color: var(--blue-600); text-transform: uppercase; letter-spacing: 0.5px; }
@@ -184,7 +184,7 @@ export default function Navbar() {
         .lang-switch-mobile { padding: 8px 4px 12px; }
         .mobile-lang-label { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--gray-400); margin-bottom: 10px; }
         .mobile-lang-options { display: flex; gap: 8px; flex-wrap: wrap; }
-        .mobile-lang-pill { padding: 9px 16px; border-radius: 100px; border: 1px solid var(--blue-100); background: var(--gray-50); color: var(--gray-700); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; font-family: 'DM Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; }
+        .mobile-lang-pill { padding: 9px 16px; border-radius: 100px; border: 1px solid var(--blue-100); background: var(--gray-50); color: var(--gray-700); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; font-family: 'DM Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif; }
         .mobile-lang-pill:hover { border-color: var(--blue-300); background: var(--blue-50); }
         .mobile-lang-pill.active { background: var(--blue-600); border-color: var(--blue-600); color: #fff; font-weight: 700; }
         .hamburger { display: none; flex-direction: column; gap: 5px; background: none; border: none; cursor: pointer; padding: 8px; border-radius: 8px; }
@@ -199,7 +199,7 @@ export default function Navbar() {
         .mobile-link-icon { width: 34px; height: 34px; border-radius: 9px; background: var(--gray-100); display: flex; align-items: center; justify-content: center; font-size: 16px; }
         .mobile-divider { height: 1px; background: var(--blue-50); margin: 6px 0; }
         .mobile-user-card { display: flex; align-items: center; gap: 12px; padding: 14px; background: var(--blue-50); border: 1px solid var(--blue-200); border-radius: 14px; margin-bottom: 6px; }
-        .mobile-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--blue-600); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif; font-size: 16px; font-weight: 800; }
+        .mobile-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--blue-600); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif; font-size: 16px; font-weight: 800; }
         @keyframes twPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
         @media (max-width: 860px) { .nav-links { display: none; } .hamburger { display: flex; } .hosp-badge { display: none; } }
         @media (max-width: 480px) { .nav-inner { padding: 0 16px; } }

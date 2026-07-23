@@ -3,9 +3,10 @@ import { initReactI18next } from 'react-i18next';
 import en from './en.json';
 import hi from './hi.json';
 import te from './te.json';
+import kn from './kn.json';
 
 export const LANG_STORAGE_KEY = 'tw_lang';
-export const SUPPORTED_LANGS = ['en', 'hi', 'te'];
+export const SUPPORTED_LANGS = ['en', 'hi', 'te', 'kn'];
 
 function readStoredLang() {
   try { return localStorage.getItem(LANG_STORAGE_KEY); } catch { return null; }
@@ -25,6 +26,7 @@ i18n
       en: { translation: en },
       hi: { translation: hi },
       te: { translation: te },
+      kn: { translation: kn },
     },
     lng: initialLang,
     fallbackLng: 'en',

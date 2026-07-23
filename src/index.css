@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Mono:wght@400;500&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=Noto+Sans+Telugu:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Mono:wght@400;500&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=Noto+Sans+Telugu:wght@400;500;600;700;800&family=Noto+Sans+Kannada:wght@400;500;600;700;800&display=swap');
 
 /* ── Design tokens ─────────────────────────────────────────────────────── */
 :root {
@@ -59,8 +59,8 @@
   --radius-xl: 20px;
 
   /* Typography */
-  --font-display: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif;
-  --font-body:    'DM Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', sans-serif;
+  --font-display: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif;
+  --font-body:    'DM Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif;
   --font-mono:    'DM Mono', monospace;
 }
 
