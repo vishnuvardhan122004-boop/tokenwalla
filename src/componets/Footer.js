@@ -7,14 +7,14 @@ export default function Footer() {
         .footer-root {
           background: var(--blue-900);
           color: rgba(255,255,255,0.7);
-          font-family: 'DM Sans', sans-serif;
+          font-family: var(--font-body);
           border-top: 3px solid var(--blue-600);
         }
         .footer-inner {
           max-width: 1200px; margin: 0 auto; padding: 56px 24px 32px;
         }
         .footer-brand-name {
-          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-family: var(--font-display);
           font-size: 1.3rem; font-weight: 800; color: #fff; margin-bottom: 10px;
         }
         .footer-brand-name .accent { color: var(--blue-400); }
@@ -37,7 +37,7 @@ export default function Footer() {
         }
         .footer-playstore:hover img { opacity: 0.85; }
         .footer-col h6 {
-          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-family: var(--font-display);
           font-size: 12px; font-weight: 700; letter-spacing: 1.5px;
           text-transform: uppercase; color: rgba(255,255,255,0.4); margin-bottom: 16px;
         }
@@ -77,7 +77,7 @@ export default function Footer() {
                 Smart hospital token & queue management platform helping patients and hospitals reduce waiting time.
               </p>
               <div className="footer-badge">
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3B6D11', animation: 'twPulse 2s infinite' }} />
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-success-text)', animation: 'twPulse 2s infinite' }} />
                 Live in AP & Telangana
               </div>
 
