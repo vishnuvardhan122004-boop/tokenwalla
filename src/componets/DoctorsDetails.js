@@ -93,6 +93,8 @@ export default function DoctorDetails() {
   const [selectedDate, setSelectedDate] = useState(DAYS[0].full);
   const [selectedSlot, setSelectedSlot] = useState('');
   const [selectedPlan, setSelectedPlan] = useState('queue');
+  const [shared,       setShared]       = useState(false);   // "Copied!" feedback
+  const [shareOpen,    setShareOpen]    = useState(false);   // share menu open
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
@@ -177,6 +179,50 @@ export default function DoctorDetails() {
     });
   };
 
+  // Build the shareable message + public link for this doctor. Anyone who opens
+  // the link lands on this same page and can book.
+  const buildShare = () => {
+    const url  = window.location.href;
+    const text = [
+      `👨‍⚕️ Dr. ${doctor.name}`,
+      doctor.specialization ? `🩺 ${doctor.specialization}` : null,
+      doctor.hospital_name  ? `🏥 ${doctor.hospital_name}`  : null,
+      doctor.city           ? `📍 ${doctor.city}`           : null,
+      '',
+      'Book your token on Tokenwalla 👉',
+    ].filter(Boolean).join('\n');
+    return { url, text, full: `${text} ${url}` };
+  };
+
+  const shareWhatsApp = () => {
+    const { full } = buildShare();
+    window.open(`https://wa.me/?text=${encodeURIComponent(full)}`, '_blank', 'noopener');
+    setShareOpen(false);
+  };
+
+  const shareFacebook = () => {
+    const { url } = buildShare();
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank', 'noopener');
+    setShareOpen(false);
+  };
+
+  const shareInstagram = async () => {
+    // Instagram has no share-a-link URL — copy the link and open Instagram so
+    // the user can paste it into a story or DM.
+    const { full } = buildShare();
+    try { await navigator.clipboard.writeText(full); } catch {}
+    window.open('https://www.instagram.com/', '_blank', 'noopener');
+    setShareOpen(false);
+  };
+
+  const copyLink = async () => {
+    const { full } = buildShare();
+    try { await navigator.clipboard.writeText(full); } catch {}
+    setShared(true);
+    setShareOpen(false);
+    setTimeout(() => setShared(false), 2000);
+  };
+
   const slots    = doctor?.slots || [];
   const am       = slots.filter(s => s.includes('AM'));
   const pm       = slots.filter(s => s.includes('PM'));
@@ -242,6 +288,7 @@ export default function DoctorDetails() {
           background: var(--color-surface);
           min-height: 100vh;
           padding-bottom: 60px;
+          position: relative;
         }
 
         /* ── BANNER ── */
@@ -282,6 +329,41 @@ export default function DoctorDetails() {
           white-space: nowrap;
         }
         .dd-back:hover { background: #fff; border-color: var(--blue-400); }
+        .dd-share {
+          position: absolute; top: 14px; right: 14px; z-index: 10;
+          display: inline-flex; align-items: center; gap: 6px;
+          background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
+          border: 1px solid var(--blue-100); border-radius: 10px;
+          padding: 8px 14px; font-size: 13px; color: var(--blue-600);
+          cursor: pointer; transition: all 0.2s;
+          font-family: var(--font-body);
+          white-space: nowrap; font-weight: 600;
+        }
+        .dd-share:hover { background: #fff; border-color: var(--blue-400); }
+        .dd-share-wrap { position: absolute; top: 14px; right: 14px; z-index: 40; }
+        .dd-share-wrap .dd-share { position: static; }
+        .dd-share-backdrop { position: fixed; inset: 0; z-index: 25; }
+        .dd-share-menu {
+          position: absolute; top: calc(100% + 8px); right: 0; z-index: 30;
+          background: #fff; border: 1px solid var(--blue-100); border-radius: 12px;
+          box-shadow: 0 10px 30px rgba(24,95,165,0.18);
+          padding: 6px; min-width: 190px;
+          animation: ddFadeUp 0.16s ease;
+        }
+        .dd-share-item {
+          display: flex; align-items: center; gap: 10px; width: 100%;
+          background: none; border: none; cursor: pointer;
+          padding: 9px 10px; border-radius: 9px;
+          font-family: var(--font-body); font-size: 13.5px; font-weight: 600;
+          color: var(--gray-800); text-align: left; transition: background 0.15s;
+        }
+        .dd-share-item:hover { background: var(--blue-50); }
+        .dd-share-divider { height: 1px; background: var(--blue-50); margin: 6px 8px; }
+        .dd-share-ico {
+          width: 34px; height: 34px; border-radius: 9px;
+          display: inline-flex; align-items: center; justify-content: center;
+          font-size: 17px; flex-shrink: 0;
+        }
 
         /* ── WRAPPER ── */
         .dd-wrap {
@@ -710,6 +792,8 @@ export default function DoctorDetails() {
         @media (max-width: 640px) {
           .dd-banner { height: 180px; }
           .dd-back { top: 10px; left: 10px; padding: 7px 12px; font-size: 12px; }
+          .dd-share-wrap { top: 10px; right: 10px; }
+          .dd-share { padding: 7px 12px; font-size: 12px; }
 
           .dd-wrap { padding: 0 12px; }
 
@@ -788,6 +872,58 @@ export default function DoctorDetails() {
           <div className="dd-banner-grid" />
           <div className="dd-banner-overlay" />
           <button className="dd-back" onClick={() => navigate(-1)}>← Back</button>
+        </div>
+
+        <div className="dd-share-wrap">
+            <button className="dd-share" onClick={() => setShareOpen(o => !o)}>
+              {shared ? '✓ Link copied' : '↗ Share'}
+            </button>
+            {shareOpen && (
+              <>
+                <div className="dd-share-backdrop" onClick={() => setShareOpen(false)} />
+                <div className="dd-share-menu">
+                  <button className="dd-share-item" onClick={shareWhatsApp}>
+                    <span className="dd-share-ico" style={{ background: '#E7F9EE' }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="#25D366" aria-hidden="true">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                      </svg>
+                    </span> WhatsApp
+                  </button>
+                  <button className="dd-share-item" onClick={shareFacebook}>
+                    <span className="dd-share-ico" style={{ background: '#E7F0FE' }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="#1877F2" aria-hidden="true">
+                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                      </svg>
+                    </span> Facebook
+                  </button>
+                  <button className="dd-share-item" onClick={shareInstagram}>
+                    <span className="dd-share-ico" style={{ background: '#FCE9F1' }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="ddIgGrad" x1="0" y1="1" x2="1" y2="0">
+                            <stop offset="0" stopColor="#FEDA75" />
+                            <stop offset="0.25" stopColor="#FA7E1E" />
+                            <stop offset="0.5" stopColor="#D62976" />
+                            <stop offset="0.75" stopColor="#962FBF" />
+                            <stop offset="1" stopColor="#4F5BD5" />
+                          </linearGradient>
+                        </defs>
+                        <path fill="url(#ddIgGrad)" d="M12 0C8.74 0 8.333.015 7.053.072 5.775.132 4.905.333 4.14.63c-.789.306-1.459.717-2.126 1.384S.935 3.35.63 4.14C.333 4.905.131 5.775.072 7.053.012 8.333 0 8.74 0 12s.015 3.667.072 4.947c.06 1.277.261 2.148.558 2.913.306.788.717 1.459 1.384 2.126.667.666 1.336 1.079 2.126 1.384.766.296 1.636.499 2.913.558C8.333 23.988 8.74 24 12 24s3.667-.015 4.947-.072c1.277-.06 2.148-.262 2.913-.558.788-.306 1.459-.718 2.126-1.384.666-.667 1.079-1.335 1.384-2.126.296-.765.499-1.636.558-2.913.06-1.28.072-1.687.072-4.947s-.015-3.667-.072-4.947c-.06-1.277-.262-2.149-.558-2.913-.306-.789-.718-1.459-1.384-2.126C21.319 1.347 20.651.935 19.86.63c-.765-.297-1.636-.499-2.913-.558C15.667.012 15.26 0 12 0zm0 2.16c3.203 0 3.585.016 4.85.071 1.17.055 1.805.249 2.227.415.562.217.96.477 1.382.896.419.42.679.819.896 1.381.164.422.36 1.057.413 2.227.057 1.266.07 1.646.07 4.85s-.015 3.585-.074 4.85c-.061 1.17-.256 1.805-.421 2.227-.224.562-.479.96-.899 1.382-.419.419-.824.679-1.38.896-.42.164-1.065.36-2.235.413-1.274.057-1.649.07-4.859.07-3.211 0-3.586-.015-4.859-.074-1.171-.061-1.816-.256-2.236-.421-.569-.224-.96-.479-1.379-.899-.421-.419-.69-.824-.9-1.38-.165-.42-.359-1.065-.42-2.235-.045-1.26-.061-1.649-.061-4.844 0-3.196.016-3.586.061-4.861.061-1.17.255-1.814.42-2.234.21-.57.479-.96.9-1.381.419-.419.81-.689 1.379-.898.42-.166 1.051-.361 2.221-.421 1.275-.045 1.65-.06 4.859-.06l.045.03zm0 3.678c-3.405 0-6.162 2.76-6.162 6.162 0 3.405 2.76 6.162 6.162 6.162 3.405 0 6.162-2.76 6.162-6.162 0-3.405-2.76-6.162-6.162-6.162zM12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm7.846-10.405c0 .795-.646 1.44-1.44 1.44-.795 0-1.44-.646-1.44-1.44 0-.794.646-1.439 1.44-1.439.793-.001 1.44.645 1.44 1.439z" />
+                      </svg>
+                    </span> Instagram
+                  </button>
+                  <div className="dd-share-divider" />
+                  <button className="dd-share-item" onClick={copyLink}>
+                    <span className="dd-share-ico" style={{ background: '#EAF3FF' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#185FA5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M10 13a5 5 0 007.07 0l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                        <path d="M14 11a5 5 0 00-7.07 0l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+                      </svg>
+                    </span> Copy Link
+                  </button>
+                </div>
+              </>
+            )}
         </div>
 
         <div className="dd-wrap">
