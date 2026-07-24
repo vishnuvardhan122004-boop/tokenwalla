@@ -33,36 +33,14 @@ User = get_user_model()
 def _verify_otp(mobile, otp_entered):
     """
     Verifies an OTP for the given mobile number.
-    Mirrors users.auth_views.verify_otp — kept local to avoid circular import.
+
+    Delegates to users.auth_views.verify_otp so the brute-force protection
+    (per-code attempt cap, constant-time compare) is enforced identically for
+    hospital logins and password resets. Imported lazily to avoid any import
+    cycle at module load.
     """
-    api_key = getattr(settings, 'TWOFACTOR_API_KEY', '')
-    session_id = cache.get(f'otp_session:{mobile}')
-    via = cache.get(f'otp_via:{mobile}', 'sms')
-
-    if not session_id:
-        return False
-
-    # Fallback: compare session_id directly (dev / voice mode)
-    if not api_key or via == 'voice':
-        result = str(session_id) == str(otp_entered)
-        if result:
-            cache.delete(f'otp_session:{mobile}')
-            cache.delete(f'otp_via:{mobile}')
-        return result
-
-    # Live: call 2factor.in
-    try:
-        import requests as req
-        url = f'https://2factor.in/API/V1/{api_key}/SMS/VERIFY/{session_id}/{otp_entered}'
-        data = req.get(url, timeout=5).json()
-        if data.get('Status') == 'Success' and 'Matched' in str(data.get('Details', '')):
-            cache.delete(f'otp_session:{mobile}')
-            cache.delete(f'otp_via:{mobile}')
-            return True
-        return False
-    except Exception:
-        logger.exception('Hospital OTP verify error for mobile ending ...%s', mobile[-4:])
-        return False
+    from users.auth_views import verify_otp as _shared_verify_otp
+    return _shared_verify_otp(mobile, otp_entered)
 
 
 # ── Views ─────────────────────────────────────────────────────────────────────

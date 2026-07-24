@@ -7,7 +7,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ── Core ──────────────────────────────────────────────────────────────────────
 SECRET_KEY = config('SECRET_KEY')
-DEBUG      = config('DEBUG', default=True, cast=bool)
+# Fail closed: production is secure-by-default. Debug must be explicitly opted
+# into via the environment (local dev sets DEBUG=True in backend/.env). If the
+# env var is missing in production, we stay in the hardened, non-debug mode.
+DEBUG      = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS',

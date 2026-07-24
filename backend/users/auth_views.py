@@ -1,4 +1,5 @@
-import random
+import hmac
+import secrets
 import re
 import logging
 
@@ -21,6 +22,38 @@ User   = get_user_model()
 
 class OTPRateThrottle(AnonRateThrottle):
     scope = 'otp'
+
+
+# Max wrong OTP guesses before the code is burned and a new one must be sent.
+# This is the primary defence against brute-forcing the numeric OTP — even a
+# distributed attacker (bypassing per-IP throttling) only gets this many tries
+# per issued code.
+OTP_MAX_ATTEMPTS = 5
+
+
+def _register_otp_failure(mobile):
+    """Count a wrong OTP guess; invalidate the session once the cap is hit.
+
+    Returns True if the OTP session is still alive, False if it was just burned
+    (or the attempt cap was already exceeded).
+    """
+    key      = f'otp_attempts:{mobile}'
+    attempts = (cache.get(key) or 0) + 1
+    cache.set(key, attempts, timeout=300)
+    if attempts >= OTP_MAX_ATTEMPTS:
+        cache.delete(f'otp_session:{mobile}')
+        cache.delete(f'otp_via:{mobile}')
+        cache.delete(key)
+        logger.warning('OTP attempt cap reached for mobile ...%s — code invalidated', mobile[-4:])
+        return False
+    return True
+
+
+def _clear_otp_state(mobile):
+    """Clear all OTP cache entries for a mobile after a successful verify."""
+    cache.delete(f'otp_session:{mobile}')
+    cache.delete(f'otp_via:{mobile}')
+    cache.delete(f'otp_attempts:{mobile}')
 
 
 # ── OTP Helpers ───────────────────────────────────────────────────────────────
@@ -94,16 +127,13 @@ def verify_otp(mobile, otp_entered):
 
     # Dev mode or voice call → direct string comparison
     if not api_key or via == 'voice':
-        result = str(session_id).strip() == str(otp_entered).strip()
+        result = hmac.compare_digest(str(session_id).strip(), str(otp_entered).strip())
         if result:
-            cache.delete(f'otp_session:{mobile}')
-            cache.delete(f'otp_via:{mobile}')
+            _clear_otp_state(mobile)
             logger.info('OTP verified for mobile ...%s (dev/voice mode)', mobile[-4:])
         else:
-            logger.warning(
-                'OTP mismatch for mobile ...%s (entered: %s)',
-                mobile[-4:], otp_entered
-            )
+            _register_otp_failure(mobile)
+            logger.warning('OTP mismatch for mobile ...%s', mobile[-4:])
         return result
 
     # SMS production → verify via 2Factor API
@@ -112,10 +142,10 @@ def verify_otp(mobile, otp_entered):
         url  = f'https://2factor.in/API/V1/{api_key}/SMS/VERIFY/{session_id}/{otp_entered}'
         data = requests.get(url, timeout=8).json()
         if data.get('Status') == 'Success' and 'Matched' in str(data.get('Details', '')):
-            cache.delete(f'otp_session:{mobile}')
-            cache.delete(f'otp_via:{mobile}')
+            _clear_otp_state(mobile)
             logger.info('OTP verified for mobile ...%s (2Factor SMS)', mobile[-4:])
             return True
+        _register_otp_failure(mobile)
         logger.warning('OTP verify failed for ...%s: %s', mobile[-4:], data.get('Details'))
         return False
     except Exception:
@@ -272,8 +302,11 @@ class RequestOTPView(APIView):
         if cache.get(f'otp_limit:{mobile}'):
             return Response({'message': 'Wait 60 seconds before requesting again.'}, status=429)
 
-        otp        = str(random.randint(1000, 9999))
+        # 6-digit code from a CSPRNG (100000–999999). Wider space + the
+        # per-code attempt cap in verify_otp defeats brute-forcing.
+        otp        = str(secrets.randbelow(900000) + 100000)
         cache.set(f'otp_limit:{mobile}', True, timeout=60)
+        cache.delete(f'otp_attempts:{mobile}')  # fresh code → reset the counter
         session_id = send_otp(mobile, otp, via=via)
 
         if session_id is None:
@@ -284,6 +317,7 @@ class RequestOTPView(APIView):
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes   = [OTPRateThrottle]
 
     def post(self, request):
         mobile = request.data.get('mobile', '').strip()

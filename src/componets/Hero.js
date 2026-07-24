@@ -452,7 +452,7 @@ API.get('/doctors/').then(({ data }) => {
                     }
                     <div className="doc-info">
                       <div className="doc-spec">{doc.specialization}</div>
-                      <div className="doc-name">Dr. {doc.name}</div>
+                      <div className="doc-name">{doc.name}</div>
                       <div className="doc-meta">
                         <span>📍 {doc.city}</span>
                         <span>{t('hero.doctorsPreview.yearsExp', { count: doc.experience })}</span>

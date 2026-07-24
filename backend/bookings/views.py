@@ -1,8 +1,12 @@
+import hashlib
+import hmac as hmac_lib
 import logging
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.pagination import PageNumberPagination
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 
 from .models import Booking
@@ -11,6 +15,10 @@ from tokenwalla.permissions import IsAdmin, IsHospitalStaff
 from notifications.push import push_booking_in_progress
 
 logger = logging.getLogger('tokenwalla')
+
+# Queue-access upgrade is the ₹15 "queue_view" plan → 1500 paise.
+QUEUE_UPGRADE_AMOUNT_PAISE = 1500
+QUEUE_UPGRADE_AMOUNT_INR   = 15
 
 
 class StandardPagination(PageNumberPagination):
@@ -223,17 +231,55 @@ class UpgradeQueueAccessView(APIView):
         if booking.queue_access:
             return Response({'message': 'Queue access already active.'}, status=400)
 
-        payment_id = request.data.get('payment_id', '').strip()
-        if not payment_id:
+        # ── Verify the payment BEFORE unlocking the paid feature ──────────────
+        # Previously this endpoint trusted a client-supplied `payment_id` string
+        # with no verification, so any user could unlock queue access for free.
+        # We now require the full Razorpay handshake and validate it exactly like
+        # payments.VerifyPaymentView: HMAC signature + server-side amount check.
+        order_id   = request.data.get('razorpay_order_id',   '').strip()
+        payment_id = request.data.get('razorpay_payment_id', '').strip()
+        sig        = request.data.get('razorpay_signature',  '').strip()
+
+        if not all([order_id, payment_id, sig]):
             return Response(
-                {'message': 'payment_id is required to upgrade queue access.'},
-                status=400
+                {'message': 'razorpay_order_id, razorpay_payment_id and '
+                            'razorpay_signature are required to upgrade queue access.'},
+                status=400,
             )
+
+        secret   = settings.RAZORPAY_KEY_SECRET.encode('utf-8')
+        msg      = f'{order_id}|{payment_id}'.encode('utf-8')
+        expected = hmac_lib.new(secret, msg, digestmod=hashlib.sha256).hexdigest()
+        if not hmac_lib.compare_digest(expected, sig):
+            logger.warning('Invalid Razorpay signature on queue upgrade for booking %s', pk)
+            return Response({'message': 'Invalid payment signature.'}, status=400)
+
+        # Confirm the order with Razorpay and that it was paid for the right amount.
+        try:
+            import razorpay
+            client = razorpay.Client(
+                auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
+            )
+            order_details = client.order.fetch(order_id)
+        except Exception as exc:
+            logger.error('Queue upgrade: failed to fetch Razorpay order %s: %s', order_id, exc)
+            return Response({'message': 'Could not verify order with Razorpay.'}, status=502)
+
+        if int(order_details.get('amount', 0)) != QUEUE_UPGRADE_AMOUNT_PAISE:
+            logger.warning('Queue upgrade: wrong amount for order %s: %s paise',
+                           order_id, order_details.get('amount'))
+            return Response({'message': 'Invalid payment amount for queue access.'}, status=400)
+
+        # Reject a payment id that has already been used for another booking.
+        if Booking.objects.filter(payment_id=payment_id).exclude(pk=booking.pk).exists():
+            return Response({'message': 'This payment has already been used.'}, status=409)
 
         booking.queue_access = True
         booking.payment_id   = payment_id
-        booking.amount       = 15
-        booking.save(update_fields=['queue_access', 'payment_id', 'amount'])
+        booking.order_id     = order_id
+        booking.amount       = QUEUE_UPGRADE_AMOUNT_INR
+        booking.save(update_fields=['queue_access', 'payment_id', 'order_id', 'amount'])
+        logger.info('Queue access unlocked for booking %s by user %s', pk, request.user.id)
 
         return Response({
             'success': True,

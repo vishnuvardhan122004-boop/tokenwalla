@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from .models import Doctor
 from .serializers import DoctorSerializer
+from tokenwalla.permissions import IsHospitalStaff
 from tokenwalla.utils import is_slot_bookable
 
 import logging
@@ -62,7 +63,27 @@ def _notify_doctor_unavailable(doctor_id):
 
 class DoctorViewSet(viewsets.ModelViewSet):
     serializer_class = DoctorSerializer
+    # Reads are public; any write (create/update/partial_update/destroy) requires
+    # an authenticated hospital-staff or admin account. Without this, the
+    # class-level default let anonymous callers create, edit, and delete doctors
+    # (and wipe their booking history). See get_permissions() below.
     permission_classes = [AllowAny]
+
+    # Verbs that are safe to expose to the public (patients browsing doctors).
+    _PUBLIC_ACTIONS = {'list', 'retrieve', 'slot_availability'}
+
+    def get_permissions(self):
+        """Public read, authenticated hospital/admin write.
+
+        Custom @action methods (booking_summary, force_delete) declare their own
+        permission_classes and enforce an explicit admin check inside the handler,
+        so they are left to DRF's per-action resolution.
+        """
+        if self.action in self._PUBLIC_ACTIONS:
+            return [AllowAny()]
+        if self.action in ('create', 'update', 'partial_update', 'destroy'):
+            return [IsAuthenticated(), IsHospitalStaff()]
+        return super().get_permissions()
 
     def get_queryset(self):
         # Default ordering prevents UnorderedObjectListWarning with pagination

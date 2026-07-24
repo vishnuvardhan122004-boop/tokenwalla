@@ -158,6 +158,12 @@ export default function BookingToken() {
         .bt-pos-text  { font-size: 15px; font-weight: 600; color: var(--blue-700); }
         .bt-actions { display: flex; flex-direction: column; gap: 12px; animation: fadeUp 0.5s 0.35s ease both; }
         .bt-note { text-align: center; font-size: 12px; color: var(--gray-400); line-height: 1.6; margin-top: 18px; }
+        .bt-qr-note {
+          margin-top: 10px; padding: 8px 10px;
+          background: var(--blue-50, #eff6ff); border: 1px solid var(--blue-100, #dbeafe);
+          border-radius: 8px; text-align: center;
+          font-size: 11.5px; color: var(--blue-700, #1d4ed8); line-height: 1.5;
+        }
         @keyframes twPulse{0%,100%{opacity:1}50%{opacity:0.4}}
       `}</style>
 
@@ -192,7 +198,7 @@ export default function BookingToken() {
             <div className="bt-info-grid">
               <div className="bt-info-item">
                 <div className="bt-info-label">Doctor</div>
-                <div className="bt-info-value">Dr. {doctorName}</div>
+                <div className="bt-info-value">{doctorName}</div>
               </div>
               <div className="bt-info-item">
                 <div className="bt-info-label">Patient</div>
@@ -235,6 +241,9 @@ export default function BookingToken() {
                   slot={slot}
                   variant="inline"
                 />
+                <div className="bt-qr-note">
+                  ℹ️ You have paid only for the service to Tokenwalla. The doctor's consultation fee is to be paid separately at the hospital.
+                </div>
               </div>
             </div>
 
