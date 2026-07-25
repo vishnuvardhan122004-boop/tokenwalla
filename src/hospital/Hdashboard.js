@@ -917,7 +917,7 @@ const Hdashboard = () => {
                           )}
                         </div>
                         <div className="p-3 pt-4 mt-2">
-                          <div className="fw-semibold">Dr. {doc.name}</div>
+                          <div className="fw-semibold">{doc.name}</div>
                           <div className="small text-primary mb-1">{doc.specialization}</div>
                           <div className="small text-muted mb-1">📞 {doc.mobile}</div>
                           <div className="small text-muted mb-1">⏳ {doc.experience} yrs exp</div>

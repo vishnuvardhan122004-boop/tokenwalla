@@ -458,7 +458,7 @@ export default function QRScanner() {
                   { label: 'Hospital',       value: `🏥 ${booking.hospital_name}`           },
                   { label: 'Patient',        value: `👤 ${booking.patient_name}`           },
                   { label: 'Mobile',         value: booking.patient_mobile, mono: true      },
-                  { label: 'Doctor',         value: `Dr. ${booking.doctor_name}`            },
+                  { label: 'Doctor',         value: booking.doctor_name                     },
                   { label: 'Specialization', value: booking.specialization                  },
                   { label: 'Date',           value: `📅 ${booking.date}`                   },
                   { label: 'Slot',           value: `🕐 ${booking.slot}`                   },

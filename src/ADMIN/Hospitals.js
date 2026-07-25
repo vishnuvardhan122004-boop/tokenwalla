@@ -672,7 +672,7 @@ const Hospitals = () => {
                 const hasActiveFlag = doc.has_active_bookings ?? false;
                 return (
                   <tr key={doc.id}>
-                    <td style={{ fontWeight: 600 }}>Dr. {doc.name}</td>
+                    <td style={{ fontWeight: 600 }}>{doc.name}</td>
                     <td style={{ color: 'var(--blue-700)' }}>{doc.specialization}</td>
                     <td style={{ color: 'var(--gray-500)' }}>{doc.hospital_name || '—'}</td>
                     <td>{doc.experience} yrs</td>
@@ -715,7 +715,7 @@ const Hospitals = () => {
         <div className="hp-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
           <div className="hp-modal">
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg,var(--blue-600),var(--blue-400))', borderRadius: '20px 20px 0 0' }} />
-            <div className="hp-modal-title">✏️ Edit Dr. {editDoctor.name}</div>
+            <div className="hp-modal-title">✏️ Edit {editDoctor.name}</div>
             <form onSubmit={submitEdit}>
               <div className="hp-modal-row">
                 <div className="hp-field">
