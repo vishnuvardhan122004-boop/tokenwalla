@@ -111,7 +111,7 @@ def push_doctor_unavailable(booking):
             booking.user,
             title='⚠️ Doctor unavailable',
             body=(
-                f'Dr. {booking.doctor.name} is unavailable on {booking.date}. '
+                f'{booking.doctor.name} is unavailable on {booking.date}. '
                 f'Tap to reschedule token {booking.token} for FREE.'
             ),
             data={
@@ -164,7 +164,7 @@ def push_new_booking_to_hospital(booking):
         _send(
             list(tokens),
             title='🔔 New Appointment Booked',
-            body=f'{patient} booked Dr. {booking.doctor.name} at {booking.slot}. Token {booking.token}.',
+            body=f'{patient} booked {booking.doctor.name} at {booking.slot}. Token {booking.token}.',
             data={
                 'screen': 'hospital-dashboard',
                 'type': 'new_booking',

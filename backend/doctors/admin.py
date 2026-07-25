@@ -76,12 +76,12 @@ class DoctorAdmin(admin.ModelAdmin):
                     # Delete all booking records for this doctor
                     Booking.objects.filter(doctor=doctor).delete()
 
-                    name = f'Dr. {doctor.name}'
+                    name = doctor.name
                     doctor.delete()
                     deleted.append(f'{name} (cancelled {cancelled} active booking(s))')
 
             except Exception as exc:
-                errors.append(f'Dr. {doctor.name}: {exc}')
+                errors.append(f'{doctor.name}: {exc}')
 
         if deleted:
             self.message_user(

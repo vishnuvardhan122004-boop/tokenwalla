@@ -721,7 +721,7 @@ const Hdashboard = () => {
                       <label className="form-label fw-semibold">Doctor Name *</label>
                       <input
                         className={`form-control ${errors.name ? "is-invalid" : ""}`}
-                        placeholder="Dr. John Smith"
+                        placeholder="John Smith"
                         value={formData.name}
                         onChange={e => handleChange("name", e.target.value)}
                       />

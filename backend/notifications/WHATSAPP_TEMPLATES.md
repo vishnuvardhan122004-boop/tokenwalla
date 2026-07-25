@@ -34,7 +34,7 @@ Sender: `notifications.whatsapp.send_doctor_unavailable(booking)`.
 **Body** (paste exactly):
 
 ```
-Hi {{1}}, we're sorry — Dr. {{2}} at {{3}} is unavailable for your appointment on {{4}} ({{5}}).
+Hi {{1}}, we're sorry — {{2}} at {{3}} is unavailable for your appointment on {{4}} ({{5}}).
 
 Your token {{6}} can be rescheduled at no charge. Open the TokenWalla app, go to My Bookings and tap Reschedule (free) to pick a new time.
 
@@ -80,7 +80,7 @@ Sender: `notifications.whatsapp.send_hospital_new_booking(booking)`.
 New appointment at {{1}}.
 
 Patient: {{2}}
-Doctor: Dr. {{3}}
+Doctor: {{3}}
 Date: {{4}} ({{5}})
 Token: {{6}}
 

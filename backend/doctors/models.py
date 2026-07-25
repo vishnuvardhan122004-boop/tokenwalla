@@ -26,4 +26,4 @@ class Doctor(models.Model):
         ordering = ["name"]
 
     def __str__(self):
-        return f"Dr. {self.name} — {self.specialization}"
+        return f"{self.name} — {self.specialization}"

@@ -224,7 +224,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
         return Response({
             'message': (
-                f'Dr. {name} deleted. '
+                f'{name} deleted. '
                 f'{cancelled} active booking(s) were cancelled. '
                 f'{total_deleted} total booking records removed.'
             ),
