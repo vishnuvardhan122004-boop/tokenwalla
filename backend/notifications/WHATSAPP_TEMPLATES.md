@@ -118,11 +118,38 @@ Sender: `send_booking_confirmation(booking)`. Category: **Utility**, lang `en`.
 Params, in order: `{{1}}` patient, `{{2}}` doctor, `{{3}}` hospital,
 `{{4}}` date, `{{5}}` slot, `{{6}}` token.
 
-## 4. `appointment_reminder` (existing — for reference)
+## 4. `appointment_reminder`  ← submit this
 
-Sender: `send_appointment_reminder(booking)`. Category: **Utility**, lang `en`.
-Params, in order: `{{1}}` patient, `{{2}}` doctor, `{{3}}` hospital,
-`{{4}}` date, `{{5}}` slot, `{{6}}` token.
+Sent ~2 hours before the slot by the cron command `send_appointment_reminders`
+(see `notifications/CRON_SETUP.md`). Sender: `send_appointment_reminder(booking)`.
+
+| Field | Value |
+|-------|-------|
+| **Name** | `appointment_reminder` |
+| **Category** | **Utility** |
+| **Language** | English (`en`) |
+| **Header** | None |
+| **Footer** | `TokenWalla` |
+| **Buttons** | None |
+
+**Body** (sentence form — paste exactly; avoids the "form-like"/"token" flags):
+
+```
+Hi {{1}}, this is a reminder for your appointment with {{2}} at {{3}} on {{4}} at {{5}}.
+
+Please arrive a few minutes early. Booking reference {{6}}. Track your live queue position in the TokenWalla app.
+```
+
+**Variable mapping** (order matters — matches the `params` list in code):
+
+| Placeholder | Meaning | Sample value for review |
+|-------------|---------|-------------------------|
+| `{{1}}` | Patient name   | Rahul |
+| `{{2}}` | Doctor name    | Anita Rao |
+| `{{3}}` | Hospital name  | City Care Clinic |
+| `{{4}}` | Appointment date | 2026-07-26 |
+| `{{5}}` | Slot           | 10:30 AM |
+| `{{6}}` | Booking reference (booking token) | TW-024607-E90BC0 |
 
 ---
 

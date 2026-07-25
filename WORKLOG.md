@@ -69,8 +69,8 @@ text lives in **Meta**, code only fills the `{{ }}` at send time. Doc of record:
 |----------|---------|-------------|
 | `doctor_unavailable` | Patient: doctor unavailable, free reschedule | ✅ **Approved** |
 | `hospital_new_booking` | Hospital team: new booking (now incl. patient **mobile**) | 🕒 Submitted (reworded to sentence form to pass review) |
-| `booking_confirmation` | Patient: booking confirmed | ⬜ Not yet submitted |
-| `appointment_reminder` | Patient: ~2h reminder | ⬜ Not yet submitted |
+| `booking_confirmation` | Patient: booking confirmed | ⬜ Not yet submitted (no body drafted yet) |
+| `appointment_reminder` | Patient: ~2h reminder (cron) | 📝 Body ready in `WHATSAPP_TEMPLATES.md` — submit to Meta. Code + cron wired; won't deliver until approved |
 
 - Added patient mobile as `{{3}}` in `hospital_new_booking` (`b5a7b27`).
 - Reworded `hospital_new_booking` to sentence form — Meta's auto-review rejects
