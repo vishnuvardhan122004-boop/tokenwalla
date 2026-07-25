@@ -53,5 +53,9 @@ reminder each (idempotent — `reminder_sent` flag prevents duplicates).
 
 - The Meta template `appointment_reminder` must be **approved** with exactly 6 body
   params in order: patient name, doctor, hospital, date, slot, token.
+- `WHATSAPP_TEMPLATE_REMINDER` must be the template **NAME** (`appointment_reminder`),
+  **not** a numeric template ID and **not** the booking template's name. A wrong value
+  → Meta `132001 template does not exist` and no reminder is sent. Simplest: leave the
+  variable unset so the code default (`appointment_reminder`) is used.
 - `WHATSAPP_ACCESS_TOKEN` must be a **permanent** System-User token, not a 24h dev token.
 - Booking slot strings must be `"HH:MM AM/PM"` (e.g. `09:00 AM`) — the parser expects that.
