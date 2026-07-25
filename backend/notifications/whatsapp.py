@@ -155,8 +155,8 @@ def send_hospital_new_booking(booking):
     hospital app is closed or the push token is stale.
 
     Template body (see notifications/WHATSAPP_TEMPLATES.md) params:
-      {{1}} hospital name  {{2}} patient name  {{3}} doctor
-      {{4}} date           {{5}} slot          {{6}} token
+      {{1}} hospital name  {{2}} patient name   {{3}} patient mobile
+      {{4}} doctor         {{5}} date           {{6}} slot          {{7}} token
     """
     from .models import WhatsAppLog
 
@@ -171,6 +171,7 @@ def send_hospital_new_booking(booking):
         params=[
             hospital.name,
             patient_name,
+            booking.user.mobile,
             booking.doctor.name,
             str(booking.date),
             booking.slot,

@@ -80,9 +80,10 @@ Sender: `notifications.whatsapp.send_hospital_new_booking(booking)`.
 New appointment at {{1}}.
 
 Patient: {{2}}
-Doctor: {{3}}
-Date: {{4}} ({{5}})
-Token: {{6}}
+Mobile: {{3}}
+Doctor: {{4}}
+Date: {{5}} ({{6}})
+Token: {{7}}
 
 Open the TokenWalla hospital app to view the queue.
 ```
@@ -93,10 +94,11 @@ Open the TokenWalla hospital app to view the queue.
 |-------------|---------|-------------------------|
 | `{{1}}` | Hospital name  | City Care Clinic |
 | `{{2}}` | Patient name   | Rahul |
-| `{{3}}` | Doctor name    | Anita Rao |
-| `{{4}}` | Appointment date | 2026-07-22 |
-| `{{5}}` | Slot           | 10:30 AM |
-| `{{6}}` | Booking token  | TW-024607-E90BC0 |
+| `{{3}}` | Patient mobile | 9876543210 |
+| `{{4}}` | Doctor name    | Anita Rao |
+| `{{5}}` | Appointment date | 2026-07-22 |
+| `{{6}}` | Slot           | 10:30 AM |
+| `{{7}}` | Booking token  | TW-024607-E90BC0 |
 
 > This message is NOT gated on `whatsapp_opt_in` (that flag belongs to the
 > patient) — the hospital always wants to hear about a new booking. If the
