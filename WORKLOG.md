@@ -4,8 +4,15 @@ A running record of changes so we can cross-check what's done and what's pending
 Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** `main`
-- **Latest commit at last update:** `77ca692`
+- **Latest commit at last update:** `b734b10`
 - **Last updated:** 2026-07-26
+
+### How to update this log
+- Add a new `## YYYY-MM-DD — <title>` section **on top** for each working session; keep older sessions below.
+- As work lands, flip the **Status** cells (⬜ not started → 🕒 in progress → ✅ done) and tick **Action items** (`- [ ]` → `- [x]`).
+- After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
+- Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
+- Keep entries short — one line per change, link the commit hash so it's traceable.
 
 ---
 
