@@ -100,7 +100,7 @@ export default function BookingQR({
             gap:          6,
           }}>
             {[
-              { label: "Doctor",   value: `Dr. ${doctorName}` },
+              { label: "Doctor",   value: doctorName           },
               { label: "Hospital", value: hospital             },
               { label: "Date",     value: date                 },
               { label: "Slot",     value: slot                 },

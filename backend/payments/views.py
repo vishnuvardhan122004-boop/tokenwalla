@@ -38,9 +38,6 @@ MIGRATION NOTE:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
-import razorpay
-import hmac as hmac_lib
-import hashlib
 import uuid
 import logging
 import threading
@@ -57,19 +54,10 @@ from rest_framework.permissions import IsAuthenticated
 from bookings.models import Booking
 from bookings.serializers import BookingSerializer
 from tokenwalla.permissions import IsAdmin
+# Shared, single-source-of-truth Razorpay helpers (see payments/razorpay_utils.py).
+from payments.razorpay_utils import VALID_AMOUNTS_PAISE, verify_signature, get_client
 
 logger = logging.getLogger('tokenwalla')
-
-client = razorpay.Client(
-    auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
-)
-
-# Server is the source of truth — never trust the client for amounts.
-# 'reschedule' is a separate plan that does NOT create a new Booking.
-VALID_AMOUNTS_PAISE = {
-    1500: {'fee': 15, 'queue_access': True,  'plan': 'queue_view'},
-    500:  {'fee': 5,  'queue_access': False,  'plan': 'reschedule'},
-}
 
 
 def _generate_token() -> str:
@@ -141,7 +129,7 @@ class CreateOrderView(APIView):
             )
 
         try:
-            order = client.order.create({
+            order = get_client().order.create({
                 'amount':          amount_paise,
                 'currency':        'INR',
                 'payment_capture': 1,
@@ -184,17 +172,13 @@ class VerifyPaymentView(APIView):
             return Response({'success': False, 'message': 'Missing payment fields.'}, status=400)
 
         # ── 1. Signature verification (always first) ──────────────────────────
-        secret   = settings.RAZORPAY_KEY_SECRET.encode('utf-8')
-        msg      = f'{order_id}|{payment_id}'.encode('utf-8')
-        expected = hmac_lib.new(secret, msg, digestmod=hashlib.sha256).hexdigest()
-
-        if not hmac_lib.compare_digest(expected, sig):
+        if not verify_signature(order_id, payment_id, sig):
             logger.warning('Invalid Razorpay signature for order %s', order_id)
             return Response({'success': False, 'message': 'Invalid payment signature.'}, status=400)
 
         # ── 2. Fetch & validate order from Razorpay ───────────────────────────
         try:
-            order_details = client.order.fetch(order_id)
+            order_details = get_client().order.fetch(order_id)
         except Exception as exc:
             logger.error('Failed to fetch Razorpay order %s: %s', order_id, exc)
             return Response({'success': False, 'message': 'Could not verify order with Razorpay.'}, status=502)

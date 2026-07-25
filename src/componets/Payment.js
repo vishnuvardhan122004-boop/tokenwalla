@@ -267,7 +267,7 @@ export default function Payment() {
             <div className="pay-rows">
               <div className="pay-row">
                 <span className="pay-row-label">Doctor</span>
-                <span className="pay-row-value">Dr. {doctorName}</span>
+                <span className="pay-row-value">{doctorName}</span>
               </div>
               <div className="pay-row">
                 <span className="pay-row-label">Hospital</span>

@@ -413,7 +413,7 @@ export default function MyBookings() {
                             {st.label}
                           </span>
                         </div>
-                        <div className="mb-doctor-name">Dr. {booking.doctor_name || '—'}</div>
+                        <div className="mb-doctor-name">{booking.doctor_name || '—'}</div>
                         <div className="mb-hospital-name">🏥 {booking.hospital_name || '—'}</div>
                         <div className="mb-meta">
                           <div className="mb-meta-chip"><div className="mb-meta-icon">📅</div>{booking.date || '—'}</div>
@@ -460,7 +460,7 @@ export default function MyBookings() {
                     {/* ── DOCTOR-UNAVAILABLE BANNER ── */}
                     {booking.status === 'waiting' && booking.free_reschedule && (
                       <div className="mb-unavail-banner">
-                        ⚠️ Dr. {booking.doctor_name} is unavailable. Reschedule below at no charge.
+                        ⚠️ {booking.doctor_name} is unavailable. Reschedule below at no charge.
                       </div>
                     )}
 
@@ -514,7 +514,7 @@ export default function MyBookings() {
         <div className="mb-modal-overlay" onClick={e => { if (e.target === e.currentTarget && !rescheduling) setRescheduleBooking(null); }}>
           <div className="mb-modal">
             <div className="mb-modal-title">📅 Reschedule Appointment</div>
-            <div className="mb-modal-sub">Dr. {rescheduleBooking.doctor_name} · {rescheduleBooking.hospital_name}</div>
+            <div className="mb-modal-sub">{rescheduleBooking.doctor_name} · {rescheduleBooking.hospital_name}</div>
             <label className="mb-modal-label">Select New Date</label>
             <input
               type="date" className="mb-modal-input" min={today} value={newDate}

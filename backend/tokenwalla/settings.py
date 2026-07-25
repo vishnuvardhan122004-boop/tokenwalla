@@ -115,7 +115,9 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '60/minute',
         'user': '300/minute',
-        'otp':  '5/minute',
+        'otp':  '5/minute',    # requesting an OTP (sends SMS/voice — real cost)
+        'otp_verify': '30/minute',  # verifying / checking (cheap, several per flow)
+        'admin_setup': '10/hour',   # /auth/create-admin/ — anti brute-force on the setup key
     },
 }
 

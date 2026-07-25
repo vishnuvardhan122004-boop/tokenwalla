@@ -21,7 +21,22 @@ User   = get_user_model()
 
 
 class OTPRateThrottle(AnonRateThrottle):
+    # Requesting an OTP sends an SMS/voice call (real cost) → tight bucket.
     scope = 'otp'
+
+
+class OTPVerifyRateThrottle(AnonRateThrottle):
+    # Verifying an OTP / checking a mobile is cheap and happens several times in
+    # a single login or reset flow, so it gets its own, looser bucket instead of
+    # sharing the tight SMS-send 'otp' scope (which 429'd legitimate users
+    # mid-login and let one NAT/CGNAT IP lock others out).
+    scope = 'otp_verify'
+
+
+class AdminSetupRateThrottle(AnonRateThrottle):
+    # /auth/create-admin/ bootstraps a superuser behind a shared setup key.
+    # Throttle hard so that key cannot be brute-forced over the network.
+    scope = 'admin_setup'
 
 
 # Max wrong OTP guesses before the code is burned and a new one must be sent.
@@ -34,19 +49,23 @@ OTP_MAX_ATTEMPTS = 5
 def _register_otp_failure(mobile):
     """Count a wrong OTP guess; invalidate the session once the cap is hit.
 
-    Returns True if the OTP session is still alive, False if it was just burned
-    (or the attempt cap was already exceeded).
+    Uses the cache's atomic ``incr`` where the backend supports it (e.g. Redis)
+    so parallel wrong guesses can't race past the cap; on backends without a
+    native atomic incr this still narrows the window versus a read-modify-write.
     """
-    key      = f'otp_attempts:{mobile}'
-    attempts = (cache.get(key) or 0) + 1
-    cache.set(key, attempts, timeout=300)
+    key = f'otp_attempts:{mobile}'
+    cache.add(key, 0, timeout=300)
+    try:
+        attempts = cache.incr(key)
+    except ValueError:
+        # Key expired between the add and the incr — treat as the first failure.
+        cache.set(key, 1, timeout=300)
+        attempts = 1
     if attempts >= OTP_MAX_ATTEMPTS:
         cache.delete(f'otp_session:{mobile}')
         cache.delete(f'otp_via:{mobile}')
         cache.delete(key)
         logger.warning('OTP attempt cap reached for mobile ...%s — code invalidated', mobile[-4:])
-        return False
-    return True
 
 
 def _clear_otp_state(mobile):
@@ -111,11 +130,17 @@ def send_otp(mobile, otp, via='sms'):
         return None
 
 
-def verify_otp(mobile, otp_entered):
+def verify_otp(mobile, otp_entered, register_failure=True):
     """
     Verify OTP from cache.
     Returns True on success (and clears the cache entry).
     Returns False if OTP is wrong or expired.
+
+    `register_failure` controls whether a mismatch counts against the per-code
+    attempt cap. It MUST stay True for the dedicated OTP-verify endpoint, but
+    login views pass False: they speculatively try the submitted value as both a
+    password and an OTP, so counting those password mismatches would let anyone
+    who knows a mobile number burn a victim's in-flight OTP session.
     """
     api_key    = getattr(settings, 'TWOFACTOR_API_KEY', '')
     session_id = cache.get(f'otp_session:{mobile}')
@@ -127,12 +152,18 @@ def verify_otp(mobile, otp_entered):
 
     # Dev mode or voice call → direct string comparison
     if not api_key or via == 'voice':
-        result = hmac.compare_digest(str(session_id).strip(), str(otp_entered).strip())
+        # Compare as UTF-8 bytes: hmac.compare_digest raises TypeError on a str
+        # containing non-ASCII characters, and this input is user-controlled.
+        result = hmac.compare_digest(
+            str(session_id).strip().encode('utf-8'),
+            str(otp_entered).strip().encode('utf-8'),
+        )
         if result:
             _clear_otp_state(mobile)
             logger.info('OTP verified for mobile ...%s (dev/voice mode)', mobile[-4:])
         else:
-            _register_otp_failure(mobile)
+            if register_failure:
+                _register_otp_failure(mobile)
             logger.warning('OTP mismatch for mobile ...%s', mobile[-4:])
         return result
 
@@ -145,7 +176,8 @@ def verify_otp(mobile, otp_entered):
             _clear_otp_state(mobile)
             logger.info('OTP verified for mobile ...%s (2Factor SMS)', mobile[-4:])
             return True
-        _register_otp_failure(mobile)
+        if register_failure:
+            _register_otp_failure(mobile)
         logger.warning('OTP verify failed for ...%s: %s', mobile[-4:], data.get('Details'))
         return False
     except Exception:
@@ -195,7 +227,9 @@ class LoginView(APIView):
             return Response({'message': 'Account blocked. Contact support.'}, status=403)
 
         password_ok = user.check_password(password)
-        otp_ok      = verify_otp(mobile, password)
+        # register_failure=False: a wrong password must not consume the OTP
+        # attempt cap (that would let anyone burn a victim's OTP via login).
+        otp_ok      = verify_otp(mobile, password, register_failure=False)
 
         if not password_ok and not otp_ok:
             logger.warning('Failed login attempt for mobile ending ...%s', mobile[-4:])
@@ -255,7 +289,7 @@ class CheckMobileView(APIView):
     Throttled to prevent enumeration attacks.
     """
     permission_classes = [AllowAny]
-    throttle_classes   = [OTPRateThrottle]
+    throttle_classes   = [OTPVerifyRateThrottle]
 
     def post(self, request):
         mobile       = request.data.get('mobile', '').strip()
@@ -317,7 +351,7 @@ class RequestOTPView(APIView):
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
-    throttle_classes   = [OTPRateThrottle]
+    throttle_classes   = [OTPVerifyRateThrottle]
 
     def post(self, request):
         mobile = request.data.get('mobile', '').strip()
@@ -467,6 +501,7 @@ class CreateAdminView(APIView):
     Returns 403 on wrong key.
     """
     permission_classes = [AllowAny]
+    throttle_classes   = [AdminSetupRateThrottle]
 
     def post(self, request):
         import re as _re
@@ -484,8 +519,8 @@ class CreateAdminView(APIView):
                 status=503,
             )
 
-        # ── 2. Validate setup key ─────────────────────────────────────────────
-        if setup_key != expected_key:
+        # ── 2. Validate setup key (constant-time, byte-safe) ──────────────────
+        if not hmac.compare_digest(setup_key.encode('utf-8'), expected_key.encode('utf-8')):
             logger.warning(
                 'Invalid admin setup key attempt from IP %s',
                 request.META.get('REMOTE_ADDR', 'unknown'),

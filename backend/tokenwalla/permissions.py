@@ -35,6 +35,29 @@ class IsHospitalStaff(BasePermission):
         )
 
 
+class IsDoctorOwnerHospitalOrAdmin(BasePermission):
+    """
+    Object-level: a hospital account may only mutate doctors that belong to its
+    OWN hospital; admins (or staff) may mutate any. The hospital id a user
+    manages is stored in User.last_name (set at hospital login/registration).
+
+    View-level has_permission stays True (inherited) so this only narrows the
+    per-object check that DRF runs inside get_object() for update/destroy.
+    """
+    message = 'You can only manage doctors for your own hospital.'
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if getattr(user, 'role', None) == 'admin' or user.is_staff:
+            return True
+        return (
+            getattr(user, 'role', None) == 'hospital' and
+            str(getattr(user, 'last_name', '')) == str(obj.hospital_id)
+        )
+
+
 class IsOwnerOrAdmin(BasePermission):
     """
     Object-level: user must own the object (obj.user) or be admin.

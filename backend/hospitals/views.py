@@ -40,7 +40,10 @@ def _verify_otp(mobile, otp_entered):
     cycle at module load.
     """
     from users.auth_views import verify_otp as _shared_verify_otp
-    return _shared_verify_otp(mobile, otp_entered)
+    # register_failure=False: HospitalLoginView tries the submitted value as both
+    # password and OTP, so a wrong password must not consume the OTP attempt cap
+    # (else anyone knowing the mobile could burn a victim's in-flight OTP).
+    return _shared_verify_otp(mobile, otp_entered, register_failure=False)
 
 
 # ── Views ─────────────────────────────────────────────────────────────────────

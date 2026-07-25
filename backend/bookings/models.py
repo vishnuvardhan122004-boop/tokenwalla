@@ -25,6 +25,13 @@ class Booking(models.Model):
     order_id     = models.CharField(max_length=100, blank=True)
     amount       = models.IntegerField(default=0)
     queue_access = models.BooleanField(default=False)
+    # Payment for a *queue-access upgrade* on an already-created booking. Kept
+    # separate from payment_id/order_id (the original booking payment) so an
+    # upgrade never clobbers that record. The partial unique constraint below
+    # makes one queue payment reusable on at most one booking, closing the
+    # concurrent-reuse race in UpgradeQueueAccessView at the DB layer.
+    queue_payment_id = models.CharField(max_length=100, blank=True)
+    queue_order_id   = models.CharField(max_length=100, blank=True)
     reminder_sent = models.BooleanField(default=False)
     # Set True when the hospital marks the doctor unavailable — grants the
     # patient a ONE-TIME reschedule with the ₹5 fee waived. Consumed (reset to
@@ -34,6 +41,16 @@ class Booking(models.Model):
 
     class Meta:
         ordering = ['-created']
+        constraints = [
+            # A single queue-upgrade payment can unlock at most one booking.
+            # Partial (non-blank only) so the many bookings with no upgrade
+            # payment ('') don't collide. Requires Postgres (partial index).
+            models.UniqueConstraint(
+                fields=['queue_payment_id'],
+                condition=~models.Q(queue_payment_id=''),
+                name='uniq_booking_queue_payment_id_nonblank',
+            ),
+        ]
         indexes = [
             # Most-used query: queue for a hospital on a date
             models.Index(fields=['hospital', 'date', 'status'], name='idx_booking_hosp_date_status'),

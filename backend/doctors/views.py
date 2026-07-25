@@ -8,7 +8,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from .models import Doctor
 from .serializers import DoctorSerializer
-from tokenwalla.permissions import IsHospitalStaff
+from tokenwalla.permissions import IsHospitalStaff, IsDoctorOwnerHospitalOrAdmin
 from tokenwalla.utils import is_slot_bookable
 
 import logging
@@ -81,8 +81,14 @@ class DoctorViewSet(viewsets.ModelViewSet):
         """
         if self.action in self._PUBLIC_ACTIONS:
             return [AllowAny()]
-        if self.action in ('create', 'update', 'partial_update', 'destroy'):
+        if self.action == 'create':
+            # No object yet — ownership of the target hospital is enforced
+            # inside create() against the submitted `hospital` field.
             return [IsAuthenticated(), IsHospitalStaff()]
+        if self.action in ('update', 'partial_update', 'destroy'):
+            # IsDoctorOwnerHospitalOrAdmin runs per-object in get_object(), so a
+            # hospital can't edit/delete another hospital's doctor.
+            return [IsAuthenticated(), IsHospitalStaff(), IsDoctorOwnerHospitalOrAdmin()]
         return super().get_permissions()
 
     def get_queryset(self):
@@ -305,6 +311,17 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = self._prepare_data(request.data)
+
+        # A hospital account may only add doctors under its OWN hospital; admins
+        # (or staff) may create for any hospital.
+        user = request.user
+        if not (getattr(user, 'role', None) == 'admin' or user.is_staff):
+            own_hospital_id = str(getattr(user, 'last_name', '') or '')
+            if str(data.get('hospital', '')) != own_hospital_id:
+                return Response(
+                    {'message': 'You can only add doctors to your own hospital.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         serializer = self.get_serializer(data=data)
         if not serializer.is_valid():

@@ -936,7 +936,7 @@ export default function DoctorDetails() {
             }
             <div className="dd-profile-info">
               <span className="dd-spec-badge">{doctor.specialization}</span>
-              <div className="dd-doctor-name">Dr. {doctor.name}</div>
+              <div className="dd-doctor-name">{doctor.name}</div>
               <div className="dd-profile-pills">
                 <span className="dd-pill">📍 {doctor.city}</span>
                 <span className="dd-pill">⏳ {doctor.experience} yrs exp</span>
@@ -1206,7 +1206,7 @@ export default function DoctorDetails() {
                 <div className="dd-booking-body">
                   <div className="dd-summary-row">
                     <span className="dd-summary-label">Doctor</span>
-                    <span className="dd-summary-value">Dr. {doctor.name}</span>
+                    <span className="dd-summary-value">{doctor.name}</span>
                   </div>
                   <div className="dd-summary-row">
                     <span className="dd-summary-label">Date</span>

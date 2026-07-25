@@ -11,6 +11,7 @@ Run:  python manage.py test tokenwalla.tests_security
 import datetime
 import hashlib
 import hmac
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.core.cache import cache
@@ -45,7 +46,9 @@ REST_FRAMEWORK_TEST = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '1000/minute', 'user': '1000/minute', 'otp': '1000/minute',
+        'anon': '1000/minute', 'user': '1000/minute',
+        'otp': '1000/minute', 'otp_verify': '1000/minute',
+        'admin_setup': '1000/minute',
     },
 }
 
@@ -67,6 +70,7 @@ class DoctorAccessControlTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        cache.clear()  # isolate DRF throttle counters from other test classes
         self.hospital = Hospital.objects.create(name='H1', city='Blr', mobile='9000000001', password='x')
         self.doctor = Doctor.objects.create(
             hospital=self.hospital, name='Old', specialization='Gen',
@@ -111,6 +115,45 @@ class DoctorAccessControlTests(TestCase):
         res = self.client.patch(f'/api/doctors/{self.doctor.id}/', {'available': False}, format='json')
         self.assertEqual(res.status_code, 200)
 
+    def test_hospital_cannot_update_another_hospitals_doctor(self):
+        other_hosp = Hospital.objects.create(name='H2', city='Blr', mobile='9000000003', password='x')
+        other_doc = Doctor.objects.create(
+            hospital=other_hosp, name='Other', specialization='Gen',
+            mobile='9000000004', fee=100, slots=['09:00 AM'])
+        _auth(self.client, self.hosp_user)  # belongs to H1, not H2
+        res = self.client.patch(f'/api/doctors/{other_doc.id}/', {'available': False}, format='json')
+        self.assertEqual(res.status_code, 403)
+        other_doc.refresh_from_db()
+        self.assertTrue(other_doc.available)
+
+    def test_hospital_cannot_delete_another_hospitals_doctor(self):
+        other_hosp = Hospital.objects.create(name='H2', city='Blr', mobile='9000000007', password='x')
+        other_doc = Doctor.objects.create(
+            hospital=other_hosp, name='Other', specialization='Gen',
+            mobile='9000000008', fee=100, slots=['09:00 AM'])
+        _auth(self.client, self.hosp_user)
+        res = self.client.delete(f'/api/doctors/{other_doc.id}/')
+        self.assertEqual(res.status_code, 403)
+        self.assertTrue(Doctor.objects.filter(id=other_doc.id).exists())
+
+    def test_hospital_cannot_create_doctor_for_another_hospital(self):
+        other_hosp = Hospital.objects.create(name='H2', city='Blr', mobile='9000000005', password='x')
+        _auth(self.client, self.hosp_user)  # H1
+        res = self.client.post('/api/doctors/', {
+            'hospital': other_hosp.id, 'name': 'Sneak', 'specialization': 'Y',
+            'mobile': '9000000006', 'fee': 1,
+        })
+        self.assertEqual(res.status_code, 403)
+        self.assertFalse(Doctor.objects.filter(name='Sneak').exists())
+
+    def test_admin_can_update_any_hospitals_doctor(self):
+        admin = User.objects.create_user(
+            username='9333330000', mobile='9333330000', password='pw',
+            role='admin', is_staff=True)
+        _auth(self.client, admin)
+        res = self.client.patch(f'/api/doctors/{self.doctor.id}/', {'available': False}, format='json')
+        self.assertEqual(res.status_code, 200)
+
 
 @override_settings(RAZORPAY_KEY_SECRET=TEST_SECRET, RAZORPAY_KEY_ID='rzp_test_x', CACHES=LOCMEM_CACHE)
 class QueueUpgradeTests(TestCase):
@@ -118,6 +161,7 @@ class QueueUpgradeTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        cache.clear()  # isolate DRF throttle counters from other test classes
         self.hospital = Hospital.objects.create(name='H1', city='Blr', mobile='9000000010', password='x')
         self.doctor = Doctor.objects.create(
             hospital=self.hospital, name='D', specialization='Gen',
@@ -153,6 +197,51 @@ class QueueUpgradeTests(TestCase):
         # The old exploit: a bare, unverified payment_id string.
         res = self._upgrade({'payment_id': 'anything'})
         self.assertEqual(res.status_code, 400)
+        self.booking.refresh_from_db()
+        self.assertFalse(self.booking.queue_access)
+
+    # order.fetch is a live network call, so mock it — the amount is what the
+    # server trusts, and these tests exercise the actual security fix (a valid
+    # signature + correct ₹15 amount unlocks; a wrong amount / reused id does not).
+    @patch('bookings.views.fetch_order_amount_paise', return_value=1500)
+    def test_valid_payment_unlocks_queue_access(self, _mock_fetch):
+        order_id, payment_id = 'order_ok', 'pay_ok'
+        res = self._upgrade({
+            'razorpay_order_id':   order_id,
+            'razorpay_payment_id': payment_id,
+            'razorpay_signature':  _sign(order_id, payment_id),
+        })
+        self.assertEqual(res.status_code, 200)
+        self.booking.refresh_from_db()
+        self.assertTrue(self.booking.queue_access)
+        self.assertEqual(self.booking.queue_payment_id, payment_id)
+
+    @patch('bookings.views.fetch_order_amount_paise', return_value=500)
+    def test_wrong_amount_rejected(self, _mock_fetch):
+        order_id, payment_id = 'order_low', 'pay_low'
+        res = self._upgrade({
+            'razorpay_order_id':   order_id,
+            'razorpay_payment_id': payment_id,
+            'razorpay_signature':  _sign(order_id, payment_id),
+        })
+        self.assertEqual(res.status_code, 400)
+        self.booking.refresh_from_db()
+        self.assertFalse(self.booking.queue_access)
+
+    @patch('bookings.views.fetch_order_amount_paise', return_value=1500)
+    def test_reused_payment_id_rejected(self, _mock_fetch):
+        # A different booking already consumed this queue-upgrade payment.
+        Booking.objects.create(
+            user=self.patient, doctor=self.doctor, hospital=self.hospital,
+            date=datetime.date.today(), slot='09:00 AM', token='TW-TEST-2',
+            amount=15, queue_access=True, queue_payment_id='pay_dup')
+        order_id, payment_id = 'order_dup', 'pay_dup'
+        res = self._upgrade({
+            'razorpay_order_id':   order_id,
+            'razorpay_payment_id': payment_id,
+            'razorpay_signature':  _sign(order_id, payment_id),
+        })
+        self.assertEqual(res.status_code, 409)
         self.booking.refresh_from_db()
         self.assertFalse(self.booking.queue_access)
 
@@ -197,3 +286,30 @@ class OTPHardeningTests(TestCase):
         r = self.client.post('/api/auth/otp/verify/', {'mobile': mobile, 'otp': real}, format='json')
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json().get('verified'))
+
+
+@override_settings(ADMIN_SETUP_KEY='super-secret-setup-key', CACHES=LOCMEM_CACHE)
+class AdminSetupTests(TestCase):
+    """Vuln: /auth/create-admin/ must reject a wrong setup key (constant-time)."""
+
+    def setUp(self):
+        self.client = APIClient()
+        cache.clear()
+
+    def test_wrong_setup_key_rejected(self):
+        res = self.client.post('/api/auth/create-admin/', {
+            'setup_key': 'wrong-key', 'mobile': '9800000000',
+            'password': 'password123', 'name': 'Admin',
+        }, format='json')
+        self.assertEqual(res.status_code, 403)
+        self.assertFalse(User.objects.filter(mobile='9800000000').exists())
+
+    def test_correct_setup_key_creates_admin(self):
+        res = self.client.post('/api/auth/create-admin/', {
+            'setup_key': 'super-secret-setup-key', 'mobile': '9800000001',
+            'password': 'password123', 'name': 'Admin',
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+        user = User.objects.get(mobile='9800000001')
+        self.assertEqual(user.role, 'admin')
+        self.assertTrue(user.is_superuser)

@@ -1,24 +1,23 @@
-import hashlib
-import hmac as hmac_lib
 import logging
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.pagination import PageNumberPagination
-from django.conf import settings
+from django.db import transaction, IntegrityError
 from django.shortcuts import get_object_or_404
 
 from .models import Booking
 from .serializers import BookingSerializer, build_queue_map
 from tokenwalla.permissions import IsAdmin, IsHospitalStaff
+from payments.razorpay_utils import (
+    verify_signature,
+    fetch_order_amount_paise,
+    QUEUE_UPGRADE_AMOUNT_PAISE,
+)
 from notifications.push import push_booking_in_progress
 
 logger = logging.getLogger('tokenwalla')
-
-# Queue-access upgrade is the ₹15 "queue_view" plan → 1500 paise.
-QUEUE_UPGRADE_AMOUNT_PAISE = 1500
-QUEUE_UPGRADE_AMOUNT_INR   = 15
 
 
 class StandardPagination(PageNumberPagination):
@@ -247,38 +246,38 @@ class UpgradeQueueAccessView(APIView):
                 status=400,
             )
 
-        secret   = settings.RAZORPAY_KEY_SECRET.encode('utf-8')
-        msg      = f'{order_id}|{payment_id}'.encode('utf-8')
-        expected = hmac_lib.new(secret, msg, digestmod=hashlib.sha256).hexdigest()
-        if not hmac_lib.compare_digest(expected, sig):
+        if not verify_signature(order_id, payment_id, sig):
             logger.warning('Invalid Razorpay signature on queue upgrade for booking %s', pk)
             return Response({'message': 'Invalid payment signature.'}, status=400)
 
         # Confirm the order with Razorpay and that it was paid for the right amount.
         try:
-            import razorpay
-            client = razorpay.Client(
-                auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
-            )
-            order_details = client.order.fetch(order_id)
+            amount_paise = fetch_order_amount_paise(order_id)
         except Exception as exc:
             logger.error('Queue upgrade: failed to fetch Razorpay order %s: %s', order_id, exc)
             return Response({'message': 'Could not verify order with Razorpay.'}, status=502)
 
-        if int(order_details.get('amount', 0)) != QUEUE_UPGRADE_AMOUNT_PAISE:
+        if amount_paise != QUEUE_UPGRADE_AMOUNT_PAISE:
             logger.warning('Queue upgrade: wrong amount for order %s: %s paise',
-                           order_id, order_details.get('amount'))
+                           order_id, amount_paise)
             return Response({'message': 'Invalid payment amount for queue access.'}, status=400)
 
-        # Reject a payment id that has already been used for another booking.
-        if Booking.objects.filter(payment_id=payment_id).exclude(pk=booking.pk).exists():
+        # Record the upgrade payment in its OWN fields (never touching the
+        # booking's original payment_id/order_id/amount) and let the partial
+        # unique index on queue_payment_id be the source of truth for reuse.
+        # The pre-check gives a friendly 409; the IntegrityError catch closes
+        # the concurrent-race window the pre-check alone can't.
+        try:
+            with transaction.atomic():
+                if Booking.objects.filter(queue_payment_id=payment_id).exists():
+                    return Response({'message': 'This payment has already been used.'}, status=409)
+                booking.queue_access     = True
+                booking.queue_payment_id = payment_id
+                booking.queue_order_id   = order_id
+                booking.save(update_fields=['queue_access', 'queue_payment_id', 'queue_order_id'])
+        except IntegrityError:
+            logger.warning('Queue upgrade: payment %s already used (unique index)', payment_id)
             return Response({'message': 'This payment has already been used.'}, status=409)
-
-        booking.queue_access = True
-        booking.payment_id   = payment_id
-        booking.order_id     = order_id
-        booking.amount       = QUEUE_UPGRADE_AMOUNT_INR
-        booking.save(update_fields=['queue_access', 'payment_id', 'order_id', 'amount'])
         logger.info('Queue access unlocked for booking %s by user %s', pk, request.user.id)
 
         return Response({
