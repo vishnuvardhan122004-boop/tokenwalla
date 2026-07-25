@@ -19,10 +19,14 @@ reminder each (idempotent — `reminder_sent` flag prevents duplicates).
 1. Open the backend project in Railway → **New → GitHub Repo** → pick this same repo
    (`vishnuvardhan122004-boop/tokenwalla`). This creates a second service.
 2. On the new service → **Settings → Config-as-code → Railway Config File**, set the
-   path to:
+   path to an **absolute path from the repo root**. Railway does NOT prefix this field
+   with the service's Root Directory, so a bare `railway.cron.json` fails to resolve
+   ("service config at 'railway.cron.json' not found") and the deploy dies at snapshot:
 
-       railway.cron.json
+       backend/railway.cron.json
 
+   Also set the service's **Root Directory** to `backend` so `manage.py` is found at
+   run time.
    That file already contains the start command (`python manage.py
    send_appointment_reminders`), the schedule (`*/10 * * * *`), and
    `restartPolicyType: NEVER` (so it doesn't loop after the command exits).
