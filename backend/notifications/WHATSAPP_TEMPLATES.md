@@ -79,14 +79,17 @@ Sender: `notifications.whatsapp.send_hospital_new_booking(booking)`.
 ```
 New appointment at {{1}}.
 
-Patient: {{2}}
-Mobile: {{3}}
-Doctor: {{4}}
-Date: {{5}} ({{6}})
-Token: {{7}}
+Patient {{2}} (mobile {{3}}) has booked an appointment with {{4}} on {{5}} at {{6}}. Booking reference {{7}}.
 
 Open the TokenWalla hospital app to view the queue.
 ```
+
+> **Why sentence form, not a `Label: {{n}}` list:** Meta's automated review
+> flags variable-heavy, form-like bodies ("This message template will be
+> rejected"), and the word **Token** next to a code-like value trips the
+> **Authentication/OTP** classifier. Keep the copy conversational and avoid
+> "token"/"OTP"/"code" — the variable order below is unchanged, so no code change
+> is needed.
 
 **Variable mapping** (order matters — matches the `params` list in code):
 
@@ -98,7 +101,7 @@ Open the TokenWalla hospital app to view the queue.
 | `{{4}}` | Doctor name    | Anita Rao |
 | `{{5}}` | Appointment date | 2026-07-22 |
 | `{{6}}` | Slot           | 10:30 AM |
-| `{{7}}` | Booking token  | TW-024607-E90BC0 |
+| `{{7}}` | Booking reference (booking token) | TW-024607-E90BC0 |
 
 > This message is NOT gated on `whatsapp_opt_in` (that flag belongs to the
 > patient) — the hospital always wants to hear about a new booking. If the
