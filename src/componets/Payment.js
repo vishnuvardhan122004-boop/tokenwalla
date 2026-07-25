@@ -54,7 +54,7 @@ export default function Payment() {
         amount:      orderData.amount,
         currency:    orderData.currency,
         name:        'TokenWalla',
-        description: `Appointment — Dr. ${doctorName}`,
+        description: `Appointment — ${doctorName}`,
         order_id:    orderData.order_id,
         prefill:     { name: user?.name || '', contact: user?.mobile || '' },
         theme:       { color: '#185FA5' },

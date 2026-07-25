@@ -184,7 +184,7 @@ export default function DoctorDetails() {
   const buildShare = () => {
     const url  = window.location.href;
     const text = [
-      `👨‍⚕️ Dr. ${doctor.name}`,
+      `👨‍⚕️ ${doctor.name}`,
       doctor.specialization ? `🩺 ${doctor.specialization}` : null,
       doctor.hospital_name  ? `🏥 ${doctor.hospital_name}`  : null,
       doctor.city           ? `📍 ${doctor.city}`           : null,

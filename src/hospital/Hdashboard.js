@@ -174,7 +174,7 @@ const Hdashboard = () => {
         { headers: { "Content-Type": "application/json" } }
       );
       setDoctors(prev => prev.map(d => d.id === docId ? { ...d, ...data } : d));
-      showToast(`Dr. ${doctor.name} is now ${newVal ? "available ✅" : "unavailable ❌"}`);
+      showToast(`${doctor.name} is now ${newVal ? "available ✅" : "unavailable ❌"}`);
     } catch (err) {
       setDoctors(prev => prev.map(d => d.id === docId ? { ...d, available: !newVal } : d));
       showToast(err?.response?.data?.message || "Failed to update availability.", "error");

@@ -113,7 +113,7 @@ export default function MyBookings() {
   };
 
   const handleCancel = async (booking) => {
-    if (!window.confirm(`Cancel appointment with Dr. ${booking.doctor_name}?\n\nRefunds are processed within 5–7 business days.`)) return;
+    if (!window.confirm(`Cancel appointment with ${booking.doctor_name}?\n\nRefunds are processed within 5–7 business days.`)) return;
     setCancelling(booking.id);
     try {
       await API.patch(`/bookings/cancel/${booking.id}/`);
@@ -191,7 +191,7 @@ export default function MyBookings() {
         amount: Number(order.amount),
         currency: 'INR',
         name: 'TokenWalla',
-        description: `Reschedule fee - Dr. ${rescheduleBooking.doctor_name}`,
+        description: `Reschedule fee - ${rescheduleBooking.doctor_name}`,
         order_id: String(order.order_id),
         prefill: {
           name: user?.name || user?.username || '',

@@ -210,7 +210,7 @@ const Hospitals = () => {
       setDeleteTarget({
         type:           'doctor',
         id:             doc.id,
-        name:           `Dr. ${doc.name} — ${doc.specialization}`,
+        name:           `${doc.name} — ${doc.specialization}`,
         activeBookings: data.active || 0,
         totalBookings:  data.total  || 0,
       });
@@ -219,7 +219,7 @@ const Hospitals = () => {
       setDeleteTarget({
         type:           'doctor',
         id:             doc.id,
-        name:           `Dr. ${doc.name} — ${doc.specialization}`,
+        name:           `${doc.name} — ${doc.specialization}`,
         activeBookings: 0,
         totalBookings:  0,
       });
@@ -234,7 +234,7 @@ const Hospitals = () => {
       await API.delete(`/doctors/${deleteTarget.id}/force-delete/`);
       setDoctors(prev => prev.filter(d => d.id !== deleteTarget.id));
       setDeleteTarget(null);
-      showToast(`🗑️ Dr. deleted. ${deleteTarget.activeBookings > 0 ? `${deleteTarget.activeBookings} booking(s) were cancelled.` : ''}`);
+      showToast(`🗑️ Doctor deleted. ${deleteTarget.activeBookings > 0 ? `${deleteTarget.activeBookings} booking(s) were cancelled.` : ''}`);
     } catch (err) {
       const status = err?.response?.status;
       if (status === 404) {
