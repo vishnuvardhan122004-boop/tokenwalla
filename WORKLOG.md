@@ -4,7 +4,7 @@ A running record of changes so we can cross-check what's done and what's pending
 Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** `main`
-- **Latest commit at last update:** `4aac7b4`
+- **Latest commit at last update:** `7bd643f`
 - **Last updated:** 2026-07-26
 
 ### How to update this log
@@ -13,6 +13,26 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## ⏭️ Next session plan (2026-07-27)
+
+**P0 — protect what's already live**
+- [ ] Confirm the WhatsApp token is a **permanent System-User token** (not the 24h temp one) — otherwise every WhatsApp send stops tomorrow. Regenerate if unsure and update env on **both** web + cron services.
+- [ ] Confirm **web + cron** services are both on the latest commit; run `python manage.py migrate` on web so migration `0008` (queue-payment unique index) is applied.
+
+**P1 — finish WhatsApp**
+- [ ] Verify the cron actually fires: cron **Logs** show `Reminder run complete` each tick; do one real ~2h booking end-to-end (WhatsAppLog `status=sent`).
+- [ ] Get `hospital_new_booking` **approved** in Meta, then `send_test_whatsapp <mobile> --template hospital_new_booking`.
+- [ ] (Optional) Draft + submit `booking_confirmation` — the last of the 4 templates.
+
+**P2 — security follow-ups (from the review)**
+- [ ] **#9:** update the **mobile app** to send `razorpay_order_id`/`razorpay_payment_id`/`razorpay_signature` to `/api/bookings/upgrade/` (the old bare `payment_id` now returns 400).
+- [ ] Toward 10/10: move cache to **Redis** (fully-atomic OTP cap), raise the **6-char** password floor, add **SMS-send abuse** protection on `RequestOTP`.
+
+**P3 — polish (optional)**
+- [ ] Reword the approved `doctor_unavailable` Meta body to drop "Dr." (cosmetic consistency with the app).
 
 ---
 
