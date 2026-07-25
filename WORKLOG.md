@@ -4,7 +4,7 @@ A running record of changes so we can cross-check what's done and what's pending
 Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** `main`
-- **Latest commit at last update:** `b734b10`
+- **Latest commit at last update:** `4aac7b4`
 - **Last updated:** 2026-07-26
 
 ### How to update this log
@@ -70,7 +70,7 @@ text lives in **Meta**, code only fills the `{{ }}` at send time. Doc of record:
 | `doctor_unavailable` | Patient: doctor unavailable, free reschedule | ✅ **Approved** |
 | `hospital_new_booking` | Hospital team: new booking (now incl. patient **mobile**) | 🕒 Submitted (reworded to sentence form to pass review) |
 | `booking_confirmation` | Patient: booking confirmed | ⬜ Not yet submitted (no body drafted yet) |
-| `appointment_reminder` | Patient: ~2h reminder (cron) | 📝 Body ready in `WHATSAPP_TEMPLATES.md` — submit to Meta. Code + cron wired; won't deliver until approved |
+| `appointment_reminder` | Patient: ~2h reminder (cron) | ✅ **Approved + verified sending** (test `message_id` received 2026-07-26) |
 
 - Added patient mobile as `{{3}}` in `hospital_new_booking` (`b5a7b27`).
 - Reworded `hospital_new_booking` to sentence form — Meta's auto-review rejects
@@ -84,12 +84,14 @@ text lives in **Meta**, code only fills the `{{ }}` at send time. Doc of record:
 ## 4. Action items / still pending
 
 **WhatsApp go-live**
-- [ ] Confirm `WHATSAPP_ACCESS_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` are set on the **server** (Railway vars), then **redeploy/restart**.
-- [ ] Verify the token is a **permanent System User token**, not the 24-hour temporary one.
-- [ ] If the WhatsApp app is in **Development** mode, add test recipient numbers (Live needs business verification).
-- [ ] Test: `python manage.py send_test_whatsapp <your-mobile> --template doctor_unavailable` → expect a `message_id`.
-- [ ] Get `hospital_new_booking` **approved** (resubmitted in sentence form).
-- [ ] (Optional) Submit `booking_confirmation` + `appointment_reminder`.
+- [x] `WHATSAPP_ACCESS_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` set on the server; services redeployed.
+- [x] Test send verified — `send_test_whatsapp ... --template appointment_reminder` returned a `message_id`.
+- [x] `appointment_reminder` approved and sending.
+- [x] Cron service Config File path fixed to `/backend/railway.cron.json` (Root Directory `backend`); deploy succeeds.
+- [ ] Verify the token is a **permanent** System-User token (not the 24h temp one) so it doesn't expire.
+- [ ] Confirm the cron actually fires: cron logs show `Reminder run complete`, and a real ~2h booking lands (WhatsAppLog `status=sent`).
+- [ ] Get `hospital_new_booking` **approved** (submitted, sentence form).
+- [ ] (Optional) Draft + submit `booking_confirmation`.
 
 **Security follow-ups**
 - [ ] **#9:** Update the out-of-repo **mobile app** to send `razorpay_order_id`/`razorpay_payment_id`/`razorpay_signature` to `/api/bookings/upgrade/` before deploying (old bare `payment_id` now returns 400).
