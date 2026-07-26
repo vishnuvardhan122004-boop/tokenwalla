@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import API from '../services/api';
 import { filterTestDoctors } from '../services/testHospitals';
@@ -38,8 +38,16 @@ const SPECIALTIES = [
 
 export default function Hero() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [doctors,   setDoctors]   = useState([]);
   const [activeIdx, setActiveIdx] = useState(0);
+  const [heroSearch, setHeroSearch] = useState('');
+
+  const handleHeroSearch = (e) => {
+    e.preventDefault();
+    const q = heroSearch.trim();
+    navigate(q ? `/alldoctor?q=${encodeURIComponent(q)}` : '/alldoctor');
+  };
 
   const STATS = [
     { num: '2,400+', label: t('hero.stats.tokensIssued') },
@@ -77,30 +85,47 @@ API.get('/doctors/').then(({ data }) => {
         /* ── HERO ── */
         .hero-section {
           position: relative; overflow: hidden;
-          padding: 90px 0 80px; min-height: 90vh;
+          padding: 76px 0 72px; min-height: 84vh;
           display: flex; align-items: center;
-          background: linear-gradient(160deg, var(--color-surface) 0%, #EAF3FF 50%, #F8FBFF 100%);
-        }
-        .hero-grid-bg {
-          position: absolute; inset: 0;
-          background-image:
-            linear-gradient(var(--blue-100) 1px, transparent 1px),
-            linear-gradient(90deg, var(--blue-100) 1px, transparent 1px);
-          background-size: 48px 48px; opacity: 0.4;
+          background: linear-gradient(180deg, var(--blue-50) 0%, #FFFFFF 62%);
         }
         .hero-glow {
-          position: absolute; top: -120px; right: -80px;
-          width: 600px; height: 600px; border-radius: 50%;
-          background: radial-gradient(circle, rgba(55,138,221,0.12) 0%, transparent 70%);
+          position: absolute; top: -160px; right: -140px;
+          width: 560px; height: 560px; border-radius: 50%;
+          background: radial-gradient(circle, rgba(55,138,221,0.10) 0%, transparent 70%);
           pointer-events: none;
         }
         .hero-badge {
           display: inline-flex; align-items: center; gap: 8px;
-          background: var(--blue-50); border: 1px solid var(--blue-200);
+          background: #fff; border: 1px solid var(--blue-100);
           border-radius: 100px; padding: 6px 16px;
           font-size: 13px; font-weight: 500; color: var(--blue-700);
-          margin-bottom: 22px;
+          box-shadow: var(--shadow-sm); margin-bottom: 24px;
         }
+
+        /* Hero search bar */
+        .hero-search {
+          display: flex; align-items: center; gap: 8px;
+          background: #fff; border: 1px solid var(--blue-100);
+          border-radius: 16px; padding: 8px 8px 8px 18px;
+          box-shadow: var(--shadow-md); max-width: 520px; margin-bottom: 18px;
+          transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .hero-search:focus-within { border-color: var(--blue-300); box-shadow: var(--shadow-lg); }
+        .hero-search-icon { font-size: 17px; color: var(--gray-400); line-height: 1; }
+        .hero-search-input {
+          flex: 1; border: none; outline: none; background: transparent;
+          font-family: var(--font-body); font-size: 15px; color: var(--gray-900);
+          padding: 12px 4px; min-width: 0;
+        }
+        .hero-search-input::placeholder { color: var(--gray-400); }
+        .hero-search-btn {
+          flex-shrink: 0; border: none; cursor: pointer;
+          background: var(--blue-600); color: #fff;
+          font-family: var(--font-body); font-size: 14.5px; font-weight: 600;
+          border-radius: 11px; padding: 12px 22px; transition: background 0.15s;
+        }
+        .hero-search-btn:hover { background: var(--blue-700); }
         .hero-badge-dot {
           width: 7px; height: 7px; border-radius: 50%; background: var(--color-success-text);
           animation: twPulse 2s ease-in-out infinite;
@@ -115,7 +140,13 @@ API.get('/doctors/').then(({ data }) => {
           font-size: 1.05rem; color: var(--gray-600); line-height: 1.7;
           max-width: 500px; margin-bottom: 36px; font-weight: 400;
         }
-        .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 24px; }
+        .hero-actions { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 30px; }
+        .hero-book-btn { padding: 14px 30px; font-size: 15px; font-weight: 600; box-shadow: var(--shadow-md); }
+        .hero-browse-link {
+          font-size: 14.5px; font-weight: 600; color: var(--blue-600);
+          text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.15s;
+        }
+        .hero-browse-link:hover { border-bottom-color: var(--blue-400); }
 
         /* Specialty quick-filter chips */
         .hero-specs { margin-bottom: 48px; }
@@ -157,13 +188,9 @@ API.get('/doctors/').then(({ data }) => {
         /* Token card visual */
         .token-card-visual {
           background: #fff; border: 1px solid var(--blue-100);
-          border-radius: 22px; padding: 28px;
-          box-shadow: 0 12px 48px rgba(24,95,165,0.12), 0 4px 12px rgba(0,0,0,0.04);
+          border-radius: 20px; padding: 28px;
+          box-shadow: 0 18px 40px rgba(24,95,165,0.10);
           position: relative; overflow: hidden;
-        }
-        .token-card-visual::before {
-          content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-          background: linear-gradient(90deg, var(--blue-600), var(--blue-400), #85B7EB);
         }
         .token-label { font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--gray-400); margin-bottom: 4px; }
         .token-live-badge {
@@ -210,36 +237,33 @@ API.get('/doctors/').then(({ data }) => {
         .float-chip-2 { bottom: 16px; left: -18px; }
 
         /* ── STEPS ── */
-        .steps-section {
-          padding: 96px 0; background: #fff;
-        }
+        .steps-section { padding: clamp(56px, 8vw, 96px) 0; background: #fff; }
         .steps-grid {
           display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          gap: 0; margin-top: 56px;
-          border: 1px solid var(--blue-100); border-radius: 20px; overflow: hidden;
+          gap: 16px; margin-top: clamp(32px, 5vw, 52px);
         }
         .step-card {
-          padding: 36px 28px; position: relative; background: #fff;
-          border-right: 1px solid var(--blue-100); transition: background 0.2s;
+          padding: 28px 24px; position: relative; background: #fff;
+          border: 1px solid var(--blue-100); border-radius: 16px;
+          transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
         }
-        .step-card:last-child { border-right: none; }
-        .step-card:hover { background: var(--blue-50); }
+        .step-card:hover { border-color: var(--blue-200); box-shadow: var(--shadow-md); transform: translateY(-3px); }
         .step-num {
           font-family: var(--font-display);
-          font-size: 3rem; font-weight: 800; color: var(--blue-100);
-          line-height: 1; margin-bottom: 16px;
+          font-size: 2.4rem; font-weight: 800; color: var(--blue-100);
+          line-height: 1; margin-bottom: 14px;
         }
         .step-icon-wrap {
-          width: 46px; height: 46px; border-radius: 13px;
-          background: var(--blue-50); border: 1px solid var(--blue-200);
+          width: 44px; height: 44px; border-radius: 12px;
+          background: var(--blue-50); border: 1px solid var(--blue-100);
           display: flex; align-items: center; justify-content: center;
-          font-size: 20px; margin-bottom: 18px;
+          font-size: 20px; margin-bottom: 16px;
         }
         .step-title { font-family: var(--font-display); font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--gray-900); }
         .step-desc  { font-size: 14px; color: var(--gray-500); line-height: 1.65; }
 
         /* ── DOCTORS ── */
-        .doctors-section { padding: 0 0 80px; background: #fff; }
+        .doctors-section { padding: 0 0 clamp(56px, 8vw, 80px); background: #fff; }
         .doctors-scroll {
           display: flex; gap: 18px; overflow-x: auto;
           padding-bottom: 10px; margin-top: 40px; scrollbar-width: none;
@@ -253,7 +277,7 @@ API.get('/doctors/').then(({ data }) => {
           transition: all 0.25s; cursor: pointer; text-decoration: none; color: inherit;
         }
         .doc-card:hover {
-          transform: translateY(-4px); border-color: var(--blue-300);
+          transform: translateY(-4px); border-color: var(--blue-200);
           box-shadow: var(--shadow-md); text-decoration: none; color: inherit;
         }
         .doc-img { width: 100%; height: 150px; object-fit: cover; }
@@ -267,34 +291,30 @@ API.get('/doctors/').then(({ data }) => {
         .doc-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--gray-500); }
 
         /* ── FEATURES ── */
-        .features-section { padding: 80px 0; background: var(--blue-50); border-top: 1px solid var(--blue-100); border-bottom: 1px solid var(--blue-100); }
-        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-top: 52px; }
+        .features-section { padding: clamp(56px, 8vw, 88px) 0; background: var(--gray-50); border-top: 1px solid var(--blue-50); border-bottom: 1px solid var(--blue-50); }
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin-top: clamp(32px, 5vw, 48px); }
         .feature-card {
           background: #fff; border: 1px solid var(--blue-100);
-          border-radius: 18px; padding: 28px;
-          transition: all 0.2s;
+          border-radius: 16px; padding: 26px;
+          transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
         }
-        .feature-card:hover { border-color: var(--blue-300); box-shadow: var(--shadow-md); transform: translateY(-3px); }
+        .feature-card:hover { border-color: var(--blue-200); box-shadow: var(--shadow-md); transform: translateY(-3px); }
         .feature-icon {
-          width: 48px; height: 48px; border-radius: 13px;
-          background: var(--blue-50); border: 1px solid var(--blue-200);
+          width: 46px; height: 46px; border-radius: 12px;
+          background: var(--blue-50); border: 1px solid var(--blue-100);
           display: flex; align-items: center; justify-content: center;
-          font-size: 22px; margin-bottom: 18px;
+          font-size: 22px; margin-bottom: 16px;
         }
         .feature-title { font-family: var(--font-display); font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--gray-900); }
         .feature-desc  { font-size: 14px; color: var(--gray-500); line-height: 1.65; }
 
         /* ── PRICING ── */
-        .pricing-section { padding: 96px 0; background: #fff; }
+        .pricing-section { padding: clamp(56px, 8vw, 96px) 0; background: #fff; }
         .price-card {
-          max-width: 360px; margin: 48px auto 0;
+          max-width: 380px; margin: clamp(32px, 5vw, 48px) auto 0;
           background: var(--blue-600); border-radius: 22px;
           padding: 40px 36px; color: #fff; position: relative; overflow: hidden;
-        }
-        .price-card::before {
-          content: ''; position: absolute; top: -60px; right: -60px;
-          width: 200px; height: 200px; border-radius: 50%;
-          background: rgba(255,255,255,0.06);
+          box-shadow: 0 20px 44px rgba(24,95,165,0.18);
         }
         .price-badge {
           display: inline-block;
@@ -312,18 +332,12 @@ API.get('/doctors/').then(({ data }) => {
         .price-check { color: #9FE1CB; font-size: 16px; }
 
         /* ── CTA ── */
-        .cta-section { padding: 80px 0 96px; background: var(--blue-50); }
+        .cta-section { padding: clamp(48px, 7vw, 80px) 0 clamp(56px, 8vw, 96px); background: #fff; }
         .cta-box {
-          background: var(--blue-600); border-radius: 24px;
-          padding: 64px 48px; text-align: center; color: #fff;
+          background: linear-gradient(135deg, var(--blue-700) 0%, var(--blue-900) 100%);
+          border-radius: 24px;
+          padding: clamp(40px, 6vw, 64px) clamp(24px, 5vw, 48px); text-align: center; color: #fff;
           position: relative; overflow: hidden;
-        }
-        .cta-box::before {
-          content: ''; position: absolute; inset: 0;
-          background-image:
-            linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
-          background-size: 48px 48px;
         }
         .cta-title { font-family: var(--font-display); font-size: clamp(1.8rem, 4vw, 3rem); font-weight: 800; margin-bottom: 16px; position: relative; }
         .cta-sub { color: rgba(255,255,255,0.65); font-size: 1.05rem; margin-bottom: 36px; position: relative; }
@@ -346,16 +360,40 @@ API.get('/doctors/').then(({ data }) => {
         .btn-white-outline:hover { border-color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.08); color: #fff; text-decoration: none; }
 
         @keyframes twPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+        /* Hero product card: right-aligned beside the copy, centered when stacked */
+        .hero-visual { position: relative; max-width: 420px; margin-left: auto; }
+
+        /* ── Tablet ── */
+        @media (max-width: 991px) {
+          .hero-section { min-height: auto; }
+          .hero-visual { margin: 44px auto 0; }
+        }
+
+        /* ── Mobile ── */
         @media (max-width: 768px) {
-          .hero-section { padding: 60px 0 48px; min-height: auto; }
-          .hero-actions { flex-direction: column; }
+          .hero-section { padding: 48px 0 44px; }
+          .hero-title { line-height: 1.12; }
+          .hero-sub { margin-bottom: 28px; }
+          .hero-search { max-width: 100%; }
+          .hero-specs { margin-bottom: 36px; }
           .steps-grid { grid-template-columns: 1fr; }
-          .step-card { border-right: none; border-bottom: 1px solid var(--blue-100); }
-          .step-card:last-child { border-bottom: none; }
-          .stats-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding-top: 24px; }
-          .stat-item { border-left: none; border-top: 2px solid var(--blue-200); padding: 12px 0 0; }
-          .float-chip { display: none; }
-          .cta-box { padding: 40px 24px; }
+          .stats-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding-top: 24px; }
+          .stat-item { border-left: none; border-top: 1px solid var(--blue-100); padding: 14px 0 0; }
+        }
+
+        /* ── Small phones ── */
+        @media (max-width: 480px) {
+          .hero-badge { font-size: 12px; padding: 5px 13px; }
+          .hero-search { padding: 6px 6px 6px 14px; border-radius: 14px; }
+          .hero-search-input { padding: 11px 4px; font-size: 14px; }
+          .hero-search-btn { padding: 11px 16px; font-size: 13.5px; }
+          .hero-book-btn { width: 100%; justify-content: center; }
+          .hero-spec-chip { padding: 7px 12px; font-size: 12.5px; }
+          .token-card-visual { padding: 22px; }
+          .token-number { font-size: 3rem; }
+          .price-card { padding: 32px 24px; }
+          .stat-num { font-size: 1.5rem; }
         }
       `}</style>
 
@@ -363,7 +401,6 @@ API.get('/doctors/').then(({ data }) => {
 
         {/* ── HERO ── */}
         <section className="hero-section">
-          <div className="hero-grid-bg" />
           <div className="hero-glow" />
           <div className="tw-container" style={{ position: 'relative', width: '100%' }}>
             <div className="row align-items-center g-5">
@@ -382,9 +419,27 @@ API.get('/doctors/').then(({ data }) => {
                 <p className="hero-sub">
                   {t('hero.subtitle')}
                 </p>
+                {/* Search */}
+                <form className="hero-search" onSubmit={handleHeroSearch} role="search">
+                  <span className="hero-search-icon" aria-hidden="true">🔍</span>
+                  <input
+                    className="hero-search-input"
+                    type="text"
+                    value={heroSearch}
+                    onChange={e => setHeroSearch(e.target.value)}
+                    placeholder={t('hero.searchPlaceholder')}
+                    aria-label={t('hero.searchPlaceholder')}
+                  />
+                  <button type="submit" className="hero-search-btn">{t('hero.searchBtn')}</button>
+                </form>
+
+                {/* Primary CTA */}
                 <div className="hero-actions">
-                  <Link to="/alldoctor" className="btn-primary" style={{ padding: '14px 28px', fontSize: 15 }}>
+                  <Link to="/alldoctor" className="btn-primary hero-book-btn">
                     {t('hero.bookAppointment')}
+                  </Link>
+                  <Link to="/alldoctor" className="hero-browse-link">
+                    {t('hero.doctorsPreview.viewAll')}
                   </Link>
                 </div>
 
@@ -414,10 +469,7 @@ API.get('/doctors/').then(({ data }) => {
 
               {/* Right — Token card */}
               <div className="col-lg-6 fade-up" style={{ animationDelay: '0.15s' }}>
-                <div style={{ position: 'relative', maxWidth: 420, marginLeft: 'auto' }}>
-                  <div className="float-chip float-chip-1">{t('hero.tokenCard.confirmedChip')}</div>
-                  <div className="float-chip float-chip-2">{t('hero.tokenCard.waitChip')}</div>
-
+                <div className="hero-visual">
                   <div className="token-card-visual">
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
                       <div>

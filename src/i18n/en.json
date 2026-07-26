@@ -27,8 +27,10 @@
     "titleLine1": "Skip the Queue.",
     "titleLine2": "Book Your Token",
     "titleLine3": "Online.",
-    "subtitle": "TokenWalla connects patients with doctors digitally. Book a slot, get a token, walk in right on time — no more waiting rooms for hours.",
+    "subtitle": "Book a doctor, get a digital token, and walk in right on time. No more waiting rooms.",
     "bookAppointment": "Book Appointment →",
+    "searchPlaceholder": "Search doctors, specialities, hospitals",
+    "searchBtn": "Search",
     "hospitalLogin": "Hospital Login",
     "specialtiesLabel": "Browse by specialty",
     "specialties": {
@@ -70,12 +72,12 @@
     "process": {
       "label": "Process",
       "heading": "How TokenWalla Works",
-      "sub": "From browsing doctors to walking in on time — the entire process takes under 2 minutes.",
+      "sub": "From booking to walk-in in under two minutes.",
       "steps": [
-        { "title": "Find a Doctor", "desc": "Browse by specialization, city, or hospital. See real-time availability and time slots." },
-        { "title": "Pick a Slot", "desc": "Choose your preferred date and time. Confirm your appointment in under 60 seconds." },
-        { "title": "Pay Securely", "desc": "Pay ₹15 via UPI, cards or wallets. Your token and queue position are confirmed instantly." },
-        { "title": "Walk In on Time", "desc": "Arrive when your number is called. Track live position from anywhere." }
+        { "title": "Find a Doctor", "desc": "Browse by specialty, city, or hospital with live availability." },
+        { "title": "Pick a Slot", "desc": "Choose a date and time and confirm in seconds." },
+        { "title": "Pay Securely", "desc": "Pay ₹15 by UPI, card, or wallet — token confirmed instantly." },
+        { "title": "Walk In on Time", "desc": "Track your live position and arrive when you're called." }
       ]
     },
     "doctorsPreview": {
@@ -87,14 +89,14 @@
     "features": {
       "label": "Why TokenWalla",
       "heading": "Built for Modern Healthcare",
-      "sub": "We handle the technology so hospitals can focus on what matters — patient care.",
+      "sub": "The technology that lets hospitals focus on care.",
       "items": [
-        { "title": "Live Queue Tracking", "desc": "See your exact position in real time. No more guessing when to arrive." },
-        { "title": "Secure Payments", "desc": "Razorpay-powered. UPI, cards, net banking, wallets — all encrypted." },
-        { "title": "Multi-Hospital Network", "desc": "Works across hospitals in your city. One platform, all doctors." },
-        { "title": "Easy Cancellation", "desc": "Cancel 2 hours before your slot for a full refund — no questions asked." },
-        { "title": "Verified Doctors", "desc": "All doctors are registered and managed by their hospitals directly." },
-        { "title": "Works on Any Device", "desc": "Fully responsive — book from your phone, tablet, or desktop in seconds." }
+        { "title": "Live Queue Tracking", "desc": "See your exact position in real time." },
+        { "title": "Secure Payments", "desc": "UPI, cards, and wallets — encrypted via Razorpay." },
+        { "title": "Multi-Hospital Network", "desc": "Every hospital in your city, one platform." },
+        { "title": "Easy Cancellation", "desc": "Cancel 2 hours ahead for a full refund." },
+        { "title": "Verified Doctors", "desc": "Every doctor is verified by their hospital." },
+        { "title": "Works on Any Device", "desc": "Book from phone, tablet, or desktop." }
       ]
     },
     "pricing": {
