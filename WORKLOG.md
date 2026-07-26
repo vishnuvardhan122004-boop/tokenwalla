@@ -18,6 +18,15 @@ Newest entry on top. Update the **Status** columns as things land.
 
 ## ⏭️ Next session plan (2026-07-27)
 
+**🚀 Deployment status (2026-07-26)**
+- ✅ **Website — LIVE.** `www.tokenwalla.com` is serving book-for-other + downloadable
+  ticket + login show-password (Vercel auto-deployed the pushed `main`).
+- ✅ **Backend — LIVE.** Railway migrated (`0009` present); book-for-other saves in prod.
+- ⏸️ **Mobile app — HOLD until after 2026-08-01** (per decision). The download +
+  book-for-other UI is committed & pushed but needs a **dev-client/EAS rebuild** (native
+  modules `react-native-view-shot`/`expo-sharing`). Do NOT ship the app before Aug 1;
+  build & submit after: `eas build --profile production --platform all`.
+
 **P0 — protect what's already live**
 - [ ] Confirm the WhatsApp token is a **permanent System-User token** (not the 24h temp one) — otherwise every WhatsApp send stops tomorrow. Regenerate if unsure and update env on **both** web + cron services.
 - [ ] Confirm **web + cron** services are both on the latest commit; run `python manage.py migrate` on web so migration `0008` (queue-payment unique index) is applied.
