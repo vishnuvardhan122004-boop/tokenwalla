@@ -285,6 +285,10 @@ export default function Navbar() {
                       </Link>
                     )}
                     <div className="nav-drop-divider" />
+                    <Link to="/Hlogin" className="nav-drop-item" onClick={() => setDropOpen(false)}>
+                      <div className="nav-drop-icon">🏥</div> {t('nav.hospitalLogin')}
+                    </Link>
+                    <div className="nav-drop-divider" />
                     <button className="nav-drop-item danger" onClick={logout}>
                       <div className="nav-drop-icon" style={{ background: 'var(--color-error-bg)' }}>🚪</div>
                       {t('nav.logout')}
@@ -345,6 +349,10 @@ export default function Navbar() {
                   <div className="mobile-link-icon">⚙️</div> {t('nav.adminPanel')}
                 </Link>
               )}
+              <div className="mobile-divider" />
+              <Link to="/Hlogin" className="mobile-link">
+                <div className="mobile-link-icon">🏥</div> {t('nav.hospitalLogin')}
+              </Link>
               <div className="mobile-divider" />
               <button
                 className="mobile-link"

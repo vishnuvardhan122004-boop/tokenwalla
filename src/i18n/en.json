@@ -2,6 +2,7 @@
   "nav": {
     "home": "Home",
     "findDoctors": "Find Doctors",
+    "hospitalLogin": "Hospital Login",
     "about": "About",
     "contact": "Contact",
     "login": "Login →",

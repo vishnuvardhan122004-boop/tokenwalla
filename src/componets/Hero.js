@@ -343,9 +343,6 @@ API.get('/doctors/').then(({ data }) => {
                   <Link to="/alldoctor" className="btn-primary" style={{ padding: '14px 28px', fontSize: 15 }}>
                     {t('hero.bookAppointment')}
                   </Link>
-                  <Link to="/Hlogin" className="btn-outline" style={{ padding: '14px 28px', fontSize: 15 }}>
-                    {t('hero.hospitalLogin')}
-                  </Link>
                 </div>
 
                 {/* Stats */}
