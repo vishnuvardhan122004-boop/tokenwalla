@@ -13,3 +13,6 @@ build/
 .env.production
 .env
 src/.env
+
+# Claude Code local preview config
+.claude/
