@@ -16,6 +16,16 @@ export default function Payment() {
   const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // "Book for someone else" — when on, the appointment is for another person
+  // (name + mobile). Notifications still go to the logged-in account holder.
+  const [forOther,    setForOther]    = useState(false);
+  const [otherName,   setOtherName]   = useState('');
+  const [otherMobile, setOtherMobile] = useState('');
+
+  const bookedForName   = forOther ? otherName.trim()   : '';
+  const bookedForMobile = forOther ? otherMobile.trim() : '';
+  const patientLabel    = bookedForName || user?.name || user?.username;
+
   useEffect(() => {
     const stored = localStorage.getItem('user');
     if (stored) setUser(JSON.parse(stored));
@@ -37,6 +47,11 @@ export default function Payment() {
   });
 
   const handlePayment = async () => {
+    // Validate the "book for someone else" details before charging.
+    if (forOther) {
+      if (bookedForName.length < 2) { alert("Please enter the other person's name."); return; }
+      if (!/^[6-9]\d{9}$/.test(bookedForMobile)) { alert("Please enter a valid 10-digit mobile number for the other person."); return; }
+    }
     setLoading(true);
     try {
       const ready = await loadScript();
@@ -64,7 +79,7 @@ export default function Payment() {
               razorpay_order_id:   response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature:  response.razorpay_signature,
-              booking: { doctorId, doctorName, hospital, date, slot, amount: fee, queue_access },
+              booking: { doctorId, doctorName, hospital, date, slot, amount: fee, queue_access, bookedForName, bookedForMobile },
             });
             if (verifyData.success) {
               navigate('/booking-token', {
@@ -75,7 +90,7 @@ export default function Payment() {
                   doctorMobile: location.state?.doctorMobile,
                   date, slot,
                   paymentId:    response.razorpay_payment_id,
-                  userName:     user?.name || user?.username,
+                  userName:     bookedForName || user?.name || user?.username,
                   queue_access,
                 }
               });
@@ -196,6 +211,32 @@ export default function Payment() {
           font-size: 2rem; font-weight: 800; color: var(--blue-600);
         }
 
+        /* Book for someone else */
+        .pay-other-card { animation: payUp 0.5s 0.08s ease both; }
+        .pay-for-tag {
+          display: inline-block; margin-left: 8px; padding: 2px 8px;
+          background: var(--blue-50); border: 1px solid var(--blue-100); border-radius: 100px;
+          font-size: 11px; font-weight: 600; color: var(--blue-600); vertical-align: middle;
+        }
+        .pay-other-toggle {
+          display: flex; align-items: center; justify-content: space-between; gap: 14px;
+          padding: 16px 22px; cursor: pointer;
+        }
+        .pay-other-title { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--gray-900); margin-bottom: 2px; }
+        .pay-other-desc  { font-size: 12px; color: var(--gray-600); }
+        .pay-other-switch { width: 20px; height: 20px; accent-color: var(--blue-600); cursor: pointer; flex-shrink: 0; }
+        .pay-other-fields { padding: 4px 22px 20px; border-top: 1px solid var(--blue-50); }
+        .pay-other-field { margin-top: 14px; }
+        .pay-other-label { display: block; font-size: 12px; font-weight: 600; color: var(--gray-700); margin-bottom: 6px; }
+        .pay-other-input {
+          width: 100%; background: var(--gray-50); border: 1px solid var(--blue-100);
+          border-radius: var(--radius-md); padding: 11px 14px;
+          font-family: var(--font-body); font-size: 15px; color: var(--gray-900);
+          outline: none; transition: all 0.15s;
+        }
+        .pay-other-input:focus { border-color: var(--blue-400); background: #fff; box-shadow: 0 0 0 3px rgba(55,138,221,0.12); }
+        .pay-other-note { margin: 14px 0 0; font-size: 11.5px; color: var(--gray-500); line-height: 1.5; }
+
         /* Secure badge */
         .pay-secure {
           display: flex; align-items: center; gap: 14px;
@@ -283,7 +324,10 @@ export default function Payment() {
               </div>
               <div className="pay-row">
                 <span className="pay-row-label">Patient</span>
-                <span className="pay-row-value">{user?.name || user?.username}</span>
+                <span className="pay-row-value">
+                  {patientLabel}
+                  {forOther && bookedForName && <span className="pay-for-tag">for someone else</span>}
+                </span>
               </div>
               <div className="pay-row">
                 <span className="pay-row-label">Plan</span>
@@ -294,6 +338,53 @@ export default function Payment() {
               <span className="pay-total-label">Total Amount</span>
               <span className="pay-total-amount">₹{fee}</span>
             </div>
+          </div>
+
+          {/* Book for someone else */}
+          <div className="pay-card pay-other-card">
+            <label className="pay-other-toggle">
+              <div>
+                <div className="pay-other-title">👥 Booking for someone else?</div>
+                <div className="pay-other-desc">Book this appointment for a family member or friend</div>
+              </div>
+              <input
+                type="checkbox"
+                className="pay-other-switch"
+                checked={forOther}
+                onChange={(e) => setForOther(e.target.checked)}
+              />
+            </label>
+
+            {forOther && (
+              <div className="pay-other-fields">
+                <div className="pay-other-field">
+                  <label className="pay-other-label">Patient's full name</label>
+                  <input
+                    className="pay-other-input"
+                    type="text"
+                    placeholder="e.g. Rahul Kumar"
+                    value={otherName}
+                    onChange={(e) => setOtherName(e.target.value)}
+                    maxLength={100}
+                  />
+                </div>
+                <div className="pay-other-field">
+                  <label className="pay-other-label">Patient's mobile number</label>
+                  <input
+                    className="pay-other-input"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="10-digit mobile number"
+                    value={otherMobile}
+                    onChange={(e) => setOtherMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    maxLength={10}
+                  />
+                </div>
+                <p className="pay-other-note">
+                  ℹ️ Appointment updates (SMS/WhatsApp) are sent to your account. The hospital sees this patient's name at reception.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Secure badge */}

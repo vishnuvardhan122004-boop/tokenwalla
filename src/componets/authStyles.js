@@ -110,6 +110,14 @@ export const authCSS = `
   .auth-input::placeholder { color: var(--gray-400); }
   .auth-input:focus { border-color: var(--blue-400); background: #fff; box-shadow: 0 0 0 3px rgba(55,138,221,0.12); }
   .auth-input.has-error { border-color: var(--color-error-border); background: var(--color-error-bg); }
+  .auth-input.has-eye { padding-right: 42px; }
+  .auth-eye {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer;
+    padding: 6px; font-size: 15px; line-height: 1; color: var(--gray-400);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .auth-eye:hover { opacity: 0.75; }
 
   /* OTP row */
   .auth-otp-row { display: flex; gap: 8px; }

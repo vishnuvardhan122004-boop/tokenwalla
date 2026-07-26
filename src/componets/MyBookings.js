@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router';
 import API from '../services/api';
 import { useVisiblePolling } from '../services/useVisiblePolling';
+import { downloadBookingTicket } from '../services/downloadTicket';
 import BookingQR from './BookingQR';
 
 const STATUS_MAP = {
@@ -67,6 +68,7 @@ export default function MyBookings() {
   const [payingReschedule,  setPayingReschedule]  = useState(false);
   const [doctorSlots,       setDoctorSlots]       = useState([]);
   const [waOptIn,           setWaOptIn]           = useState(true);
+  const [downloadingId,     setDownloadingId]     = useState(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -109,6 +111,35 @@ export default function MyBookings() {
     } catch {
       setWaOptIn(!next);
       showToast('Failed to update WhatsApp preference.', 'error');
+    }
+  };
+
+  const handleDownload = async (booking) => {
+    // Prefer the booking's patient name (the beneficiary when booked for
+    // someone else); fall back to the logged-in account holder.
+    let patientName = booking.patient_name || '';
+    if (!patientName) {
+      try {
+        const u = JSON.parse(localStorage.getItem('user') || '{}');
+        patientName = u?.name || u?.username || '';
+      } catch { patientName = ''; }
+    }
+
+    setDownloadingId(booking.id);
+    try {
+      await downloadBookingTicket({
+        token:       booking.token,
+        doctorName:  booking.doctor_name,
+        hospital:    booking.hospital_name,
+        patientName,
+        date:        booking.date,
+        slot:        booking.slot,
+        amount:      booking.amount,
+      });
+    } catch {
+      showToast('Could not prepare the ticket. Please try again.', 'error');
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -289,6 +320,7 @@ export default function MyBookings() {
         .mb-info-col { flex: 1; padding: 18px 22px; min-width: 0; }
         .mb-doctor-name { font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; color: var(--gray-900); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .mb-hospital-name { font-size: 13px; color: var(--gray-500); margin-bottom: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mb-for-other { display: inline-block; margin-bottom: 12px; padding: 3px 10px; background: var(--blue-50); border: 1px solid var(--blue-200); border-radius: 100px; font-size: 12px; font-weight: 600; color: var(--blue-700); }
         .mb-meta { display: flex; flex-wrap: wrap; gap: 12px; }
         .mb-meta-chip { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--gray-500); }
         .mb-meta-icon { width: 22px; height: 22px; border-radius: 5px; background: var(--blue-50); display: flex; align-items: center; justify-content: center; font-size: 11px; }
@@ -415,6 +447,9 @@ export default function MyBookings() {
                         </div>
                         <div className="mb-doctor-name">{booking.doctor_name || '—'}</div>
                         <div className="mb-hospital-name">🏥 {booking.hospital_name || '—'}</div>
+                        {booking.is_for_other && (
+                          <div className="mb-for-other">👥 For {booking.patient_name}</div>
+                        )}
                         <div className="mb-meta">
                           <div className="mb-meta-chip"><div className="mb-meta-icon">📅</div>{booking.date || '—'}</div>
                           <div className="mb-meta-chip"><div className="mb-meta-icon">🕐</div>{booking.slot || '—'}</div>
@@ -443,17 +478,27 @@ export default function MyBookings() {
                     {(booking.status === 'waiting' || booking.status === 'in_progress') && (
                       <div className="mb-action-panel">
                         <div>
-                          <div className="mb-action-title">⬛ Show QR Code</div>
-                          <div className="mb-action-desc">Hospital staff scans this to verify your booking</div>
+                          <div className="mb-action-title">⬛ Show / Download Token</div>
+                          <div className="mb-action-desc">Scan at reception, or download your ticket to keep it offline</div>
                         </div>
-                        <BookingQR
-                          token={booking.token}
-                          doctorName={booking.doctor_name}
-                          hospital={booking.hospital_name}
-                          date={booking.date}
-                          slot={booking.slot}
-                          variant="button"
-                        />
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <BookingQR
+                            token={booking.token}
+                            doctorName={booking.doctor_name}
+                            hospital={booking.hospital_name}
+                            date={booking.date}
+                            slot={booking.slot}
+                            variant="button"
+                          />
+                          <button
+                            type="button"
+                            className="mb-reschedule-btn"
+                            onClick={() => handleDownload(booking)}
+                            disabled={downloadingId === booking.id}
+                          >
+                            {downloadingId === booking.id ? '⏳ Preparing…' : '⬇ Download'}
+                          </button>
+                        </div>
                       </div>
                     )}
 

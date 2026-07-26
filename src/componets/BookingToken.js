@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router';
 import API from '../services/api';
 import { useVisiblePolling } from '../services/useVisiblePolling';
+import { downloadBookingTicket } from '../services/downloadTicket';
 import BookingQR from './BookingQR';
 
 export default function BookingToken() {
@@ -14,6 +15,26 @@ export default function BookingToken() {
 
   const [queuePos,  setQueuePos]  = useState(null);
   const [bookingId, setBookingId] = useState(null);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await downloadBookingTicket({
+        token,
+        doctorName,
+        hospital,
+        patientName: userName,
+        date,
+        slot,
+        paymentId,
+      });
+    } catch (err) {
+      alert('Could not prepare the ticket. Please try again or screenshot this page.');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   // Initial fetch to get the booking ID
   useEffect(() => {
@@ -275,6 +296,15 @@ export default function BookingToken() {
           )}
 
           <div className="bt-actions">
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={downloading}
+              className="btn-outline"
+              style={{ justifyContent: 'center', padding: 14, borderRadius: 12, fontSize: 15, cursor: downloading ? 'wait' : 'pointer' }}
+            >
+              {downloading ? 'Preparing ticket…' : '⬇ Download Ticket'}
+            </button>
             <Link to="/my-bookings" className="btn-primary" style={{ justifyContent: 'center', padding: 15, borderRadius: 12, fontSize: 15 }}>
               View My Bookings →
             </Link>

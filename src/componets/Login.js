@@ -10,6 +10,7 @@ export default function Login() {
   const [loading,    setLoading]    = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpSent,    setOtpSent]    = useState(false);
+  const [showPass,   setShowPass]   = useState(false);
   const [error,      setError]      = useState('');
 
   const handleChange = e => setDetails(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -153,13 +154,21 @@ export default function Login() {
                 <div className="auth-input-wrap">
                   <span className="auth-input-icon">🔑</span>
                   <input
-                    className="auth-input"
-                    type="password"
+                    className="auth-input has-eye"
+                    type={showPass ? 'text' : 'password'}
                     name="password"
                     placeholder={otpSent ? 'Enter OTP sent to your mobile' : 'Password or OTP'}
                     value={details.password}
                     onChange={handleChange}
                   />
+                  <button
+                    type="button"
+                    className="auth-eye"
+                    onClick={() => setShowPass(p => !p)}
+                    aria-label={showPass ? 'Hide password' : 'Show password'}
+                  >
+                    {showPass ? '🙈' : '👁️'}
+                  </button>
                 </div>
                 <button
                   type="button"

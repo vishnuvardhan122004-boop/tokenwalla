@@ -29,10 +29,55 @@ Newest entry on top. Update the **Status** columns as things land.
 
 **P2 — security follow-ups (from the review)**
 - [ ] **#9:** update the **mobile app** to send `razorpay_order_id`/`razorpay_payment_id`/`razorpay_signature` to `/api/bookings/upgrade/` (the old bare `payment_id` now returns 400).
-- [ ] Toward 10/10: move cache to **Redis** (fully-atomic OTP cap), raise the **6-char** password floor, add **SMS-send abuse** protection on `RequestOTP`.
+- [x] **SMS-send abuse** protection on `RequestOTP` — per-number **daily send cap** (10/day, atomic `add`+`incr`), returns 429 past the cap. Test `test_daily_send_cap_blocks_sms_flood` (22/22 pass).
+- [ ] Toward 10/10 (remaining): move cache to **Redis** (needs a Railway Redis addon — the `CACHES` block is currently `DatabaseCache` despite the "Redis" header comment), raise the **6-char** password floor.
 
 **P3 — polish (optional)**
 - [ ] Reword the approved `doctor_unavailable` Meta body to drop "Dr." (cosmetic consistency with the app).
+
+---
+
+## 2026-07-26 (session 2) — Ticket download, "book for someone else", OTP cap, show-password
+
+> Spans **three** repos: this website, the backend (`backend/`), and the **mobile app**
+> (`~/Desktop/app /Tokenwalla`, remote `tokenwalla.app.git`). Mobile changes are tracked
+> in that repo, noted here for cross-reference.
+
+### 1. Book for someone else  ← NEW feature
+Account holders can book an appointment for another person (**name + phone**).
+Notifications still go to the account holder; the **hospital** sees the beneficiary.
+
+| Layer | Change | Status |
+|-------|--------|--------|
+| Backend | `Booking.booked_for_name` / `booked_for_mobile` + `patient_display_name/mobile` props (migration `0009`) | ✅ |
+| Backend | `_handle_new_booking` reads/validates `bookedForName`/`bookedForMobile`; serializer surfaces `patient_name`→beneficiary, `patient_mobile`, `is_for_other` | ✅ |
+| Backend | QR-scan result, "in consultation" message, and `hospital_new_booking` WhatsApp show the beneficiary | ✅ |
+| Website | `Payment.js` toggle + name/phone fields + validation; `MyBookings.js` "For <name>" chip + ticket uses beneficiary | ✅ |
+| Mobile | `payment.tsx` toggle (`Switch`) + fields + validation; `my-bookings.tsx` "For <name>" tag | ✅ |
+| Tests | `BookForOtherTests` — 4 cases (beneficiary stored, self fallback, mobile-without-name ignored, serializer) | ✅ |
+
+**Decisions:** fields = name + phone; notifications → account holder only.
+
+### 2. Downloadable appointment ticket  ← NEW feature
+- **Website:** `services/downloadTicket.js` renders a PNG ticket (token + details + QR)
+  via `QRCodeCanvas` + canvas (no heavy dep — `react-dom/client`, ~+5 kB). Buttons on
+  `BookingToken.js` (confirmation) and `MyBookings.js`.
+- **Mobile:** `my-qr.tsx` + `booking-token.tsx` capture the card with `react-native-view-shot`
+  and open the share sheet via `expo-sharing`. i18n key `download_ticket` in en/hi/te/kn.
+  ⚠️ **Needs a dev-client/EAS rebuild** (new native modules).
+
+### 3. OTP daily SMS-send cap (security)
+- Per-number **daily send cap** (10/day, atomic `add`+`incr`) on `RequestOTP` → 429 past cap.
+  Test `test_daily_send_cap_blocks_sms_flood`.
+
+### 4. Login show/hide password toggle
+- `Login.js` + `authStyles.js` — eye toggle on the patient login password field.
+
+**Tests:** `python manage.py test tokenwalla.tests_security` → **26/26 pass**.
+**Website:** `npm run build` → Compiled successfully. **Mobile:** `tsc --noEmit` → 0 errors.
+
+> ⏭️ Not done: runtime end-to-end test of the payment/book-for-other flow on each platform;
+> notify-the-beneficiary option; rebuild the mobile dev client for the download + book-for-other UI.
 
 ---
 
