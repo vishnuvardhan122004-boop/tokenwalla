@@ -10,14 +10,22 @@ import SEO from './SEO';
 // "Skin" chip finds a doctor stored as "Dermatologist". Words with no entry
 // match themselves unchanged.
 const SPEC_SYNONYMS = {
-  general: ['general', 'physician', 'family', 'medicine'],
-  heart:   ['heart', 'cardio'],
-  skin:    ['skin', 'dermat'],
-  dental:  ['dental', 'dentist', 'tooth', 'teeth', 'oral'],
-  child:   ['child', 'pediatric', 'paediatric', 'paed', 'neonat'],
-  bones:   ['bone', 'ortho', 'joint'],
-  eye:     ['eye', 'ophthal', 'optom', 'vision'],
-  ent:     ['ent', 'ear', 'nose', 'throat', 'otolar'],
+  general:  ['general', 'physician', 'family', 'medicine'],
+  heart:    ['heart', 'cardio'],
+  skin:     ['skin', 'dermat'],
+  dental:   ['dental', 'dentist', 'tooth', 'teeth', 'oral'],
+  child:    ['child', 'pediatric', 'paediatric', 'paed', 'neonat'],
+  bones:    ['bone', 'ortho', 'joint'],
+  eye:      ['eye', 'ophthal', 'optom', 'vision'],
+  ent:      ['ent', 'ear', 'nose', 'throat', 'otolar'],
+  women:    ['gyn', 'obstet', 'women', 'maternity'],
+  neuro:    ['neuro', 'nuro'],
+  mental:   ['psych', 'mental'],
+  diabetes: ['diabet', 'endocrin'],
+  kidney:   ['nephro', 'kidney', 'renal'],
+  stomach:  ['gastro', 'stomach', 'digest', 'liver', 'hepat'],
+  lungs:    ['pulmon', 'lung', 'chest', 'respir'],
+  physio:   ['physio', 'rehab', 'physical'],
 };
 
 function SkeletonCard() {

@@ -18,14 +18,22 @@ const DEMO_QUEUE = [
 // (`?q=key`); AllDoctor expands it via SPEC_SYNONYMS so e.g. "skin" also finds
 // doctors stored as "Dermatologist". Labels are translated (hero.specialties.*).
 const SPECIALTIES = [
-  { key: 'general', icon: '🩺' },
-  { key: 'heart',   icon: '🫀' },
-  { key: 'skin',    icon: '🧴' },
-  { key: 'dental',  icon: '🦷' },
-  { key: 'child',   icon: '👶' },
-  { key: 'bones',   icon: '🦴' },
-  { key: 'eye',     icon: '👁️' },
-  { key: 'ent',     icon: '👂' },
+  { key: 'general',  icon: '🩺' },
+  { key: 'heart',    icon: '🫀' },
+  { key: 'skin',     icon: '🧴' },
+  { key: 'dental',   icon: '🦷' },
+  { key: 'child',    icon: '👶' },
+  { key: 'bones',    icon: '🦴' },
+  { key: 'eye',      icon: '👁️' },
+  { key: 'ent',      icon: '👂' },
+  { key: 'women',    icon: '🤰' },
+  { key: 'neuro',    icon: '🧠' },
+  { key: 'mental',   icon: '🧘' },
+  { key: 'diabetes', icon: '🩸' },
+  { key: 'kidney',   icon: '🫘' },
+  { key: 'stomach',  icon: '🫄' },
+  { key: 'lungs',    icon: '🫁' },
+  { key: 'physio',   icon: '🏃' },
 ];
 
 export default function Hero() {

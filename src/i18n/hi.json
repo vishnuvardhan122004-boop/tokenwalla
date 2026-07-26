@@ -39,7 +39,15 @@
       "child": "बाल",
       "bones": "हड्डी",
       "eye": "नेत्र",
-      "ent": "ईएनटी"
+      "ent": "ईएनटी",
+      "women": "महिला",
+      "neuro": "न्यूरो",
+      "mental": "मानसिक",
+      "diabetes": "मधुमेह",
+      "kidney": "किडनी",
+      "stomach": "पेट",
+      "lungs": "फेफड़े",
+      "physio": "फिजियो"
     },
     "tokenCard": {
       "yourToken": "आपका टोकन",

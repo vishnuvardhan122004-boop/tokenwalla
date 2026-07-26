@@ -39,7 +39,15 @@
       "child": "Child",
       "bones": "Bones",
       "eye": "Eye",
-      "ent": "ENT"
+      "ent": "ENT",
+      "women": "Women",
+      "neuro": "Neuro",
+      "mental": "Mental",
+      "diabetes": "Diabetes",
+      "kidney": "Kidney",
+      "stomach": "Stomach",
+      "lungs": "Lungs",
+      "physio": "Physio"
     },
     "tokenCard": {
       "yourToken": "Your Token",
