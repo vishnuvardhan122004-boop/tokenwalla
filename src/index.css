@@ -159,6 +159,28 @@ h4 { font-size: 1.1rem; }
   color: var(--blue-800); text-decoration: none;
 }
 
+/* Button size / width helpers */
+.btn-lg    { padding: 15px 30px; font-size: 15px; }
+.btn-sm    { padding: 8px 16px; font-size: 13px; }
+.btn-block { width: 100%; justify-content: center; }
+
+/* ── Accessibility: visible keyboard focus (mouse clicks stay clean) ──────── */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(55,138,221,0.35);
+  border-radius: var(--radius-md);
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--blue-400);
+  box-shadow: 0 0 0 3px rgba(55,138,221,0.18);
+}
+
 /* Cards */
 .card {
   background: #fff;
