@@ -64,7 +64,9 @@ Notifications still go to the account holder; the **hospital** sees the benefici
   `BookingToken.js` (confirmation) and `MyBookings.js`.
 - **Mobile:** `my-qr.tsx` + `booking-token.tsx` capture the card with `react-native-view-shot`
   and open the share sheet via `expo-sharing`. i18n key `download_ticket` in en/hi/te/kn.
-  ⚠️ **Needs a dev-client/EAS rebuild** (new native modules).
+  `my-bookings.tsx` — per-booking "Download Ticket" button that snapshots a dedicated
+  **off-screen ticket view with a QR** (the list cards have none) and shares it. No new deps.
+  ⚠️ **Needs a dev-client/EAS rebuild** (native modules).
 
 ### 3. OTP daily SMS-send cap (security)
 - Per-number **daily send cap** (10/day, atomic `add`+`incr`) on `RequestOTP` → 429 past cap.
