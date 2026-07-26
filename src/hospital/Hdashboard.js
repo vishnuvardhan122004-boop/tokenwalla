@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import API from "../services/api";
 import { logoutUser } from "../services/api";
 import QRScanner from './QRScanner';
+import SPECIALIZATION_OPTIONS from '../services/specializations';
 
 const DEFAULT_SLOTS = [
   "12:00 AM","12:30 AM","01:00 AM","01:30 AM","02:00 AM","02:30 AM",
@@ -733,9 +734,13 @@ const Hdashboard = () => {
                       <input
                         className={`form-control ${errors.specialization ? "is-invalid" : ""}`}
                         placeholder="Cardiologist"
+                        list="specialization-options"
                         value={formData.specialization}
                         onChange={e => handleChange("specialization", e.target.value)}
                       />
+                      <datalist id="specialization-options">
+                        {SPECIALIZATION_OPTIONS.map(s => <option key={s} value={s} />)}
+                      </datalist>
                       <FieldError msg={errors.specialization} />
                     </div>
 

@@ -12,6 +12,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import API from '../services/api';
+import SPECIALIZATION_OPTIONS from '../services/specializations';
 
 /* ─── Status config (unchanged) ─────────────────────────────────────────── */
 
@@ -724,7 +725,10 @@ const Hospitals = () => {
                 </div>
                 <div className="hp-field">
                   <label>Specialization *</label>
-                  <input value={editDoctor.specialization || ''} onChange={e => setEditDoctor(p => ({ ...p, specialization: e.target.value }))} placeholder="Cardiologist" required />
+                  <input value={editDoctor.specialization || ''} onChange={e => setEditDoctor(p => ({ ...p, specialization: e.target.value }))} placeholder="Cardiologist" list="admin-specialization-options" required />
+                  <datalist id="admin-specialization-options">
+                    {SPECIALIZATION_OPTIONS.map(s => <option key={s} value={s} />)}
+                  </datalist>
                 </div>
               </div>
               <div className="hp-modal-row">
