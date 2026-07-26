@@ -14,6 +14,20 @@ const DEMO_QUEUE = [
   { initials: 'AM', name: 'Arjun M.', token: 'TW-003', statusKey: 'waiting',        active: false },
 ];
 
+// Quick-access specialty chips. `key` is the search term passed to /alldoctor
+// (`?q=key`); AllDoctor expands it via SPEC_SYNONYMS so e.g. "skin" also finds
+// doctors stored as "Dermatologist". Labels are translated (hero.specialties.*).
+const SPECIALTIES = [
+  { key: 'general', icon: '🩺' },
+  { key: 'heart',   icon: '🫀' },
+  { key: 'skin',    icon: '🧴' },
+  { key: 'dental',  icon: '🦷' },
+  { key: 'child',   icon: '👶' },
+  { key: 'bones',   icon: '🦴' },
+  { key: 'eye',     icon: '👁️' },
+  { key: 'ent',     icon: '👂' },
+];
+
 export default function Hero() {
   const { t } = useTranslation();
   const [doctors,   setDoctors]   = useState([]);
@@ -93,7 +107,28 @@ API.get('/doctors/').then(({ data }) => {
           font-size: 1.05rem; color: var(--gray-600); line-height: 1.7;
           max-width: 500px; margin-bottom: 36px; font-weight: 400;
         }
-        .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 52px; }
+        .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 24px; }
+
+        /* Specialty quick-filter chips */
+        .hero-specs { margin-bottom: 48px; }
+        .hero-specs-label {
+          font-size: 12px; font-weight: 700; letter-spacing: 0.6px;
+          text-transform: uppercase; color: var(--gray-400); margin-bottom: 12px;
+        }
+        .hero-specs-row { display: flex; flex-wrap: wrap; gap: 10px; }
+        .hero-spec-chip {
+          display: inline-flex; align-items: center; gap: 7px;
+          padding: 8px 15px; border-radius: 100px;
+          background: #fff; border: 1px solid var(--blue-100);
+          font-size: 13.5px; font-weight: 600; color: var(--gray-900);
+          text-decoration: none; cursor: pointer;
+          transition: border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
+        }
+        .hero-spec-chip:hover {
+          border-color: var(--blue-300); background: var(--blue-50);
+          transform: translateY(-1px); box-shadow: 0 4px 14px rgba(37, 99, 235, 0.10);
+        }
+        .hero-spec-icon { font-size: 15px; line-height: 1; }
 
         /* Stats strip */
         .stats-strip {
@@ -343,6 +378,19 @@ API.get('/doctors/').then(({ data }) => {
                   <Link to="/alldoctor" className="btn-primary" style={{ padding: '14px 28px', fontSize: 15 }}>
                     {t('hero.bookAppointment')}
                   </Link>
+                </div>
+
+                {/* Specialty quick-filters */}
+                <div className="hero-specs">
+                  <div className="hero-specs-label">{t('hero.specialtiesLabel')}</div>
+                  <div className="hero-specs-row">
+                    {SPECIALTIES.map(s => (
+                      <Link key={s.key} to={`/alldoctor?q=${s.key}`} className="hero-spec-chip">
+                        <span className="hero-spec-icon">{s.icon}</span>
+                        {t(`hero.specialties.${s.key}`)}
+                      </Link>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Stats */}

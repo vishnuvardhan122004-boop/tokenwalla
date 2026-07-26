@@ -1,9 +1,24 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import API from '../services/api';
 import { filterTestDoctors } from '../services/testHospitals';
 import SEO from './SEO';
+
+// Maps a hero specialty chip (and any typed word) to the substrings that may
+// appear in the free-text `specialization` field hospitals enter, so e.g. the
+// "Skin" chip finds a doctor stored as "Dermatologist". Words with no entry
+// match themselves unchanged.
+const SPEC_SYNONYMS = {
+  general: ['general', 'physician', 'family', 'medicine'],
+  heart:   ['heart', 'cardio'],
+  skin:    ['skin', 'dermat'],
+  dental:  ['dental', 'dentist', 'tooth', 'teeth', 'oral'],
+  child:   ['child', 'pediatric', 'paediatric', 'paed', 'neonat'],
+  bones:   ['bone', 'ortho', 'joint'],
+  eye:     ['eye', 'ophthal', 'optom', 'vision'],
+  ent:     ['ent', 'ear', 'nose', 'throat', 'otolar'],
+};
 
 function SkeletonCard() {
   return (
@@ -22,9 +37,11 @@ function SkeletonCard() {
 
 export default function AllDoctor() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   const [doctors,    setDoctors]    = useState([]);
   const [loading,    setLoading]    = useState(true);
-  const [search,     setSearch]     = useState('');
+  // Seed the search from a ?q= param (e.g. the hero specialty chips link here).
+  const [search,     setSearch]     = useState(searchParams.get('q') || '');
   const [city,       setCity]       = useState('');
   const [specFilter, setSpecFilter] = useState('All');
   const [availOnly,  setAvailOnly]  = useState(false);
@@ -107,7 +124,11 @@ export default function AllDoctor() {
       doc.city, doc.hospital_location, doc.hospital_address,
     ].filter(Boolean).join(' ').toLowerCase();
     const keywords = search.toLowerCase().split(/\s+/).filter(Boolean);
-    const matchSearch = keywords.every(word => haystack.includes(word));
+    // A word matches if the haystack contains it OR any of its synonyms, so the
+    // hero chips (skin/heart/ent/…) reach doctors named with clinical terms.
+    const matchSearch = keywords.every(word =>
+      (SPEC_SYNONYMS[word] || [word]).some(term => haystack.includes(term))
+    );
     const matchCity  = !city || (doc.city || '').toLowerCase().includes(city.toLowerCase());
     const matchSpec  = specFilter === 'All' || (doc.specialization || '').toLowerCase().includes(specFilter.toLowerCase());
     const matchAvail = !availOnly || doc.available;

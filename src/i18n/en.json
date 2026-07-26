@@ -30,6 +30,17 @@
     "subtitle": "TokenWalla connects patients with doctors digitally. Book a slot, get a token, walk in right on time — no more waiting rooms for hours.",
     "bookAppointment": "Book Appointment →",
     "hospitalLogin": "Hospital Login",
+    "specialtiesLabel": "Browse by specialty",
+    "specialties": {
+      "general": "General",
+      "heart": "Heart",
+      "skin": "Skin",
+      "dental": "Dental",
+      "child": "Child",
+      "bones": "Bones",
+      "eye": "Eye",
+      "ent": "ENT"
+    },
     "tokenCard": {
       "yourToken": "Your Token",
       "queueActive": "Queue Access Active",
