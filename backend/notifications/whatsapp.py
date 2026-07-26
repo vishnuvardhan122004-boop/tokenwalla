@@ -164,14 +164,16 @@ def send_hospital_new_booking(booking):
     if not hospital.mobile:
         return
 
-    patient_name = booking.user.first_name or booking.user.username
+    # Show the hospital who the appointment is *for* (the beneficiary when the
+    # booking was made for someone else), and the best contact number for them.
+    patient_name = booking.patient_display_name
     result = send_template(
         to_mobile=hospital.mobile,
         template_name=settings.WHATSAPP_TEMPLATE_HOSPITAL_NEW_BOOKING,
         params=[
             hospital.name,
             patient_name,
-            booking.user.mobile,
+            booking.patient_display_mobile,
             booking.doctor.name,
             str(booking.date),
             booking.slot,

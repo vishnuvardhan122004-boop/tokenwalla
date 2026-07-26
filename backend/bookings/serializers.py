@@ -6,11 +6,15 @@ class BookingSerializer(serializers.ModelSerializer):
     doctor_name    = serializers.CharField(source='doctor.name',     read_only=True)
     hospital_name  = serializers.CharField(source='hospital.name',   read_only=True)
     hospital_mobile = serializers.CharField(source='hospital.mobile', read_only=True)
-    # user.first_name is set to the patient's real name at registration
+    # user.first_name is the account holder's real name (set at registration).
     user_name     = serializers.CharField(source='user.first_name', read_only=True)
-    # patient_name also uses first_name (was incorrectly using username = mobile)
-    patient_name  = serializers.CharField(source='user.first_name', read_only=True)
+    # patient_name is who the appointment is *for* — the beneficiary when the
+    # booking was made "for someone else", otherwise the account holder.
+    patient_name  = serializers.CharField(source='patient_display_name',   read_only=True)
+    patient_mobile = serializers.CharField(source='patient_display_mobile', read_only=True)
     user_mobile   = serializers.CharField(source='user.mobile',     read_only=True)
+    # True when this booking was made on behalf of another person.
+    is_for_other  = serializers.SerializerMethodField()
     queue_position = serializers.SerializerMethodField()
 
     class Meta:
@@ -20,8 +24,12 @@ class BookingSerializer(serializers.ModelSerializer):
             'payment_id', 'order_id', 'created',
             'queue_access', 'queue_position', 'free_reschedule',
             'doctor', 'doctor_name', 'hospital', 'hospital_name', 'hospital_mobile',
-            'user', 'user_name', 'patient_name', 'user_mobile',
+            'user', 'user_name', 'patient_name', 'patient_mobile', 'user_mobile',
+            'booked_for_name', 'booked_for_mobile', 'is_for_other',
         ]
+
+    def get_is_for_other(self, obj):
+        return bool(obj.booked_for_name)
 
     def get_queue_position(self, obj):
         """

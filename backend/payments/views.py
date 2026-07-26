@@ -269,6 +269,13 @@ class VerifyPaymentView(APIView):
         if slot_val not in (doctor.slots or []):
             return Response({'success': False, 'message': 'Invalid slot for this doctor.'}, status=400)
 
+        # "Book for someone else" — optional beneficiary details. Blank ⇒ self.
+        booked_for_name   = str(booking_data.get('bookedForName', '')   or '').strip()[:100]
+        booked_for_mobile = str(booking_data.get('bookedForMobile', '') or '').strip()[:15]
+        # A mobile with no name is meaningless — treat it as booking for self.
+        if not booked_for_name:
+            booked_for_mobile = ''
+
         try:
             with transaction.atomic():
                 token = _generate_token()
@@ -285,6 +292,8 @@ class VerifyPaymentView(APIView):
                     amount       = amount_inr,
                     status       = 'waiting',
                     queue_access = queue_access,
+                    booked_for_name   = booked_for_name,
+                    booked_for_mobile = booked_for_mobile,
                 )
 
                 # Payment has a OneToOneField → booking, so one record per booking.
@@ -322,6 +331,9 @@ class VerifyPaymentView(APIView):
                     'paymentId':    payment_id,
                     'amount':       amount_inr,
                     'queue_access': queue_access,
+                    'patientName':      new_booking.patient_display_name,
+                    'bookedForName':    booked_for_name,
+                    'bookedForMobile':  booked_for_mobile,
                 },
             })
 

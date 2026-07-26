@@ -37,7 +37,24 @@ class Booking(models.Model):
     # patient a ONE-TIME reschedule with the ₹5 fee waived. Consumed (reset to
     # False) once they reschedule.
     free_reschedule = models.BooleanField(default=False)
+    # "Book for someone else": when the account holder books on behalf of another
+    # person (a family member, etc.), the beneficiary's details are stored here.
+    # Blank ⇒ the booking is for the account holder themselves. Notifications
+    # still go to the account holder (booking.user); these fields only change who
+    # the hospital sees the appointment is *for*.
+    booked_for_name   = models.CharField(max_length=100, blank=True)
+    booked_for_mobile = models.CharField(max_length=15,  blank=True)
     created      = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def patient_display_name(self):
+        """Name the appointment is for — the beneficiary if set, else the account holder."""
+        return self.booked_for_name or self.user.first_name or self.user.username
+
+    @property
+    def patient_display_mobile(self):
+        """Best contact number for the patient at the hospital — beneficiary's if given, else the account holder's."""
+        return self.booked_for_mobile or self.user.mobile
 
     class Meta:
         ordering = ['-created']

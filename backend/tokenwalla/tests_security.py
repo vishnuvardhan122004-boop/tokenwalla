@@ -246,6 +246,89 @@ class QueueUpgradeTests(TestCase):
         self.assertFalse(self.booking.queue_access)
 
 
+@override_settings(CACHES=LOCMEM_CACHE)
+class BookForOtherTests(TestCase):
+    """Feature: "book for someone else" — the beneficiary's name/mobile are
+    stored on the booking and surfaced as the patient, while the booking still
+    belongs to the account holder (who receives notifications)."""
+
+    def setUp(self):
+        self.client = APIClient()
+        cache.clear()
+        self.hospital = Hospital.objects.create(name='H1', city='Blr', mobile='9000000030', password='x')
+        self.doctor = Doctor.objects.create(
+            hospital=self.hospital, name='D', specialization='Gen',
+            mobile='9000000031', fee=100, slots=['09:00 AM'])
+        self.patient = User.objects.create_user(
+            username='9111111130', mobile='9111111130', password='pw', role='patient')
+        self.patient.first_name = 'Account Holder'
+        self.patient.save(update_fields=['first_name'])
+        _auth(self.client, self.patient)
+
+    def _verify(self, booking_extra):
+        """POST a new-booking verify with the signature + order fetch mocked."""
+        booking = {
+            'doctorId': self.doctor.id,
+            'doctorName': self.doctor.name,
+            'hospital': self.hospital.name,
+            'date': str(datetime.date.today()),
+            'slot': '09:00 AM',
+            'amount': 15,
+            'queue_access': True,
+        }
+        booking.update(booking_extra)
+        # verify_signature + the live order.fetch are both mocked: the ₹15
+        # queue_view amount (1500 paise) is what the server trusts.
+        with patch('payments.views.verify_signature', return_value=True), \
+             patch('payments.views.get_client') as mock_client, \
+             patch('payments.views._dispatch_booking_notifications'):
+            mock_client.return_value.order.fetch.return_value = {'amount': 1500}
+            return self.client.post('/api/payment/verify/', {
+                'razorpay_order_id':   'order_x',
+                'razorpay_payment_id': 'pay_x',
+                'razorpay_signature':  'sig_x',
+                'booking': booking,
+            }, format='json')
+
+    def test_booking_for_other_stores_beneficiary(self):
+        res = self._verify({'bookedForName': 'Rahul Kumar', 'bookedForMobile': '9876543210'})
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json()['success'])
+        b = Booking.objects.get(payment_id='pay_x')
+        # Booking belongs to the account holder…
+        self.assertEqual(b.user, self.patient)
+        # …but records the beneficiary and surfaces them as the patient.
+        self.assertEqual(b.booked_for_name, 'Rahul Kumar')
+        self.assertEqual(b.booked_for_mobile, '9876543210')
+        self.assertEqual(b.patient_display_name, 'Rahul Kumar')
+        self.assertEqual(b.patient_display_mobile, '9876543210')
+
+    def test_booking_for_self_falls_back_to_account_holder(self):
+        res = self._verify({})
+        self.assertEqual(res.status_code, 200)
+        b = Booking.objects.get(payment_id='pay_x')
+        self.assertEqual(b.booked_for_name, '')
+        self.assertEqual(b.booked_for_mobile, '')
+        self.assertEqual(b.patient_display_name, 'Account Holder')
+        self.assertEqual(b.patient_display_mobile, self.patient.mobile)
+
+    def test_mobile_without_name_is_ignored(self):
+        # A mobile with no name is meaningless → treated as booking for self.
+        res = self._verify({'bookedForMobile': '9876543210'})
+        self.assertEqual(res.status_code, 200)
+        b = Booking.objects.get(payment_id='pay_x')
+        self.assertEqual(b.booked_for_name, '')
+        self.assertEqual(b.booked_for_mobile, '')
+
+    def test_serializer_exposes_is_for_other(self):
+        from bookings.serializers import BookingSerializer
+        self._verify({'bookedForName': 'Rahul Kumar', 'bookedForMobile': '9876543210'})
+        b = Booking.objects.get(payment_id='pay_x')
+        data = BookingSerializer(b).data
+        self.assertTrue(data['is_for_other'])
+        self.assertEqual(data['patient_name'], 'Rahul Kumar')
+
+
 @override_settings(CACHES=LOCMEM_CACHE, REST_FRAMEWORK=REST_FRAMEWORK_TEST)
 class OTPHardeningTests(TestCase):
     """Vuln 3: 6-digit CSPRNG OTP + attempt cap."""
@@ -277,6 +360,19 @@ class OTPHardeningTests(TestCase):
         # Code is now burned — even the correct OTP must fail afterwards.
         self.assertIsNone(cache.get(f'otp_session:{mobile}'))
         self.assertFalse(verify_otp(mobile, '654321'))
+
+    def test_daily_send_cap_blocks_sms_flood(self):
+        # Exercise the per-number daily send cap directly (the 60s cooldown and
+        # the per-IP DRF throttle would otherwise mask it at the HTTP layer).
+        from users.auth_views import _reserve_otp_send, OTP_MAX_SENDS_PER_DAY
+
+        mobile = '9111111116'
+        # The first OTP_MAX_SENDS_PER_DAY sends are all allowed …
+        for _ in range(OTP_MAX_SENDS_PER_DAY):
+            self.assertTrue(_reserve_otp_send(mobile))
+        # … and every send past the cap is refused for the rest of the window.
+        self.assertFalse(_reserve_otp_send(mobile))
+        self.assertFalse(_reserve_otp_send(mobile))
 
     @override_settings(TWOFACTOR_API_KEY='')
     def test_correct_otp_verifies(self):

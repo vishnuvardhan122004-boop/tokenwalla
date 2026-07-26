@@ -413,8 +413,12 @@ class ScanQRView(APIView):
             'id':             booking.id,
             'token':          booking.token,
             'status':         booking.status,
-            'patient_name':   booking.user.first_name or booking.user.username,
-            'patient_mobile': booking.user.mobile,
+            # Who the appointment is for — the beneficiary when booked for
+            # someone else, else the account holder.
+            'patient_name':   booking.patient_display_name,
+            'patient_mobile': booking.patient_display_mobile,
+            'booked_by_name': booking.user.first_name or booking.user.username,
+            'is_for_other':   bool(booking.booked_for_name),
             'doctor_name':    booking.doctor.name,
             'specialization': booking.doctor.specialization,
             'doctor_fee':     booking.doctor.fee,
@@ -541,7 +545,7 @@ class ScanQRView(APIView):
         )
         push_booking_in_progress(booking)  # patient "you're next" alert
  
-        patient = booking.user.first_name or booking.user.username
+        patient = booking.patient_display_name
         return Response({
             'success': True,
             'message': f'✅ {patient} marked as In Consultation.',

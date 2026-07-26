@@ -45,6 +45,38 @@ class AdminSetupRateThrottle(AnonRateThrottle):
 # per issued code.
 OTP_MAX_ATTEMPTS = 5
 
+# Hard ceiling on how many OTP *sends* a single number can trigger in 24h.
+# The 60s per-number cooldown alone still allows ~1440 paid SMS/day to one
+# number (an attacker pacing just under it, or a real number being harassed);
+# this caps the spend at OTP_MAX_SENDS_PER_DAY texts per number per day.
+# A real user needs only a handful (login + the odd password reset), so 10 is
+# generous for humans while turning SMS-flood abuse from "expensive" into "cheap".
+OTP_MAX_SENDS_PER_DAY = 10
+OTP_SEND_CAP_WINDOW   = 60 * 60 * 24  # seconds (24h)
+
+
+def _reserve_otp_send(mobile):
+    """Atomically count an OTP send against the per-number daily cap.
+
+    Returns True if the send is allowed (slot reserved), False if the number
+    has already hit OTP_MAX_SENDS_PER_DAY in the current 24h window. Uses the
+    same atomic ``add``+``incr`` pattern as the attempt counter so parallel
+    requests can't race past the cap. The window is a rolling 24h from the
+    first send (the key's timeout is not refreshed on later sends).
+    """
+    key = f'otp_sends:{mobile}'
+    cache.add(key, 0, timeout=OTP_SEND_CAP_WINDOW)
+    try:
+        sends = cache.incr(key)
+    except ValueError:
+        # Key expired between the add and the incr — treat as the first send.
+        cache.set(key, 1, timeout=OTP_SEND_CAP_WINDOW)
+        sends = 1
+    if sends > OTP_MAX_SENDS_PER_DAY:
+        logger.warning('OTP daily send cap reached for mobile ...%s', mobile[-4:])
+        return False
+    return True
+
 
 def _register_otp_failure(mobile):
     """Count a wrong OTP guess; invalidate the session once the cap is hit.
@@ -335,6 +367,14 @@ class RequestOTPView(APIView):
 
         if cache.get(f'otp_limit:{mobile}'):
             return Response({'message': 'Wait 60 seconds before requesting again.'}, status=429)
+
+        # Per-number daily ceiling — protects against SMS-flood abuse (real cost)
+        # that paces itself just under the 60s cooldown.
+        if not _reserve_otp_send(mobile):
+            return Response(
+                {'message': 'Too many OTP requests for this number today. Try again tomorrow.'},
+                status=429,
+            )
 
         # 6-digit code from a CSPRNG (100000–999999). Wider space + the
         # per-code attempt cap in verify_otp defeats brute-forcing.
