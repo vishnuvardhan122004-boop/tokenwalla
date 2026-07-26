@@ -350,10 +350,34 @@ class RescheduleBookingView(APIView):
                 status=400
             )
 
-        booking.date = new_date
-        booking.slot = new_slot
-        booking.free_reschedule = False  # one-time waiver, consumed
-        booking.save(update_fields=['date', 'slot', 'free_reschedule'])
+        # Don't let a reschedule overflow a slot's capacity. Mirror the same
+        # definition slot_availability uses (waiting + in_progress vs
+        # doctor.max_per_slot), and do the count → save atomically so two
+        # simultaneous reschedules can't both slip past a nearly-full slot.
+        # Exclude this booking itself so re-picking its current slot is a no-op.
+        with transaction.atomic():
+            booked = (
+                Booking.objects
+                .select_for_update()
+                .filter(
+                    doctor=booking.doctor,
+                    date=new_date,
+                    slot=new_slot,
+                    status__in=['waiting', 'in_progress'],
+                )
+                .exclude(pk=booking.pk)
+                .count()
+            )
+            if booked >= booking.doctor.max_per_slot:
+                return Response(
+                    {'message': f'Slot "{new_slot}" on {new_date} is full. Please pick another slot.'},
+                    status=400
+                )
+
+            booking.date = new_date
+            booking.slot = new_slot
+            booking.free_reschedule = False  # one-time waiver, consumed
+            booking.save(update_fields=['date', 'slot', 'free_reschedule'])
         logger.info('Booking %s free-rescheduled by user %s', pk, request.user.id)
 
         return Response({

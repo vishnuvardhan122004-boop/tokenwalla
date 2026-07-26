@@ -16,6 +16,41 @@ Newest entry on top. Update the **Status** columns as things land.
 
 ---
 
+## 2026-07-27 — WhatsApp templates verified live ✅
+
+All **4 Meta WhatsApp templates are approved and delivering** (tested end-to-end
+via `send_test_whatsapp 9959330601` — each returned a real `wamid`, messages
+received):
+
+| Template | Sent to | Vars | Status |
+|----------|---------|------|--------|
+| `booking_confirmation` | patient | 6 | ✅ live |
+| `appointment_reminder` | patient | 6 | ✅ live |
+| `doctor_unavailable`   | patient | 6 | ✅ live |
+| `hospital_new_booking` | hospital | 7 | ✅ live |
+
+**Doctor-unavailable → free reschedule loop — confirmed working:**
+- Hospital marks doctor unavailable → `doctors/views.py:_notify_doctor_unavailable`
+  flags today's `waiting`/`held` bookings `free_reschedule=True` and fires
+  push + WhatsApp (`doctor_unavailable`) per patient (background thread).
+- Patient taps **Reschedule (free)** → `MyBookings.js` detects `free_reschedule`
+  and hits the no-payment endpoint `PATCH /bookings/reschedule/<pk>/`.
+- `RescheduleBookingView` (`bookings/views.py:313`) validates booking is
+  `waiting`, flag is set, new date+slot given, and `slot ∈ doctor.slots`; updates
+  date/slot and **consumes the flag** (one-time waiver). Any later reschedule
+  falls back to the paid ₹5 flow.
+- ✅ **Capacity check added** (`bookings/views.py` `RescheduleBookingView`): a free
+  reschedule now rejects a slot that's already at `doctor.max_per_slot` (counting
+  `waiting`+`in_progress`, excluding the booking itself), done atomically with
+  `select_for_update` so two concurrent reschedules can't both overflow. Returns
+  `Slot "<slot>" on <date> is full. Please pick another slot.`
+  - Uses the same capacity definition as `doctors/views.py:slot_availability`.
+  - ⚠️ Note the **paid** new-booking path (`payments/views.py:_handle_new_booking`)
+    still doesn't enforce `max_per_slot` server-side — capacity there is
+    frontend-only via `slot_availability`. Separate follow-up if we want it hard-enforced.
+
+---
+
 ## ⏭️ Next session plan (2026-07-27)
 
 **🚀 Deployment status (2026-07-26)**
@@ -33,8 +68,8 @@ Newest entry on top. Update the **Status** columns as things land.
 
 **P1 — finish WhatsApp**
 - [ ] Verify the cron actually fires: cron **Logs** show `Reminder run complete` each tick; do one real ~2h booking end-to-end (WhatsAppLog `status=sent`).
-- [ ] Get `hospital_new_booking` **approved** in Meta, then `send_test_whatsapp <mobile> --template hospital_new_booking`.
-- [ ] (Optional) Draft + submit `booking_confirmation` — the last of the 4 templates.
+- [x] Get `hospital_new_booking` **approved** in Meta, then `send_test_whatsapp <mobile> --template hospital_new_booking`. ✅ approved + test-sent 2026-07-27.
+- [x] (Optional) Draft + submit `booking_confirmation` — the last of the 4 templates. ✅ approved + test-sent 2026-07-27.
 
 **P2 — security follow-ups (from the review)**
 - [ ] **#9:** update the **mobile app** to send `razorpay_order_id`/`razorpay_payment_id`/`razorpay_signature` to `/api/bookings/upgrade/` (the old bare `payment_id` now returns 400).
