@@ -128,7 +128,7 @@ export default function AllDoctor() {
     // doctor's searchable text (name, specialization, hospital, city, location).
     // e.g. "cardiologist mumbai" → cardiologists in Mumbai.
     const haystack = [
-      doc.name, doc.specialization, doc.hospital_name,
+      doc.name, doc.specialization, doc.keywords, doc.hospital_name,
       doc.city, doc.hospital_location, doc.hospital_address,
     ].filter(Boolean).join(' ').toLowerCase();
     const keywords = search.toLowerCase().split(/\s+/).filter(Boolean);

@@ -27,7 +27,7 @@ const SLOT_SECTIONS = [
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const EMPTY_DOCTOR = {
-  name: "", specialization: "", experience: "",
+  name: "", specialization: "", keywords: "", experience: "",
   mobile: "", available: true, slots: [], days: [], max_per_slot: 10,
 };
 
@@ -210,6 +210,7 @@ const Hdashboard = () => {
     setFormData({
       name:           doctor.name           || "",
       specialization: doctor.specialization || "",
+      keywords:       doctor.keywords       || "",
       experience:     doctor.experience     || "",
       mobile:         doctor.mobile         || "",
       available:      doctor.available      ?? true,
@@ -261,6 +262,7 @@ const Hdashboard = () => {
       const fd = new FormData();
       fd.append("name",           formData.name.trim());
       fd.append("specialization", formData.specialization.trim());
+      fd.append("keywords",       formData.keywords.trim());
       fd.append("experience",     Number(formData.experience)  || 0);
       fd.append("mobile",         formData.mobile.trim());
       fd.append("available",      formData.available);
@@ -742,6 +744,19 @@ const Hdashboard = () => {
                         {SPECIALIZATION_OPTIONS.map(s => <option key={s} value={s} />)}
                       </datalist>
                       <FieldError msg={errors.specialization} />
+                    </div>
+
+                    <div className="col-12">
+                      <label className="form-label fw-semibold">Search Keywords</label>
+                      <input
+                        className="form-control"
+                        placeholder="e.g. heart, chest pain, BP, ECG"
+                        value={formData.keywords}
+                        onChange={e => handleChange("keywords", e.target.value)}
+                      />
+                      <small className="text-muted">
+                        Comma-separated terms patients might search — helps this doctor show up in results.
+                      </small>
                     </div>
 
                     <div className="col-md-4">
