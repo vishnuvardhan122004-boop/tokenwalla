@@ -2,11 +2,15 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import API from '../services/api';
 import { authCSS } from './authStyles';
+import useAuthKeyboard from './useAuthKeyboard';
 import SEO from './SEO';
 
 export default function Profilecreate() {
   const navigate = useNavigate();
+  useAuthKeyboard();
   const [user,        setUser]        = useState({ name: '', mobile: '', password: '', confirmPassword: '' });
+  const [showPass,    setShowPass]    = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [errors,      setErrors]      = useState({});
   const [loading,     setLoading]     = useState(false);
   const [otpSent,     setOtpSent]     = useState(false);
@@ -223,11 +227,18 @@ export default function Profilecreate() {
               <div className="auth-input-wrap">
                 <span className="auth-input-icon">🔑</span>
                 <input
-                  className={`auth-input ${errors.password ? 'has-error' : ''}`}
-                  type="password" name="password"
+                  className={`auth-input has-eye ${errors.password ? 'has-error' : ''}`}
+                  type={showPass ? 'text' : 'password'} name="password"
                   placeholder="Min 6 chars, letters + numbers"
                   value={user.password} onChange={changeUser}
                 />
+                <button
+                  type="button" className="auth-eye"
+                  onClick={() => setShowPass(p => !p)}
+                  aria-label={showPass ? 'Hide password' : 'Show password'}
+                >
+                  {showPass ? '🙈' : '👁️'}
+                </button>
               </div>
               {errors.password && <span className="auth-field-error">{errors.password}</span>}
             </div>
@@ -237,11 +248,18 @@ export default function Profilecreate() {
               <div className="auth-input-wrap">
                 <span className="auth-input-icon">🔒</span>
                 <input
-                  className={`auth-input ${errors.confirmPassword ? 'has-error' : ''}`}
-                  type="password" name="confirmPassword"
+                  className={`auth-input has-eye ${errors.confirmPassword ? 'has-error' : ''}`}
+                  type={showConfirm ? 'text' : 'password'} name="confirmPassword"
                   placeholder="Repeat your password"
                   value={user.confirmPassword} onChange={changeUser}
                 />
+                <button
+                  type="button" className="auth-eye"
+                  onClick={() => setShowConfirm(p => !p)}
+                  aria-label={showConfirm ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirm ? '🙈' : '👁️'}
+                </button>
               </div>
               {errors.confirmPassword && <span className="auth-field-error">{errors.confirmPassword}</span>}
             </div>

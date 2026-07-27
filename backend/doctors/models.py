@@ -22,6 +22,12 @@ class Doctor(models.Model):
     days           = models.JSONField(default=list, blank=True)
     max_per_slot   = models.IntegerField(default=10)
     city           = models.CharField(max_length=100, blank=True)
+    # ── Payout routing (RazorpayX) ────────────────────────────────────────────
+    # Where the doctor's automated payout is sent. UPI is preferred when a VPA
+    # is present; otherwise the bank account (IMPS) is used as fallback.
+    upi_vpa             = models.CharField(max_length=100, blank=True, default="")
+    bank_account_number = models.CharField(max_length=30,  blank=True, default="")
+    ifsc                = models.CharField(max_length=15,  blank=True, default="")
     image          = models.ImageField(upload_to="doctors/",          null=True, blank=True)
     hospital_image = models.ImageField(upload_to="hospital_banners/", null=True, blank=True)
     created        = models.DateTimeField(auto_now_add=True)

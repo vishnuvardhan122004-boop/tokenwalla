@@ -6,10 +6,12 @@ import { downloadBookingTicket } from '../services/downloadTicket';
 import BookingQR from './BookingQR';
 
 const STATUS_MAP = {
-  waiting:     { label: 'Waiting',         cls: 'badge-amber',  pulse: true  },
-  in_progress: { label: 'In Consultation', cls: 'badge-blue',   pulse: true  },
-  completed:   { label: 'Completed',       cls: 'badge-green',  pulse: false },
-  cancelled:   { label: 'Cancelled',       cls: 'badge-red',    pulse: false },
+  CONFIRMED:   { label: 'Confirmed',       cls: 'badge-amber',  pulse: true  },
+  ON_HOLD:     { label: 'On Hold',         cls: 'badge-amber',  pulse: false },
+  IN_PROGRESS: { label: 'In Consultation', cls: 'badge-blue',   pulse: true  },
+  COMPLETED:   { label: 'Completed',       cls: 'badge-green',  pulse: false },
+  CANCELLED:   { label: 'Cancelled',       cls: 'badge-red',    pulse: false },
+  NO_SHOW:     { label: 'No Show',         cls: 'badge-red',    pulse: false },
 };
 
 const TABS = [
@@ -24,8 +26,8 @@ const RESCHEDULE_PAISE = 500;   // ₹5 in paise — must match backend VALID_AM
 const RESCHEDULE_FEE   = 5;     // display only
 
 function filterBookings(bookings, tab) {
-  if (tab === 'active')    return bookings.filter(b => b.status === 'waiting' || b.status === 'in_progress');
-  if (tab === 'completed') return bookings.filter(b => b.status === 'completed' || b.status === 'cancelled');
+  if (tab === 'active')    return bookings.filter(b => b.status === 'CONFIRMED' || b.status === 'IN_PROGRESS');
+  if (tab === 'completed') return bookings.filter(b => b.status === 'COMPLETED' || b.status === 'CANCELLED');
   return bookings;
 }
 
@@ -96,7 +98,7 @@ export default function MyBookings() {
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
   // Auto-refresh only when there are active bookings, pauses when tab hidden
-  const hasActive = bookings.some(b => b.status === 'waiting' || b.status === 'in_progress');
+  const hasActive = bookings.some(b => b.status === 'CONFIRMED' || b.status === 'IN_PROGRESS');
   useVisiblePolling(() => fetchBookings(true), 15000, hasActive);
 
   useEffect(() => {
@@ -288,7 +290,7 @@ export default function MyBookings() {
   };
 
   const visible     = filterBookings(bookings, tab);
-  const activeCount = bookings.filter(b => b.status === 'waiting' || b.status === 'in_progress').length;
+  const activeCount = bookings.filter(b => b.status === 'CONFIRMED' || b.status === 'IN_PROGRESS').length;
   const amSlots     = doctorSlots.filter(s => s.includes('AM'));
   const pmSlots     = doctorSlots.filter(s => s.includes('PM'));
 
@@ -427,8 +429,8 @@ export default function MyBookings() {
           {!loading && visible.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               {visible.map((booking, idx) => {
-                const st       = STATUS_MAP[booking.status] || STATUS_MAP.waiting;
-                const isActive = booking.status === 'waiting' || booking.status === 'in_progress';
+                const st       = STATUS_MAP[booking.status] || STATUS_MAP.CONFIRMED;
+                const isActive = booking.status === 'CONFIRMED' || booking.status === 'IN_PROGRESS';
                 const qPos     = booking.queue_position;
 
                 return (
@@ -462,12 +464,12 @@ export default function MyBookings() {
                     {isActive && booking.queue_access && (
                       <div className="mb-queue-panel">
                         <div className="mb-queue-circle">
-                          {booking.status === 'in_progress' ? '🔔' : (qPos ?? '…')}
+                          {booking.status === 'IN_PROGRESS' ? '🔔' : (qPos ?? '…')}
                         </div>
                         <div style={{ flex: 1 }}>
                           <div className="mb-queue-label">Your position in queue</div>
                           <div className="mb-queue-desc">
-                            {booking.status === 'in_progress' ? '✅ Your turn — please go in now!' : queueMsg(qPos)}
+                            {booking.status === 'IN_PROGRESS' ? '✅ Your turn — please go in now!' : queueMsg(qPos)}
                           </div>
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>Auto-refreshes every 15s</div>
@@ -475,7 +477,7 @@ export default function MyBookings() {
                     )}
 
                     {/* ── QR CODE PANEL (waiting or in_progress) ── */}
-                    {(booking.status === 'waiting' || booking.status === 'in_progress') && (
+                    {(booking.status === 'CONFIRMED' || booking.status === 'IN_PROGRESS') && (
                       <div className="mb-action-panel">
                         <div>
                           <div className="mb-action-title">⬛ Show / Download Token</div>
@@ -503,14 +505,14 @@ export default function MyBookings() {
                     )}
 
                     {/* ── DOCTOR-UNAVAILABLE BANNER ── */}
-                    {booking.status === 'waiting' && booking.free_reschedule && (
+                    {booking.status === 'CONFIRMED' && booking.free_reschedule && (
                       <div className="mb-unavail-banner">
                         ⚠️ {booking.doctor_name} is unavailable. Reschedule below at no charge.
                       </div>
                     )}
 
                     {/* ── RESCHEDULE PANEL ── */}
-                    {booking.status === 'waiting' && (
+                    {booking.status === 'CONFIRMED' && (
                       <div className="mb-action-panel">
                         <div>
                           <div className="mb-action-title">📅 Reschedule Appointment</div>
@@ -530,7 +532,7 @@ export default function MyBookings() {
                     )}
 
                     {/* ── CANCEL PANEL ── */}
-                    {booking.status === 'waiting' && (
+                    {booking.status === 'CONFIRMED' && (
                       <div className="mb-action-panel">
                         <div>
                           <div className="mb-action-title">❌ Cancel Appointment</div>

@@ -1,17 +1,25 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import API from '../services/api';
+import { computeFeeBreakdown } from '../services/fees';
 
 const RAZORPAY_KEY_ID = process.env.REACT_APP_RAZORPAY_KEY_ID || 'rzp_live_SoKq7xISlxWRoY';
+
+const inr = (n) => Number(n).toFixed(2);
 
 export default function Payment() {
   const location = useLocation();
   const navigate  = useNavigate();
   const {
     doctorId, doctorName, hospital,
-    date, slot, fee = 15, amount = 1500,
+    date, slot, doctorFee = 0,
     queue_access = true,
   } = location.state || {};
+
+  // Itemised receipt preview (doctor fee + platform + gateway + GST). The
+  // server recomputes and validates the authoritative total on verify.
+  const breakdown = computeFeeBreakdown(doctorFee);
+  const total     = breakdown.final_amount;
 
   const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(false);
@@ -57,9 +65,10 @@ export default function Payment() {
       const ready = await loadScript();
       if (!ready) { alert('Razorpay SDK failed. Check internet.'); setLoading(false); return; }
 
+      // Server computes the full fee from the doctor's consultation fee — we
+      // send only doctorId, never an amount.
       const { data: orderData } = await API.post('/payment/create-order/', {
-        amount, currency: 'INR',
-        notes: { doctorId, doctorName, hospital, date, slot },
+        doctorId,
       });
 
       const options = {
@@ -79,7 +88,7 @@ export default function Payment() {
               razorpay_order_id:   response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature:  response.razorpay_signature,
-              booking: { doctorId, doctorName, hospital, date, slot, amount: fee, queue_access, bookedForName, bookedForMobile },
+              booking: { doctorId, doctorName, hospital, date, slot, queue_access, bookedForName, bookedForMobile },
             });
             if (verifyData.success) {
               navigate('/booking-token', {
@@ -329,14 +338,36 @@ export default function Payment() {
                   {forOther && bookedForName && <span className="pay-for-tag">for someone else</span>}
                 </span>
               </div>
+            </div>
+          </div>
+
+          {/* Fee breakdown — itemised receipt */}
+          <div className="pay-card">
+            <div className="pay-card-header">
+              <div className="pay-card-header-icon">🧾</div>
+              <div className="pay-card-header-title">Payment Details</div>
+            </div>
+            <div className="pay-rows">
               <div className="pay-row">
-                <span className="pay-row-label">Plan</span>
-                <span className="pay-plan-badge">📍 Queue View</span>
+                <span className="pay-row-label">Doctor Consultation Fee</span>
+                <span className="pay-row-value">₹{inr(breakdown.doctor_fee)}</span>
+              </div>
+              <div className="pay-row">
+                <span className="pay-row-label">Platform Fee</span>
+                <span className="pay-row-value">₹{inr(breakdown.platform_fee)}</span>
+              </div>
+              <div className="pay-row">
+                <span className="pay-row-label">Payment Gateway Fee</span>
+                <span className="pay-row-value">₹{inr(breakdown.gateway_fee)}</span>
+              </div>
+              <div className="pay-row">
+                <span className="pay-row-label">GST (18%)</span>
+                <span className="pay-row-value">₹{inr(breakdown.gst_amount)}</span>
               </div>
             </div>
             <div className="pay-total-row">
               <span className="pay-total-label">Total Amount</span>
-              <span className="pay-total-amount">₹{fee}</span>
+              <span className="pay-total-amount">₹{inr(total)}</span>
             </div>
           </div>
 
@@ -405,7 +436,7 @@ export default function Payment() {
           <button className="pay-btn" onClick={handlePayment} disabled={loading}>
             {loading
               ? <><div className="pay-spinner" /> Opening Payment Gateway…</>
-              : <>💳 Pay ₹{fee} & Confirm Appointment</>
+              : <>💳 Pay ₹{inr(total)} & Confirm Appointment</>
             }
           </button>
 

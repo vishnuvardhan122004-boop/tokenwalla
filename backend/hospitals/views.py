@@ -512,11 +512,11 @@ class HospitalBookingSummaryView(APIView):
         qs = Booking.objects.filter(hospital=hospital)
         return Response({
             'total': qs.count(),
-            'active': qs.filter(status__in=['waiting', 'in_progress']).count(),
-            'waiting': qs.filter(status='waiting').count(),
-            'in_progress': qs.filter(status='in_progress').count(),
-            'completed': qs.filter(status='completed').count(),
-            'cancelled': qs.filter(status='cancelled').count(),
+            'active': qs.filter(status__in=['CONFIRMED', 'IN_PROGRESS']).count(),
+            'waiting': qs.filter(status='CONFIRMED').count(),
+            'in_progress': qs.filter(status='IN_PROGRESS').count(),
+            'completed': qs.filter(status='COMPLETED').count(),
+            'cancelled': qs.filter(status='CANCELLED').count(),
             'doctors': hospital.doctors.count(),
         })
 
@@ -547,8 +547,8 @@ class HospitalForceDeleteView(APIView):
             with transaction.atomic():
                 cancelled = Booking.objects.filter(
                     hospital=hospital,
-                    status__in=['waiting', 'in_progress'],
-                ).update(status='cancelled')
+                    status__in=['CONFIRMED', 'IN_PROGRESS'],
+                ).update(status='CANCELLED')
 
                 bookings_deleted = Booking.objects.filter(hospital=hospital).delete()[0]
 

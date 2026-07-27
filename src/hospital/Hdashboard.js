@@ -428,7 +428,7 @@ const Hdashboard = () => {
             {tokenDetail.doctor_name && <div className="small mb-1"><span className="text-muted">Doctor:</span> {tokenDetail.doctor_name}</div>}
             {tokenDetail.slot && <div className="small mb-1"><span className="text-muted">Slot:</span> {tokenDetail.slot}</div>}
             <div className="small mb-3"><span className="text-muted">Day:</span> {dayLabelFor(tokenDetail.date)}</div>
-            {tokenDetail.status !== "completed" && (
+            {tokenDetail.status !== "COMPLETED" && (
               <button className="btn btn-outline-danger btn-sm w-100" onClick={() => handleNoShow(tokenDetail.id)}>
                 🚫 Mark as No-show
               </button>

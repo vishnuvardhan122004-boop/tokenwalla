@@ -29,6 +29,10 @@ class Hospital(models.Model):
     close_time   = models.CharField(max_length=5, blank=True)
     password = models.CharField(max_length=128)
     status   = models.CharField(max_length=20, default='active')
+    # TokenWalla's per-hospital commission BASE (₹), negotiated per hospital and
+    # deducted from the doctor's payout (never routed through Razorpay Checkout).
+    # Gross commission = commission_rate + 18% GST (see payments.fees).
+    commission_rate = models.DecimalField(max_digits=10, decimal_places=2, default=20)
     created  = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

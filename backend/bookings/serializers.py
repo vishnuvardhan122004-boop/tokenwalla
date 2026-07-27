@@ -38,10 +38,10 @@ class BookingSerializer(serializers.ModelSerializer):
           1+ = number of patients ahead + 1
           None = not in an active status
         """
-        if obj.status not in ('waiting', 'in_progress'):
+        if obj.status not in ('CONFIRMED', 'IN_PROGRESS'):
             return None
 
-        if obj.status == 'in_progress':
+        if obj.status == 'IN_PROGRESS':
             return 0
 
         # Fast path: view pre-computed the position map
@@ -52,7 +52,7 @@ class BookingSerializer(serializers.ModelSerializer):
         # Slow path (single-object detail view): one extra query, acceptable
         waiting_ids = list(
             Booking.objects
-            .filter(doctor=obj.doctor, date=obj.date, status='waiting')
+            .filter(doctor=obj.doctor, date=obj.date, status='CONFIRMED')
             .order_by('created')
             .values_list('id', flat=True)
         )
@@ -79,7 +79,7 @@ def build_queue_map(bookings_qs):
         Booking.objects
         .filter(
             doctor_id__in=doctor_ids,
-            status='waiting',
+            status='CONFIRMED',
         )
         .order_by('doctor_id', 'date', 'created')
         .values('id', 'doctor_id', 'date')
@@ -95,7 +95,7 @@ def build_queue_map(bookings_qs):
         queue_map[row['id']] = counters[key]
 
     # in_progress bookings → position 0
-    in_prog_ids = bookings_qs.filter(status='in_progress').values_list('id', flat=True)
+    in_prog_ids = bookings_qs.filter(status='IN_PROGRESS').values_list('id', flat=True)
     for bid in in_prog_ids:
         queue_map[bid] = 0
 

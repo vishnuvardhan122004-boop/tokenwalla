@@ -198,6 +198,18 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # ── Third-party Keys ──────────────────────────────────────────────────────────
 RAZORPAY_KEY_ID     = config('RAZORPAY_KEY_ID',     default='')
 RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
+# Secret configured on the Razorpay webhook (used to HMAC-verify payout events).
+RAZORPAY_WEBHOOK_SECRET = config('RAZORPAY_WEBHOOK_SECRET', default='')
+
+# ── RazorpayX Payouts ─────────────────────────────────────────────────────────
+# OFF until KYC / current-account activation lands (that's an out-of-code step).
+# While disabled, run_daily_payouts still builds ledger entries + batches but the
+# payout call is SIMULATED — flip RAZORPAYX_ENABLED=true once the account is live.
+RAZORPAYX_ENABLED        = config('RAZORPAYX_ENABLED', default=False, cast=bool)
+RAZORPAYX_ACCOUNT_NUMBER = config('RAZORPAYX_ACCOUNT_NUMBER', default='')
+
+# ── TokenWalla GST identity (for receipts + B2B commission invoices) ──────────
+TOKENWALLA_GSTIN = config('TOKENWALLA_GSTIN', default='')
 TWOFACTOR_API_KEY   = config('TWOFACTOR_API_KEY',   default='')
 WHATSAPP_ACCESS_TOKEN            = config('WHATSAPP_ACCESS_TOKEN', default='')
 WHATSAPP_PHONE_NUMBER_ID         = config('WHATSAPP_PHONE_NUMBER_ID', default='')

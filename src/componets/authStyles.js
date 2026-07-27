@@ -7,6 +7,7 @@ export const authCSS = `
   .auth-page {
     font-family: var(--font-body);
     min-height: 100vh;
+    min-height: 100dvh;
     background: #fff;
     display: flex;
     align-items: stretch;
@@ -104,8 +105,10 @@ export const authCSS = `
     width: 100%;
     background: var(--gray-50); border: 1px solid var(--blue-100);
     border-radius: 12px; padding: 12px 14px 12px 42px;
-    font-family: var(--font-body); font-size: 15px; color: var(--gray-900);
+    font-family: var(--font-body); font-size: 16px; color: var(--gray-900);
     outline: none; transition: all 0.15s;
+    /* keep the field clear of the on-screen keyboard when scrolled into view */
+    scroll-margin-top: 90px; scroll-margin-bottom: 110px;
   }
   .auth-input::placeholder { color: var(--gray-400); }
   .auth-input:focus { border-color: var(--blue-400); background: #fff; box-shadow: 0 0 0 3px rgba(55,138,221,0.12); }
@@ -175,7 +178,10 @@ export const authCSS = `
     .auth-left { display: none; }
     .auth-right {
       width: 100%; border-left: none;
-      padding: 80px 24px 44px;
+      /* top-align the form so fields aren't centred behind the keyboard,
+         extra bottom padding lets the last field scroll clear of it */
+      justify-content: flex-start;
+      padding: 56px 24px 30vh;
     }
   }
 `;

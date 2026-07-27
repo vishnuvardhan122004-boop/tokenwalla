@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import API from '../services/api';
+import useAuthKeyboard from './useAuthKeyboard';
 
 export default function ForgotPassword({ type = 'patient' }) {
   const navigate   = useNavigate();
   const isHospital = type === 'hospital';
+  useAuthKeyboard();
 
   const [step,     setStep]     = useState(1);
   const [mobile,   setMobile]   = useState('');
@@ -14,6 +16,8 @@ export default function ForgotPassword({ type = 'patient' }) {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState('');
   const [success,  setSuccess]  = useState('');
+  const [showPass,    setShowPass]    = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const requestOTP = async () => {
     if (!mobile || mobile.length !== 10) { setError('Enter a valid 10-digit mobile number'); return; }
@@ -67,9 +71,10 @@ export default function ForgotPassword({ type = 'patient' }) {
         .fp-root {
           font-family: 'DM Sans', sans-serif;
           min-height: 100vh;
+          min-height: 100dvh;
           background: linear-gradient(160deg, #F4F9FF 0%, #EAF3FF 60%, #F8FBFF 100%);
           display: flex; align-items: center; justify-content: center;
-          padding: 24px 16px; position: relative; overflow: hidden;
+          padding: 24px 16px; position: relative; overflow-x: hidden;
         }
         .fp-grid {
           position: fixed; inset: 0; pointer-events: none;
@@ -149,11 +154,21 @@ export default function ForgotPassword({ type = 'patient' }) {
         .fp-input {
           width: 100%; background: #F8FAFC; border: 1px solid #B5D4F4;
           border-radius: 12px; padding: 12px 14px 12px 42px;
-          font-family: 'DM Sans', sans-serif; font-size: 15px; color: #0F172A;
+          font-family: 'DM Sans', sans-serif; font-size: 16px; color: #0F172A;
           outline: none; transition: all 0.15s;
+          scroll-margin-top: 90px; scroll-margin-bottom: 110px;
         }
+        .fp-input.has-eye { padding-right: 44px; }
         .fp-input::placeholder { color: #94A3B8; }
         .fp-input:focus { border-color: #378ADD; background: #fff; box-shadow: 0 0 0 3px rgba(55,138,221,0.14); }
+
+        .fp-eye {
+          position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+          background: none; border: none; cursor: pointer;
+          padding: 6px; font-size: 16px; line-height: 1; color: #94A3B8;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .fp-eye:hover { opacity: 0.75; }
 
         .fp-btn {
           width: 100%; padding: 14px; border-radius: 12px; border: none;
@@ -196,6 +211,10 @@ export default function ForgotPassword({ type = 'patient' }) {
         }
         .fp-back-link:hover { color: #185FA5; }
 
+        @media (max-width: 640px) {
+          /* top-align so the card isn't centred behind the keyboard */
+          .fp-root { align-items: flex-start; padding: 32px 16px 30vh; }
+        }
         @media (max-width: 480px) { .fp-card { padding: 28px 20px; } }
       `}</style>
 
@@ -277,16 +296,24 @@ export default function ForgotPassword({ type = 'patient' }) {
                 <label>New Password</label>
                 <div className="fp-wrap">
                   <span className="fp-icon">🔑</span>
-                  <input className="fp-input" type="password" placeholder="Minimum 6 characters"
+                  <input className="fp-input has-eye" type={showPass ? 'text' : 'password'} placeholder="Minimum 6 characters"
                     value={password} onChange={e => setPassword(e.target.value)} />
+                  <button type="button" className="fp-eye" onClick={() => setShowPass(p => !p)}
+                    aria-label={showPass ? 'Hide password' : 'Show password'}>
+                    {showPass ? '🙈' : '👁️'}
+                  </button>
                 </div>
               </div>
               <div className="fp-field">
                 <label>Confirm Password</label>
                 <div className="fp-wrap">
                   <span className="fp-icon">🔒</span>
-                  <input className="fp-input" type="password" placeholder="Re-enter your new password"
+                  <input className="fp-input has-eye" type={showConfirm ? 'text' : 'password'} placeholder="Re-enter your new password"
                     value={confirm} onChange={e => setConfirm(e.target.value)} />
+                  <button type="button" className="fp-eye" onClick={() => setShowConfirm(p => !p)}
+                    aria-label={showConfirm ? 'Hide password' : 'Show password'}>
+                    {showConfirm ? '🙈' : '👁️'}
+                  </button>
                 </div>
               </div>
               <button className="fp-btn" onClick={resetPassword} disabled={loading}>

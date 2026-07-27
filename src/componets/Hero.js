@@ -8,6 +8,110 @@ import SEO from './SEO';
 const STEP_ICONS = ['🔍', '📅', '💳', '🏥'];
 const FEATURE_ICONS = ['📍', '🔐', '🏥', '♻️', '🩺', '📱'];
 
+// Inline vector logos for each specialty chip. Crisp on every device (no emoji
+// tofu), inherit the chip's text color via currentColor, and scale cleanly.
+// Keys match SPECIALTIES[].key below.
+const SPEC_ICONS = {
+  general: (
+    <>
+      <path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3" />
+      <path d="M8 15v1a6 6 0 0 0 6 6 6 6 0 0 0 6-6v-4" />
+      <circle cx="20" cy="10" r="2" />
+    </>
+  ),
+  heart: (
+    <>
+      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+      <path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27" />
+    </>
+  ),
+  skin: (
+    <>
+      <rect x="2.5" y="8" width="19" height="8" rx="4" transform="rotate(45 12 12)" />
+      <path d="M9.5 9.5v5M14.5 9.5v5" />
+    </>
+  ),
+  dental: (
+    <path d="M7.5 3.5C5.5 3.5 3.5 5 3.5 8c0 1.8.5 3.3 1 5.5.4 1.8.6 4 1.5 5.5.6 1 1.6.8 2-.5l1-3.5c.2-.7.4-1 1-1s.8.3 1 1l1 3.5c.4 1.3 1.4 1.5 2 .5.9-1.5 1.1-3.7 1.5-5.5.5-2.2 1-3.7 1-5.5 0-3-2-4.5-4-4.5-1.6 0-2.8.8-4 1.8-1.2-1-2.4-1.8-4-1.8Z" />
+  ),
+  child: (
+    <>
+      <path d="M9 12h.01M15 12h.01" />
+      <path d="M10 16c.5.3 1.2.5 2 .5s1.5-.2 2-.5" />
+      <path d="M19 6.3a9 9 0 0 1 1.8 3.9 2 2 0 0 1 0 3.6 9 9 0 0 1-17.6 0 2 2 0 0 1 0-3.6A9 9 0 0 1 12 3c2 0 3.5 1.1 3.5 2.5S14.5 8 13 8s-2.5-1.1-2.5-2.5" />
+    </>
+  ),
+  bones: (
+    <path d="M17 10c.7-.7 1.69 0 2.5 0a2.5 2.5 0 1 0 0-5 .5.5 0 0 1-.5-.5 2.5 2.5 0 1 0-5 0c0 .81.7 1.8 0 2.5l-7 7c-.7.7-1.69 0-2.5 0a2.5 2.5 0 0 0 0 5c.28 0 .5.22.5.5a2.5 2.5 0 1 0 5 0c0-.81-.7-1.8 0-2.5Z" />
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  ent: (
+    <>
+      <path d="M6 8.5a6.5 6.5 0 1 1 13 0c0 6-6 6-6 10a3.5 3.5 0 1 1-7 0" />
+      <path d="M15 8.5a2.5 2.5 0 0 0-5 0v1a2 2 0 1 1 0 4" />
+    </>
+  ),
+  women: (
+    <>
+      <circle cx="12" cy="9" r="6" />
+      <path d="M12 15v7M9 19h6" />
+    </>
+  ),
+  neuro: (
+    <>
+      <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
+      <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
+      <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" />
+    </>
+  ),
+  mental: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+      <path d="M9 9h.01M15 9h.01" />
+    </>
+  ),
+  diabetes: (
+    <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7Z" />
+  ),
+  kidney: (
+    <path d="M14.5 4C10 4 6 7 6 12s4 8 8.5 8c2 0 3.5-1.2 3.5-3 0-1.5-1-2.2-1-3.5 0-1 .8-1.5 1.5-2 .7-.5 1.5-1.2 1.5-2.5C20 6 17.5 4 14.5 4Z" />
+  ),
+  stomach: (
+    <path d="M8 3v5a5 5 0 0 0 5 5 3 3 0 0 1 3 3 4 4 0 0 1-8 0" />
+  ),
+  lungs: (
+    <>
+      <path d="M12 4v7" />
+      <path d="M9 11a3 3 0 0 0-3 3v3a2 2 0 0 0 4 0v-4a2 2 0 0 0-1-2Z" />
+      <path d="M15 11a3 3 0 0 1 3 3v3a2 2 0 0 1-4 0v-4a2 2 0 0 1 1-2Z" />
+    </>
+  ),
+  physio: (
+    <>
+      <path d="m6.5 6.5 11 11" />
+      <path d="m21 21-1-1M3 3l1 1" />
+      <path d="m18 22 4-4M2 6l4-4" />
+      <path d="m3 10 7-7M14 21l7-7" />
+    </>
+  ),
+};
+
+// Renders a specialty logo as inline SVG. Inherits color/size from CSS.
+function SpecIcon({ name }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      {SPEC_ICONS[name]}
+    </svg>
+  );
+}
+
 const DEMO_QUEUE = [
   { initials: 'RK', name: 'Ravi K.',  token: 'TW-001', statusKey: 'inConsultation', active: true  },
   { initials: 'PS', name: 'Priya S.', token: 'TW-002', statusKey: 'waiting',        active: false },
@@ -18,22 +122,22 @@ const DEMO_QUEUE = [
 // (`?q=key`); AllDoctor expands it via SPEC_SYNONYMS so e.g. "skin" also finds
 // doctors stored as "Dermatologist". Labels are translated (hero.specialties.*).
 const SPECIALTIES = [
-  { key: 'general',  icon: '🩺' },
-  { key: 'heart',    icon: '🫀' },
-  { key: 'skin',     icon: '🧴' },
-  { key: 'dental',   icon: '🦷' },
-  { key: 'child',    icon: '👶' },
-  { key: 'bones',    icon: '🦴' },
-  { key: 'eye',      icon: '👁️' },
-  { key: 'ent',      icon: '👂' },
-  { key: 'women',    icon: '🤰' },
-  { key: 'neuro',    icon: '🧠' },
-  { key: 'mental',   icon: '🧘' },
-  { key: 'diabetes', icon: '🩸' },
-  { key: 'kidney',   icon: '🫘' },
-  { key: 'stomach',  icon: '🫄' },
-  { key: 'lungs',    icon: '🫁' },
-  { key: 'physio',   icon: '🏃' },
+  { key: 'general'  },
+  { key: 'heart'    },
+  { key: 'skin'     },
+  { key: 'dental'   },
+  { key: 'child'    },
+  { key: 'bones'    },
+  { key: 'eye'      },
+  { key: 'ent'      },
+  { key: 'women'    },
+  { key: 'neuro'    },
+  { key: 'mental'   },
+  { key: 'diabetes' },
+  { key: 'kidney'   },
+  { key: 'stomach'  },
+  { key: 'lungs'    },
+  { key: 'physio'   },
 ];
 
 export default function Hero() {
@@ -167,7 +271,12 @@ API.get('/doctors/').then(({ data }) => {
           border-color: var(--blue-300); background: var(--blue-50);
           transform: translateY(-1px); box-shadow: 0 4px 14px rgba(37, 99, 235, 0.10);
         }
-        .hero-spec-icon { font-size: 15px; line-height: 1; }
+        .hero-spec-icon {
+          display: inline-flex; align-items: center; justify-content: center;
+          color: var(--blue-600, #2563eb);
+        }
+        .hero-spec-icon svg { width: 17px; height: 17px; display: block; }
+        .hero-spec-chip:hover .hero-spec-icon { color: var(--blue-700, #1d4ed8); }
 
         /* Stats strip */
         .stats-strip {
@@ -449,7 +558,7 @@ API.get('/doctors/').then(({ data }) => {
                   <div className="hero-specs-row">
                     {SPECIALTIES.map(s => (
                       <Link key={s.key} to={`/alldoctor?q=${s.key}`} className="hero-spec-chip">
-                        <span className="hero-spec-icon">{s.icon}</span>
+                        <span className="hero-spec-icon"><SpecIcon name={s.key} /></span>
                         {t(`hero.specialties.${s.key}`)}
                       </Link>
                     ))}

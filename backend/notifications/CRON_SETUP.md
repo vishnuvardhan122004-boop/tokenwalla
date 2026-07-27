@@ -63,3 +63,26 @@ reminder each (idempotent — `reminder_sent` flag prevents duplicates).
   variable unset so the code default (`appointment_reminder`) is used.
 - `WHATSAPP_ACCESS_TOKEN` must be a **permanent** System-User token, not a 24h dev token.
 - Booking slot strings must be `"HH:MM AM/PM"` (e.g. `09:00 AM`) — the parser expects that.
+
+---
+
+# Payout & commission-invoice crons (RazorpayX feature)
+
+Two more scheduled management commands, each set up as its own Railway cron
+service exactly like the reminder one above (own config file, Root Directory
+`backend`, same DB/env vars):
+
+| Command | Config file | Schedule | Purpose |
+|---|---|---|---|
+| `python manage.py run_daily_payouts` | `backend/railway.payouts.cron.json` | `30 20 * * *` (daily) | Ledger completed bookings + pay doctors out (net of hospital commission) |
+| `python manage.py generate_commission_invoices` | `backend/railway.invoices.cron.json` | `0 3 1 * *` (1st of month) | Monthly B2B GST commission invoice per hospital |
+
+Notes:
+- Both are **idempotent** — safe to re-run (PayoutBatch `idempotency_key` is
+  unique; invoices are unique per hospital+period).
+- Payouts are **SIMULATED** until `RAZORPAYX_ENABLED=true` (needs RazorpayX KYC /
+  current-account activation first). While disabled the ledger + batch rows are
+  still written, so you can see exactly what *would* be paid.
+- The payout webhook (`/api/payment/webhook/`) needs `RAZORPAY_WEBHOOK_SECRET`
+  set and the `payout.processed` / `payout.failed` / `payout.reversed` events
+  subscribed in the Razorpay dashboard.

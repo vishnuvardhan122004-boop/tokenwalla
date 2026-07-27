@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import API from '../services/api';
 import { authCSS } from '../componets/authStyles';
+import useAuthKeyboard from '../componets/useAuthKeyboard';
 import LocationSearch from '../componets/LocationSearch';
 
 const Husercreate = () => {
   const navigate = useNavigate();
+  useAuthKeyboard();
 
   const [hospital, setHospital] = useState({
     name: '', city: '', address: '', location: '', mobile: '', password: '', confirmPassword: '',
@@ -17,6 +19,8 @@ const Husercreate = () => {
   const [otp,         setOtp]         = useState('');
   const [otpSent,     setOtpSent]     = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
+  const [showPass,    setShowPass]    = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [errors,      setErrors]      = useState({});
   const [error,       setError]       = useState('');
   const [success,     setSuccess]     = useState('');
@@ -282,10 +286,17 @@ const Husercreate = () => {
               <div className="auth-input-wrap">
                 <span className="auth-input-icon">🔑</span>
                 <input
-                  className={`auth-input ${errors.password ? 'has-error' : ''}`}
-                  type="password" name="password" placeholder="Min 6 characters"
+                  className={`auth-input has-eye ${errors.password ? 'has-error' : ''}`}
+                  type={showPass ? 'text' : 'password'} name="password" placeholder="Min 6 characters"
                   value={hospital.password} onChange={handleChange}
                 />
+                <button
+                  type="button" className="auth-eye"
+                  onClick={() => setShowPass(p => !p)}
+                  aria-label={showPass ? 'Hide password' : 'Show password'}
+                >
+                  {showPass ? '🙈' : '👁️'}
+                </button>
               </div>
               {errors.password && <span className="auth-field-error">{errors.password}</span>}
             </div>
@@ -296,10 +307,17 @@ const Husercreate = () => {
               <div className="auth-input-wrap">
                 <span className="auth-input-icon">🔒</span>
                 <input
-                  className={`auth-input ${errors.confirmPassword ? 'has-error' : ''}`}
-                  type="password" name="confirmPassword" placeholder="Re-enter password"
+                  className={`auth-input has-eye ${errors.confirmPassword ? 'has-error' : ''}`}
+                  type={showConfirm ? 'text' : 'password'} name="confirmPassword" placeholder="Re-enter password"
                   value={hospital.confirmPassword} onChange={handleChange}
                 />
+                <button
+                  type="button" className="auth-eye"
+                  onClick={() => setShowConfirm(p => !p)}
+                  aria-label={showConfirm ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirm ? '🙈' : '👁️'}
+                </button>
               </div>
               {errors.confirmPassword && <span className="auth-field-error">{errors.confirmPassword}</span>}
             </div>

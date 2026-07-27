@@ -20,10 +20,12 @@ function extractToken(raw) {
 
 // ── Status badge styles ───────────────────────────────────────────────────────
 const STATUS_STYLE = {
-  waiting:     { bg: 'var(--color-warning-bg)',  text: 'var(--color-warning-text)',  border: 'var(--color-warning-border)',  label: 'Waiting'         },
-  in_progress: { bg: 'var(--blue-50)',           text: 'var(--blue-700)',            border: 'var(--blue-200)',              label: 'In Consultation' },
-  completed:   { bg: 'var(--color-success-bg)',  text: 'var(--color-success-text)',  border: 'var(--color-success-border)', label: 'Completed'       },
-  cancelled:   { bg: 'var(--gray-100)',          text: 'var(--gray-600)',            border: 'var(--gray-200)',             label: 'Cancelled'       },
+  CONFIRMED:   { bg: 'var(--color-warning-bg)',  text: 'var(--color-warning-text)',  border: 'var(--color-warning-border)',  label: 'Confirmed'       },
+  ON_HOLD:     { bg: 'var(--color-warning-bg)',  text: 'var(--color-warning-text)',  border: 'var(--color-warning-border)',  label: 'On Hold'         },
+  IN_PROGRESS: { bg: 'var(--blue-50)',           text: 'var(--blue-700)',            border: 'var(--blue-200)',              label: 'In Consultation' },
+  COMPLETED:   { bg: 'var(--color-success-bg)',  text: 'var(--color-success-text)',  border: 'var(--color-success-border)', label: 'Completed'       },
+  CANCELLED:   { bg: 'var(--gray-100)',          text: 'var(--gray-600)',            border: 'var(--gray-200)',             label: 'Cancelled'       },
+  NO_SHOW:     { bg: 'var(--gray-100)',          text: 'var(--gray-600)',            border: 'var(--gray-200)',             label: 'No Show'         },
 };
 
 export default function QRScanner() {
@@ -197,7 +199,7 @@ export default function QRScanner() {
       const { data } = await API.get(`/bookings/scan/${token}/`);
       setScanResult(data);
       setScanState(
-        data.already_done || data.booking?.status === 'completed' ? 'already_done' : 'found'
+        data.already_done || data.booking?.status === 'COMPLETED' ? 'already_done' : 'found'
       );
     } catch (err) {
       const status = err?.response?.status;
@@ -245,7 +247,7 @@ export default function QRScanner() {
       setScanState('confirmed');
       setScanResult(prev => ({
         ...prev,
-        booking: { ...(prev.booking || prev), status: 'in_progress' },
+        booking: { ...(prev.booking || prev), status: 'IN_PROGRESS' },
       }));
     } catch (err) {
       if (err?.response?.status === 409) { setScanState('already_done'); }
@@ -427,7 +429,7 @@ export default function QRScanner() {
         )}
 
         {['found', 'already_done', 'confirmed'].includes(scanState) && booking && (() => {
-          const st          = STATUS_STYLE[booking.status] || STATUS_STYLE.waiting;
+          const st          = STATUS_STYLE[booking.status] || STATUS_STYLE.CONFIRMED;
           const isDone      = scanState === 'already_done';
           const isConfirmed = scanState === 'confirmed';
           const topColor    = isConfirmed ? 'confirmed' : isDone ? 'warning' : 'primary';

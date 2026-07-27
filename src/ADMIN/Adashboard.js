@@ -27,10 +27,12 @@ const Overview = ({ pendingCount }) => {
   }, []);
 
   const STATUS_STYLES = {
-    completed:   { bg: '#EAF3DE', text: '#3B6D11', border: '#97C459', label: 'Completed'   },
-    waiting:     { bg: '#FAEEDA', text: '#854F0B', border: '#EF9F27', label: 'Waiting'     },
-    in_progress: { bg: '#E6F1FB', text: '#185FA5', border: '#85B7EB', label: 'In Progress' },
-    cancelled:   { bg: '#F1F5F9', text: '#64748B', border: '#E2E8F0', label: 'Cancelled'   },
+    COMPLETED:   { bg: '#EAF3DE', text: '#3B6D11', border: '#97C459', label: 'Completed'   },
+    CONFIRMED:   { bg: '#FAEEDA', text: '#854F0B', border: '#EF9F27', label: 'Confirmed'   },
+    IN_PROGRESS: { bg: '#E6F1FB', text: '#185FA5', border: '#85B7EB', label: 'In Progress' },
+    ON_HOLD:     { bg: '#FAEEDA', text: '#854F0B', border: '#EF9F27', label: 'On Hold'     },
+    CANCELLED:   { bg: '#F1F5F9', text: '#64748B', border: '#E2E8F0', label: 'Cancelled'   },
+    NO_SHOW:     { bg: '#F1F5F9', text: '#64748B', border: '#E2E8F0', label: 'No Show'     },
   };
 
   if (loading) return (
@@ -47,7 +49,7 @@ const Overview = ({ pendingCount }) => {
   );
 
   const bookingsArr  = Array.isArray(stats.bookings) ? stats.bookings : [];
-  const inProgress   = bookingsArr.filter(b => b.status === 'in_progress').length;
+  const inProgress   = bookingsArr.filter(b => b.status === 'IN_PROGRESS').length;
   const patientCount = users.filter(u => u.role === 'patient').length;
   const hospCount    = users.filter(u => u.role === 'hospital').length;
   const revenue      = bookingsArr.reduce((a, b) => a + (b.amount || 0), 0);
@@ -153,7 +155,7 @@ const Overview = ({ pendingCount }) => {
               </thead>
               <tbody>
                 {bookingsArr.slice(0, 10).map(b => {
-                  const st = STATUS_STYLES[b.status] || STATUS_STYLES.cancelled;
+                  const st = STATUS_STYLES[b.status] || STATUS_STYLES.CANCELLED;
                   return (
                     <tr key={b.id}>
                       <td><span className="ov-token">{b.token}</span></td>

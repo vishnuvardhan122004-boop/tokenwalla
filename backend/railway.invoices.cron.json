@@ -1,0 +1,8 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "deploy": {
+    "startCommand": "python manage.py generate_commission_invoices",
+    "cronSchedule": "0 3 1 * *",
+    "restartPolicyType": "NEVER"
+  }
+}

@@ -17,7 +17,7 @@ class HospitalAdmin(admin.ModelAdmin):
     @admin.display(description='Bookings')
     def booking_count(self, obj):
         count = obj.bookings.count()
-        active = obj.bookings.filter(status__in=['waiting', 'in_progress']).count()
+        active = obj.bookings.filter(status__in=['CONFIRMED', 'IN_PROGRESS']).count()
         if active:
             return format_html(
                 '<span style="color:#854F0B;font-weight:600">{} ({} active)</span>',
@@ -103,8 +103,8 @@ class HospitalAdmin(admin.ModelAdmin):
                     # Step 1 — cancel all active bookings for this hospital
                     cancelled = Booking.objects.filter(
                         hospital=hospital,
-                        status__in=['waiting', 'in_progress']
-                    ).update(status='cancelled')
+                        status__in=['CONFIRMED', 'IN_PROGRESS']
+                    ).update(status='CANCELLED')
  
                     # Step 2 — delete all bookings (now none are PROTECT-blocked)
                     Booking.objects.filter(hospital=hospital).delete()
@@ -160,8 +160,8 @@ class HospitalAdmin(admin.ModelAdmin):
             # Cancel + delete bookings
             Booking.objects.filter(
                 hospital=obj,
-                status__in=['waiting', 'in_progress']
-            ).update(status='cancelled')
+                status__in=['CONFIRMED', 'IN_PROGRESS']
+            ).update(status='CANCELLED')
             Booking.objects.filter(hospital=obj).delete()
  
             # Delete doctors

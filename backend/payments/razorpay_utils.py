@@ -53,6 +53,23 @@ def verify_signature(order_id, payment_id, signature):
     return hmac.compare_digest(expected.encode('utf-8'), str(signature).encode('utf-8'))
 
 
+def verify_webhook_signature(raw_body, signature):
+    """Constant-time HMAC-SHA256 verification of a Razorpay WEBHOOK payload.
+
+    `raw_body` is the exact request body bytes; the signature arrives in the
+    `X-Razorpay-Signature` header. Uses RAZORPAY_WEBHOOK_SECRET. Returns False
+    when the secret is unset (fail closed) so we never trust an unverifiable
+    webhook.
+    """
+    secret = (settings.RAZORPAY_WEBHOOK_SECRET or '').encode('utf-8')
+    if not secret:
+        return False
+    if isinstance(raw_body, str):
+        raw_body = raw_body.encode('utf-8')
+    expected = hmac.new(secret, raw_body, digestmod=hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected.encode('utf-8'), str(signature).encode('utf-8'))
+
+
 def fetch_order_amount_paise(order_id):
     """Return the paid amount in paise for a Razorpay order.
 
@@ -62,3 +79,16 @@ def fetch_order_amount_paise(order_id):
     """
     order = get_client().order.fetch(order_id)
     return int(order.get('amount') or 0)
+
+
+def refund_payment(payment_id, amount_paise, notes=None):
+    """Issue a partial (or full) refund on a captured Razorpay payment.
+
+    `amount_paise` is the amount to return to the patient in paise. Returns the
+    Razorpay refund object (its ['id'] is the razorpay_refund_id). Raises on any
+    gateway/network error — the caller must decide whether to proceed.
+    """
+    payload = {'amount': int(amount_paise), 'speed': 'normal'}
+    if notes:
+        payload['notes'] = notes
+    return get_client().payment.refund(payment_id, payload)

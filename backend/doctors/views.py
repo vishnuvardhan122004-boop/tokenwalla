@@ -34,7 +34,7 @@ def _notify_doctor_unavailable(doctor_id):
             today = timezone.localdate()
             affected = list(
                 Booking.objects
-                .filter(doctor_id=doctor_id, date=today, status__in=['waiting', 'held'])
+                .filter(doctor_id=doctor_id, date=today, status__in=['CONFIRMED', 'ON_HOLD'])
                 .select_related('user', 'doctor', 'hospital')
             )
             if not affected:
@@ -115,7 +115,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
         patients can no longer book a slot that's about to happen, without
         needing any frontend changes.
 
-        Only counts bookings with status 'waiting' or 'in_progress'.
+        Only counts bookings with status 'CONFIRMED' or 'IN_PROGRESS'.
         """
         from bookings.models import Booking
         from django.db.models import Count
@@ -138,7 +138,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
         counts = (
             Booking.objects
-            .filter(doctor=doctor, date=date, status__in=['waiting', 'in_progress'])
+            .filter(doctor=doctor, date=date, status__in=['CONFIRMED', 'IN_PROGRESS'])
             .values('slot')
             .annotate(count=Count('id'))
         )
@@ -181,11 +181,11 @@ class DoctorViewSet(viewsets.ModelViewSet):
         qs = Booking.objects.filter(doctor=doctor)
         return Response({
             'total': qs.count(),
-            'active': qs.filter(status__in=['waiting', 'in_progress']).count(),
-            'waiting': qs.filter(status='waiting').count(),
-            'in_progress': qs.filter(status='in_progress').count(),
-            'completed': qs.filter(status='completed').count(),
-            'cancelled': qs.filter(status='cancelled').count(),
+            'active': qs.filter(status__in=['CONFIRMED', 'IN_PROGRESS']).count(),
+            'waiting': qs.filter(status='CONFIRMED').count(),
+            'in_progress': qs.filter(status='IN_PROGRESS').count(),
+            'completed': qs.filter(status='COMPLETED').count(),
+            'cancelled': qs.filter(status='CANCELLED').count(),
         })
 
     # ── Force delete (admin only) ─────────────────────────────────────────────
@@ -214,8 +214,8 @@ class DoctorViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             cancelled = Booking.objects.filter(
                 doctor=doctor,
-                status__in=['waiting', 'in_progress'],
-            ).update(status='cancelled')
+                status__in=['CONFIRMED', 'IN_PROGRESS'],
+            ).update(status='CANCELLED')
 
             total_deleted = Booking.objects.filter(doctor=doctor).delete()[0]
 
@@ -395,7 +395,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         active = Booking.objects.filter(
             doctor=instance,
-            status__in=['waiting', 'in_progress'],
+            status__in=['CONFIRMED', 'IN_PROGRESS'],
         ).exists()
 
         if active:
