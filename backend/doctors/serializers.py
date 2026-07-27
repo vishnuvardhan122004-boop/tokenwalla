@@ -26,7 +26,7 @@ class DoctorSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Doctor
         fields = [
-            "id", "name", "specialization", "experience",
+            "id", "name", "specialization", "keywords", "experience",
             "mobile", "available", "fee", "slots", "days", "max_per_slot",
             "image", "hospital_image",
             "image_url", "hospital_image_url",
@@ -35,6 +35,7 @@ class DoctorSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "image":          {"required": False, "allow_null": True, "write_only": False},
             "hospital_image": {"required": False, "allow_null": True, "write_only": False},
+            "keywords":       {"required": False, "allow_blank": True},
             "city":           {"required": False, "allow_blank": True},
             "experience":     {"required": False},
             "max_per_slot":   {"required": False},

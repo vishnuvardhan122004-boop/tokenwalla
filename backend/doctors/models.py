@@ -8,6 +8,10 @@ class Doctor(models.Model):
     )
     name           = models.CharField(max_length=200)
     specialization = models.CharField(max_length=200)
+    # Free-text search keywords (comma/space separated) hospitals enter so the
+    # doctor surfaces for patient searches beyond just name/specialization,
+    # e.g. "child fever vaccination" for a pediatrician.
+    keywords       = models.CharField(max_length=500, blank=True, default="")
     experience     = models.IntegerField(default=0)
     mobile         = models.CharField(max_length=15)
     available      = models.BooleanField(default=True)

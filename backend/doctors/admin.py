@@ -18,7 +18,7 @@ class DoctorAdmin(admin.ModelAdmin):
     list_display  = ('name', 'specialization', 'experience', 'mobile',
                      'available', 'hospital', 'active_bookings', 'total_bookings')
     list_filter   = ('available', 'specialization')
-    search_fields = ('name', 'specialization', 'mobile', 'hospital__name')
+    search_fields = ('name', 'specialization', 'keywords', 'mobile', 'hospital__name')
     actions       = ['mark_available', 'mark_unavailable', 'safe_delete_doctors']
 
     # ── Booking count columns ──────────────────────────────────────────────────
