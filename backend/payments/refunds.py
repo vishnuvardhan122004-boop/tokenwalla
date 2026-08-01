@@ -177,7 +177,7 @@ def record_absence_refund(booking):
 
         payment = getattr(booking, 'payment', None)
         doctor_fee = payment.doctor_fee if payment else Decimal('0.00')
-        payout = compute_doctor_payout(doctor_fee, booking.hospital.commission_rate)
+        payout = compute_doctor_payout(doctor_fee)
 
         entry = DoctorLedger.objects.create(
             doctor  = booking.doctor,

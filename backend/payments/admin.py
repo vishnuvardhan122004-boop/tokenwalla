@@ -1,7 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Payment, ReschedulePayment, Refund,
-    DoctorLedger, PayoutBatch, HospitalCommissionInvoice,
+    Payment, ReschedulePayment, Refund, DoctorLedger, PayoutBatch,
 )
 
 
@@ -41,10 +40,3 @@ class PayoutBatchAdmin(admin.ModelAdmin):
                     'razorpay_payout_id', 'idempotency_key', 'created_at')
     list_filter  = ('status', 'payout_mode')
     search_fields = ('idempotency_key', 'razorpay_payout_id', 'doctor__name')
-
-
-@admin.register(HospitalCommissionInvoice)
-class HospitalCommissionInvoiceAdmin(admin.ModelAdmin):
-    list_display = ('id', 'hospital', 'period_start', 'period_end',
-                    'total_commission', 'gst_amount', 'generated_at')
-    search_fields = ('hospital__name',)

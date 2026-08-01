@@ -40,8 +40,7 @@ class PaymentDetailsEndpointTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.hospital = Hospital.objects.create(
-            name='Apollo', city='Hyd', mobile='9000000002', password='x',
-            commission_rate=Decimal('20'))
+            name='Apollo', city='Hyd', mobile='9000000002', password='x')
         self.other_hospital = Hospital.objects.create(
             name='Rainbow', city='Hyd', mobile='9000000009', password='x')
         self.doctor = Doctor.objects.create(
@@ -122,8 +121,7 @@ class PaymentSummaryTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.hospital = Hospital.objects.create(
-            name='Apollo', city='Hyd', mobile='9000000002', password='x',
-            commission_rate=Decimal('20'))
+            name='Apollo', city='Hyd', mobile='9000000002', password='x')
         self.doctor = Doctor.objects.create(
             hospital=self.hospital, name='Dr Rao', specialization='GP',
             mobile='9000000003', fee=200)

@@ -53,8 +53,7 @@ class WorldMixin:
     def make_actors(self, *, fee=200, upi=''):
         self.user = User.objects.create(username='pat', mobile='9000000001', role='patient')
         self.hospital = Hospital.objects.create(
-            name='Apollo', city='Hyd', mobile='9000000002', password='x',
-            commission_rate=Decimal('20'))
+            name='Apollo', city='Hyd', mobile='9000000002', password='x')
         self.doctor = Doctor.objects.create(
             hospital=self.hospital, name='Dr Rao', specialization='GP',
             mobile='9000000003', fee=fee, slots=['09:00 AM', '10:00 AM'],
@@ -346,7 +345,7 @@ class PayoutWebhookRegressionTests(WorldMixin, TestCase):
         attached = (DoctorLedger.objects.filter(payout_batch=self.batch)
                     .aggregate(s=Sum('amount'))['s'])
         self.assertEqual(self.batch.total_amount, attached)
-        self.assertEqual(self.batch.total_amount, Decimal('176.40'))
+        self.assertEqual(self.batch.total_amount, Decimal('200.00'))
 
     def test_late_failure_after_processed_does_not_double_pay(self):
         # BUG A: processed first, then a stray failed delivery.
@@ -393,7 +392,7 @@ class PayoutWebhookRegressionTests(WorldMixin, TestCase):
         self.assertEqual(r.status_code, 200)
         self.batch.refresh_from_db()
         self.assertEqual(self.batch.status, PayoutBatch.FAILED)
-        self.assertEqual(DoctorLedger.objects.filter(payout_batch__isnull=True).count(), 2)
+        self.assertEqual(DoctorLedger.objects.filter(payout_batch__isnull=True).count(), 1)
 
     def test_v1_format_success_still_settles_the_batch(self):
         # If the dashboard webhook is configured V1, transfer events arrive with
@@ -539,7 +538,7 @@ class LivePayoutTransferTests(WorldMixin, TestCase):
 
         call_command('run_daily_payouts')
         self.assertEqual(PayoutBatch.objects.get().status, PayoutBatch.FAILED)
-        self.assertEqual(DoctorLedger.objects.filter(payout_batch__isnull=True).count(), 2)
+        self.assertEqual(DoctorLedger.objects.filter(payout_batch__isnull=True).count(), 1)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -567,7 +566,7 @@ class PayoutEdgeCaseTests(WorldMixin, TestCase):
                                     reason=DoctorLedger.ABSENCE_REFUND)
         call_command('run_daily_payouts')
         self.assertEqual(PayoutBatch.objects.count(), 0)
-        self.assertEqual(DoctorLedger.objects.filter(payout_batch__isnull=True).count(), 3)
+        self.assertEqual(DoctorLedger.objects.filter(payout_batch__isnull=True).count(), 2)
 
     def test_failed_batch_retries_on_next_cycle(self):
         self.make_actors(fee=200)
@@ -588,4 +587,4 @@ class PayoutEdgeCaseTests(WorldMixin, TestCase):
 
         retried = PayoutBatch.objects.exclude(pk=batch.pk)
         self.assertEqual(retried.count(), 1)
-        self.assertEqual(retried.first().total_amount, Decimal('176.40'))
+        self.assertEqual(retried.first().total_amount, Decimal('200.00'))

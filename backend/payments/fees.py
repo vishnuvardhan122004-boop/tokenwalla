@@ -1,15 +1,12 @@
 """
 backend/payments/fees.py
 
-Single source of truth for TokenWalla's money math. Two independent charges:
+Single source of truth for TokenWalla's money math.
 
-  1. Patient-facing checkout fee  → compute_fee_breakdown()
-     Collected through Cashfree at booking time. Split into named components
-     and stored on Payment (never a single lump total).
-
-  2. Hospital commission          → compute_hospital_commission()
-     Charged to the HOSPITAL and deducted at doctor-payout time — never routed
-     through Cashfree Checkout, so it incurs no gateway fee.
+TokenWalla charges the PATIENT and nobody else. Hospitals and doctors are never
+billed and never have anything deducted: our entire revenue is the service fee
+(platform + gateway) collected at checkout, and a doctor's payout is exactly the
+consultation fee the patient paid online — see compute_fee_breakdown().
 
 All arithmetic uses Decimal and rounds half-up to 2 places, so the figures
 here exactly match what the patient sees on the receipt and what we settle.
@@ -88,30 +85,10 @@ def to_paise(amount) -> int:
     return int((_q(amount) * 100).to_integral_value(rounding=ROUND_HALF_UP))
 
 
-def compute_hospital_commission(commission_rate) -> dict:
-    """Hospital commission charged by TokenWalla, deducted at payout time.
+def compute_doctor_payout(doctor_fee) -> Decimal:
+    """Doctor's take-home for one completed booking — the whole online fee.
 
-        hospital_commission = commission_rate + 18% × commission_rate
-        (e.g. ₹20 → ₹20 + ₹3.60 = ₹23.60)
-
-    `commission_rate` is the per-hospital negotiated base (Hospital.commission_rate).
-    Returns the taxable base, its GST, and the gross commission — all Decimals.
+    Nothing is deducted. TokenWalla's revenue comes from the patient's service
+    fee, never from the doctor's consultation fee.
     """
-    base       = _q(commission_rate)
-    gst_amount = _q(base * GST_RATE)
-    total      = _q(base + gst_amount)
-    return {
-        'commission_base': base,
-        'gst_amount':      gst_amount,
-        'total_commission': total,
-        'gst_rate':        GST_RATE,
-    }
-
-
-def compute_doctor_payout(doctor_fee, commission_rate) -> Decimal:
-    """Doctor's net take-home for one completed booking.
-
-        doctor_payout_amount = doctor_fee − hospital_commission(commission_rate)
-    """
-    commission = compute_hospital_commission(commission_rate)['total_commission']
-    return _q(_q(doctor_fee) - commission)
+    return _q(doctor_fee)

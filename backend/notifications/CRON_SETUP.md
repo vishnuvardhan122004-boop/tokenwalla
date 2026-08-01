@@ -66,23 +66,30 @@ reminder each (idempotent — `reminder_sent` flag prevents duplicates).
 
 ---
 
-# Payout & commission-invoice crons (RazorpayX feature)
+# Doctor payout cron (Cashfree Payouts)
 
-Two more scheduled management commands, each set up as its own Railway cron
-service exactly like the reminder one above (own config file, Root Directory
-`backend`, same DB/env vars):
+One more scheduled management command, set up as its own Railway cron service
+exactly like the reminder one above (own config file, Root Directory `backend`,
+same DB/env vars):
 
 | Command | Config file | Schedule | Purpose |
 |---|---|---|---|
-| `python manage.py run_daily_payouts` | `backend/railway.payouts.cron.json` | `30 20 * * *` (daily) | Ledger completed bookings + pay doctors out (net of hospital commission) |
-| `python manage.py generate_commission_invoices` | `backend/railway.invoices.cron.json` | `0 3 1 * *` (1st of month) | Monthly B2B GST commission invoice per hospital |
+| `python manage.py run_daily_payouts` | `backend/railway.payouts.cron.json` | `30 20 * * *` (daily) | Ledger completed bookings and pay each doctor the full online consultation fee |
 
 Notes:
-- Both are **idempotent** — safe to re-run (PayoutBatch `idempotency_key` is
-  unique; invoices are unique per hospital+period).
-- Payouts are **SIMULATED** until `RAZORPAYX_ENABLED=true` (needs RazorpayX KYC /
-  current-account activation first). While disabled the ledger + batch rows are
-  still written, so you can see exactly what *would* be paid.
-- The payout webhook (`/api/payment/webhook/`) needs `RAZORPAY_WEBHOOK_SECRET`
-  set and the `payout.processed` / `payout.failed` / `payout.reversed` events
-  subscribed in the Razorpay dashboard.
+- **Nothing is deducted from a doctor or billed to a hospital.** TokenWalla's
+  revenue is the patient's service fee, collected at checkout. The payout is
+  exactly `Payment.doctor_fee`.
+- **Idempotent** — safe to re-run: `PayoutBatch.idempotency_key` is unique per
+  doctor per day.
+- Payouts are **SIMULATED** until `CASHFREE_PAYOUTS_ENABLED=true`. While
+  disabled the ledger + batch rows are still written, so you can see exactly
+  what *would* be paid.
+- Cashfree Payouts enforces 2FA on **every** call, sandbox included: the calling
+  host's IP must be whitelisted, or the public-key method enabled
+  (`CASHFREE_PAYOUT_PUBLIC_KEY`). Railway needs a static egress IP for the
+  former. See `backend/.env.example`.
+- The payout webhook (`/api/payment/webhook/`) needs
+  `CASHFREE_PAYOUT_WEBHOOK_SECRET` set and the `TRANSFER_SUCCESS` /
+  `TRANSFER_FAILED` / `TRANSFER_REVERSED` / `TRANSFER_REJECTED` events
+  subscribed in the Cashfree Payouts dashboard (V2 format).

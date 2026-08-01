@@ -29,10 +29,6 @@ class Hospital(models.Model):
     close_time   = models.CharField(max_length=5, blank=True)
     password = models.CharField(max_length=128)
     status   = models.CharField(max_length=20, default='active')
-    # TokenWalla's per-hospital commission BASE (₹), negotiated per hospital and
-    # deducted from the doctor's payout (never routed through Cashfree Checkout).
-    # Gross commission = commission_rate + 18% GST (see payments.fees).
-    commission_rate = models.DecimalField(max_digits=10, decimal_places=2, default=20)
 
     # ── Payout / settlement account ───────────────────────────────────────────
     # Where TokenWalla settles the hospital's share. Managed by the hospital

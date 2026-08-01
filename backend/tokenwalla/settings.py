@@ -241,7 +241,7 @@ if 'test' in sys.argv:
     CASHFREE_PAYOUTS_ENABLED   = False
     CASHFREE_PAYOUT_PUBLIC_KEY = ''
 
-# ── TokenWalla GST identity (for receipts + B2B commission invoices) ──────────
+# ── TokenWalla GST identity (for patient receipts) ────────────────────────────
 TOKENWALLA_GSTIN = config('TOKENWALLA_GSTIN', default='')
 TWOFACTOR_API_KEY   = config('TWOFACTOR_API_KEY',   default='')
 WHATSAPP_ACCESS_TOKEN            = config('WHATSAPP_ACCESS_TOKEN', default='')

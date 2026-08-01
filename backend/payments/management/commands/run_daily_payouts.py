@@ -7,8 +7,9 @@ landed:
 
 Steps (see the feature spec §6):
   1. Find COMPLETED, not-yet-paid, not-refunded bookings with a fee split.
-  2. Write two DoctorLedger rows each: BOOKING_COMPLETED (+doctor_fee) and
-     HOSPITAL_COMMISSION (−commission). Move the booking to PROCESSING.
+  2. Write one DoctorLedger row each: BOOKING_COMPLETED (+doctor_fee). Nothing
+     is deducted — the doctor receives the whole online consultation fee. Move
+     the booking to PROCESSING.
   3. Group every doctor's UNBATCHED ledger rows into ONE PayoutBatch (per
      doctor, not per booking) and call Cashfree Payouts (simulated until enabled).
   4. payout.processed / failed webhooks (payments.webhooks) settle the batch.
@@ -25,7 +26,6 @@ from django.utils import timezone
 
 from bookings.models import Booking
 from payments.models import DoctorLedger, PayoutBatch
-from payments.fees import compute_hospital_commission
 from payments.cashfree_payouts_utils import create_payout, choose_mode
 
 logger = logging.getLogger('tokenwalla')
@@ -49,7 +49,7 @@ class Command(BaseCommand):
             .filter(status=Booking.COMPLETED,
                     doctor_payout_status=Booking.PAYOUT_PENDING)
             .exclude(payment__refunds__isnull=False)   # never pay out a refunded booking
-            .select_related('doctor', 'hospital', 'payment')
+            .select_related('doctor', 'payment')
         )
 
         written = 0
@@ -57,13 +57,12 @@ class Command(BaseCommand):
             payment = getattr(booking, 'payment', None)
             doctor_fee = payment.doctor_fee if payment else 0
             # Legacy bookings with no fee split collected no doctor fee → nothing
-            # to pay and no commission owed. Mark settled so we don't re-scan them.
+            # to pay out. Mark settled so we don't re-scan them.
             if not payment or doctor_fee <= 0:
                 booking.doctor_payout_status = Booking.PAYOUT_PAID
                 booking.save(update_fields=['doctor_payout_status'])
                 continue
 
-            commission = compute_hospital_commission(booking.hospital.commission_rate)['total_commission']
             try:
                 with transaction.atomic():
                     # Re-fetch under a row lock and re-check the payout status:
@@ -79,10 +78,6 @@ class Command(BaseCommand):
                     DoctorLedger.objects.create(
                         doctor=booking.doctor, booking=locked,
                         amount=doctor_fee, reason=DoctorLedger.BOOKING_COMPLETED,
-                    )
-                    DoctorLedger.objects.create(
-                        doctor=booking.doctor, booking=locked,
-                        amount=-commission, reason=DoctorLedger.HOSPITAL_COMMISSION,
                     )
                     locked.doctor_payout_status = Booking.PAYOUT_PROCESSING
                     locked.save(update_fields=['doctor_payout_status'])

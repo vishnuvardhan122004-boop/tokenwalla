@@ -1,7 +1,6 @@
 from django.db import models
 from bookings.models import Booking
 from doctors.models import Doctor
-from hospitals.models import Hospital
 
 class Payment(models.Model):
     # Lifecycle of the patient checkout payment.
@@ -149,18 +148,16 @@ class PayoutBatch(models.Model):
 class DoctorLedger(models.Model):
     """Double-sided running ledger of what TokenWalla owes each doctor.
 
-    Positive rows are earnings (a doctor's share of a completed booking).
-    Negative rows are adjustments (the hospital commission deducted, or an
-    absence-refund clawback netted against a FUTURE payout — we never reverse a
-    payout that already went out). The daily task groups all unbatched rows per
-    doctor into one PayoutBatch.
+    Positive rows are earnings — the FULL online consultation fee for a
+    completed booking. TokenWalla deducts nothing; our revenue is the patient's
+    service fee. Negative rows are absence-refund clawbacks netted against a
+    FUTURE payout (we never reverse a payout that already went out). The daily
+    task groups all unbatched rows per doctor into one PayoutBatch.
     """
     BOOKING_COMPLETED   = 'BOOKING_COMPLETED'
-    HOSPITAL_COMMISSION = 'HOSPITAL_COMMISSION'
     ABSENCE_REFUND      = 'ABSENCE_REFUND'
     REASON_CHOICES = [
         (BOOKING_COMPLETED,   'Booking Completed'),
-        (HOSPITAL_COMMISSION, 'Hospital Commission'),
         (ABSENCE_REFUND,      'Absence Refund'),
     ]
 
@@ -180,33 +177,3 @@ class DoctorLedger(models.Model):
 
     def __str__(self):
         return f'{self.reason} ₹{self.amount} → doctor {self.doctor_id}'
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Hospital commission invoice (monthly, B2B GST)
-# ─────────────────────────────────────────────────────────────────────────────
-
-class HospitalCommissionInvoice(models.Model):
-    """A monthly B2B GST invoice to a hospital for TokenWalla's commission.
-
-    Aggregates the HOSPITAL_COMMISSION ledger deductions for the period, with
-    taxable value and GST shown separately so the hospital can claim ITC.
-    """
-    hospital         = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name='commission_invoices')
-    period_start     = models.DateField()
-    period_end       = models.DateField()
-    total_commission = models.DecimalField(max_digits=10, decimal_places=2)  # taxable value
-    gst_amount       = models.DecimalField(max_digits=10, decimal_places=2)
-    generated_at     = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['-generated_at']
-        # One invoice per hospital per period — makes the monthly task idempotent.
-        unique_together = [('hospital', 'period_start', 'period_end')]
-
-    @property
-    def grand_total(self):
-        return self.total_commission + self.gst_amount
-
-    def __str__(self):
-        return f'Invoice {self.hospital_id} {self.period_start}→{self.period_end}'
