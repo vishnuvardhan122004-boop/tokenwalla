@@ -94,15 +94,32 @@ def payout_target(doctor):
 
 
 def choose_mode(target):
-    """UPI if the payout target has a VPA, else IMPS (bank) as fallback.
+    """Which rail to pay `target` on — 'UPI', 'IMPS', or None.
 
-    `target` is a Doctor or a Hospital — see payout_target(). Returns None when
-    it has NEITHER a VPA nor a full bank account: there is nowhere to send the
-    money, so the caller holds the ledger instead of creating a batch that can
-    only fail."""
-    if (target.upi_vpa or '').strip():
+    `target` is a Doctor or a Hospital (see payout_target). An EXPLICIT
+    payment_method chosen in the dashboard wins: a stale UPI VPA left over from
+    before must not silently override a bank account someone deliberately
+    selected. With no usable explicit choice we take whichever rail is actually
+    on file, UPI first (instant and free).
+
+    Returns None when there is NEITHER a VPA nor a full bank account: nowhere to
+    send the money, so the caller holds the ledger instead of creating a batch
+    that can only fail.
+    """
+    method   = (target.payment_method or '').strip().upper()
+    has_vpa  = bool((target.upi_vpa or '').strip())
+    has_bank = bool((target.bank_account_number or '').strip()
+                    and (target.ifsc or '').strip())
+
+    if method == 'UPI' and has_vpa:
         return 'UPI'
-    if (target.bank_account_number or '').strip() and (target.ifsc or '').strip():
+    if method == 'BANK' and has_bank:
+        return 'IMPS'
+    # Blank method, or legacy data missing the rail that was chosen — fall back
+    # to what's actually usable rather than holding the money indefinitely.
+    if has_vpa:
+        return 'UPI'
+    if has_bank:
         return 'IMPS'
     return None
 

@@ -703,3 +703,41 @@ class SalariedDoctorPayoutTests(WorldMixin, TestCase):
         batch = PayoutBatch.objects.get()
         self.assertEqual(batch.total_amount, Decimal('200.00'))
         self.assertEqual(batch.payout_mode, PayoutBatch.IMPS)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Rail selection — the dashboard's explicit choice must win
+# ─────────────────────────────────────────────────────────────────────────────
+class ChooseModeTests(WorldMixin, TestCase):
+    def setUp(self):
+        self.make_actors(fee=200)          # bank account set, no VPA
+
+    def test_bank_only_uses_imps(self):
+        self.assertEqual(choose_mode(self.doctor), 'IMPS')
+
+    def test_vpa_wins_when_no_method_chosen(self):
+        self.doctor.upi_vpa = 'rao@upi'
+        self.assertEqual(choose_mode(self.doctor), 'UPI')
+
+    def test_explicit_bank_beats_a_stale_vpa(self):
+        # The hospital deliberately picked Bank. A UPI ID left over from an
+        # earlier setup must NOT silently redirect the money to a VPA.
+        self.doctor.upi_vpa = 'stale@upi'
+        self.doctor.payment_method = 'BANK'
+        self.assertEqual(choose_mode(self.doctor), 'IMPS')
+
+    def test_explicit_upi_is_honoured(self):
+        self.doctor.upi_vpa = 'rao@upi'
+        self.doctor.payment_method = 'UPI'
+        self.assertEqual(choose_mode(self.doctor), 'UPI')
+
+    def test_chosen_rail_with_no_details_falls_back_to_what_exists(self):
+        # Legacy row: method says UPI but no VPA was ever saved. Paying via the
+        # bank account on file beats holding the money forever.
+        self.doctor.payment_method = 'UPI'
+        self.assertEqual(choose_mode(self.doctor), 'IMPS')
+
+    def test_no_details_at_all_is_none(self):
+        self.doctor.bank_account_number = ''
+        self.doctor.ifsc = ''
+        self.assertIsNone(choose_mode(self.doctor))

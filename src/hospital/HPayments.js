@@ -9,6 +9,15 @@ const COLLECTION_MODES = [
   { value: "SERVICE_ONLY", label: "Service Fee Only",         hint: "Patient pays only the TokenWalla service fee online; the consultation fee is collected at the clinic." },
 ];
 
+// Where this doctor's consultation fees are settled. Stored on the backend as
+// the boolean Doctor.payout_to_hospital — "DOCTOR" is the default.
+const PAYOUT_DESTINATIONS = [
+  { value: "DOCTOR",   label: "Doctor's own account",
+    hint: "Fees are paid straight to this doctor's UPI ID or bank account, set below." },
+  { value: "HOSPITAL", label: "Hospital's account",
+    hint: "For salaried doctors — fees are settled to the hospital's own payout account instead. Earnings are still tracked per doctor." },
+];
+
 const PAYMENT_METHODS = [
   { value: "",     label: "— Not set —" },
   { value: "UPI",  label: "UPI" },
@@ -333,17 +342,17 @@ const HPayments = ({ hospital, showToast }) => {
                   Payout Account
                 </p>
 
-                {/* Salaried doctor → pay the hospital instead */}
-                <div className="form-check form-switch mb-3">
-                  <input className="form-check-input" type="checkbox" role="switch"
-                         id="payoutToHospital" checked={form.payout_to_hospital}
-                         onChange={(e) => setField("payout_to_hospital", e.target.checked)} />
-                  <label className="form-check-label small" htmlFor="payoutToHospital">
-                    Salaried doctor — pay into the hospital's account
-                  </label>
+                {/* Where the money goes */}
+                <div className="mb-3">
+                  <label className="form-label fw-semibold small mb-1">Pay Fees To</label>
+                  <select className="form-select"
+                          value={form.payout_to_hospital ? "HOSPITAL" : "DOCTOR"}
+                          onChange={(e) => setField("payout_to_hospital", e.target.value === "HOSPITAL")}>
+                    {PAYOUT_DESTINATIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+                  </select>
                   <div className="form-text">
-                    Their consultation fees are settled to the hospital, not to them
-                    personally. Earnings are still tracked per doctor.
+                    {PAYOUT_DESTINATIONS.find(
+                      (d) => d.value === (form.payout_to_hospital ? "HOSPITAL" : "DOCTOR"))?.hint}
                   </div>
                 </div>
 
