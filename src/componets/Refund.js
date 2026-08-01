@@ -19,7 +19,7 @@ const Refund = () => {
         },
         {
           title: 'Payment partner rights',
-          body: 'TokenWalla uses Razorpay as its payment partner. Razorpay and TokenWalla reserve the right to hold settlements or restrict account access in cases of compliance violations or chargebacks.',
+          body: 'TokenWalla uses Cashfree as its payment partner. Cashfree and TokenWalla reserve the right to hold settlements or restrict account access in cases of compliance violations or chargebacks.',
         },
         {
           title: 'Important notice',

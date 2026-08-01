@@ -373,6 +373,54 @@ class HospitalPhotoDeleteView(APIView):
         return Response({'message': 'Deleted.'})
 
 
+class HospitalPaymentDetailsView(APIView):
+    """
+    GET  /api/hospitals/<pk>/payment-details/ — read the hospital's payout account.
+    PUT  /api/hospitals/<pk>/payment-details/ — the owning hospital (or admin)
+         updates its UPI / bank / IFSC settlement details.
+
+    Sensitive bank/UPI details are served ONLY here (never on the public
+    hospital list/detail), gated to the owning hospital or an admin.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get(self, pk):
+        try:
+            return Hospital.objects.get(pk=pk)
+        except Hospital.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        from .serializers import HospitalPaymentDetailsSerializer
+        hospital = self._get(pk)
+        if hospital is None:
+            return Response({'message': 'Not found.'}, status=404)
+        if not _is_owner_or_admin(request.user, hospital):
+            return Response({'message': 'You can only view your own hospital.'}, status=403)
+        return Response(HospitalPaymentDetailsSerializer(hospital).data)
+
+    def put(self, request, pk):
+        from .serializers import HospitalPaymentDetailsSerializer
+        hospital = self._get(pk)
+        if hospital is None:
+            return Response({'message': 'Not found.'}, status=404)
+        if not _is_owner_or_admin(request.user, hospital):
+            return Response({'message': 'You can only edit your own hospital.'}, status=403)
+
+        serializer = HospitalPaymentDetailsSerializer(hospital, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(
+                {'message': 'Validation failed', 'errors': serializer.errors},
+                status=400,
+            )
+        serializer.save()
+        logger.info('Payout details updated for hospital %s', hospital.id)
+        return Response(serializer.data)
+
+    # Allow PATCH as an alias for PUT (both partial here).
+    patch = put
+
+
 class HospitalResetPasswordView(APIView):
     """Public — reset hospital password after OTP verification."""
     permission_classes = [AllowAny]

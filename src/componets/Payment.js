@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from 'react-router';
 import API from '../services/api';
 import { computeFeeBreakdown } from '../services/fees';
 
-const RAZORPAY_KEY_ID = process.env.REACT_APP_RAZORPAY_KEY_ID || 'rzp_live_SoKq7xISlxWRoY';
+// 'sandbox' | 'production' — must match the mode the backend created the order in.
+const CASHFREE_MODE = process.env.REACT_APP_CASHFREE_MODE || 'production';
 
 const inr = (n) => Number(n).toFixed(2);
 
@@ -45,10 +46,15 @@ export default function Payment() {
   }, [doctorId, navigate]);
 
   const loadScript = () => new Promise((resolve) => {
-    if (document.getElementById('razorpay-script')) return resolve(true);
+    if (window.Cashfree) return resolve(true);
+    const existing = document.getElementById('cashfree-sdk');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true), { once: true });
+      return;
+    }
     const s = document.createElement('script');
-    s.id = 'razorpay-script';
-    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.id = 'cashfree-sdk';
+    s.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
     s.onload  = () => resolve(true);
     s.onerror = () => resolve(false);
     document.body.appendChild(s);
@@ -63,64 +69,56 @@ export default function Payment() {
     setLoading(true);
     try {
       const ready = await loadScript();
-      if (!ready) { alert('Razorpay SDK failed. Check internet.'); setLoading(false); return; }
+      if (!ready || !window.Cashfree) { alert('Cashfree SDK failed. Check internet.'); setLoading(false); return; }
 
       // Server computes the full fee from the doctor's consultation fee — we
-      // send only doctorId, never an amount.
+      // send only doctorId, never an amount. It returns a Cashfree
+      // payment_session_id + our order_id.
       const { data: orderData } = await API.post('/payment/create-order/', {
         doctorId,
       });
 
-      const options = {
-        // Prefer the key returned by the backend so the checkout is always in
-        // the same mode (test/live) as the order. Falls back to env/hardcoded.
-        key:         orderData.key_id || RAZORPAY_KEY_ID,
-        amount:      orderData.amount,
-        currency:    orderData.currency,
-        name:        'TokenWalla',
-        description: `Appointment — ${doctorName}`,
-        order_id:    orderData.order_id,
-        prefill:     { name: user?.name || '', contact: user?.mobile || '' },
-        theme:       { color: '#185FA5' },
-        handler: async (response) => {
-          try {
-            const { data: verifyData } = await API.post('/payment/verify/', {
-              razorpay_order_id:   response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature:  response.razorpay_signature,
-              booking: { doctorId, doctorName, hospital, date, slot, queue_access, bookedForName, bookedForMobile },
-            });
-            if (verifyData.success) {
-              navigate('/booking-token', {
-                state: {
-                  token:        verifyData.token,
-                  doctorName,
-                  hospital,
-                  doctorMobile: location.state?.doctorMobile,
-                  date, slot,
-                  paymentId:    response.razorpay_payment_id,
-                  userName:     bookedForName || user?.name || user?.username,
-                  queue_access,
-                }
-              });
-            } else {
-              alert('Verification failed. Contact support.');
-              setLoading(false);
-            }
-          } catch {
-            alert('Verification error. Contact support.');
-            setLoading(false);
-          }
-        },
-        modal: { ondismiss: () => setLoading(false) },
-      };
-
-      const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', (r) => {
-        alert(`Payment failed: ${r.error.description}`);
-        setLoading(false);
+      const cashfree = window.Cashfree({ mode: CASHFREE_MODE });
+      const result = await cashfree.checkout({
+        paymentSessionId: orderData.payment_session_id,
+        redirectTarget:   '_modal',
       });
-      rzp.open();
+
+      // The user closed the modal or the payment failed inside it.
+      if (result?.error) {
+        alert(result.error.message || 'Payment was not completed.');
+        setLoading(false);
+        return;
+      }
+
+      // Confirm server-side (the source of truth — Cashfree has no client
+      // signature) and create the booking. We trust order_id, not the client.
+      try {
+        const { data: verifyData } = await API.post('/payment/verify/', {
+          order_id: orderData.order_id,
+          booking: { doctorId, doctorName, hospital, date, slot, queue_access, bookedForName, bookedForMobile },
+        });
+        if (verifyData.success) {
+          navigate('/booking-token', {
+            state: {
+              token:        verifyData.token,
+              doctorName,
+              hospital,
+              doctorMobile: location.state?.doctorMobile,
+              date, slot,
+              paymentId:    verifyData.booking?.paymentId,
+              userName:     bookedForName || user?.name || user?.username,
+              queue_access,
+            }
+          });
+        } else {
+          alert(verifyData.message || 'Verification failed. Contact support.');
+          setLoading(false);
+        }
+      } catch {
+        alert('Verification error. Contact support.');
+        setLoading(false);
+      }
     } catch (err) {
       alert(err?.response?.data?.message || 'Could not initiate payment.');
       setLoading(false);
@@ -422,7 +420,7 @@ export default function Payment() {
           <div className="pay-secure">
             <div className="pay-secure-icon">🔐</div>
             <div>
-              <div className="pay-secure-title">Secured by Razorpay</div>
+              <div className="pay-secure-title">Secured by Cashfree</div>
               <div className="pay-secure-desc">256-bit SSL encrypted · PCI DSS compliant</div>
               <div className="pay-methods">
                 {['UPI', 'Cards', 'Net Banking', 'Wallets'].map(m => (

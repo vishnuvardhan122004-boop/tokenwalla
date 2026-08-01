@@ -3,6 +3,7 @@ Tests for the fee-split / refund / payout / invoice / receipt feature.
 
 Run:  python manage.py test payments
 """
+import base64
 import hashlib
 import hmac
 import json
@@ -103,7 +104,10 @@ class BaseDataMixin:
             commission_rate=Decimal('20'))
         self.doctor = Doctor.objects.create(
             hospital=self.hospital, name='Dr Rao', specialization='GP',
-            mobile='9000000003', fee=int(doctor_fee), slots=['09:00 AM'])
+            mobile='9000000003', fee=int(doctor_fee), slots=['09:00 AM'],
+            # Payout details — a doctor with none is HELD, not batched (see
+            # PayoutPipelineTests.test_doctor_without_payout_details_is_held).
+            bank_account_number='00111122233', ifsc='HDFC0000001')
         self.booking = Booking.objects.create(
             user=self.user, doctor=self.doctor, hospital=self.hospital,
             date=timezone.localdate() + timedelta(days=2), slot='09:00 AM',
@@ -123,7 +127,7 @@ class BaseDataMixin:
 # Cancellation refund (DB)
 # ─────────────────────────────────────────────────────────────────────────────
 class CancellationRefundTests(BaseDataMixin, TestCase):
-    @mock.patch('payments.razorpay_utils.refund_payment', return_value={'id': 'rfnd_test'})
+    @mock.patch('payments.cashfree_utils.refund_payment', return_value={'id': 'rfnd_test'})
     def test_confirmed_cancel_creates_single_refund(self, _rp):
         self.make_world(status=Booking.CONFIRMED, token='TW-C1')
         refund, info = process_cancellation_refund(self.booking)
@@ -186,6 +190,24 @@ class PayoutPipelineTests(BaseDataMixin, TestCase):
         self.assertEqual(DoctorLedger.objects.count(), 2)
         self.assertEqual(PayoutBatch.objects.count(), 1)
 
+    def test_doctor_without_payout_details_is_held(self):
+        # No VPA and no bank account → nowhere to send the money. The ledger is
+        # written but left unbatched so nothing is lost; it pays out in a later
+        # cycle once the hospital adds the details.
+        self.make_world(status=Booking.COMPLETED, token='TW-P4')
+        self.doctor.bank_account_number = ''
+        self.doctor.ifsc = ''
+        self.doctor.save(update_fields=['bank_account_number', 'ifsc'])
+        call_command('run_daily_payouts')
+        self.assertEqual(PayoutBatch.objects.count(), 0)
+        self.assertEqual(DoctorLedger.objects.filter(payout_batch__isnull=True).count(), 2)
+
+        # Details added → the held earnings go out on the next run.
+        self.doctor.upi_vpa = 'rao@upi'
+        self.doctor.save(update_fields=['upi_vpa'])
+        call_command('run_daily_payouts')
+        self.assertEqual(PayoutBatch.objects.get().total_amount, Decimal('176.40'))
+
     def test_uses_upi_when_vpa_present(self):
         self.make_world(status=Booking.COMPLETED, token='TW-P3')
         self.doctor.upi_vpa = 'rao@upi'
@@ -198,14 +220,18 @@ class PayoutPipelineTests(BaseDataMixin, TestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 # Payout webhook (idempotent settlement)
 # ─────────────────────────────────────────────────────────────────────────────
-@override_settings(RAZORPAY_WEBHOOK_SECRET='whsec_test')
+@override_settings(CASHFREE_PAYOUT_CLIENT_SECRET='whsec_test')
 class PayoutWebhookTests(BaseDataMixin, TestCase):
     def _post(self, payload):
         body = json.dumps(payload)
-        sig = hmac.new(b'whsec_test', body.encode(), hashlib.sha256).hexdigest()
+        ts   = '1700000000'
+        sig  = base64.b64encode(
+            hmac.new(b'whsec_test', f'{ts}{body}'.encode(), hashlib.sha256).digest()
+        ).decode()
         return self.client.post('/api/payment/webhook/', data=body,
                                 content_type='application/json',
-                                HTTP_X_RAZORPAY_SIGNATURE=sig)
+                                HTTP_X_WEBHOOK_SIGNATURE=sig,
+                                HTTP_X_WEBHOOK_TIMESTAMP=ts)
 
     def setUp(self):
         self.client = APIClient()
@@ -214,15 +240,16 @@ class PayoutWebhookTests(BaseDataMixin, TestCase):
         self.batch = PayoutBatch.objects.get(doctor=self.doctor)
 
     def _processed_payload(self):
-        return {'event': 'payout.processed',
-                'payload': {'payout': {'entity': {
-                    'id': 'pout_x', 'reference_id': self.batch.idempotency_key}}}}
+        return {'type': 'TRANSFER_SUCCESS',
+                'data': {'cf_transfer_id': 'cft_x',
+                         'transfer_id': self.batch.idempotency_key}}
 
     def test_bad_signature_rejected(self):
         body = json.dumps(self._processed_payload())
         r = self.client.post('/api/payment/webhook/', data=body,
                              content_type='application/json',
-                             HTTP_X_RAZORPAY_SIGNATURE='deadbeef')
+                             HTTP_X_WEBHOOK_SIGNATURE='deadbeef',
+                             HTTP_X_WEBHOOK_TIMESTAMP='1700000000')
         self.assertEqual(r.status_code, 400)
 
     def test_processed_is_idempotent(self):
@@ -239,9 +266,8 @@ class PayoutWebhookTests(BaseDataMixin, TestCase):
         self.assertEqual(r2.json()['status'], 'already_processed')
 
     def test_failed_releases_ledger_for_retry(self):
-        payload = {'event': 'payout.failed',
-                   'payload': {'payout': {'entity': {
-                       'reference_id': self.batch.idempotency_key}}}}
+        payload = {'type': 'TRANSFER_FAILED',
+                   'data': {'transfer_id': self.batch.idempotency_key}}
         self._post(payload)
         self.batch.refresh_from_db()
         self.assertEqual(self.batch.status, PayoutBatch.FAILED)

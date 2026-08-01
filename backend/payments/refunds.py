@@ -7,7 +7,7 @@ and the platform's share, and the doctor-absence adjustment.
 
 Hard rules (see the feature spec):
   * Refunds are only permitted BEFORE a booking reaches COMPLETED.
-  * Only (doctor_fee + platform_fee) is refundable — Razorpay does NOT return
+  * Only (doctor_fee + platform_fee) is refundable — Cashfree does NOT return
     the gateway fee or GST to us, so those are never refunded.
   * A refund needed AFTER completion (doctor no-show recorded late) is NOT a
     clawback of an already-sent payout — it's a negative ledger adjustment
@@ -78,18 +78,18 @@ def compute_refund_split(payment, refund_pct) -> dict:
 
 
 def process_cancellation_refund(booking):
-    """Compute, issue (via Razorpay) and record a cancellation refund.
+    """Compute, issue (via Cashfree) and record a cancellation refund.
 
     Idempotent: a booking's Payment carries at most one cancellation Refund.
     Returns (refund_or_None, info). Raises RefundNotAllowed if the booking is
-    already terminal. Raises on a Razorpay gateway error (caller should abort
+    already terminal. Raises on a Cashfree gateway error (caller should abort
     the cancellation so it can be retried rather than cancel without refunding).
     """
     # Local imports avoid a circular import (models import nothing from here).
+    from django.db import transaction
     from bookings.models import Booking
     from payments.models import Payment, Refund
-    from payments.razorpay_utils import refund_payment
-    from payments.fees import to_paise
+    from payments.cashfree_utils import refund_payment
 
     if booking.status not in Booking.REFUNDABLE_STATUSES:
         raise RefundNotAllowed(
@@ -100,32 +100,45 @@ def process_cancellation_refund(booking):
     if payment is None or payment.status != Payment.PAID:
         return None, {'refunded': False, 'reason': 'no_paid_payment'}
 
-    # Idempotency — never refund the same booking twice.
-    existing = payment.refunds.first()
-    if existing is not None:
-        return existing, {'refunded': True, 'reason': 'already_refunded',
-                          'amount': str(existing.refund_amount)}
+    with transaction.atomic():
+        # Lock the payment row and re-check for an existing refund UNDER the lock.
+        # Without this, two concurrent cancels for the same booking could both
+        # pass the "already refunded?" check and each fire a Cashfree refund —
+        # paying the patient twice. The loser blocks here until the winner
+        # commits, then sees the refund and returns it. The gateway call is held
+        # inside the lock deliberately: cancellations are rare, and correctness
+        # (never double-refund) outweighs the brief lock.
+        payment = Payment.objects.select_for_update().get(pk=payment.pk)
 
-    pct   = get_refund_percentage(booking)
-    split = compute_refund_split(payment, pct)
-    pool  = split['refund_pool']
+        # Idempotency — never refund the same booking twice.
+        existing = payment.refunds.first()
+        if existing is not None:
+            return existing, {'refunded': True, 'reason': 'already_refunded',
+                              'amount': str(existing.refund_amount)}
 
-    razorpay_refund_id = ''
-    if pool > 0:
-        resp = refund_payment(
-            payment.payment_id,
-            to_paise(pool),
-            notes={'booking_id': str(booking.id), 'reason': 'cancellation'},
+        pct   = get_refund_percentage(booking)
+        split = compute_refund_split(payment, pct)
+        pool  = split['refund_pool']
+
+        razorpay_refund_id = ''
+        if pool > 0:
+            # Cashfree refunds are keyed by ORDER id, take a rupee amount, and
+            # need a unique refund_id (deterministic per payment → retry-safe).
+            resp = refund_payment(
+                order_id=payment.order_id,
+                amount_rupees=pool,
+                refund_id=f'rfnd_{payment.id}',
+                note='TokenWalla cancellation refund',
+            )
+            razorpay_refund_id = (resp or {}).get('id', '') or ''
+
+        refund = Refund.objects.create(
+            payment            = payment,
+            refund_percentage  = pct,
+            doctor_loss        = split['doctor_loss'],
+            platform_loss      = split['platform_loss'],
+            razorpay_refund_id = razorpay_refund_id,
         )
-        razorpay_refund_id = (resp or {}).get('id', '') or ''
-
-    refund = Refund.objects.create(
-        payment            = payment,
-        refund_percentage  = pct,
-        doctor_loss        = split['doctor_loss'],
-        platform_loss      = split['platform_loss'],
-        razorpay_refund_id = razorpay_refund_id,
-    )
     logger.info('Refund %s for booking %s: %s%% pool ₹%s (doctor ₹%s / platform ₹%s) rzp=%s',
                 refund.id, booking.id, pct, pool, split['doctor_loss'],
                 split['platform_loss'], razorpay_refund_id or '—')
@@ -139,6 +152,7 @@ def record_absence_refund(booking):
 
     Idempotent per booking. Returns (ledger_entry_or_None, info).
     """
+    from django.db import transaction
     from bookings.models import Booking
     from payments.models import DoctorLedger, Payment
     from payments.fees import compute_doctor_payout
@@ -148,23 +162,29 @@ def record_absence_refund(booking):
             f'Absence refund only applies to COMPLETED bookings (booking {booking.id} is {booking.status}).'
         )
 
-    # One absence adjustment per booking.
-    existing = DoctorLedger.objects.filter(
-        booking=booking, reason=DoctorLedger.ABSENCE_REFUND
-    ).first()
-    if existing is not None:
-        return existing, {'adjusted': True, 'reason': 'already_recorded'}
+    with transaction.atomic():
+        # Lock the booking so a double-click / concurrent retry can't write two
+        # negative adjustments (a double clawback). The loser re-checks under the
+        # lock and returns the existing entry.
+        Booking.objects.select_for_update().filter(pk=booking.pk).first()
 
-    payment = getattr(booking, 'payment', None)
-    doctor_fee = payment.doctor_fee if payment else Decimal('0.00')
-    payout = compute_doctor_payout(doctor_fee, booking.hospital.commission_rate)
+        # One absence adjustment per booking.
+        existing = DoctorLedger.objects.filter(
+            booking=booking, reason=DoctorLedger.ABSENCE_REFUND
+        ).first()
+        if existing is not None:
+            return existing, {'adjusted': True, 'reason': 'already_recorded'}
 
-    entry = DoctorLedger.objects.create(
-        doctor  = booking.doctor,
-        booking = booking,
-        amount  = _q(-payout),   # negative — deducted from the next payout batch
-        reason  = DoctorLedger.ABSENCE_REFUND,
-    )
+        payment = getattr(booking, 'payment', None)
+        doctor_fee = payment.doctor_fee if payment else Decimal('0.00')
+        payout = compute_doctor_payout(doctor_fee, booking.hospital.commission_rate)
+
+        entry = DoctorLedger.objects.create(
+            doctor  = booking.doctor,
+            booking = booking,
+            amount  = _q(-payout),   # negative — deducted from the next payout batch
+            reason  = DoctorLedger.ABSENCE_REFUND,
+        )
     logger.info('Absence refund ledger %s: doctor %s −₹%s (booking %s)',
                 entry.id, booking.doctor_id, payout, booking.id)
     return entry, {'adjusted': True, 'amount': str(payout)}

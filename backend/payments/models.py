@@ -5,13 +5,13 @@ from hospitals.models import Hospital
 
 class Payment(models.Model):
     # Lifecycle of the patient checkout payment.
-    CREATED = 'CREATED'   # Razorpay order made, not yet paid/verified
+    CREATED = 'CREATED'   # Cashfree order made, not yet paid/verified
     PAID    = 'PAID'      # signature verified, money captured
     FAILED  = 'FAILED'
     STATUS_CHOICES = [(CREATED, 'Created'), (PAID, 'Paid'), (FAILED, 'Failed')]
 
     booking    = models.OneToOneField(Booking, on_delete=models.CASCADE, related_name='payment')
-    # order_id / payment_id are the Razorpay order & payment identifiers.
+    # order_id / payment_id are the Cashfree order & payment identifiers.
     order_id   = models.CharField(max_length=100)
     payment_id = models.CharField(max_length=100, blank=True)
     signature  = models.CharField(max_length=300, blank=True)
@@ -23,12 +23,33 @@ class Payment(models.Model):
     # gst_amount = 18% × (platform_fee + gateway_fee); doctor_fee is GST-exempt.
     # final_amount = doctor_fee + platform_fee + gateway_fee + gst_amount.
     doctor_fee   = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # Consultation fee collected OFFLINE at the hospital (Service-Fee-Only mode).
+    # In that mode the patient pays only the service fee online, so `doctor_fee`
+    # (the online-captured amount) is 0 and the consultation fee is recorded here
+    # instead. FULL-mode bookings leave this 0. Never routed through Cashfree.
+    offline_doctor_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     platform_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     gateway_fee  = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     gst_amount   = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     final_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     status     = models.CharField(max_length=20, choices=STATUS_CHOICES, default=CREATED)
     created    = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            # A Cashfree payment_id settles exactly one booking. This is the
+            # DB-level idempotency guard for the accept-payment API: two
+            # concurrent /verify/ calls for the same payment can't both create a
+            # Payment (and therefore a Booking) — the second violates this and is
+            # rolled back, then served the already-created booking. Partial
+            # (non-blank) so legacy/placeholder rows with an empty payment_id
+            # don't collide. Mirrors ReschedulePayment.payment_id's unique guard.
+            models.UniqueConstraint(
+                fields=['payment_id'],
+                condition=~models.Q(payment_id=''),
+                name='uniq_payment_payment_id_nonblank',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.payment_id} — ₹{self.final_amount} [{self.status}]"
@@ -68,7 +89,7 @@ class Refund(models.Model):
 
     Only issued while the booking is still refundable (before COMPLETED). The
     refunded pool covers (doctor_fee + platform_fee) proportionally — gateway
-    fee and GST are NOT returned by Razorpay, so they're never refunded. The
+    fee and GST are NOT returned by Cashfree, so they're never refunded. The
     split is recorded so each party's share of the loss is auditable.
     """
     payment            = models.ForeignKey(Payment, on_delete=models.CASCADE, related_name='refunds')
@@ -95,7 +116,7 @@ class Refund(models.Model):
 
 class PayoutBatch(models.Model):
     """One automated payout to a doctor, aggregating that doctor's unbatched
-    ledger entries for a cycle into a single RazorpayX payout."""
+    ledger entries for a cycle into a single Cashfree Payouts payout."""
     QUEUED    = 'QUEUED'
     PROCESSED = 'PROCESSED'
     FAILED    = 'FAILED'

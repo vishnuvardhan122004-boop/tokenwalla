@@ -435,7 +435,8 @@ API.get('/doctors/').then(({ data }) => {
         .price-name { font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.7); margin-bottom: 12px; }
         .price-amount { font-family: var(--font-display); font-size: 4rem; font-weight: 800; line-height: 1; margin-bottom: 6px; }
         .price-amount sup { font-size: 1.5rem; vertical-align: super; font-weight: 600; }
-        .price-sub { font-size: 13px; color: rgba(255,255,255,0.55); margin-bottom: 28px; }
+        .price-sub { font-size: 13px; color: rgba(255,255,255,0.55); margin-bottom: 4px; }
+        .price-note { font-size: 12px; color: rgba(255,255,255,0.4); margin-bottom: 28px; }
         .price-features { list-style: none; padding: 0; margin: 0 0 32px; display: flex; flex-direction: column; gap: 11px; }
         .price-features li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: rgba(255,255,255,0.85); }
         .price-check { color: #9FE1CB; font-size: 16px; }
@@ -712,8 +713,9 @@ API.get('/doctors/').then(({ data }) => {
             <div className="price-card">
               <div className="price-badge">{t('hero.pricing.badge')}</div>
               <div className="price-name">{t('hero.pricing.planName')}</div>
-              <div className="price-amount"><sup>₹</sup>15</div>
+              <div className="price-amount"><sup>₹</sup>20</div>
               <div className="price-sub">{t('hero.pricing.planSub')}</div>
+              <div className="price-note">{t('hero.pricing.note')}</div>
               <ul className="price-features">
                 {t('hero.pricing.features', { returnObjects: true }).map(f => (
                   <li key={f}><span className="price-check">✓</span> {f}</li>

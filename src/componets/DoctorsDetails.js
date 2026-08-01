@@ -48,10 +48,6 @@ function isOpenNow(open, close, now = new Date()) {
   return o <= c ? (cur >= o && cur < c) : (cur >= o || cur < c);
 }
 
-const PLANS = [
-  { key: 'queue', name: 'Queue View', desc: 'Token + live queue position tracking', price: 15, fee: 1500, popular: true },
-];
-
 const socialBtn = {
   display: 'inline-flex', alignItems: 'center', gap: 6,
   background: '#EAF3FF', border: '1px solid #cfe2f3', color: '#185FA5',
@@ -93,8 +89,8 @@ export default function DoctorDetails() {
   const [selectedDate, setSelectedDate] = useState(DAYS[0].full);
   const [selectedSlot, setSelectedSlot] = useState('');
   // Single implicit plan now (the old ₹15 "Queue View" chooser was removed);
-  // kept as a constant so the booking payload still carries queue_access.
-  const selectedPlan = 'queue';
+  // every booking gets queue access. The full fee (doctor fee + platform +
+  // gateway + GST) is computed server-side at checkout from the doctor's fee.
   const [shared,       setShared]       = useState(false);   // "Copied!" feedback
   const [shareOpen,    setShareOpen]    = useState(false);   // share menu open
 
@@ -165,7 +161,6 @@ export default function DoctorDetails() {
       setSelectedSlot('');
       return;
     }
-    const plan = PLANS.find(p => p.key === selectedPlan);
     navigate('/payment', {
       state: {
         doctorId:     doctor.id,
@@ -177,9 +172,7 @@ export default function DoctorDetails() {
         // Consultation fee (₹) — the checkout adds platform + gateway + GST on
         // top of this and the SERVER recomputes the authoritative total.
         doctorFee:    doctor.fee,
-        fee:          plan.price,
-        amount:       plan.fee,
-        queue_access: selectedPlan === 'queue',
+        queue_access: true,
       }
     });
   };
@@ -1252,7 +1245,7 @@ export default function DoctorDetails() {
 
                   <p className="dd-book-note">
                     + platform fee &amp; GST shown at checkout<br />
-                    Secured by Razorpay · UPI · Cards · Wallets<br />
+                    Secured by Cashfree · UPI · Cards · Wallets<br />
                     Refundable if cancelled 2hrs before slot
                   </p>
                 </div>

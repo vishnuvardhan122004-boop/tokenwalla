@@ -3,14 +3,14 @@ Regression tests for the security fixes applied in the security review.
 
 Covers:
   1. Doctor write endpoints require authenticated hospital/admin (was AllowAny).
-  2. Queue-access upgrade requires a valid Razorpay signature (was a free unlock).
+  2. Queue-access upgrade requires a server-confirmed Cashfree payment (was a
+     free unlock).
   3. OTP is 6-digit CSPRNG and locks out after a capped number of wrong guesses.
 
 Run:  python manage.py test tokenwalla.tests_security
 """
 import datetime
-import hashlib
-import hmac
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
@@ -24,8 +24,6 @@ from doctors.models import Doctor
 from bookings.models import Booking
 
 User = get_user_model()
-
-TEST_SECRET = 'test_razorpay_secret'
 
 # The project's default cache is a DB table (tw_cache_table) that isn't created
 # by migrations, so tests use an in-memory cache. Global DRF throttles read the
@@ -56,12 +54,6 @@ REST_FRAMEWORK_TEST = {
 def _auth(client, user):
     token = str(RefreshToken.for_user(user).access_token)
     client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
-
-
-def _sign(order_id, payment_id, secret=TEST_SECRET):
-    return hmac.new(
-        secret.encode(), f'{order_id}|{payment_id}'.encode(), hashlib.sha256
-    ).hexdigest()
 
 
 @override_settings(CACHES=LOCMEM_CACHE)
@@ -155,9 +147,9 @@ class DoctorAccessControlTests(TestCase):
         self.assertEqual(res.status_code, 200)
 
 
-@override_settings(RAZORPAY_KEY_SECRET=TEST_SECRET, RAZORPAY_KEY_ID='rzp_test_x', CACHES=LOCMEM_CACHE)
+@override_settings(CACHES=LOCMEM_CACHE)
 class QueueUpgradeTests(TestCase):
-    """Vuln 2: queue upgrade must verify the Razorpay signature + amount."""
+    """Vuln 2: queue upgrade must confirm the payment with Cashfree + amount."""
 
     def setUp(self):
         self.client = APIClient()
@@ -177,70 +169,57 @@ class QueueUpgradeTests(TestCase):
     def _upgrade(self, payload):
         return self.client.patch(f'/api/bookings/upgrade/{self.booking.id}/', payload, format='json')
 
-    def test_forged_signature_rejected(self):
-        res = self._upgrade({
-            'razorpay_order_id': 'order_1',
-            'razorpay_payment_id': 'pay_1',
-            'razorpay_signature': 'deadbeef',
-        })
+    def test_unpaid_order_rejected(self):
+        # Cashfree says the order is NOT paid → must not unlock.
+        with patch('bookings.views.confirm_order_paid',
+                   return_value=(False, '', Decimal('0'), {})):
+            res = self._upgrade({'order_id': 'order_1'})
         self.assertEqual(res.status_code, 400)
         self.booking.refresh_from_db()
         self.assertFalse(self.booking.queue_access)
 
-    def test_missing_fields_rejected(self):
-        res = self._upgrade({'razorpay_payment_id': 'pay_1'})
+    def test_missing_order_id_rejected(self):
+        res = self._upgrade({})
         self.assertEqual(res.status_code, 400)
         self.booking.refresh_from_db()
         self.assertFalse(self.booking.queue_access)
 
     def test_legacy_plain_payment_id_no_longer_unlocks(self):
-        # The old exploit: a bare, unverified payment_id string.
+        # The old exploit: a bare, unverified payment_id string (no order_id).
         res = self._upgrade({'payment_id': 'anything'})
         self.assertEqual(res.status_code, 400)
         self.booking.refresh_from_db()
         self.assertFalse(self.booking.queue_access)
 
-    # order.fetch is a live network call, so mock it — the amount is what the
-    # server trusts, and these tests exercise the actual security fix (a valid
-    # signature + correct ₹15 amount unlocks; a wrong amount / reused id does not).
-    @patch('bookings.views.fetch_order_amount_paise', return_value=1500)
-    def test_valid_payment_unlocks_queue_access(self, _mock_fetch):
-        order_id, payment_id = 'order_ok', 'pay_ok'
-        res = self._upgrade({
-            'razorpay_order_id':   order_id,
-            'razorpay_payment_id': payment_id,
-            'razorpay_signature':  _sign(order_id, payment_id),
-        })
+    # confirm_order_paid is a live network call, so mock it — the returned amount
+    # is what the server trusts. These exercise the actual security fix: a PAID
+    # order for the correct ₹15 unlocks; a wrong amount / reused id does not.
+    @patch('bookings.views.confirm_order_paid',
+           return_value=(True, 'pay_ok', Decimal('15'), {}))
+    def test_valid_payment_unlocks_queue_access(self, _mock):
+        res = self._upgrade({'order_id': 'order_ok'})
         self.assertEqual(res.status_code, 200)
         self.booking.refresh_from_db()
         self.assertTrue(self.booking.queue_access)
-        self.assertEqual(self.booking.queue_payment_id, payment_id)
+        self.assertEqual(self.booking.queue_payment_id, 'pay_ok')
 
-    @patch('bookings.views.fetch_order_amount_paise', return_value=500)
-    def test_wrong_amount_rejected(self, _mock_fetch):
-        order_id, payment_id = 'order_low', 'pay_low'
-        res = self._upgrade({
-            'razorpay_order_id':   order_id,
-            'razorpay_payment_id': payment_id,
-            'razorpay_signature':  _sign(order_id, payment_id),
-        })
+    @patch('bookings.views.confirm_order_paid',
+           return_value=(True, 'pay_low', Decimal('5'), {}))
+    def test_wrong_amount_rejected(self, _mock):
+        res = self._upgrade({'order_id': 'order_low'})
         self.assertEqual(res.status_code, 400)
         self.booking.refresh_from_db()
         self.assertFalse(self.booking.queue_access)
 
-    @patch('bookings.views.fetch_order_amount_paise', return_value=1500)
-    def test_reused_payment_id_rejected(self, _mock_fetch):
+    @patch('bookings.views.confirm_order_paid',
+           return_value=(True, 'pay_dup', Decimal('15'), {}))
+    def test_reused_payment_id_rejected(self, _mock):
         # A different booking already consumed this queue-upgrade payment.
         Booking.objects.create(
             user=self.patient, doctor=self.doctor, hospital=self.hospital,
             date=datetime.date.today(), slot='09:00 AM', token='TW-TEST-2',
             amount=15, queue_access=True, queue_payment_id='pay_dup')
-        order_id, payment_id = 'order_dup', 'pay_dup'
-        res = self._upgrade({
-            'razorpay_order_id':   order_id,
-            'razorpay_payment_id': payment_id,
-            'razorpay_signature':  _sign(order_id, payment_id),
-        })
+        res = self._upgrade({'order_id': 'order_dup'})
         self.assertEqual(res.status_code, 409)
         self.booking.refresh_from_db()
         self.assertFalse(self.booking.queue_access)
@@ -266,7 +245,7 @@ class BookForOtherTests(TestCase):
         _auth(self.client, self.patient)
 
     def _verify(self, booking_extra):
-        """POST a new-booking verify with the signature + order fetch mocked."""
+        """POST a new-booking verify with the Cashfree confirmation mocked."""
         booking = {
             'doctorId': self.doctor.id,
             'doctorName': self.doctor.name,
@@ -277,16 +256,13 @@ class BookForOtherTests(TestCase):
             'queue_access': True,
         }
         booking.update(booking_extra)
-        # verify_signature + the live order.fetch are both mocked: the ₹15
-        # queue_view amount (1500 paise) is what the server trusts.
-        with patch('payments.views.verify_signature', return_value=True), \
-             patch('payments.views.get_client') as mock_client, \
+        # confirm_order_paid is mocked: a PAID order for ₹15 with no 'booking'
+        # tag resolves to the legacy flat queue_view plan the server trusts.
+        with patch('payments.views.confirm_order_paid',
+                   return_value=(True, 'pay_x', Decimal('15'), {})), \
              patch('payments.views._dispatch_booking_notifications'):
-            mock_client.return_value.order.fetch.return_value = {'amount': 1500}
             return self.client.post('/api/payment/verify/', {
-                'razorpay_order_id':   'order_x',
-                'razorpay_payment_id': 'pay_x',
-                'razorpay_signature':  'sig_x',
+                'order_id': 'order_x',
                 'booking': booking,
             }, format='json')
 

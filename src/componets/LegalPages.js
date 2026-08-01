@@ -69,11 +69,11 @@ export const Terms = () => (
       },
       {
         title: '5. Payments',
-        content: <p>All payments on TokenWalla are processed via Razorpay and must comply with Razorpay's terms. Orders are only confirmed after successful payment. TokenWalla does not store card details.</p>,
+        content: <p>All payments on TokenWalla are processed via Cashfree and must comply with Cashfree's terms. Orders are only confirmed after successful payment. TokenWalla does not store card details.</p>,
       },
       {
         title: '6. KYC & verification',
-        content: <p>By using TokenWalla, you consent to provide accurate identity documents as required by TokenWalla, Razorpay, or regulatory authorities. Non-compliance may result in service suspension. TokenWalla and its payment partners reserve the right to request additional documentation to comply with RBI guidelines and anti-money laundering regulations.</p>,
+        content: <p>By using TokenWalla, you consent to provide accurate identity documents as required by TokenWalla, Cashfree, or regulatory authorities. Non-compliance may result in service suspension. TokenWalla and its payment partners reserve the right to request additional documentation to comply with RBI guidelines and anti-money laundering regulations.</p>,
       },
       {
         title: '7. Prohibited conduct',
@@ -108,7 +108,7 @@ export const Privacy = () => (
           <ul>
             <li>Name, mobile number (required for registration)</li>
             <li>Booking history and appointment details</li>
-            <li>Payment transaction IDs (processed via Razorpay — we never store card data)</li>
+            <li>Payment transaction IDs (processed via Cashfree — we never store card data)</li>
             <li>Device and browser information for analytics and security</li>
           </ul>
         ),
@@ -126,11 +126,11 @@ export const Privacy = () => (
       },
       {
         title: 'Sharing of information',
-        content: <p>We do not sell your personal information. We share data only as strictly necessary to fulfill your booking (e.g., with the hospital you booked with, and with Razorpay for payment processing).</p>,
+        content: <p>We do not sell your personal information. We share data only as strictly necessary to fulfill your booking (e.g., with the hospital you booked with, and with Cashfree for payment processing).</p>,
       },
       {
         title: 'Data security & PCI DSS compliance',
-        content: <p>TokenWalla uses SSL/TLS encryption for all data transmission. All payment processing is handled by Razorpay, a PCI DSS Level 1 certified gateway. We do not store, process, or transmit sensitive card information on our servers. We conduct regular security audits to maintain compliance with industry standards.</p>,
+        content: <p>TokenWalla uses SSL/TLS encryption for all data transmission. All payment processing is handled by Cashfree, a PCI DSS Level 1 certified gateway. We do not store, process, or transmit sensitive card information on our servers. We conduct regular security audits to maintain compliance with industry standards.</p>,
       },
       {
         title: 'Cookies',
@@ -142,7 +142,7 @@ export const Privacy = () => (
       },
       {
         title: 'Regulatory compliance & monitoring',
-        content: <p>By using TokenWalla, you consent to transaction monitoring and periodic audits conducted by TokenWalla, Razorpay, or authorized regulatory bodies to prevent fraud and ensure compliance with Indian laws and AML requirements. Suspicious activities may be reported to relevant authorities as required by law.</p>,
+        content: <p>By using TokenWalla, you consent to transaction monitoring and periodic audits conducted by TokenWalla, Cashfree, or authorized regulatory bodies to prevent fraud and ensure compliance with Indian laws and AML requirements. Suspicious activities may be reported to relevant authorities as required by law.</p>,
       },
     ]}
   />
@@ -161,7 +161,7 @@ export const Refund = () => (
               <li>Refunds are processed within 5–7 business days to your original payment method</li>
               <li>Emergency cancellations due to documented medical reasons may be considered on a case-by-case basis</li>
               <li>No-shows without prior cancellation are non-refundable</li>
-              <li>Processing fees may be deducted from refund amounts as per Razorpay's policy</li>
+              <li>Processing fees may be deducted from refund amounts as per Cashfree's policy</li>
             </ul>
           </>
         ),
@@ -178,7 +178,7 @@ export const Refund = () => (
       },
       {
         title: 'Payment partner rights',
-        content: <p>TokenWalla uses Razorpay as its payment partner. You acknowledge that Razorpay and TokenWalla reserve the right to suspend services, hold settlements, or restrict account access if there are compliance violations, suspicious activities, chargebacks, or requests from regulatory authorities.</p>,
+        content: <p>TokenWalla uses Cashfree as its payment partner. You acknowledge that Cashfree and TokenWalla reserve the right to suspend services, hold settlements, or restrict account access if there are compliance violations, suspicious activities, chargebacks, or requests from regulatory authorities.</p>,
       },
       {
         title: 'Business information',

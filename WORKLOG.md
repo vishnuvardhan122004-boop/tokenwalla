@@ -3,8 +3,8 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `main`
-- **Latest commit at last update:** `7bd643f`
+- **Branch:** `feature/fee-splitting-refunds-payouts` (web/backend) · `main` (mobile app repo)
+- **Latest commit at last update:** `7b2a01c` (web/backend); mobile changes staged, uncommitted
 - **Last updated:** 2026-07-28
 
 ### How to update this log
@@ -13,6 +13,918 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-01 (auto) — Session update @ 11:22
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 51 changed files).
+
+```
+M .gitignore
+ M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? CLAUDE.md
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-08-01 (auto) — Session update @ 11:21
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 51 changed files).
+
+```
+M .gitignore
+ M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? CLAUDE.md
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-08-01 (auto) — Session update @ 01:46
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 51 changed files).
+
+```
+M .gitignore
+ M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? CLAUDE.md
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-08-01 (auto) — Session update @ 01:43
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 51 changed files).
+
+```
+M .gitignore
+ M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? CLAUDE.md
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-08-01 (auto) — Session update @ 01:42
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 51 changed files).
+
+```
+M .gitignore
+ M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? CLAUDE.md
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-08-01 (auto) — Session update @ 01:40
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 51 changed files).
+
+```
+M .gitignore
+ M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? CLAUDE.md
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-08-01 (auto) — Session update @ 01:40
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 51 changed files).
+
+```
+M .gitignore
+ M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? CLAUDE.md
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-08-01 (auto) — Session update @ 01:36
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 51 changed files).
+
+```
+M .gitignore
+ M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? CLAUDE.md
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-08-01 (auto) — Session update @ 01:35
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 51 changed files).
+
+```
+M .gitignore
+ M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? CLAUDE.md
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-08-01 (auto) — Session update @ 01:34
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 51 changed files).
+
+```
+M .gitignore
+ M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? CLAUDE.md
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-08-01 (auto) — Session update @ 01:32
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 51 changed files).
+
+```
+M .gitignore
+ M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? CLAUDE.md
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-08-01 (auto) — Session update @ 01:30
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 51 changed files).
+
+```
+M .gitignore
+ M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? CLAUDE.md
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-08-01 (auto) — Session update @ 01:27
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 49 changed files).
+
+```
+M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-08-01 (auto) — Session update @ 01:21
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 49 changed files).
+
+```
+M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/serializers.py
+ M backend/hospitals/urls.py
+ M backend/hospitals/views.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ D backend/payments/razorpay_utils.py
+ D backend/payments/razorpayx_utils.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M package.json
+ M src/ADMIN/Settings.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/Hero.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/hospital/Hdashboard.js
+ M src/hospital/Hprofile.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? backend/doctors/migrations/0008_doctor_account_holder_name_doctor_bank_name_and_more.py
+?? backend/doctors/tests_payment_details.py
+?? backend/hospitals/migrations/0009_hospital_account_holder_name_and_more.py
+?? backend/hospitals/tests_payment_details.py
+?? backend/payments/cashfree_payouts_utils.py
+?? backend/payments/cashfree_utils.py
+?? backend/payments/migrations/0007_payment_uniq_payment_payment_id_nonblank.py
+?? backend/payments/migrations/0008_payment_offline_doctor_fee.py
+?? backend/payments/tests_integration.py
+?? src/hospital/HPayments.js
+```
+
+---
+
+
+## 2026-07-28 (session 2) — Website copy fix + mobile app: statuses & full-fee checkout 🆕
+
+Cleared the two client-side follow-ups from the fee-splitting session so the
+**website** and **mobile app** both match the new full-fee backend. Also
+confirmed WhatsApp is fully live and flagged RazorpayX as the one remaining
+blocker to actually paying doctors.
+
+### 1. Website (`src/`) — pricing copy now matches full-fee ✅
+The old flat **₹15** was stale everywhere the new model (doctor fee + ₹20
+platform + ₹1.50 gateway + 18% GST) applies.
+
+| Change | Status |
+|--------|--------|
+| Hero pricing card: `₹15 / Queue View` → **`₹20` "Booking Fee"** + sub "doctor's consultation fee shown at checkout" + note "+ payment gateway & 18% GST" (`Hero.js` + `.price-note` style) | ✅ |
+| i18n reworded across **en / hi / kn / te**: `hero.pricing.planName/planSub` + new `note` key; "How it works → Pay ₹15" step reworded to "pay the consultation fee" | ✅ |
+| `DoctorsDetails.js`: removed vestigial `PLANS` array (`price: 15`) + dead `fee`/`amount` nav params (Payment.js already ignores them; server is authoritative) | ✅ |
+| `npm run build` → **Compiled successfully**; pricing card verified in-browser (₹20 + notes render) | ✅ |
+
+### 2. Mobile app (`~/Desktop/app /Tokenwalla`, repo `tokenwalla.app.git`) ✅
+The deployed app read the old lowercase booking statuses and used the legacy
+flat-₹15 checkout — both would break against the new backend.
+
+**Booking statuses (was breaking):** the API now serialises the new UPPERCASE
+lifecycle (`waiting`→`CONFIRMED`, `held`→`ON_HOLD`, + `NO_SHOW`, etc.). The app
+compared against `'waiting'`/`'in_progress'`/`'completed'`/`'cancelled'`, so
+active bookings, QR cards, scanner state and reminders would all silently fail.
+
+| Change | Status |
+|--------|--------|
+| New `normalizeBookingStatus()` in `utils/booking.ts` — folds any backend value (new UPPERCASE **or** legacy lowercase) to the 4 canonical UI keys; safe against old+new backends | ✅ |
+| Applied in `my-bookings.tsx`, `my-qr.tsx`, `scanner.tsx`, `services/notifications.ts` (reminder scheduling). Hospital dashboard untouched — it reads grouped response-key arrays (`data.waiting`/`completed`), which the backend preserved | ✅ |
+| 3 new unit tests (UPPERCASE fold, legacy pass-through, unknown/nullish → waiting) | ✅ |
+
+**Full-fee checkout (was undercharging):** the app sent `amount: 1500` (no
+`doctorId`), hitting the backend's **legacy ₹15 path** — so it collected only
+₹15 and never funded the split/payout. Reworked to mirror the website.
+
+| Change | Status |
+|--------|--------|
+| New `utils/fees.ts` — client mirror of `payments/fees.py` (platform ₹20 / gateway ₹1.50 / GST 18%) for the receipt preview | ✅ |
+| `payment.tsx`: reads `doctorFee`, shows **itemised receipt** (consultation + platform + gateway + GST + total), sends only **`doctorId`** to `/payment/create-order/`, Razorpay + Pay button use the server amount, dropped client `amount`/`fee` from create-order & verify | ✅ |
+| `doctor/[id].tsx`: removed `PLAN` `{price:15}`; passes `doctorFee: doctor.fee`; card shows **"Consultation Fee ₹{fee}"** + "+ platform fee & GST shown at checkout"; button → **"Pay & Book Appointment"** | ✅ |
+| **Security #9 (upgrade endpoint):** N/A to the app — it has no queue-upgrade/paid-reschedule call that hits `/bookings/upgrade/`, so nothing to migrate | ✅ n/a |
+| `tsc --noEmit` → **0 errors**; `jest` → **75/75 pass** | ✅ |
+
+> ⚠️ Mobile still needs the **dev-client/EAS rebuild** before release (unchanged
+> from prior sessions — native modules), and these changes are **staged but not
+> committed** in the app repo.
+
+### 3. WhatsApp — confirmed fully live ✅
+- ✅ **Permanent System-User token in place** (not the 24h temp token) — sends won't expire.
+- ✅ **Appointment reminders confirmed working well** end-to-end (cron firing, patients receiving ~2h reminders). All 4 templates approved + delivering (see prior session).
+
+### 4. RazorpayX — the one remaining blocker 🔴
+Payouts are still **SIMULATED**. This is now the **top priority — get it live ASAP**:
+KYC/current-account activation → `RAZORPAYX_ENABLED=true` + account number →
+implement `_live_payout()` → set webhook secret + subscribe payout events.
+Until then, doctors are not actually paid; the entire split/ledger/batch
+pipeline upstream is built and just waiting on activation.
 
 ---
 
@@ -94,11 +1006,11 @@ added a multi-booking regression test.
 - Web compiles clean (no console errors); doctor booking card verified in-browser.
 
 ### ⚠️ Follow-ups / flags
-- [ ] **RazorpayX go-live:** finish KYC/current-account, set `RAZORPAYX_ENABLED=true` + `RAZORPAYX_ACCOUNT_NUMBER`, implement `_live_payout()`, set `RAZORPAY_WEBHOOK_SECRET` + subscribe payout events.
-- [ ] **Mobile app (separate repo):** parallel status-value + full-fee checkout changes before release, or deployed clients break on new statuses.
-- [ ] **Marketing copy:** Hero i18n still says "Pay ₹15" — now inaccurate under full-fee (pricing-message decision, left for product).
+- [ ] 🔴 **RazorpayX go-live — TOP PRIORITY, sort out ASAP.** Payouts are still SIMULATED. Finish KYC/current-account activation, set `RAZORPAYX_ENABLED=true` + `RAZORPAYX_ACCOUNT_NUMBER`, implement `_live_payout()`, set `RAZORPAY_WEBHOOK_SECRET` + subscribe payout events. Until this lands, doctors are not actually being paid — everything upstream (splits, ledger, batches) is ready and waiting on it.
+- [x] **Mobile app (separate repo):** parallel status-value + full-fee checkout changes — ✅ done 2026-07-28 (see session below). Still needs the dev-client/EAS rebuild before release.
+- [x] **Marketing copy:** Hero "Pay ₹15" reworked to the full-fee model (₹20 booking fee + "doctor's fee & GST at checkout") across en/hi/kn/te — ✅ done 2026-07-28.
 - [ ] Set up the 2 new Railway cron services (see `backend/notifications/CRON_SETUP.md`, updated).
-- ⏳ **Not committed yet** — all changes staged in the working tree.
+- [x] **Committed** — the fee-splitting session landed as `7b2a01c` on `feature/fee-splitting-refunds-payouts`.
 
 ---
 

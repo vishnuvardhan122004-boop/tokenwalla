@@ -195,18 +195,39 @@ else:
 MEDIA_URL  = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# ── Third-party Keys ──────────────────────────────────────────────────────────
-RAZORPAY_KEY_ID     = config('RAZORPAY_KEY_ID',     default='')
-RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
-# Secret configured on the Razorpay webhook (used to HMAC-verify payout events).
-RAZORPAY_WEBHOOK_SECRET = config('RAZORPAY_WEBHOOK_SECRET', default='')
+# ── Cashfree Payment Gateway (patient checkout) ───────────────────────────────
+# The accept-payment flow. CASHFREE_ENV switches the SDK between the sandbox and
+# production hosts; keep it SANDBOX until go-live. CASHFREE_WEBHOOK_SECRET is the
+# secret used to HMAC-verify inbound webhooks (Cashfree's scheme:
+# base64(HMAC_SHA256(f"{timestamp}{raw_body}", secret))). Defaults to the client
+# secret when unset.
+CASHFREE_CLIENT_ID      = config('CASHFREE_CLIENT_ID',     default='')
+CASHFREE_CLIENT_SECRET  = config('CASHFREE_CLIENT_SECRET', default='')
+CASHFREE_ENV            = config('CASHFREE_ENV',           default='SANDBOX')  # SANDBOX | PRODUCTION
+CASHFREE_WEBHOOK_SECRET = config('CASHFREE_WEBHOOK_SECRET', default=CASHFREE_CLIENT_SECRET)
 
-# ── RazorpayX Payouts ─────────────────────────────────────────────────────────
-# OFF until KYC / current-account activation lands (that's an out-of-code step).
-# While disabled, run_daily_payouts still builds ledger entries + batches but the
-# payout call is SIMULATED — flip RAZORPAYX_ENABLED=true once the account is live.
-RAZORPAYX_ENABLED        = config('RAZORPAYX_ENABLED', default=False, cast=bool)
-RAZORPAYX_ACCOUNT_NUMBER = config('RAZORPAYX_ACCOUNT_NUMBER', default='')
+# ── Cashfree Payouts (doctor settlement — replaces RazorpayX) ─────────────────
+# OFF until Payouts KYC / activation lands (an out-of-code step). While disabled,
+# run_daily_payouts still builds ledger entries + batches but the payout call is
+# SIMULATED — flip CASHFREE_PAYOUTS_ENABLED=true once the account is live.
+CASHFREE_PAYOUTS_ENABLED       = config('CASHFREE_PAYOUTS_ENABLED', default=False, cast=bool)
+CASHFREE_PAYOUT_CLIENT_ID      = config('CASHFREE_PAYOUT_CLIENT_ID',     default='')
+CASHFREE_PAYOUT_CLIENT_SECRET  = config('CASHFREE_PAYOUT_CLIENT_SECRET', default='')
+# Payouts webhooks are signed with the Payout CLIENT SECRET itself — Cashfree
+# has no separate "webhook secret" for Payouts (unlike the PG webhook above).
+# CASHFREE_PAYOUT_WEBHOOK_SECRET only needs to be set if you rotate
+# CASHFREE_PAYOUT_CLIENT_SECRET: Cashfree signs with the OLDEST still-active
+# client secret, so during a rotation window that may differ from the current
+# one above. Leave blank normally — payments.cashfree_payouts_utils falls back
+# to CASHFREE_PAYOUT_CLIENT_SECRET at verification time.
+CASHFREE_PAYOUT_WEBHOOK_SECRET = config('CASHFREE_PAYOUT_WEBHOOK_SECRET', default='')
+# Payouts 2FA. EVERY Payouts API call (sandbox included) is refused with 403
+# "IP not whitelisted" unless the caller is whitelisted in the Payouts dashboard
+# OR sends an X-Cf-Signature header. Railway's egress IP is not static, so set
+# this to the merchant PUBLIC KEY (PEM contents, or a path to the .pem) from
+# Payouts Dashboard → Developers → Two-Factor Authentication and the signature
+# is sent automatically. Leave blank to rely on IP whitelisting alone.
+CASHFREE_PAYOUT_PUBLIC_KEY     = config('CASHFREE_PAYOUT_PUBLIC_KEY', default='')
 
 # ── TokenWalla GST identity (for receipts + B2B commission invoices) ──────────
 TOKENWALLA_GSTIN = config('TOKENWALLA_GSTIN', default='')

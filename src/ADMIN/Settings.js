@@ -78,7 +78,7 @@ const Settings = () => {
             { label: 'Platform',        value: 'TokenWalla'            },
             { label: 'Version',         value: 'v1.0.0'                },
             { label: 'Backend',         value: 'Django REST Framework' },
-            { label: 'Payment Gateway', value: 'Razorpay'              },
+            { label: 'Payment Gateway', value: 'Cashfree'              },
             { label: 'Database',        value: 'PostgreSQL'            },
             { label: 'Media Storage',   value: 'Cloudinary'            },
           ].map(({ label, value }) => (

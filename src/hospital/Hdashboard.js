@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import API from "../services/api";
 import { logoutUser } from "../services/api";
 import QRScanner from './QRScanner';
+import HPayments from './HPayments';
 import SPECIALIZATION_OPTIONS from '../services/specializations';
 
 const DEFAULT_SLOTS = [
@@ -28,12 +29,12 @@ const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const EMPTY_DOCTOR = {
   name: "", specialization: "", keywords: "", experience: "",
-  mobile: "", available: true, slots: [], days: [], max_per_slot: 10,
+  mobile: "", available: true, fee: "", slots: [], days: [], max_per_slot: 10,
 };
 
 const EMPTY_ERRORS = {
   name: "", specialization: "", mobile: "", experience: "",
-  max_per_slot: "", slots: "", days: "",
+  fee: "", max_per_slot: "", slots: "", days: "",
 };
 
 const validate = (formData) => {
@@ -46,6 +47,8 @@ const validate = (formData) => {
   else if (!/^[6-9]\d{9}$/.test(formData.mobile.trim())) { errors.mobile = "Enter a valid 10-digit Indian mobile number"; valid = false; }
   if (formData.experience !== "" && (isNaN(formData.experience) || Number(formData.experience) < 0))
     { errors.experience = "Experience must be a positive number"; valid = false; }
+  if (formData.fee !== "" && (isNaN(formData.fee) || Number(formData.fee) < 0))
+    { errors.fee = "Fee must be a positive number"; valid = false; }
   if (formData.max_per_slot !== "" && (isNaN(formData.max_per_slot) || Number(formData.max_per_slot) < 1))
     { errors.max_per_slot = "Must be at least 1 patient per slot"; valid = false; }
   if (formData.slots.length === 0) { errors.slots = "Select at least one time slot"; valid = false; }
@@ -214,6 +217,7 @@ const Hdashboard = () => {
       experience:     doctor.experience     || "",
       mobile:         doctor.mobile         || "",
       available:      doctor.available      ?? true,
+      fee:            doctor.fee            ?? "",
       slots:          doctor.slots          || [],
       days:           doctor.days           || [],
       max_per_slot:   doctor.max_per_slot   || 10,
@@ -266,6 +270,7 @@ const Hdashboard = () => {
       fd.append("experience",     Number(formData.experience)  || 0);
       fd.append("mobile",         formData.mobile.trim());
       fd.append("available",      formData.available);
+      fd.append("fee",            Number(formData.fee) || 0);
       fd.append("max_per_slot",   Number(formData.max_per_slot) || 10);
       fd.append("slots",          JSON.stringify(formData.slots));
       fd.append("days",           JSON.stringify(formData.days));
@@ -474,9 +479,10 @@ const Hdashboard = () => {
         {/* ── Tabs ── */}
         <div className="tw-tabs mb-4">
           {[
-            { key: "queue",   label: "🏥 Queue Management" },
-            { key: "doctors", label: "👨‍⚕️ Doctors" },
-            { key: "scanner", label: "📷 QR Scanner" },
+            { key: "queue",    label: "🏥 Queue Management" },
+            { key: "doctors",  label: "👨‍⚕️ Doctors" },
+            { key: "payments", label: "💳 Doctor Payments" },
+            { key: "scanner",  label: "📷 QR Scanner" },
           ].map(({ key, label }) => (
             <button
               key={key}
@@ -771,6 +777,20 @@ const Hdashboard = () => {
                     </div>
 
                     <div className="col-md-4">
+                      <label className="form-label fw-semibold">Consultation Fee (₹)</label>
+                      <div className="input-group">
+                        <span className="input-group-text text-muted">₹</span>
+                        <input
+                          className={`form-control ${errors.fee ? "is-invalid" : ""}`}
+                          type="number" min="0" step="1" placeholder="500"
+                          value={formData.fee}
+                          onChange={e => handleChange("fee", e.target.value)}
+                        />
+                      </div>
+                      <FieldError msg={errors.fee} />
+                    </div>
+
+                    <div className="col-md-4">
                       <label className="form-label fw-semibold">
                         Mobile * <small className="text-muted">(10-digit)</small>
                       </label>
@@ -996,6 +1016,11 @@ const Hdashboard = () => {
               </div>
             )}
           </div>
+        )}
+
+        {/* ── Doctor Payments Tab ── */}
+        {activeTab === "payments" && (
+          <HPayments hospital={hospital} showToast={showToast} />
         )}
 
         {/* ── QR Scanner Tab ── */}

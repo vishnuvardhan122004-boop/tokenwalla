@@ -1,6 +1,6 @@
 """
 Daily doctor payout run. Wire to Railway cron (see railway.payouts.cron.json),
-scheduled once a day, next-day — after Razorpay's settlement to our account has
+scheduled once a day, next-day — after Cashfree's settlement to our account has
 landed:
 
     python manage.py run_daily_payouts
@@ -10,23 +10,23 @@ Steps (see the feature spec §6):
   2. Write two DoctorLedger rows each: BOOKING_COMPLETED (+doctor_fee) and
      HOSPITAL_COMMISSION (−commission). Move the booking to PROCESSING.
   3. Group every doctor's UNBATCHED ledger rows into ONE PayoutBatch (per
-     doctor, not per booking) and call RazorpayX (simulated until enabled).
+     doctor, not per booking) and call Cashfree Payouts (simulated until enabled).
   4. payout.processed / failed webhooks (payments.webhooks) settle the batch.
 
 Idempotent: the PENDING filter stops step 2 re-processing a booking, and the
 unique idempotency_key stops step 3 creating a doctor's batch twice per day.
 """
 import logging
+from decimal import Decimal
 
 from django.core.management.base import BaseCommand
 from django.db import transaction, IntegrityError
-from django.db.models import Sum
 from django.utils import timezone
 
 from bookings.models import Booking
 from payments.models import DoctorLedger, PayoutBatch
 from payments.fees import compute_hospital_commission
-from payments.razorpayx_utils import create_payout, choose_mode
+from payments.cashfree_payouts_utils import create_payout, choose_mode
 
 logger = logging.getLogger('tokenwalla')
 
@@ -66,16 +66,26 @@ class Command(BaseCommand):
             commission = compute_hospital_commission(booking.hospital.commission_rate)['total_commission']
             try:
                 with transaction.atomic():
+                    # Re-fetch under a row lock and re-check the payout status:
+                    # this is the idempotency guard against a second concurrent /
+                    # overlapping run double-ledgering (and therefore double-paying)
+                    # the same completed booking. The loser sees PROCESSING/PAID
+                    # and skips.
+                    locked = (Booking.objects
+                              .select_for_update()
+                              .get(pk=booking.pk))
+                    if locked.doctor_payout_status != Booking.PAYOUT_PENDING:
+                        continue
                     DoctorLedger.objects.create(
-                        doctor=booking.doctor, booking=booking,
+                        doctor=booking.doctor, booking=locked,
                         amount=doctor_fee, reason=DoctorLedger.BOOKING_COMPLETED,
                     )
                     DoctorLedger.objects.create(
-                        doctor=booking.doctor, booking=booking,
+                        doctor=booking.doctor, booking=locked,
                         amount=-commission, reason=DoctorLedger.HOSPITAL_COMMISSION,
                     )
-                    booking.doctor_payout_status = Booking.PAYOUT_PROCESSING
-                    booking.save(update_fields=['doctor_payout_status'])
+                    locked.doctor_payout_status = Booking.PAYOUT_PROCESSING
+                    locked.save(update_fields=['doctor_payout_status'])
                 written += 1
             except Exception as exc:
                 logger.exception('Ledgering failed for booking %s: %s', booking.id, exc)
@@ -98,30 +108,58 @@ class Command(BaseCommand):
 
         created = 0
         for doctor_id in doctor_ids:
-            entries = (DoctorLedger.objects
-                       .select_related('doctor')
-                       .filter(doctor_id=doctor_id, payout_batch__isnull=True))
-            total = entries.aggregate(s=Sum('amount'))['s'] or 0
-            # Only pay a positive net. A ≤0 net (e.g. absence clawbacks exceed
-            # earnings) stays unbatched to settle against future earnings.
-            if total <= 0:
-                logger.info('Doctor %s net payout ₹%s ≤ 0 — leaving unbatched.', doctor_id, total)
-                continue
-
-            doctor = entries[0].doctor
-            mode   = choose_mode(doctor)
+            doctor = None
             idem   = f'payout_{doctor_id}_{run_date}'
             try:
                 with transaction.atomic():
-                    batch = PayoutBatch.objects.create(
+                    # Lock this doctor's unbatched rows and snapshot their EXACT
+                    # ids under the lock. The old code summed a lazy queryset and
+                    # then re-ran it at .update(): a row inserted in between (a
+                    # concurrent completion/absence adjustment) would be attached
+                    # to the batch WITHOUT being in the summed total, so
+                    # total_amount understated what was paid. Summing and
+                    # attaching the same locked id set makes them always agree.
+                    entries = (DoctorLedger.objects
+                               .select_for_update()
+                               .select_related('doctor')
+                               .filter(doctor_id=doctor_id, payout_batch__isnull=True))
+                    rows = list(entries)
+                    if not rows:
+                        continue
+                    entry_ids = [e.id for e in rows]
+                    total = sum((e.amount for e in rows), Decimal('0'))
+                    # Only pay a positive net. A ≤0 net (e.g. absence clawbacks
+                    # exceed earnings) stays unbatched to settle against future
+                    # earnings.
+                    if total <= 0:
+                        logger.info('Doctor %s net payout ₹%s ≤ 0 — leaving unbatched.', doctor_id, total)
+                        continue
+
+                    # No VPA and no bank account → nowhere to send the money.
+                    # Leave the rows unbatched so the earnings accrue and pay out
+                    # in a later cycle once the hospital fills the details in;
+                    # batching now would only create a guaranteed-failed transfer.
+                    mode = choose_mode(rows[0].doctor)
+                    if mode is None:
+                        logger.error('ALERT: doctor %s has ₹%s owed but no UPI VPA and no '
+                                     'bank account — holding the ledger. Ask the hospital '
+                                     'to add payout details.', doctor_id, total)
+                        continue
+
+                    doctor = rows[0].doctor
+                    batch  = PayoutBatch.objects.create(
                         doctor=doctor, total_amount=total, payout_mode=mode,
                         status=PayoutBatch.QUEUED, idempotency_key=idem,
                     )
-                    # Attach exactly the rows we summed (guard against a race).
-                    entries.update(payout_batch=batch)
+                    # Attach exactly the rows we summed.
+                    DoctorLedger.objects.filter(id__in=entry_ids).update(payout_batch=batch)
             except IntegrityError:
                 # A batch with this idempotency_key already exists (task re-run).
                 logger.warning('Payout batch %s already exists — skipping.', idem)
+                continue
+
+            # No positive batch was created for this doctor (empty / net ≤ 0).
+            if doctor is None:
                 continue
 
             try:
@@ -129,12 +167,15 @@ class Command(BaseCommand):
                 batch.razorpay_payout_id = (resp or {}).get('id', '') or ''
                 batch.save(update_fields=['razorpay_payout_id'])
             except Exception as exc:
-                # Couldn't hand off to RazorpayX: mark FAILED and release the rows
+                # Couldn't hand off to Cashfree Payouts: mark FAILED and release the rows
                 # so the next cycle retries them.
                 logger.exception('Payout dispatch failed for %s: %s', idem, exc)
                 batch.status = PayoutBatch.FAILED
                 batch.save(update_fields=['status'])
-                entries.update(payout_batch=None)
+                # Release exactly the rows we attached (they're no longer
+                # payout_batch__isnull=True, so re-run over entry_ids, not the
+                # original queryset) so the next cycle retries them.
+                DoctorLedger.objects.filter(id__in=entry_ids).update(payout_batch=None)
                 continue
 
             created += 1

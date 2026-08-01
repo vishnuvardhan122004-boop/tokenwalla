@@ -17,6 +17,14 @@ import threading
 logger = logging.getLogger('tokenwalla')
 
 
+def _empty_totals():
+    """Zeroed hospital-wide totals for a hospital with no doctors yet."""
+    return {
+        'total_collected': '0', 'doctor_fees_collected': '0', 'service_revenue': '0',
+        'pending_payout': '0', 'paid_amount': '0', 'doctor_count': 0,
+    }
+
+
 def _notify_doctor_unavailable(doctor_id):
     """Flag today's active bookings for a just-unavailable doctor as eligible for
     a free reschedule, and notify each patient (push + WhatsApp) off-thread.
@@ -230,6 +238,177 @@ class DoctorViewSet(viewsets.ModelViewSet):
             ),
             'cancelled_bookings': cancelled,
             'deleted_records': total_deleted,
+        })
+
+    # ── Payout / payment details (owning hospital or admin) ───────────────────
+
+    @action(
+        detail=True,
+        methods=['get', 'put', 'patch'],
+        url_path='payment-details',
+        permission_classes=[IsAuthenticated, IsHospitalStaff, IsDoctorOwnerHospitalOrAdmin],
+    )
+    def payment_details(self, request, pk=None):
+        """
+        GET  /api/doctors/<id>/payment-details/  — read this doctor's payout/KYC details.
+        PUT  /api/doctors/<id>/payment-details/  — update them (owning hospital or admin).
+
+        Sensitive bank/UPI details are served ONLY here (never on the public
+        doctor list/detail), gated to the owning hospital or an admin via
+        IsDoctorOwnerHospitalOrAdmin, which get_object() enforces per-object.
+        """
+        from .serializers import DoctorPaymentDetailsSerializer
+
+        doctor = self.get_object()  # runs object-level owner/admin permission
+
+        if request.method == 'GET':
+            return Response(DoctorPaymentDetailsSerializer(doctor).data)
+
+        serializer = DoctorPaymentDetailsSerializer(doctor, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(
+                {'message': 'Validation failed', 'errors': serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer.save()
+        logger.info('Payment details updated for doctor %s', doctor.id)
+        return Response(serializer.data)
+
+    # ── Payment summary for a hospital's doctors (owning hospital or admin) ────
+
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path='payment-summary',
+        permission_classes=[IsAuthenticated, IsHospitalStaff],
+    )
+    def payment_summary(self, request):
+        """
+        GET /api/doctors/payment-summary/?hospital=<id>
+
+        Per-doctor money tracker for the hospital dashboard's Doctor Payments
+        page: appointments, amount collected, doctor earnings, TokenWalla service
+        revenue, pending payout, paid-out amount and last payout date — plus
+        hospital-wide totals for the summary cards. Owning hospital or admin only.
+        """
+        from django.db.models import Sum, Count, Max
+        from bookings.models import Booking
+        from payments.models import Payment, DoctorLedger, PayoutBatch
+
+        hospital_id = request.query_params.get('hospital')
+        if not hospital_id:
+            return Response({'message': 'hospital query param is required.'}, status=400)
+
+        user = request.user
+        is_admin = getattr(user, 'role', None) == 'admin' or user.is_staff
+        if not is_admin and str(getattr(user, 'last_name', '')) != str(hospital_id):
+            return Response({'message': 'You can only view your own hospital.'}, status=403)
+
+        doctors = list(Doctor.objects.filter(hospital_id=hospital_id).order_by('name'))
+        if not doctors:
+            return Response({'doctors': [], 'totals': _empty_totals()})
+
+        # ── Aggregate in a handful of grouped queries (not per-doctor loops) ──
+        def _index(rows, key):
+            return {r[key]: r for r in rows}
+
+        pay_rows = _index(
+            Payment.objects
+            .filter(booking__doctor__hospital_id=hospital_id, status=Payment.PAID)
+            .values('booking__doctor_id')
+            .annotate(
+                collected=Sum('final_amount'),
+                earnings=Sum('doctor_fee'),
+                offline=Sum('offline_doctor_fee'),
+                service=Sum('platform_fee'),
+                paid_appointments=Count('id'),
+            ),
+            'booking__doctor_id',
+        )
+        appt_rows = _index(
+            Booking.objects
+            .filter(doctor__hospital_id=hospital_id)
+            .values('doctor_id')
+            .annotate(appointments=Count('id')),
+            'doctor_id',
+        )
+        pending_rows = _index(
+            DoctorLedger.objects
+            .filter(doctor__hospital_id=hospital_id, payout_batch__isnull=True)
+            .values('doctor_id')
+            .annotate(pending=Sum('amount')),
+            'doctor_id',
+        )
+        paid_rows = _index(
+            PayoutBatch.objects
+            .filter(doctor__hospital_id=hospital_id, status=PayoutBatch.PROCESSED)
+            .values('doctor_id')
+            .annotate(paid=Sum('total_amount'), last=Max('created_at')),
+            'doctor_id',
+        )
+
+        def _num(v):
+            return str(v if v is not None else 0)
+
+        rows = []
+        t_collected = t_doctor_fees = t_service = t_pending = t_paid = 0
+        for d in doctors:
+            p  = pay_rows.get(d.id, {})
+            a  = appt_rows.get(d.id, {})
+            pe = pending_rows.get(d.id, {})
+            pd = paid_rows.get(d.id, {})
+
+            online    = p.get('collected') or 0   # Σ final_amount (paid via TokenWalla)
+            earnings  = p.get('earnings') or 0     # Σ doctor_fee captured ONLINE (FULL mode)
+            offline   = p.get('offline') or 0      # Σ consultation fee collected at hospital
+            service   = p.get('service') or 0
+            pending   = pe.get('pending') or 0
+            paid      = pd.get('paid') or 0
+            last      = pd.get('last')
+
+            # Doctor's consultation fee collected across BOTH rails (online for
+            # FULL bookings, offline at the hospital for Service-Fee-Only ones).
+            doctor_fees = earnings + offline
+            # Grand total that changed hands: everything paid online PLUS the
+            # consultation fee collected offline at the hospital.
+            total = online + offline
+
+            t_collected  += total
+            t_doctor_fees += doctor_fees
+            t_service    += service
+            t_pending    += pending
+            t_paid       += paid
+
+            rows.append({
+                'id':               d.id,
+                'name':             d.name,
+                'specialization':   d.specialization,
+                'fee':              d.fee,
+                'collection_mode':  d.payment_collection_mode,
+                'payment_method':   d.payment_method,
+                'has_payout_details': bool(d.upi_vpa or d.bank_account_number),
+                'appointments':     a.get('appointments', 0),
+                'paid_appointments': p.get('paid_appointments', 0),
+                'total_collected':  _num(total),          # gross (online + offline)
+                'online_collected': _num(online),         # captured via TokenWalla
+                'doctor_fees_collected': _num(doctor_fees),
+                'offline_doctor_fee':    _num(offline),   # collected at the hospital
+                'service_revenue':  _num(service),
+                'pending_payout':   _num(pending),
+                'paid_amount':      _num(paid),
+                'last_payout_date': last.isoformat() if last else None,
+            })
+
+        return Response({
+            'doctors': rows,
+            'totals': {
+                'total_collected':       _num(t_collected),
+                'doctor_fees_collected': _num(t_doctor_fees),
+                'service_revenue':       _num(t_service),
+                'pending_payout':        _num(t_pending),
+                'paid_amount':           _num(t_paid),
+                'doctor_count':          len(doctors),
+            },
         })
 
     # ── Internal helpers ──────────────────────────────────────────────────────

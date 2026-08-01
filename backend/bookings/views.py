@@ -13,10 +13,9 @@ from tokenwalla.permissions import IsAdmin, IsHospitalStaff
 from payments.refunds import (
     process_cancellation_refund, record_absence_refund, RefundNotAllowed,
 )
-from payments.razorpay_utils import (
-    verify_signature,
-    fetch_order_amount_paise,
-    QUEUE_UPGRADE_AMOUNT_PAISE,
+from payments.cashfree_utils import (
+    confirm_order_paid,
+    QUEUE_UPGRADE_AMOUNT_INR,
 )
 from notifications.push import push_booking_in_progress
 
@@ -237,33 +236,34 @@ class UpgradeQueueAccessView(APIView):
         # ── Verify the payment BEFORE unlocking the paid feature ──────────────
         # Previously this endpoint trusted a client-supplied `payment_id` string
         # with no verification, so any user could unlock queue access for free.
-        # We now require the full Razorpay handshake and validate it exactly like
-        # payments.VerifyPaymentView: HMAC signature + server-side amount check.
-        order_id   = request.data.get('razorpay_order_id',   '').strip()
-        payment_id = request.data.get('razorpay_payment_id', '').strip()
-        sig        = request.data.get('razorpay_signature',  '').strip()
+        # We now confirm the payment with Cashfree server-side (there is no client
+        # signature) and validate it was paid for the right amount, exactly like
+        # payments.VerifyPaymentView.
+        order_id = str(request.data.get('order_id', '') or '').strip()
 
-        if not all([order_id, payment_id, sig]):
+        if not order_id:
             return Response(
-                {'message': 'razorpay_order_id, razorpay_payment_id and '
-                            'razorpay_signature are required to upgrade queue access.'},
+                {'message': 'order_id is required to upgrade queue access.'},
                 status=400,
             )
 
-        if not verify_signature(order_id, payment_id, sig):
-            logger.warning('Invalid Razorpay signature on queue upgrade for booking %s', pk)
-            return Response({'message': 'Invalid payment signature.'}, status=400)
-
-        # Confirm the order with Razorpay and that it was paid for the right amount.
+        # Confirm the order with Cashfree and that it was paid for the right amount.
         try:
-            amount_paise = fetch_order_amount_paise(order_id)
+            paid, payment_ref, amount_rupees, _tags = confirm_order_paid(order_id)
         except Exception as exc:
-            logger.error('Queue upgrade: failed to fetch Razorpay order %s: %s', order_id, exc)
-            return Response({'message': 'Could not verify order with Razorpay.'}, status=502)
+            logger.error('Queue upgrade: failed to confirm Cashfree order %s: %s', order_id, exc)
+            return Response({'message': 'Could not verify order with the payment gateway.'}, status=502)
 
-        if amount_paise != QUEUE_UPGRADE_AMOUNT_PAISE:
-            logger.warning('Queue upgrade: wrong amount for order %s: %s paise',
-                           order_id, amount_paise)
+        if not paid:
+            logger.warning('Queue upgrade: order %s is not PAID.', order_id)
+            return Response({'message': 'Payment not completed.'}, status=400)
+
+        # payment_ref (cf_payment_id) is the reuse key stored on queue_payment_id.
+        payment_id = payment_ref
+
+        if int(amount_rupees) != QUEUE_UPGRADE_AMOUNT_INR:
+            logger.warning('Queue upgrade: wrong amount for order %s: ₹%s',
+                           order_id, amount_rupees)
             return Response({'message': 'Invalid payment amount for queue access.'}, status=400)
 
         # Record the upgrade payment in its OWN fields (never touching the
