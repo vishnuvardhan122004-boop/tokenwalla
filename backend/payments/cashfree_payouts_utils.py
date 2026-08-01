@@ -22,6 +22,8 @@ import base64
 import hashlib
 import hmac
 import logging
+import re
+import textwrap
 import time
 import uuid
 from pathlib import Path
@@ -108,6 +110,29 @@ def payouts_base_url():
             else 'https://sandbox.cashfree.com/payout')
 
 
+def _public_key_pem(raw):
+    """Normalise CASHFREE_PAYOUT_PUBLIC_KEY into PEM bytes.
+
+    Accepts the key in whichever shape it arrives, because all three happen in
+    practice and the failure mode is otherwise a confusing crash at payout time:
+      * a full PEM block (possibly with literal "\\n" instead of real newlines,
+        which is what most env-var UIs produce),
+      * a path to a .pem file,
+      * the bare base64 body with no BEGIN/END armor — what you get pasting from
+        the Cashfree dashboard.
+    Never log or echo the value: it is key material.
+    """
+    if raw.startswith('-----'):
+        return raw.replace('\\n', '\n').encode()
+    try:
+        if Path(raw).is_file():
+            return Path(raw).read_bytes()
+    except OSError:
+        pass    # too long / not a valid path — it's key material, not a file
+    body = '\n'.join(textwrap.wrap(re.sub(r'\s+', '', raw), 64))
+    return f'-----BEGIN PUBLIC KEY-----\n{body}\n-----END PUBLIC KEY-----\n'.encode()
+
+
 def cf_signature():
     """Cashfree Payouts 2FA header for hosts without a static IP.
 
@@ -119,14 +144,21 @@ def cf_signature():
     Returns '' when no key is configured, so a whitelisted static IP keeps
     working with no key and no extra setup. The payload is timestamped, so this
     is regenerated per request — never cached.
+
+    UNVERIFIED against a live account as of 2026-08-01: sending this header made
+    no difference on TokenWalla's sandbox account — /payout/v1/authorize returned
+    the same "IP not whitelisted" with and without it. Cashfree ignores the
+    signature until the public-key method is actually ENABLED for the merchant
+    under Payouts Dashboard → Developers → Two-Factor Authentication (having
+    downloaded a key is not enough). The header itself is correct per Cashfree's
+    documented scheme and is covered by a test that decrypts it back to
+    "<client_id>.<epoch>"; if it still fails once the dashboard is switched over,
+    suspect the key pairing, not the encoding.
     """
     raw = (settings.CASHFREE_PAYOUT_PUBLIC_KEY or '').strip()
     if not raw:
         return ''
-    # Accept the PEM inline (an env var, as on Railway) or as a path to a .pem.
-    # Env vars often arrive with literal backslash-n instead of real newlines.
-    pem = (raw.replace('\\n', '\n').encode()
-           if raw.startswith('-----') else Path(raw).read_bytes())
+    pem = _public_key_pem(raw)
 
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding

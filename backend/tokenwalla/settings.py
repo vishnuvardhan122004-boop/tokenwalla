@@ -1,3 +1,5 @@
+import sys
+
 import dj_database_url
 from pathlib import Path
 from decouple import config, Csv
@@ -228,6 +230,16 @@ CASHFREE_PAYOUT_WEBHOOK_SECRET = config('CASHFREE_PAYOUT_WEBHOOK_SECRET', defaul
 # Payouts Dashboard → Developers → Two-Factor Authentication and the signature
 # is sent automatically. Leave blank to rely on IP whitelisting alone.
 CASHFREE_PAYOUT_PUBLIC_KEY     = config('CASHFREE_PAYOUT_PUBLIC_KEY', default='')
+
+# A test run must NEVER be able to reach the live payout API — that would mean
+# `manage.py test` moving real money once Payouts go live. Forcing these off
+# under the test runner also keeps the payout suite deterministic regardless of
+# what the developer currently has in .env (before this, flipping
+# CASHFREE_PAYOUTS_ENABLED=true locally broke 8 unrelated tests). Tests that
+# exercise the live path opt in explicitly with @override_settings.
+if 'test' in sys.argv:
+    CASHFREE_PAYOUTS_ENABLED   = False
+    CASHFREE_PAYOUT_PUBLIC_KEY = ''
 
 # ── TokenWalla GST identity (for receipts + B2B commission invoices) ──────────
 TOKENWALLA_GSTIN = config('TOKENWALLA_GSTIN', default='')

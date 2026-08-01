@@ -492,17 +492,27 @@ class LivePayoutTransferTests(WorldMixin, TestCase):
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo).decode()
 
-        post.return_value = self._resp()
-        with override_settings(CASHFREE_PAYOUT_PUBLIC_KEY=pem):
-            create_payout(self.doctor, Decimal('10.00'), 'IMPS', 'k3')
+        # The key gets pasted in three shapes in practice, and all must work:
+        # a full PEM, a PEM whose newlines an env-var UI turned into literal
+        # "\n", and the bare base64 body with no BEGIN/END armor (what you get
+        # copying from the Cashfree dashboard — this one used to crash).
+        bare = ''.join(l for l in pem.splitlines() if not l.startswith('-----'))
+        for label, value in (('full PEM', pem),
+                             ('escaped newlines', pem.replace('\n', '\\n')),
+                             ('bare base64', bare)):
+            with self.subTest(key_format=label):
+                post.reset_mock()
+                post.return_value = self._resp()
+                with override_settings(CASHFREE_PAYOUT_PUBLIC_KEY=value):
+                    create_payout(self.doctor, Decimal('10.00'), 'IMPS', 'k3')
 
-        header = post.call_args.kwargs['headers']['X-Cf-Signature']
-        plain = private.decrypt(base64.b64decode(header), padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA1()),
-            algorithm=hashes.SHA1(), label=None)).decode()
-        client_id, _, epoch = plain.partition('.')
-        self.assertEqual(client_id, 'cid')
-        self.assertAlmostEqual(int(epoch), int(time.time()), delta=60)
+                header = post.call_args.kwargs['headers']['X-Cf-Signature']
+                plain = private.decrypt(base64.b64decode(header), padding.OAEP(
+                    mgf=padding.MGF1(algorithm=hashes.SHA1()),
+                    algorithm=hashes.SHA1(), label=None)).decode()
+                client_id, _, epoch = plain.partition('.')
+                self.assertEqual(client_id, 'cid')
+                self.assertAlmostEqual(int(epoch), int(time.time()), delta=60)
 
     @mock.patch('requests.post')
     def test_gateway_error_raises_so_the_batch_is_marked_failed(self, post):
