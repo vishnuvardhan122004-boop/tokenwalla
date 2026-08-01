@@ -22,6 +22,7 @@ def _empty_totals():
     """Zeroed hospital-wide totals for a hospital with no doctors yet."""
     return {
         'total_collected': '0', 'doctor_fees_collected': '0', 'service_revenue': '0',
+        'gateway_fees': '0', 'gst_collected': '0', 'service_total': '0',
         'pending_payout': '0', 'paid_amount': '0', 'doctor_count': 0,
     }
 
@@ -324,6 +325,8 @@ class DoctorViewSet(viewsets.ModelViewSet):
                 earnings=Sum('doctor_fee'),
                 offline=Sum('offline_doctor_fee'),
                 service=Sum('platform_fee'),
+                gateway=Sum('gateway_fee'),
+                gst=Sum('gst_amount'),
                 paid_appointments=Count('id'),
             ),
             'booking__doctor_id',
@@ -355,6 +358,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
         rows = []
         t_collected = t_doctor_fees = t_service = t_pending = t_paid = 0
+        t_gateway = t_gst = 0
         for d in doctors:
             p  = pay_rows.get(d.id, {})
             a  = appt_rows.get(d.id, {})
@@ -365,6 +369,8 @@ class DoctorViewSet(viewsets.ModelViewSet):
             earnings  = p.get('earnings') or 0     # Σ doctor_fee captured ONLINE (FULL mode)
             offline   = p.get('offline') or 0      # Σ consultation fee collected at hospital
             service   = p.get('service') or 0
+            gateway   = p.get('gateway') or 0
+            gst       = p.get('gst') or 0
             pending   = pe.get('pending') or 0
             paid      = pd.get('paid') or 0
             last      = pd.get('last')
@@ -376,9 +382,23 @@ class DoctorViewSet(viewsets.ModelViewSet):
             # consultation fee collected offline at the hospital.
             total = online + offline
 
+            # Everything the patient paid TokenWalla on top of the consultation
+            # fee. Charged to the PATIENT — never deducted from the doctor or
+            # billed to the hospital.
+            #
+            # Derived as the REMAINDER, not as platform+gateway+gst: legacy
+            # pre-split payments carry a final_amount with every component field
+            # at 0 (the old flat ₹15 booking fee, all of it ours), so summing
+            # components silently dropped them and left the page showing a gap
+            # nobody could account for. As a remainder this always holds:
+            #   total_collected == doctor_fees_collected + service_total
+            service_total = max(total - doctor_fees, 0)
+
             t_collected  += total
             t_doctor_fees += doctor_fees
             t_service    += service
+            t_gateway    += gateway
+            t_gst        += gst
             t_pending    += pending
             t_paid       += paid
 
@@ -402,7 +422,10 @@ class DoctorViewSet(viewsets.ModelViewSet):
                 'online_collected': _num(online),         # captured via TokenWalla
                 'doctor_fees_collected': _num(doctor_fees),
                 'offline_doctor_fee':    _num(offline),   # collected at the hospital
-                'service_revenue':  _num(service),
+                'service_revenue':  _num(service),          # platform fee alone
+                'gateway_fee':      _num(gateway),
+                'gst_collected':    _num(gst),
+                'service_total':    _num(service_total),    # platform + gateway + GST
                 'pending_payout':   _num(pending),
                 'paid_amount':      _num(paid),
                 'last_payout_date': last.isoformat() if last else None,
@@ -414,6 +437,9 @@ class DoctorViewSet(viewsets.ModelViewSet):
                 'total_collected':       _num(t_collected),
                 'doctor_fees_collected': _num(t_doctor_fees),
                 'service_revenue':       _num(t_service),
+                'gateway_fees':          _num(t_gateway),
+                'gst_collected':         _num(t_gst),
+                'service_total':         _num(max(t_collected - t_doctor_fees, 0)),
                 'pending_payout':        _num(t_pending),
                 'paid_amount':           _num(t_paid),
                 'doctor_count':          len(doctors),

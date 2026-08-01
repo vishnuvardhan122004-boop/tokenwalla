@@ -234,6 +234,55 @@ class PaymentSummaryTests(TestCase):
         self.hospital.save(update_fields=['upi_vpa'])
         self.assertTrue(row()['has_payout_details'])
 
+    def test_the_money_reconciles(self):
+        # What the patient paid must split exactly into the doctor's share and
+        # TokenWalla's — no hidden remainder. Showing "collected" and "doctor
+        # fees" without the gateway fee and GST left a gap nobody could explain.
+        self.client.force_authenticate(self.staff)
+        r = self.client.get(f'/api/doctors/payment-summary/?hospital={self.hospital.id}')
+        row = r.json()['doctors'][0]
+
+        self.assertEqual(Decimal(row['service_revenue']), Decimal('20.00'))   # platform
+        self.assertEqual(Decimal(row['gateway_fee']),     Decimal('1.50'))
+        self.assertEqual(Decimal(row['gst_collected']),   Decimal('3.87'))
+        self.assertEqual(Decimal(row['service_total']),   Decimal('25.37'))
+
+        self.assertEqual(
+            Decimal(row['doctor_fees_collected']) + Decimal(row['service_total']),
+            Decimal(row['total_collected']),
+        )
+        totals = r.json()['totals']
+        self.assertEqual(
+            Decimal(totals['doctor_fees_collected']) + Decimal(totals['service_total']),
+            Decimal(totals['total_collected']),
+        )
+
+    def test_legacy_payments_still_reconcile(self):
+        # Pre-split payments carry a final_amount with every component field at
+        # 0 (the old flat booking fee). Summing platform+gateway+GST dropped
+        # them, so the page showed Patients Paid ≠ Doctor Fees + TokenWalla with
+        # no way to explain the difference.
+        legacy_booking = Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate(), slot='10:00 AM', token='TW-LEG',
+            status=Booking.COMPLETED, amount=15)
+        Payment.objects.create(
+            booking=legacy_booking, order_id='old', payment_id='old1', amount=15,
+            final_amount=Decimal('15.00'), status=Payment.PAID)   # no split at all
+
+        self.client.force_authenticate(self.staff)
+        r = self.client.get(f'/api/doctors/payment-summary/?hospital={self.hospital.id}')
+        row = r.json()['doctors'][0]
+
+        self.assertEqual(Decimal(row['total_collected']), Decimal('240.37'))  # 225.37 + 15
+        self.assertEqual(Decimal(row['doctor_fees_collected']), Decimal('200.00'))
+        # The whole legacy ₹15 was TokenWalla's — it lands here, not in a gap.
+        self.assertEqual(Decimal(row['service_total']), Decimal('40.37'))
+        self.assertEqual(
+            Decimal(row['doctor_fees_collected']) + Decimal(row['service_total']),
+            Decimal(row['total_collected']),
+        )
+
     def test_summary_requires_hospital_param(self):
         self.client.force_authenticate(self.staff)
         self.assertEqual(

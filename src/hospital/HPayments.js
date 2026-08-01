@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import API from "../services/api";
+import { computeFeeBreakdown } from "../services/fees";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 8;
@@ -29,8 +30,11 @@ const inr = (v) => {
   return "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+// Reads as a SETTING, not as a description of past money — a row can show
+// "Collects online" next to fees that were historically taken at the clinic,
+// and "Fee paid online" made that look like a contradiction.
 const modeLabel = (m) =>
-  m === "SERVICE_ONLY" ? "Service fee only" : "Doctor + service fee";
+  m === "SERVICE_ONLY" ? "Collects at clinic" : "Collects online";
 
 const fmtDate = (iso) => {
   if (!iso) return "—";
@@ -89,19 +93,28 @@ const HPayments = ({ hospital, showToast }) => {
   const [loadingForm, setLoadingForm] = useState(false);
   const [saving,      setSaving]      = useState(false);
 
+  // showToast is rebuilt on every parent render, and `hospital` is an object —
+  // depending on either made loadSummary a new function each render, so the
+  // effect below re-fired forever and hammered the API. Keep the toast in a ref
+  // and key the callback on the id alone.
+  const toastRef = useRef(showToast);
+  useEffect(() => { toastRef.current = showToast; }, [showToast]);
+
+  const hospitalId = hospital?.id;
+
   const loadSummary = useCallback(async () => {
-    if (!hospital?.id) return;
+    if (!hospitalId) return;
     setLoading(true);
     try {
-      const { data } = await API.get(`/doctors/payment-summary/?hospital=${hospital.id}`);
+      const { data } = await API.get(`/doctors/payment-summary/?hospital=${hospitalId}`);
       setSummary({ doctors: data.doctors || [], totals: data.totals || {} });
     } catch (err) {
       console.warn("Payment summary load failed:", err?.response?.status, err?.response?.data);
-      showToast?.("Could not load payments. Please try again.", "error");
+      toastRef.current?.("Could not load payments. Please try again.", "error");
     } finally {
       setLoading(false);
     }
-  }, [hospital, showToast]);
+  }, [hospitalId]);
 
   useEffect(() => { loadSummary(); }, [loadSummary]);
 
@@ -123,6 +136,10 @@ const HPayments = ({ hospital, showToast }) => {
   useEffect(() => { setPage(1); }, [search]);
 
   const totals = summary.totals || {};
+
+  // Doctors whose money has nowhere to go — their earnings are held until an
+  // account is added, so this is worth surfacing rather than burying in a row.
+  const needsSetup = summary.doctors.filter((d) => !d.has_payout_details).length;
 
   // ── Modal open / prefill ────────────────────────────────────────────────────
   const openModal = async (row) => {
@@ -190,23 +207,48 @@ const HPayments = ({ hospital, showToast }) => {
     }
   };
 
+  // Ownership is the organising idea here: the first card is everything patients
+  // paid, and it splits exactly into the doctors' share and TokenWalla's. The
+  // old page called the service fee revenue "you've earned" — it is charged to
+  // the PATIENT and never reaches the hospital, which made the totals unreadable.
   const cards = [
-    { label: "Total Collected",  val: inr(totals.total_collected),       hex: "#16a34a", hint: "All money collected — online + at hospital", primary: true },
-    { label: "Doctor Fees",      val: inr(totals.doctor_fees_collected), hex: "#7c3aed", hint: "Consultation fees (incl. collected at hospital)" },
-    { label: "Service Revenue",  val: inr(totals.service_revenue),       hex: "#0d6efd", hint: "TokenWalla platform fees you've earned" },
-    { label: "Pending Payout",   val: inr(totals.pending_payout),        hex: "#d97706", hint: "Accrued, not yet settled" },
-    { label: "Paid Out",         val: inr(totals.paid_amount),           hex: "#0ea5e9", hint: "Settled to doctors" },
+    { label: "Patients Paid", icon: "💰", val: inr(totals.total_collected), hex: "#16a34a",
+      hint: "Everything patients paid — consultation fees + TokenWalla charges", primary: true },
+    { label: "Doctor Fees",   icon: "🩺", val: inr(totals.doctor_fees_collected), hex: "#7c3aed",
+      hint: "Your doctors' consultation fees, paid to them in full" },
+    { label: "Pending Payout", icon: "⏳", val: inr(totals.pending_payout), hex: "#d97706",
+      hint: "Earned on completed visits, not yet transferred" },
+    { label: "Paid Out",      icon: "✅", val: inr(totals.paid_amount), hex: "#0ea5e9",
+      hint: "Already transferred to doctor / hospital accounts" },
+    { label: "TokenWalla Charges", icon: "🏷️", val: inr(totals.service_total), hex: "#64748b",
+      hint: "Service fee + GST paid by patients. Not deducted from you." },
   ];
 
   return (
     <div className="hp-wrap">
+      {/* ── How the money works — the single most asked question ── */}
+      <div className="hp-explain mb-3">
+        <span className="hp-explain__icon">💡</span>
+        <div>
+          <strong>Your doctors keep 100% of their consultation fee.</strong>{" "}
+          TokenWalla charges the <em>patient</em> a service fee on top — we never
+          deduct from a doctor's fee and never bill the hospital.
+          <span className="hp-explain__eg">
+            Example: ₹500 consultation → patient pays {inr(computeFeeBreakdown(500).final_amount)},
+            doctor receives ₹500.00, TokenWalla keeps {inr(computeFeeBreakdown(500).service_total)}.
+          </span>
+        </div>
+      </div>
+
       {/* ── Summary cards ── */}
       <div className="row g-3 mb-4">
         {cards.map((c) => (
           <div key={c.label} className="col-6 col-lg">
             <div className={`tw-stat hp-card ${c.primary ? "hp-card--primary" : ""}`}>
               <span className="tw-stat__accent" style={{ background: c.hex }} />
-              <p className="tw-stat__label">{c.label}</p>
+              <p className="hp-card__label">
+                <span className="hp-card__icon">{c.icon}</span>{c.label}
+              </p>
               <p className="hp-card__val" style={{ color: c.hex }}>{c.val}</p>
               <p className="hp-card__hint">{c.hint}</p>
             </div>
@@ -219,7 +261,10 @@ const HPayments = ({ hospital, showToast }) => {
         <div>
           <h5 className="fw-bold mb-0">💳 Doctor Payments</h5>
           <span className="text-muted small">
-            {summary.doctors.length} doctor{summary.doctors.length === 1 ? "" : "s"} • payout details &amp; earnings
+            {summary.doctors.length} doctor{summary.doctors.length === 1 ? "" : "s"}
+            {needsSetup > 0 && (
+              <> • <span className="hp-warn">{needsSetup} need{needsSetup === 1 ? "s" : ""} a payout account</span></>
+            )}
           </span>
         </div>
         <div className="d-flex align-items-center gap-2">
@@ -229,7 +274,8 @@ const HPayments = ({ hospital, showToast }) => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <button className="btn btn-outline-secondary btn-sm" onClick={loadSummary} title="Refresh">↻</button>
+          <button className="btn btn-outline-secondary btn-sm hp-refresh" onClick={loadSummary}
+                  disabled={loading} title="Refresh">↻</button>
         </div>
       </div>
 
@@ -239,57 +285,82 @@ const HPayments = ({ hospital, showToast }) => {
           <thead>
             <tr>
               <th>Doctor</th>
-              <th>Collection Mode</th>
-              <th className="text-end">Appts</th>
-              <th className="text-end">Total Collected</th>
+              <th className="text-end">Visits</th>
+              <th className="text-end">Patients Paid</th>
               <th className="text-end">Doctor Fees</th>
-              <th className="text-end">Service Rev.</th>
+              <th className="text-end">TokenWalla</th>
               <th className="text-end">Pending</th>
-              <th className="text-end">Paid</th>
-              <th>Last Payout</th>
-              <th className="text-end">Action</th>
+              <th className="text-end">Paid Out</th>
+              <th className="text-end">&nbsp;</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={10} className="text-center text-muted py-4">Loading…</td></tr>
+              <tr><td colSpan={8} className="text-center text-muted py-5">Loading…</td></tr>
             )}
             {!loading && pageRows.length === 0 && (
-              <tr><td colSpan={10} className="text-center text-muted py-4">
-                {summary.doctors.length === 0 ? "No doctors yet." : "No doctors match your search."}
+              <tr><td colSpan={8} className="text-center py-5">
+                {summary.doctors.length === 0 ? (
+                  <>
+                    <div className="hp-empty__icon">🩺</div>
+                    <div className="fw-semibold">No doctors yet</div>
+                    <div className="text-muted small">Add a doctor and their payout details will appear here.</div>
+                  </>
+                ) : (
+                  <span className="text-muted">No doctors match “{search}”.</span>
+                )}
               </td></tr>
             )}
             {!loading && pageRows.map((d) => (
               <tr key={d.id}>
                 <td>
                   <div className="fw-semibold">{d.name}</div>
-                  <div className="text-muted hp-sub">{d.specialization || "—"} • {inr(d.fee)} fee</div>
-                </td>
-                <td>
-                  <span className={`hp-badge ${d.collection_mode === "SERVICE_ONLY" ? "hp-badge--amber" : "hp-badge--blue"}`}>
-                    {modeLabel(d.collection_mode)}
-                  </span>
+                  <div className="text-muted hp-sub mb-1">
+                    {d.specialization || "—"} • {inr(d.fee)} consultation
+                  </div>
+                  <div className="hp-badges">
+                    <span className={`hp-badge ${d.collection_mode === "SERVICE_ONLY" ? "hp-badge--amber" : "hp-badge--blue"}`}>
+                      {modeLabel(d.collection_mode)}
+                    </span>
+                    {d.has_payout_details ? (
+                      <span className={`hp-badge ${d.payout_to_hospital ? "hp-badge--violet" : "hp-badge--slate"}`}>
+                        {d.payout_to_hospital ? "→ Hospital a/c" : "→ Doctor's a/c"}
+                      </span>
+                    ) : (
+                      <span className="hp-badge hp-badge--red"
+                            title={d.payout_to_hospital
+                              ? "The hospital's payout account is empty — set it under Profile."
+                              : "No UPI ID or bank account saved for this doctor."}>
+                        ⚠ No payout account
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="text-end">{d.appointments}</td>
                 <td className="text-end fw-semibold">{inr(d.total_collected)}</td>
                 <td className="text-end">
                   {inr(d.doctor_fees_collected)}
                   {Number(d.offline_doctor_fee) > 0 && (
-                    <span className="hp-sub d-block text-muted">{inr(d.offline_doctor_fee)} at hospital</span>
+                    <span className="hp-sub d-block text-muted">{inr(d.offline_doctor_fee)} at clinic</span>
                   )}
                 </td>
-                <td className="text-end fw-semibold text-primary">{inr(d.service_revenue)}</td>
-                <td className="text-end">{inr(d.pending_payout)}</td>
-                <td className="text-end">{inr(d.paid_amount)}</td>
-                <td>
-                  {fmtDate(d.last_payout_date)}
-                  {!d.has_payout_details && (
-                    <span className="hp-warn d-block" title="No payout account saved">⚠ no account</span>
-                  )}
+                <td className="text-end hp-muted-num"
+                    title={`Service fee ${inr(d.service_revenue)} + gateway ${inr(d.gateway_fee)} `
+                         + `+ GST ${inr(d.gst_collected)}`}>
+                  {inr(d.service_total)}
+                </td>
+                <td className="text-end">
+                  {Number(d.pending_payout) > 0
+                    ? <span className="hp-pending">{inr(d.pending_payout)}</span>
+                    : <span className="text-muted">—</span>}
+                </td>
+                <td className="text-end">
+                  {inr(d.paid_amount)}
+                  <span className="hp-sub d-block text-muted">{fmtDate(d.last_payout_date)}</span>
                 </td>
                 <td className="text-end">
                   <button className="btn btn-sm btn-primary hp-update" onClick={() => openModal(d)}>
-                    Update
+                    Manage
                   </button>
                 </td>
               </tr>
@@ -336,6 +407,42 @@ const HPayments = ({ hospital, showToast }) => {
                     {COLLECTION_MODES.find((m) => m.value === form.payment_collection_mode)?.hint}
                   </div>
                 </div>
+
+                {/* Live preview — what this setting actually does to one visit */}
+                {(() => {
+                  const b = computeFeeBreakdown(modalDoctor.fee, form.payment_collection_mode);
+                  const serviceOnly = form.payment_collection_mode === "SERVICE_ONLY";
+                  return (
+                    <div className="hp-preview mb-3">
+                      <div className="hp-preview__title">
+                        One {inr(modalDoctor.fee)} consultation
+                      </div>
+                      <div className="hp-preview__row">
+                        <span>Patient pays online</span>
+                        <strong>{inr(b.final_amount)}</strong>
+                      </div>
+                      {serviceOnly && (
+                        <div className="hp-preview__row">
+                          <span>Patient pays at your clinic</span>
+                          <strong>{inr(b.offline_doctor_fee)}</strong>
+                        </div>
+                      )}
+                      <div className="hp-preview__row hp-preview__row--good">
+                        <span>Doctor receives</span>
+                        <strong>
+                          {serviceOnly ? `${inr(b.offline_doctor_fee)} at clinic` : inr(b.doctor_fee)}
+                        </strong>
+                      </div>
+                      <div className="hp-preview__row hp-preview__row--muted">
+                        <span>TokenWalla service fee + GST</span>
+                        <strong>{inr(b.service_total)}</strong>
+                      </div>
+                      <div className="hp-preview__note">
+                        Nothing is deducted from the doctor or billed to the hospital.
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <hr className="my-3" />
                 <p className="fw-semibold small text-uppercase text-muted mb-2" style={{ letterSpacing: ".04em" }}>
@@ -439,27 +546,68 @@ const HPayments = ({ hospital, showToast }) => {
       )}
 
       <style>{`
-        .hp-card{padding:16px 16px 14px 20px}
-        .hp-card--primary{box-shadow:0 4px 16px rgba(13,110,253,.10)}
-        .hp-card__val{font-size:26px;font-weight:700;line-height:1.1;letter-spacing:-.02em;margin:0 0 4px}
-        .hp-card__hint{font-size:11px;color:#8a94a1;margin:0;line-height:1.3}
-        .hp-search{width:200px;max-width:52vw}
+        /* ── Explainer ── */
+        .hp-explain{display:flex;gap:12px;align-items:flex-start;background:linear-gradient(180deg,#f6fbff,#f2f7ff);
+          border:1px solid #dbeafe;border-radius:14px;padding:13px 16px;font-size:13px;color:#1e3a5f;line-height:1.5}
+        .hp-explain__icon{font-size:16px;line-height:1.35;flex:none}
+        .hp-explain__eg{display:block;margin-top:4px;font-size:12px;color:#5b7290}
 
+        /* ── Stat cards ── */
+        .hp-card{padding:16px 16px 14px 20px;height:100%}
+        .hp-card--primary{box-shadow:0 4px 16px rgba(22,163,74,.10)}
+        .hp-card__label{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
+          letter-spacing:.04em;text-transform:uppercase;color:#8a94a1;margin:0 0 6px}
+        .hp-card__icon{font-size:12px}
+        .hp-card__val{font-size:26px;font-weight:700;line-height:1.1;letter-spacing:-.02em;margin:0 0 4px}
+        .hp-card__hint{font-size:11px;color:#8a94a1;margin:0;line-height:1.35}
+        .hp-search{width:200px;max-width:52vw}
+        .hp-refresh{border-radius:8px;width:34px}
+
+        /* ── Table ── */
         .hp-tablewrap{background:#fff;border:1px solid #edf0f2;border-radius:16px;overflow-x:auto}
-        .hp-table{font-size:14px;min-width:900px;margin:0}
-        .hp-table thead th{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#8a94a1;border-bottom:1px solid #edf0f2;white-space:nowrap;padding:12px 14px}
-        .hp-table tbody td{border-bottom:1px solid #f2f4f6;padding:12px 14px;vertical-align:middle}
+        .hp-table{font-size:14px;min-width:860px;margin:0}
+        .hp-table thead th{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+          color:#8a94a1;border-bottom:1px solid #edf0f2;white-space:nowrap;padding:12px 14px;background:#fcfdfe}
+        .hp-table tbody td{border-bottom:1px solid #f2f4f6;padding:13px 14px;vertical-align:middle}
         .hp-table tbody tr:last-child td{border-bottom:0}
+        .hp-table tbody tr{transition:background .12s ease}
+        .hp-table tbody tr:hover{background:#fafcff}
         .hp-sub{font-size:12px}
-        .hp-warn{font-size:11px;color:#c2410c;font-weight:600}
+        .hp-warn{color:#c2410c;font-weight:600}
+        .hp-muted-num{color:#8a94a1}
+        .hp-pending{color:#b45309;font-weight:600}
+        .hp-badges{display:flex;flex-wrap:wrap;gap:4px}
+        .hp-empty__icon{font-size:30px;margin-bottom:6px;opacity:.7}
 
         .hp-badge{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
         .hp-badge--blue{background:#e7f0ff;color:#0d6efd}
         .hp-badge--amber{background:#fff3e0;color:#c2410c}
+        .hp-badge--violet{background:#f3e8ff;color:#7c3aed}
+        .hp-badge--slate{background:#eef2f6;color:#556170}
+        .hp-badge--red{background:#fee2e2;color:#b91c1c;cursor:help}
         .hp-update{border-radius:8px;font-weight:600}
 
-        .hp-modal-backdrop{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto}
-        .hp-modal{background:#fff;border-radius:18px;width:100%;max-width:520px;padding:22px 22px 20px;box-shadow:0 20px 60px rgba(16,24,40,.25);margin:auto}
+        /* ── Fee preview inside the modal ── */
+        .hp-preview{background:#f8fafc;border:1px solid #e8edf2;border-radius:12px;padding:12px 14px}
+        .hp-preview__title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+          color:#8a94a1;margin-bottom:8px}
+        .hp-preview__row{display:flex;justify-content:space-between;gap:12px;font-size:13px;
+          padding:3px 0;color:#334155}
+        .hp-preview__row--good{color:#15803d;border-top:1px dashed #dde5ec;margin-top:4px;padding-top:7px}
+        .hp-preview__row--muted{color:#8a94a1}
+        .hp-preview__note{font-size:11px;color:#8a94a1;margin-top:7px;line-height:1.4}
+
+        /* ── Modal ── */
+        .hp-modal-backdrop{position:fixed;inset:0;z-index:9999;background:rgba(16,24,40,.5);
+          backdrop-filter:blur(2px);display:flex;align-items:flex-start;justify-content:center;
+          padding:24px 16px;overflow-y:auto}
+        .hp-modal{background:#fff;border-radius:18px;width:100%;max-width:520px;padding:22px 22px 20px;
+          box-shadow:0 20px 60px rgba(16,24,40,.25);margin:auto}
+
+        @media (max-width:575px){
+          .hp-card__val{font-size:21px}
+          .hp-explain{font-size:12.5px;padding:11px 13px}
+        }
       `}</style>
     </div>
   );
