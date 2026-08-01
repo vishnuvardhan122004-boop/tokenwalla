@@ -51,6 +51,11 @@ class Doctor(models.Model):
     BANK = 'BANK'
     PAYMENT_METHOD_CHOICES = [(UPI, 'UPI'), (BANK, 'Bank Account')]
     payment_method      = models.CharField(max_length=10, choices=PAYMENT_METHOD_CHOICES, blank=True, default="")
+    # Salaried/employed doctors don't collect their own consultation fees — the
+    # hospital does. When set, the payout goes to the HOSPITAL's account instead
+    # of this doctor's (payments.cashfree_payouts_utils.payout_target). The
+    # ledger stays per-doctor either way, so who earned what is still auditable.
+    payout_to_hospital  = models.BooleanField(default=False)
     account_holder_name = models.CharField(max_length=200, blank=True, default="")
     bank_name           = models.CharField(max_length=200, blank=True, default="")
     payout_notes        = models.CharField(max_length=300, blank=True, default="")

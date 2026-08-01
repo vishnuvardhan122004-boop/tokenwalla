@@ -32,6 +32,7 @@ const fmtDate = (iso) => {
 
 const EMPTY_FORM = {
   payment_collection_mode: "FULL",
+  payout_to_hospital: false,
   payment_method: "",
   upi_id: "",
   account_holder_name: "",
@@ -44,6 +45,9 @@ const EMPTY_FORM = {
 // Mirrors the backend validation so users get instant feedback.
 const validateDetails = (f) => {
   const e = {};
+  // Salaried doctor: the money goes to the hospital's account, so this doctor's
+  // own payout fields are never read and must not be demanded.
+  if (f.payout_to_hospital) return e;
   if (f.payment_method === "UPI") {
     if (!f.upi_id.trim()) e.upi_id = "UPI ID is required for a UPI payout.";
     else if (!/^[\w.\-]{2,256}@[a-zA-Z]{2,64}$/.test(f.upi_id.trim()))
@@ -121,6 +125,7 @@ const HPayments = ({ hospital, showToast }) => {
       const { data } = await API.get(`/doctors/${row.id}/payment-details/`);
       setForm({
         payment_collection_mode: data.payment_collection_mode || "FULL",
+        payout_to_hospital:      !!data.payout_to_hospital,
         payment_method:          data.payment_method || "",
         upi_id:                  data.upi_id || "",
         account_holder_name:     data.account_holder_name || "",
@@ -150,6 +155,7 @@ const HPayments = ({ hospital, showToast }) => {
     try {
       await API.put(`/doctors/${modalDoctor.id}/payment-details/`, {
         payment_collection_mode: form.payment_collection_mode,
+        payout_to_hospital:      form.payout_to_hospital,
         payment_method:          form.payment_method,
         upi_id:                  form.upi_id.trim(),
         account_holder_name:     form.account_holder_name.trim(),
@@ -327,6 +333,27 @@ const HPayments = ({ hospital, showToast }) => {
                   Payout Account
                 </p>
 
+                {/* Salaried doctor → pay the hospital instead */}
+                <div className="form-check form-switch mb-3">
+                  <input className="form-check-input" type="checkbox" role="switch"
+                         id="payoutToHospital" checked={form.payout_to_hospital}
+                         onChange={(e) => setField("payout_to_hospital", e.target.checked)} />
+                  <label className="form-check-label small" htmlFor="payoutToHospital">
+                    Salaried doctor — pay into the hospital's account
+                  </label>
+                  <div className="form-text">
+                    Their consultation fees are settled to the hospital, not to them
+                    personally. Earnings are still tracked per doctor.
+                  </div>
+                </div>
+
+                {form.payout_to_hospital ? (
+                  <div className="alert alert-info py-2 small mb-3">
+                    Payouts for {modalDoctor.name} go to the hospital's payout account.
+                    Set it under <strong>Profile → Payout Account</strong>. Payouts are
+                    held until that account is filled in.
+                  </div>
+                ) : (<>
                 {/* Method */}
                 <div className="mb-3">
                   <label className="form-label fw-semibold small mb-1">Payment Method</label>
@@ -380,6 +407,7 @@ const HPayments = ({ hospital, showToast }) => {
                     </div>
                   </>
                 )}
+                </>)}
 
                 {/* Notes */}
                 <div className="mb-3">

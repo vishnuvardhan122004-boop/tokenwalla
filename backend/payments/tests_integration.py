@@ -41,7 +41,9 @@ from payments.models import (
     Payment, ReschedulePayment, DoctorLedger, PayoutBatch,
 )
 from payments.fees import compute_fee_breakdown
-from payments.cashfree_payouts_utils import create_payout
+from payments.cashfree_payouts_utils import (
+    create_payout, choose_mode, payout_target,
+)
 
 User = get_user_model()
 
@@ -588,3 +590,116 @@ class PayoutEdgeCaseTests(WorldMixin, TestCase):
         retried = PayoutBatch.objects.exclude(pk=batch.pk)
         self.assertEqual(retried.count(), 1)
         self.assertEqual(retried.first().total_amount, Decimal('200.00'))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Salaried doctors — the payout goes to the HOSPITAL's account
+# ─────────────────────────────────────────────────────────────────────────────
+class SalariedDoctorPayoutTests(WorldMixin, TestCase):
+    """A salaried doctor doesn't collect their own fees; the hospital does.
+    `Doctor.payout_to_hospital` redirects the money WITHOUT moving the ledger:
+    earnings stay attributable per doctor, only the destination account changes.
+    """
+    def setUp(self):
+        self.make_actors(fee=200)
+        self.hospital.upi_vpa = 'apollo@upi'
+        self.hospital.account_holder_name = 'Apollo Hospitals Pvt Ltd'
+        self.hospital.save(update_fields=['upi_vpa', 'account_holder_name'])
+
+    def _complete_booking(self, token, doctor=None):
+        booking = Booking.objects.create(
+            user=self.user, doctor=doctor or self.doctor, hospital=self.hospital,
+            date=timezone.localdate(), slot='09:00 AM', token=token,
+            status=Booking.COMPLETED, amount=200)
+        bd = compute_fee_breakdown(200)
+        Payment.objects.create(
+            booking=booking, order_id='o', payment_id=f'pay_{token}', amount=225,
+            doctor_fee=bd['doctor_fee'], platform_fee=bd['platform_fee'],
+            gateway_fee=bd['gateway_fee'], gst_amount=bd['gst_amount'],
+            final_amount=bd['final_amount'], status=Payment.PAID)
+        return booking
+
+    def _salaried(self):
+        self.doctor.payout_to_hospital = True
+        self.doctor.save(update_fields=['payout_to_hospital'])
+
+    def test_target_is_the_doctor_by_default(self):
+        self.assertEqual(payout_target(self.doctor), self.doctor)
+
+    def test_target_is_the_hospital_when_salaried(self):
+        self._salaried()
+        self.assertEqual(payout_target(self.doctor), self.hospital)
+
+    def test_mode_comes_from_the_hospital_not_the_doctor(self):
+        # The doctor has only a bank account (IMPS); the hospital has a VPA.
+        # Routing to the hospital must pick UPI — reading the doctor's rail here
+        # would send an IMPS transfer to an account we never looked up.
+        self._salaried()
+        self._complete_booking('TW-SAL-1')
+        call_command('run_daily_payouts')
+        self.assertEqual(PayoutBatch.objects.get().payout_mode, PayoutBatch.UPI)
+
+    @override_settings(CASHFREE_PAYOUTS_ENABLED=True, CASHFREE_ENV='SANDBOX',
+                       CASHFREE_PAYOUT_CLIENT_ID='cid',
+                       CASHFREE_PAYOUT_CLIENT_SECRET='csec')
+    @mock.patch('requests.post')
+    def test_transfer_carries_the_hospital_account(self, post):
+        post.return_value = mock.Mock(status_code=200, text='')
+        post.return_value.json.return_value = {'cf_transfer_id': '99', 'status': 'RECEIVED'}
+        self._salaried()
+        create_payout(self.doctor, Decimal('200.00'), 'UPI', 'payout_1_2026-08-02')
+
+        bene = post.call_args.kwargs['json']['beneficiary_details']
+        self.assertEqual(bene['beneficiary_instrument_details'], {'vpa': 'apollo@upi'})
+        self.assertEqual(bene['beneficiary_id'], f'tw_hospital_{self.hospital.id}')
+        self.assertEqual(bene['beneficiary_name'], 'Apollo Hospitals Pvt Ltd')
+
+    def test_ledger_and_batch_stay_keyed_to_the_doctor(self):
+        # The money goes to the hospital, but the AUDIT TRAIL must still say
+        # which doctor earned it — otherwise a hospital with several salaried
+        # doctors has one undifferentiated lump.
+        self._salaried()
+        booking = self._complete_booking('TW-SAL-2')
+        call_command('run_daily_payouts')
+        self.assertEqual(DoctorLedger.objects.get(booking=booking).doctor, self.doctor)
+        self.assertEqual(PayoutBatch.objects.get().doctor, self.doctor)
+
+    def test_two_salaried_doctors_share_one_beneficiary_but_not_one_batch(self):
+        self._salaried()
+        other = Doctor.objects.create(
+            hospital=self.hospital, name='Dr Iyer', specialization='ENT',
+            mobile='9000000009', fee=200, slots=['09:00 AM'],
+            payout_to_hospital=True)
+        self._complete_booking('TW-SAL-3')
+        self._complete_booking('TW-SAL-4', doctor=other)
+        call_command('run_daily_payouts')
+
+        # One batch each (per-doctor accounting), both paid into one account.
+        self.assertEqual(PayoutBatch.objects.count(), 2)
+        self.assertEqual(
+            {payout_target(d).id for d in (self.doctor, other)}, {self.hospital.id})
+        # `other` has no payout details of their own — routing is what makes
+        # them payable at all.
+        self.assertEqual(choose_mode(other), None)
+        self.assertEqual(choose_mode(payout_target(other)), 'UPI')
+
+    def test_salaried_doctor_is_held_when_the_hospital_has_no_details(self):
+        # The doctor's own bank account must NOT be used as a fallback — the
+        # whole point of the flag is that they don't receive these fees.
+        self._salaried()
+        self.hospital.upi_vpa = ''
+        self.hospital.save(update_fields=['upi_vpa'])
+        self._complete_booking('TW-SAL-5')
+        call_command('run_daily_payouts')
+
+        self.assertEqual(PayoutBatch.objects.count(), 0)
+        self.assertEqual(DoctorLedger.objects.filter(payout_batch__isnull=True).count(), 1)
+
+        # Hospital adds its account → the held earnings go out next cycle.
+        self.hospital.bank_account_number = '55566677788'
+        self.hospital.ifsc = 'ICIC0000123'
+        self.hospital.save(update_fields=['bank_account_number', 'ifsc'])
+        call_command('run_daily_payouts')
+        batch = PayoutBatch.objects.get()
+        self.assertEqual(batch.total_amount, Decimal('200.00'))
+        self.assertEqual(batch.payout_mode, PayoutBatch.IMPS)

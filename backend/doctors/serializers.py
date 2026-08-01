@@ -92,6 +92,7 @@ class DoctorPaymentDetailsSerializer(serializers.ModelSerializer):
             "id", "name", "fee",
             "payment_collection_mode",
             "payment_method",
+            "payout_to_hospital",
             "upi_id",
             "account_holder_name",
             "bank_name",
@@ -103,6 +104,7 @@ class DoctorPaymentDetailsSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "payment_collection_mode": {"required": False},
             "payment_method":          {"required": False, "allow_blank": True},
+            "payout_to_hospital":      {"required": False},
             "account_holder_name":     {"required": False, "allow_blank": True},
             "bank_name":               {"required": False, "allow_blank": True},
             "payout_notes":            {"required": False, "allow_blank": True},
@@ -131,6 +133,16 @@ class DoctorPaymentDetailsSerializer(serializers.ModelSerializer):
         acct   = attrs.get("bank_account_number", getattr(inst, "bank_account_number", "") if inst else "")
         ifsc   = attrs.get("ifsc",                getattr(inst, "ifsc", "") if inst else "")
         holder = attrs.get("account_holder_name", getattr(inst, "account_holder_name", "") if inst else "")
+        to_hospital = attrs.get(
+            "payout_to_hospital",
+            getattr(inst, "payout_to_hospital", False) if inst else False)
+
+        # Salaried doctor: paid into the HOSPITAL's account, so this doctor's own
+        # instrument is never read. Demanding it would block the save on a field
+        # the UI has (correctly) hidden — and a stale payment_method left over
+        # from before the switch is exactly how that happens.
+        if to_hospital:
+            return attrs
 
         if method == Doctor.UPI and not (upi or "").strip():
             raise serializers.ValidationError(

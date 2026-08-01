@@ -73,25 +73,47 @@ def verify_legacy_payout_notification(payload):
     return hmac.compare_digest(expected, str(signature))
 
 
-def choose_mode(doctor):
-    """UPI if the doctor has a VPA, else IMPS (bank) as fallback.
+def payout_target(doctor):
+    """Whose ACCOUNT a doctor's payout is sent to.
 
-    Returns None when the doctor has NEITHER a VPA nor a full bank account —
-    there is nowhere to send the money, so the caller holds the ledger instead
-    of creating a batch that can only fail."""
-    if (doctor.upi_vpa or '').strip():
+    A salaried doctor doesn't collect their own fees — the hospital employing
+    them does — so `Doctor.payout_to_hospital` routes the money to the
+    hospital's account. Everyone else is paid directly.
+
+    Hospital and Doctor deliberately carry identically named payout fields
+    (upi_vpa / bank_account_number / ifsc / account_holder_name / name / mobile),
+    so every function below takes whichever this returns without caring which.
+
+    Only the DESTINATION changes: the ledger and the batch stay keyed to the
+    doctor, so earnings remain attributable per doctor even when several
+    salaried doctors are paid into one hospital account.
+    """
+    if doctor.payout_to_hospital and doctor.hospital_id:
+        return doctor.hospital
+    return doctor
+
+
+def choose_mode(target):
+    """UPI if the payout target has a VPA, else IMPS (bank) as fallback.
+
+    `target` is a Doctor or a Hospital — see payout_target(). Returns None when
+    it has NEITHER a VPA nor a full bank account: there is nowhere to send the
+    money, so the caller holds the ledger instead of creating a batch that can
+    only fail."""
+    if (target.upi_vpa or '').strip():
         return 'UPI'
-    if (doctor.bank_account_number or '').strip() and (doctor.ifsc or '').strip():
+    if (target.bank_account_number or '').strip() and (target.ifsc or '').strip():
         return 'IMPS'
     return None
 
 
 def _simulate_payout(doctor, amount, mode, idempotency_key):
     """Stand-in for the live Cashfree Payouts call while payouts are disabled."""
+    target = payout_target(doctor)
     logger.info(
-        '[cashfree-payouts:SIMULATED] payout ₹%s to doctor %s via %s (key=%s) — '
-        'Cashfree Payouts disabled; no money moved.',
-        amount, doctor.id, mode, idempotency_key,
+        '[cashfree-payouts:SIMULATED] payout ₹%s for doctor %s to %s %s via %s '
+        '(key=%s) — Cashfree Payouts disabled; no money moved.',
+        amount, doctor.id, target._meta.model_name, target.id, mode, idempotency_key,
     )
     return {
         'id':        f'txn_sim_{uuid.uuid4().hex[:14]}',
@@ -185,23 +207,28 @@ def _payout_headers():
     return headers
 
 
-def _beneficiary_details(doctor, mode):
+def _beneficiary_details(target, mode):
     """Inline beneficiary for a V2 transfer — no pre-registration step needed.
 
-    beneficiary_id is stable per doctor so Cashfree links repeat payouts to the
-    same payee. Only the instrument for the chosen mode is sent: a stale/blank
-    bank account alongside a good VPA is a rejection waiting to happen.
+    `target` is a Doctor or a Hospital (see payout_target). beneficiary_id is
+    stable per target so Cashfree links repeat payouts to the same payee, and
+    keying it on the model name keeps a hospital's account distinct from any
+    doctor's — two salaried doctors at one hospital share ONE beneficiary rather
+    than each registering the hospital's account under their own id.
+
+    Only the instrument for the chosen mode is sent: a stale/blank bank account
+    alongside a good VPA is a rejection waiting to happen.
     """
-    instrument = ({'vpa': doctor.upi_vpa.strip()} if mode == 'UPI' else {
-        'bank_account_number': (doctor.bank_account_number or '').strip(),
-        'bank_ifsc':           (doctor.ifsc or '').strip(),
+    instrument = ({'vpa': target.upi_vpa.strip()} if mode == 'UPI' else {
+        'bank_account_number': (target.bank_account_number or '').strip(),
+        'bank_ifsc':           (target.ifsc or '').strip(),
     })
     return {
-        'beneficiary_id':   f'tw_doctor_{doctor.id}',
-        'beneficiary_name': (doctor.account_holder_name or doctor.name).strip()[:100],
+        'beneficiary_id':   f'tw_{target._meta.model_name}_{target.id}',
+        'beneficiary_name': (target.account_holder_name or target.name).strip()[:100],
         'beneficiary_instrument_details': instrument,
         'beneficiary_contact_details': {
-            'beneficiary_phone': (doctor.mobile or '').strip()[-10:],
+            'beneficiary_phone': (target.mobile or '').strip()[-10:],
         },
     }
 
@@ -227,12 +254,13 @@ def _live_payout(doctor, amount, mode, idempotency_key):
     """
     import requests   # local: the simulated path shouldn't pay for the import
 
+    target = payout_target(doctor)
     body = {
         'transfer_id':       idempotency_key,
         'transfer_amount':   float(amount),          # rupees, not paise
         'transfer_currency': 'INR',
         'transfer_mode':     mode.lower(),           # 'upi' | 'imps'
-        'beneficiary_details': _beneficiary_details(doctor, mode),
+        'beneficiary_details': _beneficiary_details(target, mode),
         'transfer_remarks':  'TokenWalla consultation payout',
     }
     resp = requests.post(f'{payouts_base_url()}/transfers',
@@ -253,8 +281,10 @@ def _live_payout(doctor, amount, mode, idempotency_key):
         )
     # V2 returns the transfer object flat; tolerate a `data` wrapper either way.
     body_out = data.get('data') if isinstance(data.get('data'), dict) else data
-    logger.info('[cashfree-payouts] transfer %s → doctor %s ₹%s via %s: %s',
-                idempotency_key, doctor.id, amount, mode, body_out.get('status'))
+    logger.info('[cashfree-payouts] transfer %s → doctor %s (paid to %s %s) ₹%s '
+                'via %s: %s', idempotency_key, doctor.id,
+                target._meta.model_name, target.id, amount, mode,
+                body_out.get('status'))
     return {
         'id':     str(body_out.get('cf_transfer_id') or ''),
         'status': body_out.get('status', ''),

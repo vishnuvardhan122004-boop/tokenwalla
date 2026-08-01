@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from .models import Doctor
 from .serializers import DoctorSerializer
+from payments.cashfree_payouts_utils import payout_target
 from tokenwalla.permissions import IsHospitalStaff, IsDoctorOwnerHospitalOrAdmin
 from tokenwalla.utils import is_slot_bookable
 
@@ -304,7 +305,9 @@ class DoctorViewSet(viewsets.ModelViewSet):
         if not is_admin and str(getattr(user, 'last_name', '')) != str(hospital_id):
             return Response({'message': 'You can only view your own hospital.'}, status=403)
 
-        doctors = list(Doctor.objects.filter(hospital_id=hospital_id).order_by('name'))
+        # select_related('hospital'): payout_target() reads it for salaried doctors.
+        doctors = list(Doctor.objects.filter(hospital_id=hospital_id)
+                       .select_related('hospital').order_by('name'))
         if not doctors:
             return Response({'doctors': [], 'totals': _empty_totals()})
 
@@ -379,6 +382,11 @@ class DoctorViewSet(viewsets.ModelViewSet):
             t_pending    += pending
             t_paid       += paid
 
+            # A salaried doctor is paid into the HOSPITAL's account, so "are the
+            # payout details set?" must ask the target, not the doctor — else the
+            # dashboard nags for bank details that would never be used.
+            target = payout_target(d)
+
             rows.append({
                 'id':               d.id,
                 'name':             d.name,
@@ -386,7 +394,8 @@ class DoctorViewSet(viewsets.ModelViewSet):
                 'fee':              d.fee,
                 'collection_mode':  d.payment_collection_mode,
                 'payment_method':   d.payment_method,
-                'has_payout_details': bool(d.upi_vpa or d.bank_account_number),
+                'payout_to_hospital': d.payout_to_hospital,
+                'has_payout_details': bool(target.upi_vpa or target.bank_account_number),
                 'appointments':     a.get('appointments', 0),
                 'paid_appointments': p.get('paid_appointments', 0),
                 'total_collected':  _num(total),          # gross (online + offline)

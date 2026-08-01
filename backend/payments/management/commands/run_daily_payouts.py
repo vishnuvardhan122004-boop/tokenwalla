@@ -26,7 +26,7 @@ from django.utils import timezone
 
 from bookings.models import Booking
 from payments.models import DoctorLedger, PayoutBatch
-from payments.cashfree_payouts_utils import create_payout, choose_mode
+from payments.cashfree_payouts_utils import create_payout, choose_mode, payout_target
 
 logger = logging.getLogger('tokenwalla')
 
@@ -116,7 +116,7 @@ class Command(BaseCommand):
                     # attaching the same locked id set makes them always agree.
                     entries = (DoctorLedger.objects
                                .select_for_update()
-                               .select_related('doctor')
+                               .select_related('doctor', 'doctor__hospital')
                                .filter(doctor_id=doctor_id, payout_batch__isnull=True))
                     rows = list(entries)
                     if not rows:
@@ -134,11 +134,15 @@ class Command(BaseCommand):
                     # Leave the rows unbatched so the earnings accrue and pay out
                     # in a later cycle once the hospital fills the details in;
                     # batching now would only create a guaranteed-failed transfer.
-                    mode = choose_mode(rows[0].doctor)
+                    # For a salaried doctor the target is their HOSPITAL, so the
+                    # missing details may be the hospital's — say which.
+                    target = payout_target(rows[0].doctor)
+                    mode   = choose_mode(target)
                     if mode is None:
-                        logger.error('ALERT: doctor %s has ₹%s owed but no UPI VPA and no '
-                                     'bank account — holding the ledger. Ask the hospital '
-                                     'to add payout details.', doctor_id, total)
+                        logger.error('ALERT: doctor %s has ₹%s owed but payout target '
+                                     '%s %s has no UPI VPA and no bank account — holding '
+                                     'the ledger. Add payout details to release it.',
+                                     doctor_id, total, target._meta.model_name, target.id)
                         continue
 
                     doctor = rows[0].doctor

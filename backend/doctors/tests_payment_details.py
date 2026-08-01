@@ -72,6 +72,28 @@ class PaymentDetailsEndpointTests(TestCase):
         self.assertEqual(self.doctor.upi_vpa, 'apollo@okhdfc')
         self.assertEqual(self.doctor.payment_collection_mode, 'SERVICE_ONLY')
 
+    def test_owner_can_mark_a_doctor_salaried(self):
+        self.client.force_authenticate(self.staff)
+        r = self.client.put(self.url(), {'payout_to_hospital': True}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.doctor.refresh_from_db()
+        self.assertTrue(self.doctor.payout_to_hospital)
+        self.assertTrue(self.client.get(self.url()).json()['payout_to_hospital'])
+
+    def test_salaried_doctor_saves_despite_a_stale_payment_method(self):
+        # Doctor was set to UPI but never given a VPA. Marking them salaried must
+        # save — the UI hides those fields, so a 400 here is an unfixable dead end.
+        self.doctor.payment_method = 'UPI'
+        self.doctor.save(update_fields=['payment_method'])
+        self.client.force_authenticate(self.staff)
+        r = self.client.put(self.url(), {'payout_to_hospital': True}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+
+        # Turning it back off restores the requirement.
+        r2 = self.client.put(self.url(), {'payout_to_hospital': False}, format='json')
+        self.assertEqual(r2.status_code, 400)
+        self.assertIn('upi_id', r2.json().get('errors', r2.json()))
+
     def test_upi_method_requires_upi_id(self):
         self.client.force_authenticate(self.staff)
         r = self.client.put(self.url(), {'payment_method': 'UPI'}, format='json')
@@ -192,6 +214,25 @@ class PaymentSummaryTests(TestCase):
         self.assertEqual(Decimal(row['total_collected']),
                          bd['final_amount'] + compute_fee_breakdown(200)['final_amount'] + Decimal('300.00'))
         self.assertEqual(Decimal(data['totals']['doctor_fees_collected']), Decimal('500.00'))
+
+    def test_salaried_doctor_reads_payout_details_off_the_hospital(self):
+        # The doctor has no account of their own; the hospital does. The
+        # dashboard must not warn "no payout details" for a doctor whose money
+        # is routed elsewhere — nor call them ready when the hospital is blank.
+        self.doctor.payout_to_hospital = True
+        self.doctor.save(update_fields=['payout_to_hospital'])
+        self.client.force_authenticate(self.staff)
+
+        def row():
+            r = self.client.get(f'/api/doctors/payment-summary/?hospital={self.hospital.id}')
+            return r.json()['doctors'][0]
+
+        self.assertTrue(row()['payout_to_hospital'])
+        self.assertFalse(row()['has_payout_details'])   # hospital account blank
+
+        self.hospital.upi_vpa = 'apollo@upi'
+        self.hospital.save(update_fields=['upi_vpa'])
+        self.assertTrue(row()['has_payout_details'])
 
     def test_summary_requires_hospital_param(self):
         self.client.force_authenticate(self.staff)
