@@ -29,6 +29,8 @@ test('unauthenticated user is redirected from /my-bookings to /login', () => {
       <App />
     </MemoryRouter>
   );
-  // Should be redirected — login form is present
-  expect(screen.getByText(/sign in/i)).toBeTruthy();
+  // Should be redirected — the login form's submit button is present. Matched by
+  // role, not text: "sign in" also appears in the panel copy, and a bare text
+  // query fails on the duplicate rather than on the thing being tested.
+  expect(screen.getByRole('button', { name: /sign in/i })).toBeTruthy();
 });
