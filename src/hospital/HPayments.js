@@ -288,6 +288,7 @@ const HPayments = ({ hospital, showToast }) => {
               <th className="text-end">Visits</th>
               <th className="text-end">Patients Paid</th>
               <th className="text-end">Doctor Fees</th>
+              <th className="text-end">Refunded</th>
               <th className="text-end">TokenWalla</th>
               <th className="text-end">Pending</th>
               <th className="text-end">Paid Out</th>
@@ -296,10 +297,10 @@ const HPayments = ({ hospital, showToast }) => {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={8} className="text-center text-muted py-5">Loading…</td></tr>
+              <tr><td colSpan={9} className="text-center text-muted py-5">Loading…</td></tr>
             )}
             {!loading && pageRows.length === 0 && (
-              <tr><td colSpan={8} className="text-center py-5">
+              <tr><td colSpan={9} className="text-center py-5">
                 {summary.doctors.length === 0 ? (
                   <>
                     <div className="hp-empty__icon">🩺</div>
@@ -343,6 +344,17 @@ const HPayments = ({ hospital, showToast }) => {
                   {Number(d.offline_doctor_fee) > 0 && (
                     <span className="hp-sub d-block text-muted">{inr(d.offline_doctor_fee)} at clinic</span>
                   )}
+                </td>
+                <td className="text-end">
+                  {Number(d.refunded_to_patient) > 0
+                    ? <span className="hp-refunded"
+                            title={`Returned to patients on cancellation: `
+                                 + `${inr(d.refunded_from_doctor_fee)} of doctor fees `
+                                 + `+ ${inr(d.refunded_from_service)} of our service fee. `
+                                 + `Already deducted from the columns either side.`}>
+                        −{inr(d.refunded_to_patient)}
+                      </span>
+                    : <span className="text-muted">—</span>}
                 </td>
                 <td className="text-end hp-muted-num"
                     title={`Service fee ${inr(d.service_revenue)} + gateway ${inr(d.gateway_fee)} `
@@ -565,7 +577,7 @@ const HPayments = ({ hospital, showToast }) => {
 
         /* ── Table ── */
         .hp-tablewrap{background:#fff;border:1px solid #edf0f2;border-radius:16px;overflow-x:auto}
-        .hp-table{font-size:14px;min-width:860px;margin:0}
+        .hp-table{font-size:14px;min-width:940px;margin:0}
         .hp-table thead th{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
           color:#8a94a1;border-bottom:1px solid #edf0f2;white-space:nowrap;padding:12px 14px;background:#fcfdfe}
         .hp-table tbody td{border-bottom:1px solid #f2f4f6;padding:13px 14px;vertical-align:middle}
@@ -576,6 +588,7 @@ const HPayments = ({ hospital, showToast }) => {
         .hp-warn{color:#c2410c;font-weight:600}
         .hp-muted-num{color:#8a94a1}
         .hp-pending{color:#b45309;font-weight:600}
+        .hp-refunded{color:#dc2626;font-weight:600;white-space:nowrap}
         .hp-badges{display:flex;flex-wrap:wrap;gap:4px}
         .hp-empty__icon{font-size:30px;margin-bottom:6px;opacity:.7}
 

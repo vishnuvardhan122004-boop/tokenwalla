@@ -216,11 +216,15 @@ class PaymentSummaryTests(TestCase):
         row = data['doctors'][0]
         # Doctor side: 400 collected online − 140 refunded − 30 clawback − 200 paid.
         self.assertEqual(Decimal(row['doctor_fee_online']), Decimal('400.00'))
-        self.assertEqual(Decimal(row['refunded_to_patient']), Decimal('140.00'))
+        self.assertEqual(Decimal(row['refunded_from_doctor_fee']), Decimal('140.00'))
         self.assertEqual(Decimal(row['pending_payout']), Decimal('30.00'))
         # Platform side: two payments × ₹20 service fee, less the ₹14 handed back.
+        self.assertEqual(Decimal(row['refunded_from_service']), Decimal('14.00'))
         self.assertEqual(Decimal(row['service_revenue']), Decimal('26.00'))
         self.assertEqual(Decimal(data['totals']['service_revenue']), Decimal('26.00'))
+        # The dashboard column shows the whole pool the patient got back.
+        self.assertEqual(Decimal(row['refunded_to_patient']), Decimal('154.00'))
+        self.assertEqual(Decimal(data['totals']['refunded_to_patient']), Decimal('154.00'))
         # …and the remainder still reconciles, on the row and in the totals:
         #   total_collected == doctor_fees_collected + service_total
         for scope in (row, data['totals']):

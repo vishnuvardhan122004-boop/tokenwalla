@@ -23,7 +23,7 @@ def _empty_totals():
     return {
         'total_collected': '0', 'doctor_fees_collected': '0', 'service_revenue': '0',
         'gateway_fees': '0', 'gst_collected': '0', 'service_total': '0',
-        'offline_doctor_fee': '0',
+        'offline_doctor_fee': '0', 'refunded_to_patient': '0',
         'pending_payout': '0', 'paid_amount': '0', 'doctor_count': 0,
     }
 
@@ -376,7 +376,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
         rows = []
         t_collected = t_doctor_fees = t_service = t_pending = t_paid = 0
-        t_gateway = t_gst = t_offline = 0
+        t_gateway = t_gst = t_offline = t_refunded = 0
         for d in doctors:
             p  = pay_rows.get(d.id, {})
             a  = appt_rows.get(d.id, {})
@@ -406,7 +406,8 @@ class DoctorViewSet(viewsets.ModelViewSet):
             # ledger-driven "pending" read ₹0 while real money sat with us, and
             # fees already inside a QUEUED (not yet PROCESSED) batch showed up in
             # neither column. As a remainder this always holds:
-            #   doctor_fee_online == pending_payout + paid_amount + refunded
+            #   doctor_fee_online == pending_payout + paid_amount
+            #                        + refunded_from_doctor_fee
             owed    = earnings + adjust - refunded
             pending = max(owed - paid, 0)
 
@@ -438,6 +439,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
             t_gateway    += gateway
             t_gst        += gst
             t_offline    += offline
+            t_refunded   += refunded + svc_back
             t_pending    += pending
             t_paid       += paid
 
@@ -462,7 +464,9 @@ class DoctorViewSet(viewsets.ModelViewSet):
                 'doctor_fees_collected': _num(doctor_fees),
                 'doctor_fee_online':     _num(earnings),  # captured by us → payable
                 'offline_doctor_fee':    _num(offline),   # collected at the hospital
-                'refunded_to_patient':   _num(refunded),
+                'refunded_to_patient':   _num(refunded + svc_back),  # whole pool
+                'refunded_from_doctor_fee': _num(refunded),           # …its doctor slice
+                'refunded_from_service':    _num(svc_back),           # …and ours
                 'service_revenue':  _num(service),          # platform fee alone
                 'gateway_fee':      _num(gateway),
                 'gst_collected':    _num(gst),
@@ -478,6 +482,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
                 'total_collected':       _num(t_collected),
                 'doctor_fees_collected': _num(t_doctor_fees),
                 'offline_doctor_fee':    _num(t_offline),
+                'refunded_to_patient':   _num(t_refunded),
                 'service_revenue':       _num(t_service),
                 'gateway_fees':          _num(t_gateway),
                 'gst_collected':         _num(t_gst),
