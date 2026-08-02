@@ -213,7 +213,7 @@ const HPayments = ({ hospital, showToast }) => {
   // the PATIENT and never reaches the hospital, which made the totals unreadable.
   const cards = [
     { label: "Patients Paid", icon: "💰", val: inr(totals.total_collected), hex: "#16a34a",
-      hint: "Everything patients paid — consultation fees + TokenWalla charges", primary: true },
+      hint: "Consultation fees + TokenWalla charges, net of cancellation refunds", primary: true },
     { label: "Doctor Fees",   icon: "🩺", val: inr(totals.doctor_fees_collected), hex: "#7c3aed",
       hint: "Your doctors' consultation fees, paid to them in full" },
     { label: "Pending Payout", icon: "⏳", val: inr(totals.pending_payout), hex: "#d97706",

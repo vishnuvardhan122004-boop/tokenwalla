@@ -23,6 +23,7 @@ def _empty_totals():
     return {
         'total_collected': '0', 'doctor_fees_collected': '0', 'service_revenue': '0',
         'gateway_fees': '0', 'gst_collected': '0', 'service_total': '0',
+        'offline_doctor_fee': '0',
         'pending_payout': '0', 'paid_amount': '0', 'doctor_count': 0,
     }
 
@@ -295,7 +296,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
         """
         from django.db.models import Sum, Count, Max
         from bookings.models import Booking
-        from payments.models import Payment, DoctorLedger, PayoutBatch
+        from payments.models import Payment, DoctorLedger, PayoutBatch, Refund
 
         hospital_id = request.query_params.get('hospital')
         if not hospital_id:
@@ -338,12 +339,29 @@ class DoctorViewSet(viewsets.ModelViewSet):
             .annotate(appointments=Count('id')),
             'doctor_id',
         )
-        pending_rows = _index(
+        # Clawbacks for doctor no-shows (negative rows). Counted whether or not
+        # they've been batched: a batch's total_amount is already net of any
+        # clawback inside it, so `earnings + adjustments - paid` nets out either
+        # way — see the pending derivation below.
+        adjust_rows = _index(
             DoctorLedger.objects
-            .filter(doctor__hospital_id=hospital_id, payout_batch__isnull=True)
+            .filter(doctor__hospital_id=hospital_id,
+                    reason=DoctorLedger.ABSENCE_REFUND)
             .values('doctor_id')
-            .annotate(pending=Sum('amount')),
+            .annotate(adjustments=Sum('amount')),
             'doctor_id',
+        )
+        # Cancellation refunds — collected online, then given back to the
+        # patient. Both slices leave us: the doctor's share is never owed to the
+        # doctor, and the platform's share is not our revenue. (Gateway fee and
+        # GST are never refunded, so they need no netting.)
+        refund_rows = _index(
+            Refund.objects
+            .filter(payment__booking__doctor__hospital_id=hospital_id)
+            .values('payment__booking__doctor_id')
+            .annotate(refunded=Sum('doctor_loss'),
+                      service_refunded=Sum('platform_loss')),
+            'payment__booking__doctor_id',
         )
         paid_rows = _index(
             PayoutBatch.objects
@@ -358,29 +376,49 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
         rows = []
         t_collected = t_doctor_fees = t_service = t_pending = t_paid = 0
-        t_gateway = t_gst = 0
+        t_gateway = t_gst = t_offline = 0
         for d in doctors:
             p  = pay_rows.get(d.id, {})
             a  = appt_rows.get(d.id, {})
-            pe = pending_rows.get(d.id, {})
+            ad = adjust_rows.get(d.id, {})
+            rf = refund_rows.get(d.id, {})
             pd = paid_rows.get(d.id, {})
 
             online    = p.get('collected') or 0   # Σ final_amount (paid via TokenWalla)
             earnings  = p.get('earnings') or 0     # Σ doctor_fee captured ONLINE (FULL mode)
             offline   = p.get('offline') or 0      # Σ consultation fee collected at hospital
-            service   = p.get('service') or 0
             gateway   = p.get('gateway') or 0
             gst       = p.get('gst') or 0
-            pending   = pe.get('pending') or 0
+            adjust    = ad.get('adjustments') or 0   # ≤ 0
+            refunded  = rf.get('refunded') or 0
+            svc_back  = rf.get('service_refunded') or 0
             paid      = pd.get('paid') or 0
             last      = pd.get('last')
 
+            # Our platform fee, net of the share handed back on cancellations.
+            # Never negative: a refund's platform_loss is a percentage of that
+            # same payment's platform_fee (see payments.refunds).
+            service   = (p.get('service') or 0) - svc_back
+
+            # What is still owed to this doctor. Derived from the fees actually
+            # COLLECTED online, not from ledger rows: a ledger row only appears
+            # once the nightly payout run has seen the visit COMPLETED, so a
+            # ledger-driven "pending" read ₹0 while real money sat with us, and
+            # fees already inside a QUEUED (not yet PROCESSED) batch showed up in
+            # neither column. As a remainder this always holds:
+            #   doctor_fee_online == pending_payout + paid_amount + refunded
+            owed    = earnings + adjust - refunded
+            pending = max(owed - paid, 0)
+
             # Doctor's consultation fee collected across BOTH rails (online for
-            # FULL bookings, offline at the hospital for Service-Fee-Only ones).
-            doctor_fees = earnings + offline
+            # FULL bookings, offline at the hospital for Service-Fee-Only ones),
+            # less whatever went back to the patient on a cancellation.
+            doctor_fees = earnings + offline - refunded
             # Grand total that changed hands: everything paid online PLUS the
-            # consultation fee collected offline at the hospital.
-            total = online + offline
+            # consultation fee collected offline at the hospital, MINUS the whole
+            # refunded pool. Netting each slice where it landed is what keeps the
+            # remainder below equal to platform + gateway + GST.
+            total = online + offline - refunded - svc_back
 
             # Everything the patient paid TokenWalla on top of the consultation
             # fee. Charged to the PATIENT — never deducted from the doctor or
@@ -399,6 +437,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
             t_service    += service
             t_gateway    += gateway
             t_gst        += gst
+            t_offline    += offline
             t_pending    += pending
             t_paid       += paid
 
@@ -421,7 +460,9 @@ class DoctorViewSet(viewsets.ModelViewSet):
                 'total_collected':  _num(total),          # gross (online + offline)
                 'online_collected': _num(online),         # captured via TokenWalla
                 'doctor_fees_collected': _num(doctor_fees),
+                'doctor_fee_online':     _num(earnings),  # captured by us → payable
                 'offline_doctor_fee':    _num(offline),   # collected at the hospital
+                'refunded_to_patient':   _num(refunded),
                 'service_revenue':  _num(service),          # platform fee alone
                 'gateway_fee':      _num(gateway),
                 'gst_collected':    _num(gst),
@@ -436,6 +477,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
             'totals': {
                 'total_collected':       _num(t_collected),
                 'doctor_fees_collected': _num(t_doctor_fees),
+                'offline_doctor_fee':    _num(t_offline),
                 'service_revenue':       _num(t_service),
                 'gateway_fees':          _num(t_gateway),
                 'gst_collected':         _num(t_gst),

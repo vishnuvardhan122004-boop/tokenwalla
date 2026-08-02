@@ -15,8 +15,9 @@ from django.contrib.auth import get_user_model
 from hospitals.models import Hospital
 from doctors.models import Doctor
 from bookings.models import Booking
-from payments.models import Payment, DoctorLedger, PayoutBatch
+from payments.models import Payment, DoctorLedger, PayoutBatch, Refund
 from payments.fees import compute_fee_breakdown
+from payments.refunds import compute_refund_split
 
 User = get_user_model()
 
@@ -162,17 +163,13 @@ class PaymentSummaryTests(TestCase):
             doctor_fee=bd['doctor_fee'], platform_fee=bd['platform_fee'],
             gateway_fee=bd['gateway_fee'], gst_amount=bd['gst_amount'],
             final_amount=bd['final_amount'], status=Payment.PAID)
-        # A processed payout of ₹176.40.
+        # …paid out in full (nothing is deducted from a doctor's fee).
         batch = PayoutBatch.objects.create(
-            doctor=self.doctor, total_amount=Decimal('176.40'), payout_mode='IMPS',
+            doctor=self.doctor, total_amount=Decimal('200.00'), payout_mode='IMPS',
             status=PayoutBatch.PROCESSED, idempotency_key='k1')
         DoctorLedger.objects.create(
-            doctor=self.doctor, booking=booking, amount=Decimal('176.40'),
+            doctor=self.doctor, booking=booking, amount=Decimal('200.00'),
             reason=DoctorLedger.BOOKING_COMPLETED, payout_batch=batch)
-        # An unbatched (pending) earning of ₹50.
-        DoctorLedger.objects.create(
-            doctor=self.doctor, amount=Decimal('50'),
-            reason=DoctorLedger.BOOKING_COMPLETED)
 
     def test_summary_aggregates_per_doctor(self):
         self.client.force_authenticate(self.staff)
@@ -183,10 +180,58 @@ class PaymentSummaryTests(TestCase):
         self.assertEqual(row['appointments'], 1)
         self.assertEqual(Decimal(row['service_revenue']), Decimal('20.00'))
         self.assertEqual(Decimal(row['doctor_fees_collected']), Decimal('200.00'))
-        self.assertEqual(Decimal(row['pending_payout']), Decimal('50'))
-        self.assertEqual(Decimal(row['paid_amount']), Decimal('176.40'))
+        self.assertEqual(Decimal(row['pending_payout']), Decimal('0'))
+        self.assertEqual(Decimal(row['paid_amount']), Decimal('200.00'))
         self.assertIsNotNone(row['last_payout_date'])
         self.assertEqual(Decimal(data['totals']['service_revenue']), Decimal('20.00'))
+
+    def test_pending_nets_out_refunds_and_clawbacks(self):
+        # A second booking, cancelled and refunded before completion: its doctor
+        # fee was collected online but handed back, so it is never payable. Plus
+        # a no-show clawback on the (already paid out) first booking.
+        booking = Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate(), slot='11:00 AM', token='TW-3',
+            status=Booking.CANCELLED, amount=200)
+        bd = compute_fee_breakdown(200)
+        payment = Payment.objects.create(
+            booking=booking, order_id='o3', payment_id='p3', amount=int(bd['final_amount']),
+            doctor_fee=bd['doctor_fee'], platform_fee=bd['platform_fee'],
+            gateway_fee=bd['gateway_fee'], gst_amount=bd['gst_amount'],
+            final_amount=bd['final_amount'], status=Payment.PAID)
+        # 70% of the (200 fee + 20 service) pool = 154, split proportionally.
+        split = compute_refund_split(payment, Decimal('0.70'))
+        self.assertEqual((split['doctor_loss'], split['platform_loss']),
+                         (Decimal('140.00'), Decimal('14.00')))
+        Refund.objects.create(payment=payment, refund_percentage=Decimal('0.70'),
+                              doctor_loss=split['doctor_loss'],
+                              platform_loss=split['platform_loss'])
+        DoctorLedger.objects.create(
+            doctor=self.doctor, amount=Decimal('-30.00'),
+            reason=DoctorLedger.ABSENCE_REFUND)
+
+        self.client.force_authenticate(self.staff)
+        data = self.client.get(
+            f'/api/doctors/payment-summary/?hospital={self.hospital.id}').json()
+        row = data['doctors'][0]
+        # Doctor side: 400 collected online − 140 refunded − 30 clawback − 200 paid.
+        self.assertEqual(Decimal(row['doctor_fee_online']), Decimal('400.00'))
+        self.assertEqual(Decimal(row['refunded_to_patient']), Decimal('140.00'))
+        self.assertEqual(Decimal(row['pending_payout']), Decimal('30.00'))
+        # Platform side: two payments × ₹20 service fee, less the ₹14 handed back.
+        self.assertEqual(Decimal(row['service_revenue']), Decimal('26.00'))
+        self.assertEqual(Decimal(data['totals']['service_revenue']), Decimal('26.00'))
+        # …and the remainder still reconciles, on the row and in the totals:
+        #   total_collected == doctor_fees_collected + service_total
+        for scope in (row, data['totals']):
+            self.assertEqual(
+                Decimal(scope['total_collected']),
+                Decimal(scope['doctor_fees_collected']) + Decimal(scope['service_total']))
+        # service_total is platform + gateway + GST, all net of the refund.
+        self.assertEqual(
+            Decimal(row['service_total']),
+            Decimal(row['service_revenue']) + Decimal(row['gateway_fee'])
+            + Decimal(row['gst_collected']))
 
     def test_offline_doctor_fee_counted_in_totals(self):
         # A Service-Fee-Only booking: doctor_fee captured online is 0, but the
