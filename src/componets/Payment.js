@@ -112,6 +112,14 @@ export default function Payment() {
                 paymentId:    verifyData.booking?.paymentId,
                 userName:     bookedForName || user?.name || user?.username,
                 queue_access,
+                // >0 only for a SERVICE_ONLY doctor — the token page shows the
+                // "pay the consultation fee at the hospital" note off this.
+                // The verify response is authoritative; the checkout preview
+                // covers the idempotent replay, which omits the breakdown.
+                offlineDoctorFee: Number(
+                  verifyData.booking?.breakdown?.offline_doctor_fee
+                  ?? breakdown?.offline_doctor_fee ?? 0
+                ),
               }
             });
           } else {
