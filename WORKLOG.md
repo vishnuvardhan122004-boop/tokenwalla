@@ -4,8 +4,8 @@ A running record of changes so we can cross-check what's done and what's pending
 Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** `feature/fee-splitting-refunds-payouts` (web/backend) · `main` (mobile app repo)
-- **Latest commit at last update:** `7b2a01c` (web/backend); mobile changes staged, uncommitted
-- **Last updated:** 2026-07-28
+- **Latest commit at last update:** `d79103e` (web/backend) — back to Razorpay + manual doctor payouts; mobile app still on the Cashfree SDK
+- **Last updated:** 2026-08-05
 
 ### How to update this log
 - Add a new `## YYYY-MM-DD — <title>` section **on top** for each working session; keep older sessions below.
