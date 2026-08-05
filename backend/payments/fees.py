@@ -38,7 +38,7 @@ FULL         = 'FULL'          # patient pays doctor_fee + service fee online
 SERVICE_ONLY = 'SERVICE_ONLY'  # patient pays ONLY the service fee online
 
 
-def compute_fee_breakdown(doctor_fee, collection_mode=FULL) -> dict:
+def compute_fee_breakdown(doctor_fee, collection_mode=SERVICE_ONLY) -> dict:
     """Split a doctor's consultation fee into the full patient bill.
 
         gst          = 18% × (platform_fee + gateway_fee)   # doctor_fee exempt
@@ -47,8 +47,11 @@ def compute_fee_breakdown(doctor_fee, collection_mode=FULL) -> dict:
     `collection_mode` (matches Doctor.payment_collection_mode) decides whether
     the doctor's consultation fee is charged online:
 
-      FULL          → online_doctor_fee = doctor_fee (default; existing behaviour)
-      SERVICE_ONLY  → online_doctor_fee = 0. The consultation fee is collected
+      FULL          → online_doctor_fee = doctor_fee. Opt-in: only an explicit
+                      'FULL' collects the consultation fee online.
+      SERVICE_ONLY  → online_doctor_fee = 0. This is what a blank, missing or
+                      unrecognised mode means too — never collect a fee online
+                      for a doctor nobody chose to collect for. The fee is
                       offline at the hospital, so nothing is captured online for
                       the doctor and no payout is owed. `offline_doctor_fee`
                       carries the amount payable at the clinic for the receipt.
@@ -59,7 +62,7 @@ def compute_fee_breakdown(doctor_fee, collection_mode=FULL) -> dict:
     doctor_fee   = _q(doctor_fee)
     platform_fee = _q(PLATFORM_FEE)
     gateway_fee  = _q(GATEWAY_FEE)
-    service_only = (collection_mode == SERVICE_ONLY)
+    service_only = (collection_mode != FULL)   # blank/unknown ⇒ service only
     online_doctor_fee  = _q(0) if service_only else doctor_fee
     offline_doctor_fee = doctor_fee if service_only else _q(0)
     taxable      = platform_fee + gateway_fee            # doctor_fee is exempt
@@ -69,7 +72,9 @@ def compute_fee_breakdown(doctor_fee, collection_mode=FULL) -> dict:
         # `doctor_fee` is the amount charged ONLINE (what payout logic reads).
         'doctor_fee':   online_doctor_fee,
         'offline_doctor_fee': offline_doctor_fee,  # payable at clinic (SERVICE_ONLY)
-        'collection_mode':    collection_mode,
+        # Canonical, never the raw input — a blank/unknown mode is reported as
+        # SERVICE_ONLY so the receipt and Payment row match what was charged.
+        'collection_mode':    FULL if not service_only else SERVICE_ONLY,
         'platform_fee': platform_fee,
         'gateway_fee':  gateway_fee,
         'taxable_value': taxable,       # GST-taxable portion (platform + gateway)

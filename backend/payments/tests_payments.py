@@ -32,7 +32,7 @@ User = get_user_model()
 # ─────────────────────────────────────────────────────────────────────────────
 class FeeMathTests(TestCase):
     def test_breakdown_matches_spec_example(self):
-        b = compute_fee_breakdown(200)
+        b = compute_fee_breakdown(200, 'FULL')
         self.assertEqual(b['platform_fee'], Decimal('20.00'))
         self.assertEqual(b['gateway_fee'],  Decimal('1.50'))
         self.assertEqual(b['gst_amount'],   Decimal('3.87'))   # 18% of 21.50
@@ -40,14 +40,14 @@ class FeeMathTests(TestCase):
 
     def test_doctor_fee_is_gst_exempt(self):
         # GST must not depend on the doctor fee.
-        self.assertEqual(compute_fee_breakdown(500)['gst_amount'],
-                         compute_fee_breakdown(50)['gst_amount'])
+        self.assertEqual(compute_fee_breakdown(500, 'FULL')['gst_amount'],
+                         compute_fee_breakdown(50, 'FULL')['gst_amount'])
 
     def test_doctor_is_paid_the_whole_online_fee(self):
         # We charge the patient, never the doctor or the hospital — so the
         # payout is the consultation fee itself, with nothing deducted.
         self.assertEqual(compute_doctor_payout(200), Decimal('200.00'))
-        b = compute_fee_breakdown(200)
+        b = compute_fee_breakdown(200, 'FULL')
         self.assertEqual(compute_doctor_payout(b['doctor_fee']), Decimal('200.00'))
 
 
@@ -96,6 +96,7 @@ class BaseDataMixin:
         self.doctor = Doctor.objects.create(
             hospital=self.hospital, name='Dr Rao', specialization='GP',
             mobile='9000000003', fee=int(doctor_fee), slots=['09:00 AM'],
+            payment_collection_mode=Doctor.COLLECT_FULL,
             # Payout details — a doctor with none is HELD, not batched (see
             # PayoutPipelineTests.test_doctor_without_payout_details_is_held).
             bank_account_number='00111122233', ifsc='HDFC0000001')
@@ -103,7 +104,7 @@ class BaseDataMixin:
             user=self.user, doctor=self.doctor, hospital=self.hospital,
             date=timezone.localdate() + timedelta(days=2), slot='09:00 AM',
             token=token, status=status, amount=int(doctor_fee))
-        bd = compute_fee_breakdown(doctor_fee)
+        bd = compute_fee_breakdown(doctor_fee, 'FULL')
         self.payment = Payment.objects.create(
             booking=self.booking, order_id='order_1', payment_id='pay_1',
             amount=int(bd['final_amount']),
@@ -256,7 +257,7 @@ class ManualPayoutTests(BaseDataMixin, TestCase):
 class MultiBookingPayoutTests(BaseDataMixin, TestCase):
     def test_two_completed_bookings_pay_out_as_one_batch(self):
         self.make_world(status=Booking.COMPLETED, token='TW-I2')
-        bd = compute_fee_breakdown(Decimal('200'))
+        bd = compute_fee_breakdown(Decimal('200'), 'FULL')
         b2 = Booking.objects.create(
             user=self.user, doctor=self.doctor, hospital=self.hospital,
             date=timezone.localdate(), slot='09:00 AM', token='TW-I3',

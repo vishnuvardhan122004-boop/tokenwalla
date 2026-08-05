@@ -26,11 +26,16 @@ class Doctor(models.Model):
     # ── Payment collection mode ───────────────────────────────────────────────
     # How the patient checkout is charged for this doctor. Set per doctor by the
     # hospital and read server-side at order time (payments.CreateOrderView):
-    #   FULL          → patient pays doctor_fee + service fee online (default,
-    #                   the existing behaviour). TokenWalla settles the doctor.
+    #   FULL          → patient pays doctor_fee + service fee online. TokenWalla
+    #                   settles the doctor.
     #   SERVICE_ONLY  → patient pays ONLY the service fee online; the doctor's
     #                   consultation fee is collected offline at the hospital, so
     #                   no online doctor fee is captured and no payout is owed.
+    # SERVICE_ONLY is the DEFAULT: a hospital that hasn't made a choice (or given
+    # us payout details) must not have its doctors' fees collected online, or we
+    # end up holding money we have no account to send it to. Collecting the full
+    # fee is opt-in. payments.fees treats anything that isn't exactly FULL the
+    # same way, so a blank/unknown value is service-only too.
     COLLECT_FULL         = 'FULL'
     COLLECT_SERVICE_ONLY = 'SERVICE_ONLY'
     COLLECTION_MODE_CHOICES = [
@@ -38,7 +43,7 @@ class Doctor(models.Model):
         (COLLECT_SERVICE_ONLY, 'Service Fee Only'),
     ]
     payment_collection_mode = models.CharField(
-        max_length=20, choices=COLLECTION_MODE_CHOICES, default=COLLECT_FULL,
+        max_length=20, choices=COLLECTION_MODE_CHOICES, default=COLLECT_SERVICE_ONLY,
     )
 
     # ── Payout routing (payouts are MANUAL) ──────────────────────────────────────────

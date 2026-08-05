@@ -33,8 +33,8 @@ const inr = (v) => {
 // Reads as a SETTING, not as a description of past money — a row can show
 // "Collects online" next to fees that were historically taken at the clinic,
 // and "Fee paid online" made that look like a contradiction.
-const modeLabel = (m) =>
-  m === "SERVICE_ONLY" ? "Collects at clinic" : "Collects online";
+// Only an explicit FULL collects online — blank/unset is service-fee-only.
+const modeLabel = (m) => (m === "FULL" ? "Collects online" : "Collects at clinic");
 
 const fmtDate = (iso) => {
   if (!iso) return "—";
@@ -44,7 +44,7 @@ const fmtDate = (iso) => {
 };
 
 const EMPTY_FORM = {
-  payment_collection_mode: "FULL",
+  payment_collection_mode: "SERVICE_ONLY",
   payout_to_hospital: false,
   payment_method: "",
   upi_id: "",
@@ -150,7 +150,9 @@ const HPayments = ({ hospital, showToast }) => {
     try {
       const { data } = await API.get(`/doctors/${row.id}/payment-details/`);
       setForm({
-        payment_collection_mode: data.payment_collection_mode || "FULL",
+        // Unset ⇒ service fee only, matching the backend default: we never
+        // collect a doctor's fee online until a hospital opts in.
+        payment_collection_mode: data.payment_collection_mode || "SERVICE_ONLY",
         payout_to_hospital:      !!data.payout_to_hospital,
         payment_method:          data.payment_method || "",
         upi_id:                  data.upi_id || "",
@@ -320,7 +322,7 @@ const HPayments = ({ hospital, showToast }) => {
                     {d.specialization || "—"} • {inr(d.fee)} consultation
                   </div>
                   <div className="hp-badges">
-                    <span className={`hp-badge ${d.collection_mode === "SERVICE_ONLY" ? "hp-badge--amber" : "hp-badge--blue"}`}>
+                    <span className={`hp-badge ${d.collection_mode === "FULL" ? "hp-badge--blue" : "hp-badge--amber"}`}>
                       {modeLabel(d.collection_mode)}
                     </span>
                     {d.has_payout_details ? (
@@ -423,7 +425,7 @@ const HPayments = ({ hospital, showToast }) => {
                 {/* Live preview — what this setting actually does to one visit */}
                 {(() => {
                   const b = computeFeeBreakdown(modalDoctor.fee, form.payment_collection_mode);
-                  const serviceOnly = form.payment_collection_mode === "SERVICE_ONLY";
+                  const serviceOnly = form.payment_collection_mode !== "FULL";
                   return (
                     <div className="hp-preview mb-3">
                       <div className="hp-preview__title">

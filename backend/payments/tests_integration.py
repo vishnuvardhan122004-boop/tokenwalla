@@ -51,6 +51,7 @@ class WorldMixin:
         self.doctor = Doctor.objects.create(
             hospital=self.hospital, name='Dr Rao', specialization='GP',
             mobile='9000000003', fee=fee, slots=['09:00 AM', '10:00 AM'],
+            payment_collection_mode=Doctor.COLLECT_FULL,
             upi_vpa=upi,
             # Payout details present — without them a manual mark-paid still
             # works (mode falls back to OTHER), see ManualPayoutTests.
@@ -130,7 +131,7 @@ class CreateOrderTests(WorldMixin, TestCase):
 class VerifyNewBookingTests(WorldMixin, TestCase):
     def setUp(self):
         self.make_actors(fee=200)
-        self.breakdown = compute_fee_breakdown(200)
+        self.breakdown = compute_fee_breakdown(200, 'FULL')
         self.amount    = self.breakdown['final_amount']   # Decimal 225.37
 
     def _confirm(self, *, paid=True, ref='rzp_pay_1', amount=None, doctor_fee='200'):
@@ -217,8 +218,9 @@ class VerifyOrderBindingTests(WorldMixin, TestCase):
         self.make_actors(fee=200)                       # self.doctor — the ₹200 one
         self.dear = Doctor.objects.create(
             hospital=self.hospital, name='Dr Expensive', specialization='Cardio',
-            mobile='9000000004', fee=2000, slots=['09:00 AM'])
-        self.amount = compute_fee_breakdown(200)['final_amount']
+            mobile='9000000004', fee=2000, slots=['09:00 AM'],
+            payment_collection_mode=Doctor.COLLECT_FULL,)
+        self.amount = compute_fee_breakdown(200, 'FULL')['final_amount']
 
     def _confirm(self, **tag_overrides):
         tags = {'plan': 'booking', 'doctor_fee': '200',
@@ -339,7 +341,7 @@ class SalariedDoctorPayoutTests(WorldMixin, TestCase):
             user=self.user, doctor=doctor or self.doctor, hospital=self.hospital,
             date=timezone.localdate(), slot='09:00 AM', token=token,
             status=Booking.COMPLETED, amount=200)
-        bd = compute_fee_breakdown(200)
+        bd = compute_fee_breakdown(200, 'FULL')
         Payment.objects.create(
             booking=booking, order_id='o', payment_id=f'pay_{token}', amount=225,
             doctor_fee=bd['doctor_fee'], platform_fee=bd['platform_fee'],
@@ -384,6 +386,7 @@ class SalariedDoctorPayoutTests(WorldMixin, TestCase):
         other = Doctor.objects.create(
             hospital=self.hospital, name='Dr Iyer', specialization='ENT',
             mobile='9000000009', fee=200, slots=['09:00 AM'],
+            payment_collection_mode=Doctor.COLLECT_FULL,
             payout_to_hospital=True)
         self._complete_booking('TW-SAL-3')
         self._complete_booking('TW-SAL-4', doctor=other)

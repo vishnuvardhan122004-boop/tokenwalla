@@ -67,6 +67,7 @@ class DoctorAccessControlTests(TestCase):
         self.doctor = Doctor.objects.create(
             hospital=self.hospital, name='Old', specialization='Gen',
             mobile='9000000002', fee=100, slots=['09:00 AM'],
+            payment_collection_mode=Doctor.COLLECT_FULL,
         )
         self.patient = User.objects.create_user(
             username='9111111111', mobile='9111111111', password='pw', role='patient')
@@ -159,7 +160,8 @@ class BookForOtherTests(TestCase):
         self.hospital = Hospital.objects.create(name='H1', city='Blr', mobile='9000000030', password='x')
         self.doctor = Doctor.objects.create(
             hospital=self.hospital, name='D', specialization='Gen',
-            mobile='9000000031', fee=100, slots=['09:00 AM'])
+            mobile='9000000031', fee=100, slots=['09:00 AM'],
+            payment_collection_mode=Doctor.COLLECT_FULL,)
         self.patient = User.objects.create_user(
             username='9111111130', mobile='9111111130', password='pw', role='patient')
         self.patient.first_name = 'Account Holder'
@@ -181,7 +183,7 @@ class BookForOtherTests(TestCase):
         # confirm_order_paid is mocked as a PAID full-fee booking order: the
         # server-written tags name the doctor and their fee, and the captured
         # amount is the full bill the server would have priced.
-        total = compute_fee_breakdown(self.doctor.fee)['final_amount']
+        total = compute_fee_breakdown(self.doctor.fee, 'FULL')['final_amount']
         tags = {
             'plan':       'booking',
             'doctor_fee': str(self.doctor.fee),

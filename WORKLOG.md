@@ -16,6 +16,26 @@ Newest entry on top. Update the **Status** columns as things land.
 
 ---
 
+## 2026-08-05 (auto) — Session update @ 21:20
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 10 changed files).
+
+```
+M backend/doctors/models.py
+ M backend/doctors/tests_payment_details.py
+ M backend/payments/fees.py
+ M backend/payments/tests_integration.py
+ M backend/payments/tests_payments.py
+ M backend/tokenwalla/tests_security.py
+ M src/componets/Payment.js
+ M src/hospital/HPayments.js
+ M src/services/fees.js
+?? backend/doctors/migrations/0010_alter_doctor_payment_collection_mode.py
+```
+
+---
+
+
 ## 2026-08-05 — Back to Razorpay + manual doctor payouts 🆕
 
 Reverted the payment stack from Cashfree to **Razorpay**, and replaced the

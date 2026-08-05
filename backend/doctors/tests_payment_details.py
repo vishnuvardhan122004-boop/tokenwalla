@@ -22,11 +22,17 @@ User = get_user_model()
 
 
 class FeeBreakdownModeTests(TestCase):
-    def test_full_mode_matches_default(self):
-        self.assertEqual(
-            compute_fee_breakdown(200, 'FULL')['final_amount'],
-            compute_fee_breakdown(200)['final_amount'],
-        )
+    def test_unset_mode_is_service_only(self):
+        """No choice made (default, blank, or junk) ⇒ we never take the doctor's
+        fee online. Collecting the full fee has to be an explicit 'FULL'."""
+        for mode in (None, '', 'anything-else'):
+            with self.subTest(mode=mode):
+                bd = (compute_fee_breakdown(200) if mode is None
+                      else compute_fee_breakdown(200, mode))
+                self.assertEqual(bd['doctor_fee'], Decimal('0.00'))
+                self.assertEqual(bd['offline_doctor_fee'], Decimal('200.00'))
+                self.assertEqual(bd['final_amount'], Decimal('25.37'))
+                self.assertEqual(bd['collection_mode'], 'SERVICE_ONLY')
 
     def test_service_only_excludes_doctor_fee_online(self):
         bd = compute_fee_breakdown(200, 'SERVICE_ONLY')
@@ -45,7 +51,8 @@ class PaymentDetailsEndpointTests(TestCase):
             name='Rainbow', city='Hyd', mobile='9000000009', password='x')
         self.doctor = Doctor.objects.create(
             hospital=self.hospital, name='Dr Rao', specialization='GP',
-            mobile='9000000003', fee=200)
+            mobile='9000000003', fee=200,
+            payment_collection_mode=Doctor.COLLECT_FULL,)
         # Hospital staff user — the managed hospital id lives in last_name.
         self.staff = User.objects.create(
             username='9000000002', mobile='9000000002', role='hospital',
@@ -146,7 +153,8 @@ class PaymentSummaryTests(TestCase):
             name='Apollo', city='Hyd', mobile='9000000002', password='x')
         self.doctor = Doctor.objects.create(
             hospital=self.hospital, name='Dr Rao', specialization='GP',
-            mobile='9000000003', fee=200)
+            mobile='9000000003', fee=200,
+            payment_collection_mode=Doctor.COLLECT_FULL,)
         self.user = User.objects.create(username='pat', mobile='9000000001', role='patient')
         self.staff = User.objects.create(
             username='9000000002', mobile='9000000002', role='hospital',
@@ -156,7 +164,7 @@ class PaymentSummaryTests(TestCase):
             user=self.user, doctor=self.doctor, hospital=self.hospital,
             date=timezone.localdate(), slot='09:00 AM', token='TW-1',
             status=Booking.COMPLETED, amount=200)
-        bd = compute_fee_breakdown(200)
+        bd = compute_fee_breakdown(200, 'FULL')
         Payment.objects.create(
             booking=booking, order_id='o1', payment_id='p1', amount=int(bd['final_amount']),
             doctor_fee=bd['doctor_fee'], platform_fee=bd['platform_fee'],
@@ -192,7 +200,7 @@ class PaymentSummaryTests(TestCase):
             user=self.user, doctor=self.doctor, hospital=self.hospital,
             date=timezone.localdate(), slot='11:00 AM', token='TW-3',
             status=Booking.CANCELLED, amount=200)
-        bd = compute_fee_breakdown(200)
+        bd = compute_fee_breakdown(200, 'FULL')
         payment = Payment.objects.create(
             booking=booking, order_id='o3', payment_id='p3', amount=int(bd['final_amount']),
             doctor_fee=bd['doctor_fee'], platform_fee=bd['platform_fee'],
@@ -260,7 +268,7 @@ class PaymentSummaryTests(TestCase):
         self.assertEqual(Decimal(row['doctor_fees_collected']), Decimal('500.00'))
         # …and into the grand total (225.37 online + 25.37 online + 300 offline).
         self.assertEqual(Decimal(row['total_collected']),
-                         bd['final_amount'] + compute_fee_breakdown(200)['final_amount'] + Decimal('300.00'))
+                         bd['final_amount'] + compute_fee_breakdown(200, 'FULL')['final_amount'] + Decimal('300.00'))
         self.assertEqual(Decimal(data['totals']['doctor_fees_collected']), Decimal('500.00'))
 
     def test_salaried_doctor_reads_payout_details_off_the_hospital(self):
@@ -365,7 +373,8 @@ class DoctorFeeBreakdownFieldTests(TestCase):
         return r.json()['fee_breakdown']
 
     def test_full_mode_totals_match_the_fee_math(self):
-        b = self._breakdown(mobile='9000000091', fee=200)
+        b = self._breakdown(mobile='9000000091', fee=200,
+                            payment_collection_mode='FULL')
         expected = compute_fee_breakdown(200, 'FULL')
         self.assertEqual(Decimal(b['final_amount']), expected['final_amount'])
         self.assertEqual(Decimal(b['final_amount']), Decimal('225.37'))

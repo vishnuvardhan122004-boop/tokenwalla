@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import API from '../services/api';
+import { computeFeeBreakdown } from '../services/fees';
 
 const inr = (n) => Number(n).toFixed(2);
 
@@ -19,6 +20,7 @@ export default function Payment() {
   // SERVICE_ONLY doctors wrong (their consultation fee is paid at the clinic,
   // not online). Until it loads, the pay button stays disabled.
   const [breakdown, setBreakdown] = useState(null);
+  const [feeError,  setFeeError]  = useState('');
   const total = breakdown ? breakdown.final_amount : null;
 
   const [user,    setUser]    = useState(null);
@@ -43,9 +45,20 @@ export default function Payment() {
   useEffect(() => {
     if (!doctorId) { navigate('/alldoctor'); return; }
     let cancelled = false;
+    // Drop the previous doctor's figures first — otherwise a slow or failed
+    // load leaves the last doctor's price on screen as if it were this one's.
+    setBreakdown(null);
+    setFeeError('');
     API.get(`/doctors/${doctorId}/`)
-      .then(({ data }) => { if (!cancelled) setBreakdown(data.fee_breakdown || null); })
-      .catch(() => { if (!cancelled) setBreakdown(null); });
+      .then(({ data }) => {
+        if (cancelled) return;
+        // A backend that predates fee_breakdown would leave this screen stuck on
+        // "Loading…" forever, so fall back to the local mirror. It's a preview
+        // either way — the amount charged is the server's order amount.
+        setBreakdown(data.fee_breakdown
+          || computeFeeBreakdown(data.fee, data.payment_collection_mode));
+      })
+      .catch(() => { if (!cancelled) setFeeError('Could not load the fee details. Check your connection and try again.'); });
     return () => { cancelled = true; };
   }, [doctorId, navigate]);
 
@@ -368,7 +381,12 @@ export default function Payment() {
             {!breakdown ? (
               <div className="pay-rows">
                 <div className="pay-row">
-                  <span className="pay-row-label">Loading fee details…</span>
+                  <span className="pay-row-label">{feeError || 'Loading fee details…'}</span>
+                  {feeError && (
+                    <button className="pay-back" style={{ margin: 0 }} onClick={() => window.location.reload()}>
+                      Retry
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -475,7 +493,7 @@ export default function Payment() {
             {loading
               ? <><div className="pay-spinner" /> Opening Payment Gateway…</>
               : !breakdown
-                ? <>Loading…</>
+                ? <>{feeError ? 'Fee details unavailable' : 'Loading…'}</>
                 : <>💳 Pay ₹{inr(total)} & Confirm Appointment</>
             }
           </button>
