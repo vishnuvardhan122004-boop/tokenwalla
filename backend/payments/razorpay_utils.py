@@ -2,10 +2,10 @@
 backend/payments/razorpay_utils.py
 
 Single source of truth for the Razorpay Payment Gateway logic shared between
-payments.VerifyPaymentView (new bookings / reschedule) and
-bookings.UpgradeQueueAccessView (queue-access upgrade). Keeping order creation,
-payment confirmation and plan pricing in ONE place means the paid endpoints can
-never silently drift apart — a fix here protects both. (Replaces
+payments.CreateOrderView and payments.VerifyPaymentView (new bookings and the
+₹5 reschedule fee). Keeping order creation, payment confirmation and plan
+pricing in ONE place means checkout and verify can never silently drift
+apart. (Replaces
 cashfree_utils.py — we're back on Razorpay for patient checkout; doctor
 payouts are handled manually, not via a gateway payout API.)
 
@@ -41,15 +41,13 @@ def _q2(amount) -> Decimal:
 
 
 # Server is the source of truth for prices — never trust the client for amounts.
-# Keyed in RUPEES. 'reschedule' is a separate plan that does NOT create a new Booking.
+# Keyed in RUPEES. 'reschedule' does NOT create a new Booking; it's the only
+# fixed-amount plan left now that checkout collects the full bill (consultation
+# fee + platform + gateway + GST) and every booking includes queue access. The
+# old ₹15 'queue_view' upgrade was retired with that change.
 VALID_PLAN_AMOUNTS = {
-    Decimal('15.00'): {'fee': 15, 'queue_access': True,  'plan': 'queue_view'},
-    Decimal('5.00'):  {'fee': 5,  'queue_access': False, 'plan': 'reschedule'},
+    Decimal('5.00'): {'fee': 5, 'queue_access': False, 'plan': 'reschedule'},
 }
-
-# The queue-access upgrade is the ₹15 "queue_view" plan. Derived from
-# VALID_PLAN_AMOUNTS so a repricing there flows through automatically.
-QUEUE_UPGRADE_AMOUNT_INR = 15
 
 _client = None
 
@@ -69,7 +67,7 @@ def checkout_key() -> str:
 
 
 def plan_for_amount(amount_rupees):
-    """Resolve a legacy fixed-amount plan (reschedule / queue_view) by rupee
+    """Resolve a fixed-amount plan (currently only 'reschedule') by rupee
     amount, or None. Tolerant of int/str/Decimal inputs."""
     return VALID_PLAN_AMOUNTS.get(_q2(amount_rupees))
 

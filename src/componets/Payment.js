@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import API from '../services/api';
-import { computeFeeBreakdown } from '../services/fees';
 
 const inr = (n) => Number(n).toFixed(2);
 
@@ -10,14 +9,17 @@ export default function Payment() {
   const navigate  = useNavigate();
   const {
     doctorId, doctorName, hospital,
-    date, slot, doctorFee = 0,
+    date, slot,
     queue_access = true,
   } = location.state || {};
 
-  // Itemised receipt preview (doctor fee + platform + gateway + GST). The
-  // server recomputes and validates the authoritative total on verify.
-  const breakdown = computeFeeBreakdown(doctorFee);
-  const total     = breakdown.final_amount;
+  // The itemised bill comes from the SERVER (doctor.fee_breakdown, computed by
+  // payments/fees.py — the same code that prices the order). We don't recompute
+  // it here: a client-side copy can drift from the backend, and it would get
+  // SERVICE_ONLY doctors wrong (their consultation fee is paid at the clinic,
+  // not online). Until it loads, the pay button stays disabled.
+  const [breakdown, setBreakdown] = useState(null);
+  const total = breakdown ? breakdown.final_amount : null;
 
   const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(false);
@@ -39,7 +41,12 @@ export default function Payment() {
   }, [navigate]);
 
   useEffect(() => {
-    if (!doctorId) navigate('/alldoctor');
+    if (!doctorId) { navigate('/alldoctor'); return; }
+    let cancelled = false;
+    API.get(`/doctors/${doctorId}/`)
+      .then(({ data }) => { if (!cancelled) setBreakdown(data.fee_breakdown || null); })
+      .catch(() => { if (!cancelled) setBreakdown(null); });
+    return () => { cancelled = true; };
   }, [doctorId, navigate]);
 
   const loadScript = () => new Promise((resolve) => {
@@ -109,7 +116,10 @@ export default function Payment() {
       // payments from Razorpay) rather than trusting a client signature.
       const rzp = new window.Razorpay({
         key:      orderData.key,
-        amount:   Math.round(Number(total) * 100),
+        // The SERVER's amount, not our preview total — the preview is computed
+        // from a client-side mirror of the fee math (services/fees.js) and would
+        // be wrong the moment the two drift, or for a SERVICE_ONLY doctor.
+        amount:   Math.round(Number(orderData.amount) * 100),
         currency: orderData.currency || 'INR',
         order_id: orderData.order_id,
         name:     'TokenWalla',
@@ -355,27 +365,47 @@ export default function Payment() {
               <div className="pay-card-header-icon">🧾</div>
               <div className="pay-card-header-title">Payment Details</div>
             </div>
-            <div className="pay-rows">
-              <div className="pay-row">
-                <span className="pay-row-label">Doctor Consultation Fee</span>
-                <span className="pay-row-value">₹{inr(breakdown.doctor_fee)}</span>
+            {!breakdown ? (
+              <div className="pay-rows">
+                <div className="pay-row">
+                  <span className="pay-row-label">Loading fee details…</span>
+                </div>
               </div>
-              <div className="pay-row">
-                <span className="pay-row-label">Platform Fee</span>
-                <span className="pay-row-value">₹{inr(breakdown.platform_fee)}</span>
+            ) : (
+              <div className="pay-rows">
+                {/* SERVICE_ONLY doctors collect the consultation fee at the
+                    clinic, so it is NOT part of the online total. */}
+                {Number(breakdown.offline_doctor_fee) > 0 ? (
+                  <div className="pay-row">
+                    <span className="pay-row-label">
+                      Doctor Consultation Fee
+                      <span className="pay-for-tag">pay at clinic</span>
+                    </span>
+                    <span className="pay-row-value">₹{inr(breakdown.offline_doctor_fee)}</span>
+                  </div>
+                ) : (
+                  <div className="pay-row">
+                    <span className="pay-row-label">Doctor Consultation Fee</span>
+                    <span className="pay-row-value">₹{inr(breakdown.doctor_fee)}</span>
+                  </div>
+                )}
+                <div className="pay-row">
+                  <span className="pay-row-label">Platform Fee</span>
+                  <span className="pay-row-value">₹{inr(breakdown.platform_fee)}</span>
+                </div>
+                <div className="pay-row">
+                  <span className="pay-row-label">Payment Gateway Fee</span>
+                  <span className="pay-row-value">₹{inr(breakdown.gateway_fee)}</span>
+                </div>
+                <div className="pay-row">
+                  <span className="pay-row-label">GST (18%)</span>
+                  <span className="pay-row-value">₹{inr(breakdown.gst_amount)}</span>
+                </div>
               </div>
-              <div className="pay-row">
-                <span className="pay-row-label">Payment Gateway Fee</span>
-                <span className="pay-row-value">₹{inr(breakdown.gateway_fee)}</span>
-              </div>
-              <div className="pay-row">
-                <span className="pay-row-label">GST (18%)</span>
-                <span className="pay-row-value">₹{inr(breakdown.gst_amount)}</span>
-              </div>
-            </div>
+            )}
             <div className="pay-total-row">
-              <span className="pay-total-label">Total Amount</span>
-              <span className="pay-total-amount">₹{inr(total)}</span>
+              <span className="pay-total-label">Total Payable Now</span>
+              <span className="pay-total-amount">{total === null ? '—' : `₹${inr(total)}`}</span>
             </div>
           </div>
 
@@ -441,10 +471,12 @@ export default function Payment() {
           </div>
 
           {/* Pay button */}
-          <button className="pay-btn" onClick={handlePayment} disabled={loading}>
+          <button className="pay-btn" onClick={handlePayment} disabled={loading || !breakdown}>
             {loading
               ? <><div className="pay-spinner" /> Opening Payment Gateway…</>
-              : <>💳 Pay ₹{inr(total)} & Confirm Appointment</>
+              : !breakdown
+                ? <>Loading…</>
+                : <>💳 Pay ₹{inr(total)} & Confirm Appointment</>
             }
           </button>
 

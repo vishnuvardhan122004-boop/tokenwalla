@@ -101,7 +101,7 @@ class HospitalAdmin(admin.ModelAdmin):
                     hospital_name = hospital.name
  
                     # Step 1 — cancel all active bookings for this hospital
-                    cancelled = Booking.objects.filter(
+                    Booking.objects.filter(
                         hospital=hospital,
                         status__in=['CONFIRMED', 'IN_PROGRESS']
                     ).update(status='CANCELLED')

@@ -1,41 +1,18 @@
 """
-backend/payments/views.py  — CORRECTED
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-BUGS FIXED:
-  1. Payment.booking is OneToOneField → creating a 2nd Payment for a reschedule
-     crashes with IntegrityError.  Fixed: reschedule payments go into a NEW
-     model  ReschedulePayment  (see migration note at bottom of this file).
-     If you cannot add a new model yet, the fallback (update existing Payment)
-     is also shown as a commented-out alternative.
+backend/payments/views.py
 
-  2. VALID_AMOUNTS_PAISE allowed 500 paise for "reschedule" → the same
-     CreateOrderView accepted ₹5 orders but then VerifyPaymentView tried to
-     create a Booking with a plan named 'reschedule', which has no doctor /
-     slot data → KeyError crash.  Fixed: reschedule is routed to
-     _handle_reschedule(); new-booking route only fires for 'queue_view'.
+The accept-payment API (Razorpay), the admin reports/receipt endpoints, and the
+manual doctor-payout endpoints.
 
-  3. _handle_reschedule() called Payment.objects.create(booking=...) which
-     would violate the OneToOne constraint for any booking that already has a
-     payment (every real booking does).  Fixed: uses ReschedulePayment model.
+Two things shape every handler here:
 
-  4. Idempotency check (existing = Booking.objects.filter(payment_id=...))
-     only ran for new bookings.  A retried reschedule verify would fall through
-     to _handle_reschedule() and try to reschedule again.  Fixed: idempotency
-     is checked first for both plans.
+  * The client is NEVER trusted for an amount or for who was paid for. Prices
+    come from payments/fees.py, and /verify/ re-derives the split and binds the
+    booking to the server-written order tags (see VerifyPaymentView).
 
-  5. booking_data.get('bookingId') — the mobile app sends 'booking_id'
-     (snake_case) not 'bookingId'.  Fixed: read both keys.
-
-  6. ReschedulePayment.objects.create() inside _handle_reschedule received
-     `plan_info['fee']` which is ₹5 (INR), but Payment.amount stores INR
-     integers so that is correct; noted explicitly for clarity.
-
-MIGRATION NOTE:
-  After dropping this file, run:
-      python manage.py makemigrations payments
-      python manage.py migrate
-  to create the ReschedulePayment table.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  * Reschedule fees live in their own ReschedulePayment model — Payment has a
+    OneToOneField to Booking, so it can't hold a second payment for the same
+    booking. Both plans are idempotency-checked before any handler runs.
 """
 
 import uuid
@@ -57,7 +34,6 @@ from tokenwalla.permissions import IsAdmin
 # Shared, single-source-of-truth Razorpay PG helpers (see payments/razorpay_utils.py).
 from payments.razorpay_utils import (
     create_order, confirm_order_paid, plan_for_amount, VALID_PLAN_AMOUNTS,
-    checkout_key,
 )
 # Server-side fee math — the client is never trusted for booking amounts.
 from payments.fees import compute_fee_breakdown, SAC_CODE, GST_RATE
@@ -154,7 +130,7 @@ def _dispatch_booking_notifications(booking):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CreateOrderView  — full-fee booking orders + legacy fixed-amount plans
+# CreateOrderView  — full-fee booking orders + the ₹5 reschedule fee
 # ─────────────────────────────────────────────────────────────────────────────
 
 class CreateOrderView(APIView):
@@ -176,7 +152,7 @@ class CreateOrderView(APIView):
         if doctor_id:
             return self._create_booking_order(request, doctor_id)
 
-        # ── Legacy fixed-amount plans (₹5 reschedule / ₹15 queue upgrade) ──────
+        # ── Fixed-amount plan (the ₹5 reschedule fee) ─────────────────────────
         #    The client sends `amount` in RUPEES now (Razorpay's unit), not paise.
         plan_info = plan_for_amount(request.data.get('amount', 0))
         if plan_info is None:
@@ -289,8 +265,8 @@ class VerifyPaymentView(APIView):
         plan_info  = plan_for_amount(amount_rupees)
 
         # New full-fee bookings carry plan='booking' in the order tags and a
-        # dynamic amount. Legacy fixed-amount plans ('reschedule', or the old ₹15
-        # 'queue_view' booking) are resolved by rupee amount.
+        # dynamic amount. The ₹5 reschedule fee is the one remaining
+        # fixed-amount plan, resolved by rupee amount.
         if order_plan == 'booking':
             effective_plan = 'booking'
         elif plan_info:
@@ -350,52 +326,48 @@ class VerifyPaymentView(APIView):
 
         # ── 4. Route to the correct handler ───────────────────────────────────
         if effective_plan == 'reschedule':
-            return self._handle_reschedule(request, booking_data, payment_id, order_id, '', plan_info)
+            return self._handle_reschedule(request, booking_data, payment_id, order_id, plan_info)
 
-        # New full-fee booking, or legacy flat ₹15 'queue_view' booking.
-        if effective_plan == 'booking':
-            # The doctor is whoever the ORDER was priced for — not whoever the
-            # client names now. Reject a mismatch outright (rather than silently
-            # substituting) so the patient isn't handed a booking with a doctor
-            # they didn't choose, and pin doctorId to the tag either way.
-            tag_doctor = str(tags.get('doctor_id') or '')
-            claimed    = str(booking_data.get('doctorId') or '')
-            if tag_doctor:
-                if claimed and claimed != tag_doctor:
-                    logger.error('Order %s was paid for doctor %s but redeemed against %s.',
-                                 order_id, tag_doctor, claimed)
-                    return Response({'success': False,
-                                     'message': 'Payment does not match the selected doctor.'},
-                                    status=400)
-                booking_data = {**booking_data, 'doctorId': tag_doctor}
+        # Everything else is a full-fee booking ('reschedule' returned above).
+        # The doctor is whoever the ORDER was priced for — not whoever the
+        # client names now. Reject a mismatch outright (rather than silently
+        # substituting) so the patient isn't handed a booking with a doctor
+        # they didn't choose, and pin doctorId to the tag either way.
+        tag_doctor = str(tags.get('doctor_id') or '')
+        claimed    = str(booking_data.get('doctorId') or '')
+        if tag_doctor:
+            if claimed and claimed != tag_doctor:
+                logger.error('Order %s was paid for doctor %s but redeemed against %s.',
+                             order_id, tag_doctor, claimed)
+                return Response({'success': False,
+                                 'message': 'Payment does not match the selected doctor.'},
+                                status=400)
+            booking_data = {**booking_data, 'doctorId': tag_doctor}
 
-            breakdown = compute_fee_breakdown(
-                tags.get('doctor_fee') or 0,
-                tags.get('collection_mode') or 'FULL',
-            )
-            # The amount actually captured must match the split we computed —
-            # otherwise the doctor's fee changed mid-checkout or the amount was
-            # tampered with. Reject rather than store an inconsistent Payment.
-            # Both sides are 2dp rupee Decimals, so this is an exact comparison.
-            if breakdown['final_amount'] != amount_rupees:
-                logger.error('Booking amount mismatch order %s: paid ₹%s vs computed ₹%s',
-                             order_id, amount_rupees, breakdown['final_amount'])
-                return Response({'success': False, 'message': 'Payment amount mismatch.'}, status=400)
-            amount_inr   = int(round(float(breakdown['final_amount'])))
-            queue_access = True
-        else:  # legacy 'queue_view'
-            breakdown    = None
-            amount_inr   = plan_info['fee']
-            queue_access = plan_info['queue_access']
+        breakdown = compute_fee_breakdown(
+            tags.get('doctor_fee') or 0,
+            tags.get('collection_mode') or 'FULL',
+        )
+        # The amount actually captured must match the split we computed —
+        # otherwise the doctor's fee changed mid-checkout or the amount was
+        # tampered with. Reject rather than store an inconsistent Payment.
+        # Both sides are 2dp rupee Decimals, so this is an exact comparison.
+        if breakdown['final_amount'] != amount_rupees:
+            logger.error('Booking amount mismatch order %s: paid ₹%s vs computed ₹%s',
+                         order_id, amount_rupees, breakdown['final_amount'])
+            return Response({'success': False, 'message': 'Payment amount mismatch.'}, status=400)
 
         return self._handle_new_booking(
-            request, booking_data, payment_id, order_id, '',
-            amount_inr=amount_inr, queue_access=queue_access, breakdown=breakdown,
+            request, booking_data, payment_id, order_id,
+            amount_inr=int(round(float(breakdown['final_amount']))),
+            # Every booking now includes live queue access — it's part of the
+            # service fee, not a separate ₹15 upgrade any more.
+            queue_access=True, breakdown=breakdown,
         )
 
     # ── Handler: new appointment booking ─────────────────────────────────────
 
-    def _handle_new_booking(self, request, booking_data, payment_id, order_id, sig,
+    def _handle_new_booking(self, request, booking_data, payment_id, order_id,
                             amount_inr, queue_access, breakdown):
         from doctors.models import Doctor
         from payments.models import Payment
@@ -452,7 +424,6 @@ class VerifyPaymentView(APIView):
                     booking    = new_booking,
                     order_id   = order_id,
                     payment_id = payment_id,
-                    signature  = sig,
                     amount     = amount_inr,
                     status     = Payment.PAID,
                 )
@@ -526,7 +497,7 @@ class VerifyPaymentView(APIView):
 
     # ── Handler: reschedule an existing booking ───────────────────────────────
 
-    def _handle_reschedule(self, request, booking_data, payment_id, order_id, sig, plan_info):
+    def _handle_reschedule(self, request, booking_data, payment_id, order_id, plan_info):
         """
         Reschedule an existing 'CONFIRMED' booking after the ₹5 fee is verified.
 
@@ -600,7 +571,6 @@ class VerifyPaymentView(APIView):
                     booking    = existing_booking,
                     order_id   = order_id,
                     payment_id = payment_id,
-                    signature  = sig,
                     amount     = plan_info['fee'],   # ₹5 in INR
                     status     = 'success',
                 )
@@ -683,7 +653,6 @@ class BookingReceiptView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        from payments.models import Payment
         booking = (Booking.objects
                    .select_related('doctor', 'hospital', 'user', 'payment')
                    .filter(pk=pk).first())

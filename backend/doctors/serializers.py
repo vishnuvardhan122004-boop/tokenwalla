@@ -13,6 +13,13 @@ class DoctorSerializer(serializers.ModelSerializer):
     image_url          = serializers.SerializerMethodField()
     hospital_image_url = serializers.SerializerMethodField()
 
+    # The itemised patient bill for this doctor, computed by the SAME code that
+    # prices the order (payments/fees.py). Checkout renders this rather than
+    # recomputing client-side, so the preview can never disagree with what the
+    # server actually charges — including for SERVICE_ONLY doctors, whose
+    # consultation fee is collected at the clinic and not online.
+    fee_breakdown = serializers.SerializerMethodField()
+
     slots = serializers.ListField(
         child=serializers.CharField(),
         default=list,
@@ -30,7 +37,7 @@ class DoctorSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "specialization", "keywords", "experience",
             "mobile", "available", "fee", "slots", "days", "max_per_slot",
-            "payment_collection_mode",
+            "payment_collection_mode", "fee_breakdown",
             "image", "hospital_image",
             "image_url", "hospital_image_url",
             "hospital", "hospital_name", "hospital_location", "hospital_address", "city",
@@ -60,6 +67,12 @@ class DoctorSerializer(serializers.ModelSerializer):
             return obj.hospital_image.url
         return 'https://placehold.co/1200x350?text=Hospital'
 
+    def get_fee_breakdown(self, obj):
+        # Local import: doctors must not import payments at module load time.
+        from payments.fees import compute_fee_breakdown
+        b = compute_fee_breakdown(obj.fee or 0, obj.payment_collection_mode)
+        return {k: (str(v) if not isinstance(v, str) else v) for k, v in b.items()}
+
     def to_representation(self, instance):
         rep = super().to_representation(instance)
         # Replace image fields with full Cloudinary URLs in response
@@ -79,7 +92,7 @@ class DoctorPaymentDetailsSerializer(serializers.ModelSerializer):
     the owner-hospital / admin `payment-details` action.
 
     The spec's field names (upi_id / account_number / ifsc_code) map onto the
-    existing model columns the Razorpay payout utils already read (upi_vpa /
+    existing model columns the payout utils already read (upi_vpa /
     bank_account_number / ifsc) so payouts keep working with no data migration.
     """
     upi_id         = serializers.CharField(source="upi_vpa",             required=False, allow_blank=True)

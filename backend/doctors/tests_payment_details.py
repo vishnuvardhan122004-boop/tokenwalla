@@ -8,7 +8,6 @@ from decimal import Decimal
 
 from django.test import TestCase
 from django.utils import timezone
-from datetime import timedelta
 from rest_framework.test import APIClient
 
 from django.contrib.auth import get_user_model
@@ -343,3 +342,41 @@ class PaymentSummaryTests(TestCase):
         self.client.force_authenticate(other)
         r = self.client.get(f'/api/doctors/payment-summary/?hospital={self.hospital.id}')
         self.assertEqual(r.status_code, 403)
+
+
+class DoctorFeeBreakdownFieldTests(TestCase):
+    """`fee_breakdown` on the doctor endpoint is what checkout renders, so it
+    must agree exactly with the fee math that prices the order — including for
+    SERVICE_ONLY doctors, whose consultation fee is paid at the clinic and is
+    NOT part of the online total."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.hospital = Hospital.objects.create(
+            name='H', city='Blr', mobile='9000000090', password='x')
+
+    def _breakdown(self, **kw):
+        d = Doctor.objects.create(
+            hospital=self.hospital, name='D', specialization='Gen',
+            mobile=kw.pop('mobile'), fee=kw.pop('fee', 200),
+            slots=['09:00 AM'], **kw)
+        r = self.client.get(f'/api/doctors/{d.id}/')
+        self.assertEqual(r.status_code, 200)
+        return r.json()['fee_breakdown']
+
+    def test_full_mode_totals_match_the_fee_math(self):
+        b = self._breakdown(mobile='9000000091', fee=200)
+        expected = compute_fee_breakdown(200, 'FULL')
+        self.assertEqual(Decimal(b['final_amount']), expected['final_amount'])
+        self.assertEqual(Decimal(b['final_amount']), Decimal('225.37'))
+        self.assertEqual(Decimal(b['doctor_fee']), Decimal('200.00'))
+        self.assertEqual(Decimal(b['offline_doctor_fee']), Decimal('0.00'))
+
+    def test_service_only_excludes_the_consultation_fee_from_the_online_total(self):
+        b = self._breakdown(mobile='9000000092', fee=200,
+                            payment_collection_mode='SERVICE_ONLY')
+        # Patient pays only the service fee online; ₹200 is due at the clinic.
+        self.assertEqual(Decimal(b['final_amount']), Decimal('25.37'))
+        self.assertEqual(Decimal(b['doctor_fee']), Decimal('0.00'))
+        self.assertEqual(Decimal(b['offline_doctor_fee']), Decimal('200.00'))
+        self.assertEqual(b['collection_mode'], 'SERVICE_ONLY')

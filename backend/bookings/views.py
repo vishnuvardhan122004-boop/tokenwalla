@@ -2,9 +2,9 @@ import logging
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
-from django.db import transaction, IntegrityError
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 
 from .models import Booking
@@ -12,10 +12,6 @@ from .serializers import BookingSerializer, build_queue_map
 from tokenwalla.permissions import IsAdmin, IsHospitalStaff
 from payments.refunds import (
     process_cancellation_refund, record_absence_refund, RefundNotAllowed,
-)
-from payments.razorpay_utils import (
-    confirm_order_paid,
-    QUEUE_UPGRADE_AMOUNT_INR,
 )
 from notifications.push import push_booking_in_progress
 
@@ -221,74 +217,6 @@ class AllBookingsView(APIView):
         page       = paginator.paginate_queryset(qs, request)
         serializer = BookingSerializer(page, many=True, context={'request': request})
         return paginator.get_paginated_response(serializer.data)
-
-
-# ── Upgrade queue access ──────────────────────────────────────────────────────
-class UpgradeQueueAccessView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def patch(self, request, pk):
-        booking = get_object_or_404(Booking, pk=pk, user=request.user)
-
-        if booking.queue_access:
-            return Response({'message': 'Queue access already active.'}, status=400)
-
-        # ── Verify the payment BEFORE unlocking the paid feature ──────────────
-        # Previously this endpoint trusted a client-supplied `payment_id` string
-        # with no verification, so any user could unlock queue access for free.
-        # We now confirm the payment with Razorpay server-side (there is no client
-        # signature) and validate it was paid for the right amount, exactly like
-        # payments.VerifyPaymentView.
-        order_id = str(request.data.get('order_id', '') or '').strip()
-
-        if not order_id:
-            return Response(
-                {'message': 'order_id is required to upgrade queue access.'},
-                status=400,
-            )
-
-        # Confirm the order with Razorpay and that it was paid for the right amount.
-        try:
-            paid, payment_ref, amount_rupees, _tags = confirm_order_paid(order_id)
-        except Exception as exc:
-            logger.error('Queue upgrade: failed to confirm Razorpay order %s: %s', order_id, exc)
-            return Response({'message': 'Could not verify order with the payment gateway.'}, status=502)
-
-        if not paid:
-            logger.warning('Queue upgrade: order %s is not PAID.', order_id)
-            return Response({'message': 'Payment not completed.'}, status=400)
-
-        # payment_ref (cf_payment_id) is the reuse key stored on queue_payment_id.
-        payment_id = payment_ref
-
-        if int(amount_rupees) != QUEUE_UPGRADE_AMOUNT_INR:
-            logger.warning('Queue upgrade: wrong amount for order %s: ₹%s',
-                           order_id, amount_rupees)
-            return Response({'message': 'Invalid payment amount for queue access.'}, status=400)
-
-        # Record the upgrade payment in its OWN fields (never touching the
-        # booking's original payment_id/order_id/amount) and let the partial
-        # unique index on queue_payment_id be the source of truth for reuse.
-        # The pre-check gives a friendly 409; the IntegrityError catch closes
-        # the concurrent-race window the pre-check alone can't.
-        try:
-            with transaction.atomic():
-                if Booking.objects.filter(queue_payment_id=payment_id).exists():
-                    return Response({'message': 'This payment has already been used.'}, status=409)
-                booking.queue_access     = True
-                booking.queue_payment_id = payment_id
-                booking.queue_order_id   = order_id
-                booking.save(update_fields=['queue_access', 'queue_payment_id', 'queue_order_id'])
-        except IntegrityError:
-            logger.warning('Queue upgrade: payment %s already used (unique index)', payment_id)
-            return Response({'message': 'This payment has already been used.'}, status=409)
-        logger.info('Queue access unlocked for booking %s by user %s', pk, request.user.id)
-
-        return Response({
-            'success': True,
-            'message': 'Queue access unlocked!',
-            'booking': BookingSerializer(booking, context={'request': request}).data,
-        })
 
 
 # ── Cancel booking ────────────────────────────────────────────────────────────

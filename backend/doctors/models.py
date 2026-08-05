@@ -41,9 +41,10 @@ class Doctor(models.Model):
         max_length=20, choices=COLLECTION_MODE_CHOICES, default=COLLECT_FULL,
     )
 
-    # ── Payout routing (Razorpay Payouts) ────────────────────────────────────────────
-    # Where the doctor's automated payout is sent. UPI is preferred when a VPA
-    # is present; otherwise the bank account (IMPS) is used as fallback.
+    # ── Payout routing (payouts are MANUAL) ──────────────────────────────────────────
+    # Where the doctor's payout is sent. Admin staff read these off the payouts
+    # page and transfer the money by hand — nothing here is sent to a gateway.
+    # UPI is preferred when a VPA is present; otherwise the bank account (IMPS).
     # `payment_method` records which one the hospital chose as primary; the
     # column names below are the canonical storage the payout utils already read
     # (exposed to the hospital UI as upi_id / account_number / ifsc_code).

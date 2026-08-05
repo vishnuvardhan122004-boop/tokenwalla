@@ -2,7 +2,6 @@ import logging
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password, check_password
-from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
 

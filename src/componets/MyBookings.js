@@ -218,7 +218,7 @@ export default function MyBookings() {
       const finish = () => { setPayingReschedule(false); setRescheduling(false); };
       const rzp = new window.Razorpay({
         key:      order.key,
-        amount:   RESCHEDULE_AMOUNT * 100,
+        amount:   Math.round(Number(order.amount) * 100),   // server's amount, not ours
         currency: order.currency || 'INR',
         order_id: order.order_id,
         name:     'TokenWalla',

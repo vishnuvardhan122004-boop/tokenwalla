@@ -154,7 +154,7 @@ def record_absence_refund(booking):
     """
     from django.db import transaction
     from bookings.models import Booking
-    from payments.models import DoctorLedger, Payment
+    from payments.models import DoctorLedger
     from payments.fees import compute_doctor_payout
 
     if booking.status != Booking.COMPLETED:

@@ -1,8 +1,13 @@
 // src/services/fees.js
-// Client-side mirror of backend/payments/fees.py — used ONLY to preview the
-// itemised receipt before checkout. The SERVER is always the source of truth
-// for the amount actually charged (it recomputes and validates on verify).
-// Keep these constants in sync with payments/fees.py.
+// Client-side mirror of backend/payments/fees.py, kept ONLY for the hospital
+// dashboard's illustrative "what-if" previews (the static ₹500 example and the
+// live preview while a hospital edits a doctor's collection mode) — figures
+// that are explanatory, never charged.
+//
+// NEVER use this for an amount a patient pays or sees as their total. Checkout
+// reads the server-computed `doctor.fee_breakdown` instead, so the quoted price
+// can't drift from what the backend actually charges. Keep the constants below
+// in sync with payments/fees.py regardless.
 
 export const PLATFORM_FEE = 20.0;
 export const GATEWAY_FEE  = 1.5;

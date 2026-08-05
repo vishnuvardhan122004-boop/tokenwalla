@@ -3,14 +3,14 @@ Regression tests for the security fixes applied in the security review.
 
 Covers:
   1. Doctor write endpoints require authenticated hospital/admin (was AllowAny).
-  2. Queue-access upgrade requires a server-confirmed Razorpay payment (was a
-     free unlock).
-  3. OTP is 6-digit CSPRNG and locks out after a capped number of wrong guesses.
+  2. OTP is 6-digit CSPRNG and locks out after a capped number of wrong guesses.
+
+(The queue-access-upgrade tests were removed with the endpoint itself — every
+booking now includes queue access as part of the full fee.)
 
 Run:  python manage.py test tokenwalla.tests_security
 """
 import datetime
-from decimal import Decimal
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
@@ -148,84 +148,6 @@ class DoctorAccessControlTests(TestCase):
 
 
 @override_settings(CACHES=LOCMEM_CACHE)
-class QueueUpgradeTests(TestCase):
-    """Vuln 2: queue upgrade must confirm the payment with Razorpay + amount."""
-
-    def setUp(self):
-        self.client = APIClient()
-        cache.clear()  # isolate DRF throttle counters from other test classes
-        self.hospital = Hospital.objects.create(name='H1', city='Blr', mobile='9000000010', password='x')
-        self.doctor = Doctor.objects.create(
-            hospital=self.hospital, name='D', specialization='Gen',
-            mobile='9000000011', fee=100, slots=['09:00 AM'])
-        self.patient = User.objects.create_user(
-            username='9111111112', mobile='9111111112', password='pw', role='patient')
-        self.booking = Booking.objects.create(
-            user=self.patient, doctor=self.doctor, hospital=self.hospital,
-            date=datetime.date.today(), slot='09:00 AM', token='TW-TEST-1',
-            amount=10, queue_access=False)
-        _auth(self.client, self.patient)
-
-    def _upgrade(self, payload):
-        return self.client.patch(f'/api/bookings/upgrade/{self.booking.id}/', payload, format='json')
-
-    def test_unpaid_order_rejected(self):
-        # Razorpay says the order is NOT paid → must not unlock.
-        with patch('bookings.views.confirm_order_paid',
-                   return_value=(False, '', Decimal('0'), {})):
-            res = self._upgrade({'order_id': 'order_1'})
-        self.assertEqual(res.status_code, 400)
-        self.booking.refresh_from_db()
-        self.assertFalse(self.booking.queue_access)
-
-    def test_missing_order_id_rejected(self):
-        res = self._upgrade({})
-        self.assertEqual(res.status_code, 400)
-        self.booking.refresh_from_db()
-        self.assertFalse(self.booking.queue_access)
-
-    def test_legacy_plain_payment_id_no_longer_unlocks(self):
-        # The old exploit: a bare, unverified payment_id string (no order_id).
-        res = self._upgrade({'payment_id': 'anything'})
-        self.assertEqual(res.status_code, 400)
-        self.booking.refresh_from_db()
-        self.assertFalse(self.booking.queue_access)
-
-    # confirm_order_paid is a live network call, so mock it — the returned amount
-    # is what the server trusts. These exercise the actual security fix: a PAID
-    # order for the correct ₹15 unlocks; a wrong amount / reused id does not.
-    @patch('bookings.views.confirm_order_paid',
-           return_value=(True, 'pay_ok', Decimal('15'), {}))
-    def test_valid_payment_unlocks_queue_access(self, _mock):
-        res = self._upgrade({'order_id': 'order_ok'})
-        self.assertEqual(res.status_code, 200)
-        self.booking.refresh_from_db()
-        self.assertTrue(self.booking.queue_access)
-        self.assertEqual(self.booking.queue_payment_id, 'pay_ok')
-
-    @patch('bookings.views.confirm_order_paid',
-           return_value=(True, 'pay_low', Decimal('5'), {}))
-    def test_wrong_amount_rejected(self, _mock):
-        res = self._upgrade({'order_id': 'order_low'})
-        self.assertEqual(res.status_code, 400)
-        self.booking.refresh_from_db()
-        self.assertFalse(self.booking.queue_access)
-
-    @patch('bookings.views.confirm_order_paid',
-           return_value=(True, 'pay_dup', Decimal('15'), {}))
-    def test_reused_payment_id_rejected(self, _mock):
-        # A different booking already consumed this queue-upgrade payment.
-        Booking.objects.create(
-            user=self.patient, doctor=self.doctor, hospital=self.hospital,
-            date=datetime.date.today(), slot='09:00 AM', token='TW-TEST-2',
-            amount=15, queue_access=True, queue_payment_id='pay_dup')
-        res = self._upgrade({'order_id': 'order_dup'})
-        self.assertEqual(res.status_code, 409)
-        self.booking.refresh_from_db()
-        self.assertFalse(self.booking.queue_access)
-
-
-@override_settings(CACHES=LOCMEM_CACHE)
 class BookForOtherTests(TestCase):
     """Feature: "book for someone else" — the beneficiary's name/mobile are
     stored on the booking and surfaced as the patient, while the booking still
@@ -246,20 +168,28 @@ class BookForOtherTests(TestCase):
 
     def _verify(self, booking_extra):
         """POST a new-booking verify with the Razorpay confirmation mocked."""
+        from payments.fees import compute_fee_breakdown
         booking = {
             'doctorId': self.doctor.id,
             'doctorName': self.doctor.name,
             'hospital': self.hospital.name,
             'date': str(datetime.date.today()),
             'slot': '09:00 AM',
-            'amount': 15,
             'queue_access': True,
         }
         booking.update(booking_extra)
-        # confirm_order_paid is mocked: a PAID order for ₹15 with no 'booking'
-        # tag resolves to the legacy flat queue_view plan the server trusts.
+        # confirm_order_paid is mocked as a PAID full-fee booking order: the
+        # server-written tags name the doctor and their fee, and the captured
+        # amount is the full bill the server would have priced.
+        total = compute_fee_breakdown(self.doctor.fee)['final_amount']
+        tags = {
+            'plan':       'booking',
+            'doctor_fee': str(self.doctor.fee),
+            'doctor_id':  str(self.doctor.id),
+            'user_id':    str(self.patient.id),
+        }
         with patch('payments.views.confirm_order_paid',
-                   return_value=(True, 'pay_x', Decimal('15'), {})), \
+                   return_value=(True, 'pay_x', total, tags)), \
              patch('payments.views._dispatch_booking_notifications'):
             return self.client.post('/api/payment/verify/', {
                 'order_id': 'order_x',
