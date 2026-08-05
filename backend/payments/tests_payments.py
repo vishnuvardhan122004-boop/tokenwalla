@@ -3,10 +3,6 @@ Tests for the fee-split / refund / payout / invoice / receipt feature.
 
 Run:  python manage.py test payments
 """
-import base64
-import hashlib
-import hmac
-import json
 from datetime import timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -122,7 +118,7 @@ class BaseDataMixin:
 # Cancellation refund (DB)
 # ─────────────────────────────────────────────────────────────────────────────
 class CancellationRefundTests(BaseDataMixin, TestCase):
-    @mock.patch('payments.cashfree_utils.refund_payment', return_value={'id': 'rfnd_test'})
+    @mock.patch('payments.razorpay_utils.refund_payment', return_value={'id': 'rfnd_test'})
     def test_confirmed_cancel_creates_single_refund(self, _rp):
         self.make_world(status=Booking.CONFIRMED, token='TW-C1')
         refund, info = process_cancellation_refund(self.booking)
@@ -153,10 +149,11 @@ class CancellationRefundTests(BaseDataMixin, TestCase):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Daily payout pipeline
+# Daily ledger run — writes DoctorLedger rows only; payouts are manual (see
+# ManualPayoutTests below for the mark-paid flow).
 # ─────────────────────────────────────────────────────────────────────────────
 class PayoutPipelineTests(BaseDataMixin, TestCase):
-    def test_run_creates_ledger_and_one_batch_per_doctor(self):
+    def test_run_creates_ledger_row(self):
         self.make_world(status=Booking.COMPLETED, token='TW-P1')
         call_command('run_daily_payouts')
 
@@ -165,13 +162,7 @@ class PayoutPipelineTests(BaseDataMixin, TestCase):
         self.assertEqual(rows.count(), 1)
         self.assertEqual(rows.first().reason, DoctorLedger.BOOKING_COMPLETED)
         self.assertEqual(rows.first().amount, Decimal('200.00'))
-
-        batches = PayoutBatch.objects.filter(doctor=self.doctor)
-        self.assertEqual(batches.count(), 1)
-        batch = batches.first()
-        self.assertEqual(batch.total_amount, Decimal('200.00'))
-        self.assertEqual(batch.payout_mode, PayoutBatch.IMPS)   # no upi_vpa set
-        self.assertEqual(batch.status, PayoutBatch.QUEUED)
+        self.assertIsNone(rows.first().payout_batch)
 
         self.booking.refresh_from_db()
         self.assertEqual(self.booking.doctor_payout_status, Booking.PAYOUT_PROCESSING)
@@ -179,94 +170,84 @@ class PayoutPipelineTests(BaseDataMixin, TestCase):
     def test_run_is_idempotent(self):
         self.make_world(status=Booking.COMPLETED, token='TW-P2')
         call_command('run_daily_payouts')
-        call_command('run_daily_payouts')   # second run: no new ledger, no new batch
+        call_command('run_daily_payouts')   # second run: no new ledger row
         self.assertEqual(DoctorLedger.objects.count(), 1)
-        self.assertEqual(PayoutBatch.objects.count(), 1)
 
-    def test_doctor_without_payout_details_is_held(self):
-        # No VPA and no bank account → nowhere to send the money. The ledger is
-        # written but left unbatched so nothing is lost; it pays out in a later
-        # cycle once the hospital adds the details.
-        self.make_world(status=Booking.COMPLETED, token='TW-P4')
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Manual payouts — admin payouts page (PendingPayoutsView / MarkPayoutPaidView)
+# ─────────────────────────────────────────────────────────────────────────────
+class ManualPayoutTests(BaseDataMixin, TestCase):
+    def _admin_client(self):
+        admin = User.objects.create(username='adm', mobile='9000000099',
+                                    role='admin', password='x')
+        client = APIClient()
+        client.force_authenticate(admin)
+        return client
+
+    def test_pending_view_lists_doctor_with_positive_balance(self):
+        self.make_world(status=Booking.COMPLETED, token='TW-M1')
+        call_command('run_daily_payouts')
+        client = self._admin_client()
+        r = client.get('/api/payment/payouts/pending/')
+        self.assertEqual(r.status_code, 200)
+        rows = r.json()['payouts']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['doctor_id'], self.doctor.id)
+        self.assertEqual(rows[0]['pending_amount'], '200.00')
+        self.assertEqual(rows[0]['mode'], 'IMPS')   # bank details, no upi_vpa
+
+    def test_mark_paid_batches_ledger_and_settles_booking(self):
+        self.make_world(status=Booking.COMPLETED, token='TW-M2')
+        call_command('run_daily_payouts')
+        client = self._admin_client()
+        r = client.post('/api/payment/payouts/mark-paid/',
+                        {'doctor_id': self.doctor.id, 'reference': 'UTR123'})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['amount_paid'], '200.00')
+
+        batch = PayoutBatch.objects.get(doctor=self.doctor)
+        self.assertEqual(batch.status, PayoutBatch.PROCESSED)
+        self.assertEqual(batch.total_amount, Decimal('200.00'))
+        self.assertEqual(batch.razorpay_payout_id, 'UTR123')
+
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.doctor_payout_status, Booking.PAYOUT_PAID)
+
+        # Now paid — no longer pending.
+        self.assertEqual(
+            DoctorLedger.objects.filter(payout_batch__isnull=True).count(), 0)
+        r2 = client.get('/api/payment/payouts/pending/')
+        self.assertEqual(r2.json()['payouts'], [])
+
+    def test_mark_paid_with_no_pending_balance_is_rejected(self):
+        self.make_world(status=Booking.COMPLETED, token='TW-M3')
+        client = self._admin_client()
+        r = client.post('/api/payment/payouts/mark-paid/', {'doctor_id': self.doctor.id})
+        self.assertEqual(r.status_code, 400)
+
+    def test_doctor_without_payout_details_still_marks_paid_as_other(self):
+        # No VPA and no bank account on file — money was still wired manually
+        # (e.g. cash), so mode falls back to OTHER rather than blocking.
+        self.make_world(status=Booking.COMPLETED, token='TW-M4')
         self.doctor.bank_account_number = ''
         self.doctor.ifsc = ''
         self.doctor.save(update_fields=['bank_account_number', 'ifsc'])
         call_command('run_daily_payouts')
-        self.assertEqual(PayoutBatch.objects.count(), 0)
-        self.assertEqual(DoctorLedger.objects.filter(payout_batch__isnull=True).count(), 1)
-
-        # Details added → the held earnings go out on the next run.
-        self.doctor.upi_vpa = 'rao@upi'
-        self.doctor.save(update_fields=['upi_vpa'])
-        call_command('run_daily_payouts')
-        self.assertEqual(PayoutBatch.objects.get().total_amount, Decimal('200.00'))
+        client = self._admin_client()
+        r = client.post('/api/payment/payouts/mark-paid/', {'doctor_id': self.doctor.id})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(PayoutBatch.objects.get().payout_mode, PayoutBatch.OTHER)
 
     def test_uses_upi_when_vpa_present(self):
         self.make_world(status=Booking.COMPLETED, token='TW-P3')
         self.doctor.upi_vpa = 'rao@upi'
         self.doctor.save(update_fields=['upi_vpa'])
         call_command('run_daily_payouts')
+        client = self._admin_client()
+        client.post('/api/payment/payouts/mark-paid/', {'doctor_id': self.doctor.id})
         self.assertEqual(PayoutBatch.objects.get(doctor=self.doctor).payout_mode,
                          PayoutBatch.UPI)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Payout webhook (idempotent settlement)
-# ─────────────────────────────────────────────────────────────────────────────
-@override_settings(CASHFREE_PAYOUT_CLIENT_SECRET='whsec_test')
-class PayoutWebhookTests(BaseDataMixin, TestCase):
-    def _post(self, payload):
-        body = json.dumps(payload)
-        ts   = '1700000000'
-        sig  = base64.b64encode(
-            hmac.new(b'whsec_test', f'{ts}{body}'.encode(), hashlib.sha256).digest()
-        ).decode()
-        return self.client.post('/api/payment/webhook/', data=body,
-                                content_type='application/json',
-                                HTTP_X_WEBHOOK_SIGNATURE=sig,
-                                HTTP_X_WEBHOOK_TIMESTAMP=ts)
-
-    def setUp(self):
-        self.client = APIClient()
-        self.make_world(status=Booking.COMPLETED, token='TW-W1')
-        call_command('run_daily_payouts')
-        self.batch = PayoutBatch.objects.get(doctor=self.doctor)
-
-    def _processed_payload(self):
-        return {'type': 'TRANSFER_SUCCESS',
-                'data': {'cf_transfer_id': 'cft_x',
-                         'transfer_id': self.batch.idempotency_key}}
-
-    def test_bad_signature_rejected(self):
-        body = json.dumps(self._processed_payload())
-        r = self.client.post('/api/payment/webhook/', data=body,
-                             content_type='application/json',
-                             HTTP_X_WEBHOOK_SIGNATURE='deadbeef',
-                             HTTP_X_WEBHOOK_TIMESTAMP='1700000000')
-        self.assertEqual(r.status_code, 400)
-
-    def test_processed_is_idempotent(self):
-        r1 = self._post(self._processed_payload())
-        self.assertEqual(r1.status_code, 200)
-        self.batch.refresh_from_db()
-        self.assertEqual(self.batch.status, PayoutBatch.PROCESSED)
-        self.booking.refresh_from_db()
-        self.assertEqual(self.booking.doctor_payout_status, Booking.PAYOUT_PAID)
-
-        # Duplicate delivery — no second transition.
-        r2 = self._post(self._processed_payload())
-        self.assertEqual(r2.status_code, 200)
-        self.assertEqual(r2.json()['status'], 'already_processed')
-
-    def test_failed_releases_ledger_for_retry(self):
-        payload = {'type': 'TRANSFER_FAILED',
-                   'data': {'transfer_id': self.batch.idempotency_key}}
-        self._post(payload)
-        self.batch.refresh_from_db()
-        self.assertEqual(self.batch.status, PayoutBatch.FAILED)
-        # Ledger rows released (unbatched) for the next cycle.
-        self.assertEqual(
-            DoctorLedger.objects.filter(payout_batch__isnull=True).count(), 1)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -286,9 +267,14 @@ class MultiBookingPayoutTests(BaseDataMixin, TestCase):
             gateway_fee=bd['gateway_fee'], gst_amount=bd['gst_amount'],
             final_amount=bd['final_amount'], status=Payment.PAID)
         call_command('run_daily_payouts')
-
-        # One batch for the doctor, carrying both bookings' full fees.
         self.assertEqual(DoctorLedger.objects.count(), 2)
+
+        # Marking the doctor paid batches both bookings' fees into one payout.
+        admin = User.objects.create(username='adm2', mobile='9000000098',
+                                    role='admin', password='x')
+        client = APIClient()
+        client.force_authenticate(admin)
+        client.post('/api/payment/payouts/mark-paid/', {'doctor_id': self.doctor.id})
         self.assertEqual(PayoutBatch.objects.get(doctor=self.doctor).total_amount,
                          Decimal('400.00'))
 

@@ -3,7 +3,7 @@ Regression tests for the security fixes applied in the security review.
 
 Covers:
   1. Doctor write endpoints require authenticated hospital/admin (was AllowAny).
-  2. Queue-access upgrade requires a server-confirmed Cashfree payment (was a
+  2. Queue-access upgrade requires a server-confirmed Razorpay payment (was a
      free unlock).
   3. OTP is 6-digit CSPRNG and locks out after a capped number of wrong guesses.
 
@@ -149,7 +149,7 @@ class DoctorAccessControlTests(TestCase):
 
 @override_settings(CACHES=LOCMEM_CACHE)
 class QueueUpgradeTests(TestCase):
-    """Vuln 2: queue upgrade must confirm the payment with Cashfree + amount."""
+    """Vuln 2: queue upgrade must confirm the payment with Razorpay + amount."""
 
     def setUp(self):
         self.client = APIClient()
@@ -170,7 +170,7 @@ class QueueUpgradeTests(TestCase):
         return self.client.patch(f'/api/bookings/upgrade/{self.booking.id}/', payload, format='json')
 
     def test_unpaid_order_rejected(self):
-        # Cashfree says the order is NOT paid → must not unlock.
+        # Razorpay says the order is NOT paid → must not unlock.
         with patch('bookings.views.confirm_order_paid',
                    return_value=(False, '', Decimal('0'), {})):
             res = self._upgrade({'order_id': 'order_1'})
@@ -245,7 +245,7 @@ class BookForOtherTests(TestCase):
         _auth(self.client, self.patient)
 
     def _verify(self, booking_extra):
-        """POST a new-booking verify with the Cashfree confirmation mocked."""
+        """POST a new-booking verify with the Razorpay confirmation mocked."""
         booking = {
             'doctorId': self.doctor.id,
             'doctorName': self.doctor.name,

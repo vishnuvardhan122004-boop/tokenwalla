@@ -1,5 +1,3 @@
-import sys
-
 import dj_database_url
 from pathlib import Path
 from decouple import config, Csv
@@ -197,49 +195,11 @@ else:
 MEDIA_URL  = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# ── Cashfree Payment Gateway (patient checkout) ───────────────────────────────
-# The accept-payment flow. CASHFREE_ENV switches the SDK between the sandbox and
-# production hosts; keep it SANDBOX until go-live. CASHFREE_WEBHOOK_SECRET is the
-# secret used to HMAC-verify inbound webhooks (Cashfree's scheme:
-# base64(HMAC_SHA256(f"{timestamp}{raw_body}", secret))). Defaults to the client
-# secret when unset.
-CASHFREE_CLIENT_ID      = config('CASHFREE_CLIENT_ID',     default='')
-CASHFREE_CLIENT_SECRET  = config('CASHFREE_CLIENT_SECRET', default='')
-CASHFREE_ENV            = config('CASHFREE_ENV',           default='SANDBOX')  # SANDBOX | PRODUCTION
-CASHFREE_WEBHOOK_SECRET = config('CASHFREE_WEBHOOK_SECRET', default=CASHFREE_CLIENT_SECRET)
-
-# ── Cashfree Payouts (doctor settlement — replaces RazorpayX) ─────────────────
-# OFF until Payouts KYC / activation lands (an out-of-code step). While disabled,
-# run_daily_payouts still builds ledger entries + batches but the payout call is
-# SIMULATED — flip CASHFREE_PAYOUTS_ENABLED=true once the account is live.
-CASHFREE_PAYOUTS_ENABLED       = config('CASHFREE_PAYOUTS_ENABLED', default=False, cast=bool)
-CASHFREE_PAYOUT_CLIENT_ID      = config('CASHFREE_PAYOUT_CLIENT_ID',     default='')
-CASHFREE_PAYOUT_CLIENT_SECRET  = config('CASHFREE_PAYOUT_CLIENT_SECRET', default='')
-# Payouts webhooks are signed with the Payout CLIENT SECRET itself — Cashfree
-# has no separate "webhook secret" for Payouts (unlike the PG webhook above).
-# CASHFREE_PAYOUT_WEBHOOK_SECRET only needs to be set if you rotate
-# CASHFREE_PAYOUT_CLIENT_SECRET: Cashfree signs with the OLDEST still-active
-# client secret, so during a rotation window that may differ from the current
-# one above. Leave blank normally — payments.cashfree_payouts_utils falls back
-# to CASHFREE_PAYOUT_CLIENT_SECRET at verification time.
-CASHFREE_PAYOUT_WEBHOOK_SECRET = config('CASHFREE_PAYOUT_WEBHOOK_SECRET', default='')
-# Payouts 2FA. EVERY Payouts API call (sandbox included) is refused with 403
-# "IP not whitelisted" unless the caller is whitelisted in the Payouts dashboard
-# OR sends an X-Cf-Signature header. Railway's egress IP is not static, so set
-# this to the merchant PUBLIC KEY (PEM contents, or a path to the .pem) from
-# Payouts Dashboard → Developers → Two-Factor Authentication and the signature
-# is sent automatically. Leave blank to rely on IP whitelisting alone.
-CASHFREE_PAYOUT_PUBLIC_KEY     = config('CASHFREE_PAYOUT_PUBLIC_KEY', default='')
-
-# A test run must NEVER be able to reach the live payout API — that would mean
-# `manage.py test` moving real money once Payouts go live. Forcing these off
-# under the test runner also keeps the payout suite deterministic regardless of
-# what the developer currently has in .env (before this, flipping
-# CASHFREE_PAYOUTS_ENABLED=true locally broke 8 unrelated tests). Tests that
-# exercise the live path opt in explicitly with @override_settings.
-if 'test' in sys.argv:
-    CASHFREE_PAYOUTS_ENABLED   = False
-    CASHFREE_PAYOUT_PUBLIC_KEY = ''
+# ── Razorpay Payment Gateway (patient checkout) ───────────────────────────────
+# The accept-payment flow. Doctor payouts are MANUAL (see payments.payout_utils
+# / payments.views.MarkPayoutPaidView) — no payout API keys needed here.
+RAZORPAY_KEY_ID     = config('RAZORPAY_KEY_ID',     default='')
+RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
 
 # ── TokenWalla GST identity (for patient receipts) ────────────────────────────
 TOKENWALLA_GSTIN = config('TOKENWALLA_GSTIN', default='')

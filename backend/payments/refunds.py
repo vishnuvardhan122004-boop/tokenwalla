@@ -7,7 +7,7 @@ and the platform's share, and the doctor-absence adjustment.
 
 Hard rules (see the feature spec):
   * Refunds are only permitted BEFORE a booking reaches COMPLETED.
-  * Only (doctor_fee + platform_fee) is refundable — Cashfree does NOT return
+  * Only (doctor_fee + platform_fee) is refundable — Razorpay does NOT return
     the gateway fee or GST to us, so those are never refunded.
   * A refund needed AFTER completion (doctor no-show recorded late) is NOT a
     clawback of an already-sent payout — it's a negative ledger adjustment
@@ -78,18 +78,18 @@ def compute_refund_split(payment, refund_pct) -> dict:
 
 
 def process_cancellation_refund(booking):
-    """Compute, issue (via Cashfree) and record a cancellation refund.
+    """Compute, issue (via Razorpay) and record a cancellation refund.
 
     Idempotent: a booking's Payment carries at most one cancellation Refund.
     Returns (refund_or_None, info). Raises RefundNotAllowed if the booking is
-    already terminal. Raises on a Cashfree gateway error (caller should abort
+    already terminal. Raises on a Razorpay gateway error (caller should abort
     the cancellation so it can be retried rather than cancel without refunding).
     """
     # Local imports avoid a circular import (models import nothing from here).
     from django.db import transaction
     from bookings.models import Booking
     from payments.models import Payment, Refund
-    from payments.cashfree_utils import refund_payment
+    from payments.razorpay_utils import refund_payment
 
     if booking.status not in Booking.REFUNDABLE_STATUSES:
         raise RefundNotAllowed(
@@ -103,7 +103,7 @@ def process_cancellation_refund(booking):
     with transaction.atomic():
         # Lock the payment row and re-check for an existing refund UNDER the lock.
         # Without this, two concurrent cancels for the same booking could both
-        # pass the "already refunded?" check and each fire a Cashfree refund —
+        # pass the "already refunded?" check and each fire a Razorpay refund —
         # paying the patient twice. The loser blocks here until the winner
         # commits, then sees the refund and returns it. The gateway call is held
         # inside the lock deliberately: cancellations are rare, and correctness
@@ -122,10 +122,10 @@ def process_cancellation_refund(booking):
 
         razorpay_refund_id = ''
         if pool > 0:
-            # Cashfree refunds are keyed by ORDER id, take a rupee amount, and
-            # need a unique refund_id (deterministic per payment → retry-safe).
+            # Razorpay refunds are keyed by PAYMENT id (not order id), take a
+            # rupee amount, and use a deterministic refund_id for logging.
             resp = refund_payment(
-                order_id=payment.order_id,
+                payment_id=payment.payment_id,
                 amount_rupees=pool,
                 refund_id=f'rfnd_{payment.id}',
                 note='TokenWalla cancellation refund',

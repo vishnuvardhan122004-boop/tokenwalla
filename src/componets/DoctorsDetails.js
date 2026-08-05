@@ -1245,7 +1245,7 @@ export default function DoctorDetails() {
 
                   <p className="dd-book-note">
                     + platform fee &amp; GST shown at checkout<br />
-                    Secured by Cashfree · UPI · Cards · Wallets<br />
+                    Secured by Razorpay · UPI · Cards · Wallets<br />
                     Refundable if cancelled 2hrs before slot
                   </p>
                 </div>

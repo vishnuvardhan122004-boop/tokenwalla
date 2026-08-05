@@ -332,7 +332,7 @@ const Privacy = () => {
             <ul className="pp-list">
               <li><span className="pp-list-dot" /><span><strong>Account data:</strong> Your full name and mobile number (used as your login identifier).</span></li>
               <li><span className="pp-list-dot" /><span><strong>Booking data:</strong> Doctor appointments, chosen date and time slots, hospital name, token numbers, and booking status.</span></li>
-              <li><span className="pp-list-dot" /><span><strong>Payment data:</strong> Cashfree order IDs and payment transaction IDs only. We never store, process, or transmit your card number, CVV, UPI PIN, or net banking credentials. All payment processing is handled entirely by Cashfree.</span></li>
+              <li><span className="pp-list-dot" /><span><strong>Payment data:</strong> Razorpay order IDs and payment transaction IDs only. We never store, process, or transmit your card number, CVV, UPI PIN, or net banking credentials. All payment processing is handled entirely by Razorpay.</span></li>
               <li><span className="pp-list-dot" /><span><strong>OTP verification data:</strong> Your mobile number is used to send a one-time password via our OTP provider (2Factor.in) for identity verification. OTPs expire within 5 minutes and are never stored after verification.</span></li>
               <li><span className="pp-list-dot" /><span><strong>Device &amp; technical data:</strong> Browser type, device type, and IP address — collected automatically for security monitoring and analytics. We do not fingerprint your device or track you across other apps or websites.</span></li>
               <li><span className="pp-list-dot" /><span><strong>Doctor / hospital profile images:</strong> Images uploaded by hospitals are stored on Cloudinary (our media storage provider). Patients do not upload images.</span></li>
@@ -354,7 +354,7 @@ const Privacy = () => {
               <li><span className="pp-list-dot" /><span>To process appointment bookings and issue digital queue tokens.</span></li>
               <li><span className="pp-list-dot" /><span>To display your live queue position and appointment status.</span></li>
               <li><span className="pp-list-dot" /><span>To send OTP messages for login, registration, and password reset.</span></li>
-              <li><span className="pp-list-dot" /><span>To process payments via Cashfree and verify successful transactions.</span></li>
+              <li><span className="pp-list-dot" /><span>To process payments via Razorpay and verify successful transactions.</span></li>
               <li><span className="pp-list-dot" /><span>To comply with legal obligations under Indian law, including RBI guidelines and anti-money-laundering regulations.</span></li>
               <li><span className="pp-list-dot" /><span>To improve platform performance through anonymised usage analytics.</span></li>
               <li><span className="pp-list-dot" /><span>To prevent fraud, abuse, and unauthorised access.</span></li>
@@ -374,7 +374,7 @@ const Privacy = () => {
             <p>We do not sell, rent, or trade your personal information to any third party. We share data only in these limited cases:</p>
             <ul className="pp-list">
               <li><span className="pp-list-dot" /><span><strong>With the hospital you booked:</strong> Your name, mobile number, appointment date, slot, and token are shared with the hospital staff to manage your visit.</span></li>
-              <li><span className="pp-list-dot" /><span><strong>With Cashfree:</strong> Payment transaction data is shared with Cashfree to process and verify your payment. Cashfree is PCI DSS Level 1 certified.</span></li>
+              <li><span className="pp-list-dot" /><span><strong>With Razorpay:</strong> Payment transaction data is shared with Razorpay to process and verify your payment. Razorpay is PCI DSS Level 1 certified.</span></li>
               <li><span className="pp-list-dot" /><span><strong>With 2Factor.in:</strong> Your mobile number is shared solely to deliver OTP messages. No other data is shared.</span></li>
               <li><span className="pp-list-dot" /><span><strong>With Cloudinary:</strong> Hospital and doctor profile images are stored on Cloudinary's CDN. No patient personal data is shared with Cloudinary.</span></li>
               <li><span className="pp-list-dot" /><span><strong>With legal authorities:</strong> If required by law, court order, or a regulatory authority in India, we may be required to disclose your information.</span></li>
@@ -468,10 +468,10 @@ const Privacy = () => {
                 </thead>
                 <tbody>
                   <tr>
-                    <td><strong>Cashfree</strong></td>
+                    <td><strong>Razorpay</strong></td>
                     <td>Payment processing</td>
                     <td>Order amount, transaction IDs, mobile number</td>
-                    <td><a href="https://www.cashfree.com/privacy-policy/" target="_blank" rel="noopener noreferrer">cashfree.com/privacy-policy</a></td>
+                    <td><a href="https://razorpay.com/privacy/" target="_blank" rel="noopener noreferrer">razorpay.com/privacy</a></td>
                   </tr>
                   <tr>
                     <td><strong>2Factor.in</strong></td>
@@ -534,7 +534,7 @@ const Privacy = () => {
               <li><span className="pp-list-dot" /><span><strong>Encryption at rest:</strong> Your data is stored in a PostgreSQL database with encryption at rest on the hosting provider's infrastructure.</span></li>
               <li><span className="pp-list-dot" /><span><strong>Password security:</strong> Passwords are hashed using Django's PBKDF2-SHA256 algorithm and are never stored in plain text.</span></li>
               <li><span className="pp-list-dot" /><span><strong>JWT authentication:</strong> Short-lived access tokens (2 hours) and rotating refresh tokens (14 days) with server-side blacklisting on logout.</span></li>
-              <li><span className="pp-list-dot" /><span><strong>Payment security:</strong> We are PCI DSS compliant via Cashfree. Sensitive card data never touches our servers.</span></li>
+              <li><span className="pp-list-dot" /><span><strong>Payment security:</strong> We are PCI DSS compliant via Razorpay. Sensitive card data never touches our servers.</span></li>
               <li><span className="pp-list-dot" /><span><strong>Rate limiting:</strong> All API endpoints and OTP requests are rate-limited to prevent abuse.</span></li>
             </ul>
             <p>Despite these measures, no system is 100% secure. If you suspect any unauthorised access to your account, please contact us immediately.</p>

@@ -8,7 +8,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from .models import Doctor
 from .serializers import DoctorSerializer
-from payments.cashfree_payouts_utils import payout_target
+from payments.payout_utils import payout_target
 from tokenwalla.permissions import IsHospitalStaff, IsDoctorOwnerHospitalOrAdmin
 from tokenwalla.utils import is_slot_bookable
 

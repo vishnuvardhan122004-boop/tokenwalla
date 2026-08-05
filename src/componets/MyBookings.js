@@ -21,8 +21,6 @@ const TABS = [
 ];
 
 // ── Reschedule payment constants (mirrors mobile RescheduleModal.tsx) ──────
-// 'sandbox' | 'production' — must match the mode the backend created the order in.
-const CASHFREE_MODE     = process.env.REACT_APP_CASHFREE_MODE || 'production';
 const RESCHEDULE_AMOUNT = 5;   // ₹5 (rupees) — must match backend VALID_PLAN_AMOUNTS
 const RESCHEDULE_FEE    = 5;   // display only
 
@@ -32,17 +30,17 @@ function filterBookings(bookings, tab) {
   return bookings;
 }
 
-function loadCashfreeScript() {
+function loadRazorpayScript() {
   return new Promise((resolve) => {
-    if (window.Cashfree) return resolve(true);
-    const existing = document.querySelector('script[src="https://sdk.cashfree.com/js/v3/cashfree.js"]');
+    if (window.Razorpay) return resolve(true);
+    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
     if (existing) {
       existing.addEventListener('load', () => resolve(true));
       existing.addEventListener('error', () => resolve(false));
       return;
     }
     const script = document.createElement('script');
-    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.onload = () => resolve(true);
     script.onerror = () => resolve(false);
     document.body.appendChild(script);
@@ -172,14 +170,14 @@ export default function MyBookings() {
     }
   };
 
-  // ── Reschedule: create ₹5 order → Cashfree Checkout → verify → confirm ──
+  // ── Reschedule: create ₹5 order → Razorpay Checkout → verify → confirm ──
   const handleReschedule = async () => {
     if (!rescheduleBooking) return;
     if (!newDate) { showToast('Please select a new date', 'error'); return; }
     if (!newSlot) { showToast('Please select a time slot', 'error'); return; }
 
     // ── Free path: hospital marked the doctor unavailable, so the ₹5 fee is
-    // waived. Skip Cashfree and call the no-payment reschedule endpoint. ──
+    // waived. Skip Razorpay and call the no-payment reschedule endpoint. ──
     if (rescheduleBooking.free_reschedule) {
       setRescheduling(true);
       try {
@@ -200,8 +198,8 @@ export default function MyBookings() {
 
     setRescheduling(true);
     try {
-      const loaded = await loadCashfreeScript();
-      if (!loaded || !window.Cashfree) {
+      const loaded = await loadRazorpayScript();
+      if (!loaded || !window.Razorpay) {
         showToast('Could not load payment gateway. Check your connection.', 'error');
         setRescheduling(false);
         return;
@@ -211,47 +209,52 @@ export default function MyBookings() {
       const { data: order } = await API.post('/payment/create-order/', {
         amount: RESCHEDULE_AMOUNT,
       });
-      if (!order?.payment_session_id) throw new Error('No payment session returned from server.');
+      if (!order?.order_id) throw new Error('No order returned from server.');
 
       setPayingReschedule(true);
 
-      // Step 2: open Cashfree checkout, then confirm server-side.
-      const cashfree = window.Cashfree({ mode: CASHFREE_MODE });
-      const result = await cashfree.checkout({
-        paymentSessionId: order.payment_session_id,
-        redirectTarget:   '_modal',
+      // Step 2: open Razorpay checkout, then confirm server-side (the server
+      // re-fetches the order from Razorpay — no client signature is trusted).
+      const finish = () => { setPayingReschedule(false); setRescheduling(false); };
+      const rzp = new window.Razorpay({
+        key:      order.key,
+        amount:   RESCHEDULE_AMOUNT * 100,
+        currency: order.currency || 'INR',
+        order_id: order.order_id,
+        name:     'TokenWalla',
+        description: 'Appointment reschedule fee',
+        theme: { color: '#185FA5' },
+        handler: async () => {
+          try {
+            const { data } = await API.post('/payment/verify/', {
+              order_id: order.order_id,
+              booking: {
+                booking_id: rescheduleBooking.id,
+                date:       newDate,
+                slot:       newSlot,
+              },
+            });
+
+            if (data.success) {
+              setRescheduleBooking(null);
+              await fetchBookings(true);
+              showToast('Appointment rescheduled successfully!');
+            } else {
+              showToast(data.message || 'Reschedule verification failed. Contact support.', 'error');
+            }
+          } catch (err) {
+            showToast(err?.response?.data?.message || 'Verification error. Contact support.', 'error');
+          } finally {
+            finish();
+          }
+        },
+        modal: { ondismiss: finish },
       });
-
-      if (result?.error) {
-        setPayingReschedule(false);
-        setRescheduling(false);
-        showToast(result.error.message || 'Payment cancelled.', 'error');
-        return;
-      }
-
-      try {
-        const { data } = await API.post('/payment/verify/', {
-          order_id: order.order_id,
-          booking: {
-            booking_id: rescheduleBooking.id,
-            date:       newDate,
-            slot:       newSlot,
-          },
-        });
-
-        if (data.success) {
-          setRescheduleBooking(null);
-          await fetchBookings(true);
-          showToast('Appointment rescheduled successfully!');
-        } else {
-          showToast(data.message || 'Reschedule verification failed. Contact support.', 'error');
-        }
-      } catch (err) {
-        showToast(err?.response?.data?.message || 'Verification error. Contact support.', 'error');
-      } finally {
-        setPayingReschedule(false);
-        setRescheduling(false);
-      }
+      rzp.on('payment.failed', (resp) => {
+        showToast(resp?.error?.description || 'Payment cancelled.', 'error');
+        finish();
+      });
+      rzp.open();
     } catch (err) {
       showToast(err?.response?.data?.message || err?.message || 'Could not create payment order.', 'error');
       setRescheduling(false);
@@ -585,7 +588,7 @@ export default function MyBookings() {
             <div className="mb-fee-note">
               {rescheduleBooking.free_reschedule
                 ? '✅ Free reschedule — your doctor was marked unavailable, so there is no charge.'
-                : `💡 A ₹${RESCHEDULE_FEE} reschedule fee applies. Cashfree will open after you confirm.`}
+                : `💡 A ₹${RESCHEDULE_FEE} reschedule fee applies. Razorpay will open after you confirm.`}
             </div>
 
             <div className="mb-modal-actions">
@@ -598,7 +601,7 @@ export default function MyBookings() {
                 disabled={rescheduling || !newDate || !newSlot}
               >
                 {payingReschedule
-                  ? '⏳ Opening Cashfree…'
+                  ? '⏳ Opening Razorpay…'
                   : rescheduling
                     ? '⏳ Processing…'
                     : rescheduleBooking.free_reschedule

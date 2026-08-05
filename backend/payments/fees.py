@@ -11,13 +11,13 @@ consultation fee the patient paid online — see compute_fee_breakdown().
 All arithmetic uses Decimal and rounds half-up to 2 places, so the figures
 here exactly match what the patient sees on the receipt and what we settle.
 
-Kept model-free (like cashfree_utils.py) so it's safe to import anywhere.
+Kept model-free (like razorpay_utils.py) so it's safe to import anywhere.
 """
 from decimal import Decimal, ROUND_HALF_UP
 
 # ── Patient-facing fee constants ──────────────────────────────────────────────
 PLATFORM_FEE = Decimal('20.00')   # TokenWalla's flat platform fee
-GATEWAY_FEE  = Decimal('1.50')    # Cashfree passthrough, shown as a line item
+GATEWAY_FEE  = Decimal('1.50')    # gateway passthrough, shown as a line item
 GST_RATE     = Decimal('0.18')    # 18% GST
 
 # SAC (Service Accounting Code) for the taxable service line on the GST invoice.
@@ -78,11 +78,6 @@ def compute_fee_breakdown(doctor_fee, collection_mode=FULL) -> dict:
         'gst_rate':     GST_RATE,
         'sac_code':     SAC_CODE,
     }
-
-
-def to_paise(amount) -> int:
-    """Convert a rupee Decimal/number to an integer paise amount for Cashfree."""
-    return int((_q(amount) * 100).to_integral_value(rounding=ROUND_HALF_UP))
 
 
 def compute_doctor_payout(doctor_fee) -> Decimal:

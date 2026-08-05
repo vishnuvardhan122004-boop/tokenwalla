@@ -54,9 +54,10 @@ from rest_framework.permissions import IsAuthenticated
 from bookings.models import Booking
 from bookings.serializers import BookingSerializer
 from tokenwalla.permissions import IsAdmin
-# Shared, single-source-of-truth Cashfree PG helpers (see payments/cashfree_utils.py).
-from payments.cashfree_utils import (
+# Shared, single-source-of-truth Razorpay PG helpers (see payments/razorpay_utils.py).
+from payments.razorpay_utils import (
     create_order, confirm_order_paid, plan_for_amount, VALID_PLAN_AMOUNTS,
+    checkout_key,
 )
 # Server-side fee math — the client is never trusted for booking amounts.
 from payments.fees import compute_fee_breakdown, SAC_CODE, GST_RATE
@@ -160,7 +161,7 @@ class CreateOrderView(APIView):
     permission_classes = [IsAuthenticated]
 
     def _customer(self, request):
-        """Cashfree customer_details for the logged-in user."""
+        """Razorpay customer_details for the logged-in user."""
         return {
             'id':    request.user.id,
             'phone': getattr(request.user, 'mobile', '') or '',
@@ -176,7 +177,7 @@ class CreateOrderView(APIView):
             return self._create_booking_order(request, doctor_id)
 
         # ── Legacy fixed-amount plans (₹5 reschedule / ₹15 queue upgrade) ──────
-        #    The client sends `amount` in RUPEES now (Cashfree's unit), not paise.
+        #    The client sends `amount` in RUPEES now (Razorpay's unit), not paise.
         plan_info = plan_for_amount(request.data.get('amount', 0))
         if plan_info is None:
             allowed = [str(a) for a in VALID_PLAN_AMOUNTS]
@@ -194,18 +195,18 @@ class CreateOrderView(APIView):
                 tags={'user_id': str(request.user.id), 'plan': plan_info['plan']},
             )
         except Exception as exc:
-            logger.error('Cashfree order creation failed: %s', exc)
+            logger.error('Razorpay order creation failed: %s', exc)
             return Response({'message': 'Payment gateway error. Try again.'}, status=502)
 
         return Response({
-            'order_id':            order['order_id'],
-            'payment_session_id':  order['payment_session_id'],
-            'amount':              str(plan_info['fee']),
-            'currency':            'INR',
+            'order_id':  order['order_id'],
+            'key':       order['key'],
+            'amount':    str(plan_info['fee']),
+            'currency':  'INR',
         })
 
     def _create_booking_order(self, request, doctor_id):
-        """Create a Cashfree order for the full patient bill of a new booking.
+        """Create a Razorpay order for the full patient bill of a new booking.
 
         Amount = doctor_fee + platform + gateway + GST, computed from the
         doctor's fee. The component split is returned so checkout can render an
@@ -237,15 +238,15 @@ class CreateOrderView(APIView):
                 },
             )
         except Exception as exc:
-            logger.error('Cashfree booking-order creation failed: %s', exc)
+            logger.error('Razorpay booking-order creation failed: %s', exc)
             return Response({'message': 'Payment gateway error. Try again.'}, status=502)
 
         return Response({
-            'order_id':            order['order_id'],
-            'payment_session_id':  order['payment_session_id'],
-            'amount':              str(breakdown['final_amount']),
-            'currency':            'INR',
-            'breakdown':           _serialize_breakdown(breakdown),
+            'order_id':   order['order_id'],
+            'key':        order['key'],
+            'amount':     str(breakdown['final_amount']),
+            'currency':   'INR',
+            'breakdown':  _serialize_breakdown(breakdown),
         })
 
 
@@ -257,8 +258,8 @@ class VerifyPaymentView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # Cashfree contract: the client sends only the order_id it checked out
-        # with. The server confirms the payment with Cashfree — there is no
+        # Razorpay contract: the client sends only the order_id it checked out
+        # with. The server confirms the payment with Razorpay — there is no
         # client-returned signature to trust.
         order_id = str(request.data.get('order_id', '') or '').strip()
         # 'booking' dict carries context for BOTH plans:
@@ -269,20 +270,20 @@ class VerifyPaymentView(APIView):
         if not order_id:
             return Response({'success': False, 'message': 'Missing order_id.'}, status=400)
 
-        # ── 1. Confirm the payment with Cashfree (server-side) ────────────────
+        # ── 1. Confirm the payment with Razorpay (server-side) ────────────────
         try:
             paid, payment_ref, amount_rupees, tags = confirm_order_paid(order_id)
         except Exception as exc:
-            logger.error('Failed to confirm Cashfree order %s: %s', order_id, exc)
+            logger.error('Failed to confirm Razorpay order %s: %s', order_id, exc)
             return Response({'success': False,
                              'message': 'Could not verify order with the payment gateway.'}, status=502)
 
         if not paid:
-            logger.warning('Cashfree order %s is not PAID — verify rejected.', order_id)
+            logger.warning('Razorpay order %s is not PAID — verify rejected.', order_id)
             return Response({'success': False, 'message': 'Payment not completed.'}, status=400)
 
         # payment_ref (cf_payment_id) is the idempotency key everywhere the old
-        # razorpay_payment_id was used. There is no signature under Cashfree.
+        # razorpay_payment_id was used. There is no signature under Razorpay.
         payment_id = payment_ref
         order_plan = tags.get('plan')
         plan_info  = plan_for_amount(amount_rupees)
@@ -756,4 +757,118 @@ class BookingReceiptView(APIView):
                 'amount': str(payment.gst_amount),
             },
             'total': str(payment.final_amount),
+        })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Doctor payouts — MANUAL. Staff wire the money themselves (own bank account)
+# and mark it paid here; there is no gateway payout API involved.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PendingPayoutsView(APIView):
+    """Admin-only: which doctors currently have money owed to them.
+
+    Aggregates every doctor's unbatched DoctorLedger rows (earnings minus any
+    absence-refund clawbacks). Only positive net balances are shown — a doctor
+    whose clawbacks currently exceed their earnings owes nothing yet.
+    """
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get(self, request):
+        from decimal import Decimal, ROUND_HALF_UP
+        from django.db.models import Sum
+        from doctors.models import Doctor
+        from payments.models import DoctorLedger
+        from payments.payout_utils import payout_target, choose_mode
+
+        totals = (
+            DoctorLedger.objects
+            .filter(payout_batch__isnull=True)
+            .order_by()
+            .values('doctor_id')
+            .annotate(pending_amount=Sum('amount'))
+        )
+        rows = []
+        for row in totals:
+            amount = row['pending_amount']
+            if amount is None or amount <= 0:
+                continue
+            doctor = (Doctor.objects.select_related('hospital')
+                      .get(pk=row['doctor_id']))
+            target = payout_target(doctor)
+            rows.append({
+                'doctor_id':      doctor.id,
+                'doctor_name':    doctor.name,
+                'hospital_name':  doctor.hospital.name if doctor.hospital_id else None,
+                'pay_to':         'hospital' if target is not doctor else 'doctor',
+                'recipient_name': target.account_holder_name or target.name,
+                'mode':           choose_mode(target),
+                'pending_amount': str(amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            })
+        rows.sort(key=lambda r: r['doctor_name'])
+        return Response({'payouts': rows})
+
+
+class MarkPayoutPaidView(APIView):
+    """Admin-only: record that a doctor's pending balance was paid manually.
+
+    Locks and batches that doctor's currently-unbatched ledger rows into one
+    PayoutBatch(PROCESSED), and marks every booking behind those rows as
+    payout-PAID. `reference` (optional) is a UTR / transaction note for
+    reconciliation — nothing is sent anywhere; this only records that the
+    transfer already happened outside the app.
+    """
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def post(self, request):
+        from decimal import Decimal
+        from django.utils import timezone
+        from doctors.models import Doctor
+        from payments.models import DoctorLedger, PayoutBatch
+        from payments.payout_utils import payout_target, choose_mode
+
+        doctor_id = request.data.get('doctor_id')
+        if not doctor_id:
+            return Response({'message': 'doctor_id is required.'}, status=400)
+        try:
+            doctor = Doctor.objects.select_related('hospital').get(pk=doctor_id)
+        except (Doctor.DoesNotExist, ValueError, TypeError):
+            return Response({'message': 'Doctor not found.'}, status=404)
+
+        reference = str(request.data.get('reference', '') or '').strip()[:100]
+
+        with transaction.atomic():
+            rows = list(
+                DoctorLedger.objects
+                .select_for_update()
+                .filter(doctor_id=doctor_id, payout_batch__isnull=True)
+            )
+            total = sum((r.amount for r in rows), Decimal('0'))
+            if not rows or total <= 0:
+                return Response({'message': 'This doctor has no pending payout.'}, status=400)
+
+            target = payout_target(doctor)
+            mode   = choose_mode(target) or PayoutBatch.OTHER
+            idem   = f'manual_{doctor_id}_{timezone.now():%Y%m%d%H%M%S}'
+
+            batch = PayoutBatch.objects.create(
+                doctor=doctor, total_amount=total, payout_mode=mode,
+                status=PayoutBatch.PROCESSED,
+                razorpay_payout_id=reference,
+                idempotency_key=idem,
+            )
+            entry_ids = [r.id for r in rows]
+            DoctorLedger.objects.filter(id__in=entry_ids).update(payout_batch=batch)
+
+            booking_ids = [r.booking_id for r in rows if r.booking_id]
+            Booking.objects.filter(id__in=booking_ids).update(
+                doctor_payout_status=Booking.PAYOUT_PAID)
+
+        logger.info('Payout batch %s: doctor %s paid ₹%s manually (ref=%s)',
+                    batch.id, doctor_id, total, reference or '—')
+        return Response({
+            'success': True,
+            'batch_id': batch.id,
+            'doctor_id': doctor.id,
+            'amount_paid': str(total),
         })

@@ -79,7 +79,7 @@ class DoctorPaymentDetailsSerializer(serializers.ModelSerializer):
     the owner-hospital / admin `payment-details` action.
 
     The spec's field names (upi_id / account_number / ifsc_code) map onto the
-    existing model columns the Cashfree payout utils already read (upi_vpa /
+    existing model columns the Razorpay payout utils already read (upi_vpa /
     bank_account_number / ifsc) so payouts keep working with no data migration.
     """
     upi_id         = serializers.CharField(source="upi_vpa",             required=False, allow_blank=True)

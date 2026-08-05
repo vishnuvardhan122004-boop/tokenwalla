@@ -4,13 +4,13 @@ from doctors.models import Doctor
 
 class Payment(models.Model):
     # Lifecycle of the patient checkout payment.
-    CREATED = 'CREATED'   # Cashfree order made, not yet paid/verified
-    PAID    = 'PAID'      # signature verified, money captured
+    CREATED = 'CREATED'   # Razorpay order made, not yet paid/verified
+    PAID    = 'PAID'      # server-confirmed with Razorpay, money captured
     FAILED  = 'FAILED'
     STATUS_CHOICES = [(CREATED, 'Created'), (PAID, 'Paid'), (FAILED, 'Failed')]
 
     booking    = models.OneToOneField(Booking, on_delete=models.CASCADE, related_name='payment')
-    # order_id / payment_id are the Cashfree order & payment identifiers.
+    # order_id / payment_id are the Razorpay order & payment identifiers.
     order_id   = models.CharField(max_length=100)
     payment_id = models.CharField(max_length=100, blank=True)
     signature  = models.CharField(max_length=300, blank=True)
@@ -25,7 +25,7 @@ class Payment(models.Model):
     # Consultation fee collected OFFLINE at the hospital (Service-Fee-Only mode).
     # In that mode the patient pays only the service fee online, so `doctor_fee`
     # (the online-captured amount) is 0 and the consultation fee is recorded here
-    # instead. FULL-mode bookings leave this 0. Never routed through Cashfree.
+    # instead. FULL-mode bookings leave this 0. Never routed through Razorpay.
     offline_doctor_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     platform_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     gateway_fee  = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -36,7 +36,7 @@ class Payment(models.Model):
 
     class Meta:
         constraints = [
-            # A Cashfree payment_id settles exactly one booking. This is the
+            # A Razorpay payment_id settles exactly one booking. This is the
             # DB-level idempotency guard for the accept-payment API: two
             # concurrent /verify/ calls for the same payment can't both create a
             # Payment (and therefore a Booking) — the second violates this and is
@@ -88,7 +88,7 @@ class Refund(models.Model):
 
     Only issued while the booking is still refundable (before COMPLETED). The
     refunded pool covers (doctor_fee + platform_fee) proportionally — gateway
-    fee and GST are NOT returned by Cashfree, so they're never refunded. The
+    fee and GST are NOT returned by Razorpay, so they're never refunded. The
     split is recorded so each party's share of the loss is auditable.
     """
     payment            = models.ForeignKey(Payment, on_delete=models.CASCADE, related_name='refunds')
@@ -114,8 +114,11 @@ class Refund(models.Model):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class PayoutBatch(models.Model):
-    """One automated payout to a doctor, aggregating that doctor's unbatched
-    ledger entries for a cycle into a single Cashfree Payouts payout."""
+    """One MANUAL payout to a doctor, created when admin staff mark that
+    doctor's unbatched ledger entries as paid (payments.views.
+    MarkPayoutPaidView) after wiring the money themselves. Always created
+    directly as PROCESSED — there is no gateway call, so QUEUED/FAILED/
+    REVERSED are unused today but kept for schema compatibility."""
     QUEUED    = 'QUEUED'
     PROCESSED = 'PROCESSED'
     FAILED    = 'FAILED'
@@ -124,17 +127,19 @@ class PayoutBatch(models.Model):
         (QUEUED, 'Queued'), (PROCESSED, 'Processed'),
         (FAILED, 'Failed'), (REVERSED, 'Reversed'),
     ]
-    UPI  = 'UPI'
-    IMPS = 'IMPS'
-    MODE_CHOICES = [(UPI, 'UPI'), (IMPS, 'IMPS')]
+    UPI   = 'UPI'
+    IMPS  = 'IMPS'
+    OTHER = 'OTHER'   # paid manually with no UPI/bank on file (e.g. cash)
+    MODE_CHOICES = [(UPI, 'UPI'), (IMPS, 'IMPS'), (OTHER, 'Other')]
 
     doctor             = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='payout_batches')
     total_amount       = models.DecimalField(max_digits=10, decimal_places=2)
+    # Optional UTR / transaction reference the admin enters for reconciliation
+    # when marking the doctor paid — no gateway ever writes this now.
     razorpay_payout_id = models.CharField(max_length=100, blank=True)
     payout_mode        = models.CharField(max_length=10, choices=MODE_CHOICES)
     status             = models.CharField(max_length=20, choices=STATUS_CHOICES, default=QUEUED)
-    # Reused idempotency discipline: f"payout_{doctor.id}_{date}" — a UNIQUE
-    # constraint makes a re-run of the daily task a no-op instead of a double pay.
+    # f"manual_{doctor.id}_{timestamp}" — unique per mark-paid action.
     idempotency_key    = models.CharField(max_length=100, unique=True)
     created_at         = models.DateTimeField(auto_now_add=True)
 
@@ -151,8 +156,9 @@ class DoctorLedger(models.Model):
     Positive rows are earnings — the FULL online consultation fee for a
     completed booking. TokenWalla deducts nothing; our revenue is the patient's
     service fee. Negative rows are absence-refund clawbacks netted against a
-    FUTURE payout (we never reverse a payout that already went out). The daily
-    task groups all unbatched rows per doctor into one PayoutBatch.
+    FUTURE payout (we never reverse a payout that already went out). Marking a
+    doctor paid (payments.views.MarkPayoutPaidView) groups all their unbatched
+    rows into one PayoutBatch.
     """
     BOOKING_COMPLETED   = 'BOOKING_COMPLETED'
     ABSENCE_REFUND      = 'ABSENCE_REFUND'

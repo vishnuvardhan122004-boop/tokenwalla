@@ -92,7 +92,7 @@
       "sub": "The technology that lets hospitals focus on care.",
       "items": [
         { "title": "Live Queue Tracking", "desc": "See your exact position in real time." },
-        { "title": "Secure Payments", "desc": "UPI, cards, and wallets — encrypted via Cashfree." },
+        { "title": "Secure Payments", "desc": "UPI, cards, and wallets — encrypted via Razorpay." },
         { "title": "Multi-Hospital Network", "desc": "Every hospital in your city, one platform." },
         { "title": "Easy Cancellation", "desc": "Cancel 2 hours ahead for a full refund." },
         { "title": "Verified Doctors", "desc": "Every doctor is verified by their hospital." },

@@ -41,7 +41,7 @@ class Doctor(models.Model):
         max_length=20, choices=COLLECTION_MODE_CHOICES, default=COLLECT_FULL,
     )
 
-    # ── Payout routing (Cashfree Payouts) ────────────────────────────────────────────
+    # ── Payout routing (Razorpay Payouts) ────────────────────────────────────────────
     # Where the doctor's automated payout is sent. UPI is preferred when a VPA
     # is present; otherwise the bank account (IMPS) is used as fallback.
     # `payment_method` records which one the hospital chose as primary; the
@@ -53,7 +53,7 @@ class Doctor(models.Model):
     payment_method      = models.CharField(max_length=10, choices=PAYMENT_METHOD_CHOICES, blank=True, default="")
     # Salaried/employed doctors don't collect their own consultation fees — the
     # hospital does. When set, the payout goes to the HOSPITAL's account instead
-    # of this doctor's (payments.cashfree_payouts_utils.payout_target). The
+    # of this doctor's (payments.payout_utils.payout_target). The
     # ledger stays per-doctor either way, so who earned what is still auditable.
     payout_to_hospital  = models.BooleanField(default=False)
     account_holder_name = models.CharField(max_length=200, blank=True, default="")

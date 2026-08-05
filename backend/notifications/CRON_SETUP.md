@@ -66,7 +66,7 @@ reminder each (idempotent — `reminder_sent` flag prevents duplicates).
 
 ---
 
-# Doctor payout cron (Cashfree Payouts)
+# Doctor ledger cron
 
 One more scheduled management command, set up as its own Railway cron service
 exactly like the reminder one above (own config file, Root Directory `backend`,
@@ -74,22 +74,15 @@ same DB/env vars):
 
 | Command | Config file | Schedule | Purpose |
 |---|---|---|---|
-| `python manage.py run_daily_payouts` | `backend/railway.payouts.cron.json` | `30 20 * * *` (daily) | Ledger completed bookings and pay each doctor the full online consultation fee |
+| `python manage.py run_daily_payouts` | `backend/railway.payouts.cron.json` | `30 20 * * *` (daily) | Ledger completed bookings so each doctor's outstanding balance is up to date |
 
 Notes:
 - **Nothing is deducted from a doctor or billed to a hospital.** TokenWalla's
-  revenue is the patient's service fee, collected at checkout. The payout is
-  exactly `Payment.doctor_fee`.
-- **Idempotent** — safe to re-run: `PayoutBatch.idempotency_key` is unique per
-  doctor per day.
-- Payouts are **SIMULATED** until `CASHFREE_PAYOUTS_ENABLED=true`. While
-  disabled the ledger + batch rows are still written, so you can see exactly
-  what *would* be paid.
-- Cashfree Payouts enforces 2FA on **every** call, sandbox included: the calling
-  host's IP must be whitelisted, or the public-key method enabled
-  (`CASHFREE_PAYOUT_PUBLIC_KEY`). Railway needs a static egress IP for the
-  former. See `backend/.env.example`.
-- The payout webhook (`/api/payment/webhook/`) needs
-  `CASHFREE_PAYOUT_WEBHOOK_SECRET` set and the `TRANSFER_SUCCESS` /
-  `TRANSFER_FAILED` / `TRANSFER_REVERSED` / `TRANSFER_REJECTED` events
-  subscribed in the Cashfree Payouts dashboard (V2 format).
+  revenue is the patient's service fee, collected at checkout. The amount owed
+  is exactly `Payment.doctor_fee`.
+- **Idempotent** — safe to re-run: a booking already ledgered is skipped.
+- **Payouts themselves are MANUAL.** This command only writes ledger rows. To
+  actually pay a doctor, transfer the money from TokenWalla's own bank account
+  or UPI, then mark it paid on the admin Doctor Payouts page
+  (`/Adashboard/payouts`) so the ledger clears. No payment-gateway payout API
+  is involved, and no payout keys or webhooks need configuring.

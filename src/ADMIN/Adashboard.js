@@ -224,6 +224,7 @@ const Adashboard = () => {
     '/Adashboard/user-management': 'User Management',
     '/Adashboard/hospitals':       'Hospitals & Doctors',
     '/Adashboard/reports':         'Reports',
+    '/Adashboard/payouts':         'Doctor Payouts',
     '/Adashboard/support':         'Support',
     '/Adashboard/settings':        'Settings',
   };
@@ -233,6 +234,7 @@ const Adashboard = () => {
     { to: 'user-management', icon: '👥', label: 'User Management',     badge: null         },
     { to: 'hospitals',       icon: '🏥', label: 'Hospitals / Doctors',  badge: pendingCount },
     { to: 'reports',         icon: '📋', label: 'Reports',              badge: null         },
+    { to: 'payouts',         icon: '💸', label: 'Doctor Payouts',       badge: null         },
     { to: 'support',         icon: '🎧', label: 'Support',              badge: null         },
     { to: 'settings',        icon: '⚙️', label: 'Settings',             badge: null         },
   ];

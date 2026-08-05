@@ -16,6 +16,273 @@ Newest entry on top. Update the **Status** columns as things land.
 
 ---
 
+## 2026-08-05 — Back to Razorpay + manual doctor payouts 🆕
+
+Reverted the payment stack from Cashfree to **Razorpay**, and replaced the
+automated payout integration with a **manual payout flow**: we collect the full
+amount via Razorpay, then pay each doctor by hand from TokenWalla's own bank
+account and record it on a new admin page. Cashfree is fully removed.
+
+**Why:** Cashfree Payouts never cleared its mandatory 2FA / IP-whitelist gate
+(403 on every call, sandbox included — see the 2026-08-02 entry), so no doctor
+payout could ever actually be sent. Rather than keep waiting on that gate, the
+payout leg is now a bookkeeping operation with no gateway dependency at all.
+
+> Scope: **backend** (`backend/`) + **React web** (`src/`). The Expo/RN **mobile
+> app** (separate repo) still needs its checkout SDK swapped back to Razorpay —
+> the `/payment/verify/` contract itself is unchanged.
+
+### 1. Gateway swap — Razorpay PG
+Verification stayed **server-side**: we deliberately ignore the signature
+Razorpay Checkout hands the browser and re-fetch the order + its payments
+instead. So `/payment/verify/` still takes only `{ order_id }` and the frontend
+contract never changed.
+
+| Layer | Change | Status |
+|-------|--------|--------|
+| Backend | `payments/razorpay_utils.py` replaces `cashfree_utils.py` (same function shapes → callers barely changed); `confirm_order_paid()` looks for a `captured` payment on the order | ✅ |
+| Backend | Paise conversion confined to the gateway boundary — money stays rupee `Decimal` internally; dead `fees.to_paise()` deleted | ✅ |
+| Backend | Refunds re-keyed to the **payment** id (Razorpay) instead of the order id (Cashfree) | ✅ |
+| Backend | `create-order` now returns the public `key` instead of `payment_session_id`/`mode`; `settings.py` + `.env`/`.env.example` down to just `RAZORPAY_KEY_ID`/`_SECRET`; `cashfree-pg` + `cryptography` dropped from requirements | ✅ |
+| Web | `Payment.js` + `MyBookings.js` (reschedule) load the Razorpay CDN and open Checkout; `REACT_APP_CASHFREE_MODE` retired (key now comes from the order response, so test/live can't drift) | ✅ |
+
+### 2. Manual doctor payouts (replaces Cashfree Payouts)
+No payout API, no payout keys, no webhooks. `run_daily_payouts` now **only**
+writes ledger rows; a human moves the money and records it.
+
+| Piece | Change | Status |
+|-------|--------|--------|
+| Backend | `payments/payout_utils.py` keeps only `payout_target` (salaried doctor → hospital account) + `choose_mode` (UPI/IMPS rail); `cashfree_payouts_utils.py` deleted | ✅ |
+| Backend | `run_daily_payouts` reduced to ledger-writing only — no batching, no gateway dispatch | ✅ |
+| Backend | New admin endpoints `GET /api/payment/payouts/pending/` + `POST /api/payment/payouts/mark-paid/`; mark-paid locks the doctor's unbatched ledger rows, batches them `PROCESSED`, flips bookings to payout-PAID | ✅ |
+| Backend | `PayoutBatch` gained mode `OTHER` (paid in cash / no bank details on file) — migration `0010`; `razorpay_payout_id` now stores a hand-entered UTR; payout webhook + `/api/payment/webhook/` route deleted | ✅ |
+| Web | **New admin page `src/ADMIN/Payouts.js`** at `/Adashboard/payouts` ("💸 Doctor Payouts" in the sidebar): who's owed, how much, which account + rail, and a Mark Paid button that prompts for a UTR | ✅ |
+
+### 3. Website copy — gateway rename across every surface
+Every patient-facing mention of the gateway swept so nothing still advertises
+Cashfree:
+
+| Surface | Change | Status |
+|---------|--------|--------|
+| Hero / features | "Secure Payments" card → "encrypted via **Razorpay**" across **en / hi / kn / te** | ✅ |
+| Doctor details | Booking card note → "Secured by **Razorpay** · UPI · Cards · Wallets" | ✅ |
+| Payment page | Trust badge → "Secured by **Razorpay**" | ✅ |
+| Legal | `Terms.js`, `Privacy.js`, `Refund.js`, `LegalPages.js` — payment-partner, KYC, data-sharing and processor-table rows re-pointed (incl. the privacy-policy link → `razorpay.com/privacy`) | ✅ |
+| Admin | `Settings.js` system-info row `Payment Gateway: Razorpay`; `Adashboard.js` nav + page label for the new Payouts page | ✅ |
+
+### 4. Docs & tooling cleanup
+- `CLAUDE.md` rewritten: was 100% Cashfree skill-package routing pointing at
+  deleted files. Now documents the real stack — Razorpay, server-side
+  verification, rupee-Decimal convention, the manual payout flow, and the money
+  rules that must not be broken.
+- `.claude/skills/` (18 Cashfree skills, ~1 MB) deleted — gitignored, local only.
+- `backend/notifications/CRON_SETUP.md` payout section rewritten for the manual flow.
+
+### Verification
+- **`python manage.py test` → 103/103 pass**; `makemigrations --check` → no drift.
+- Web compiles clean; frontend suite 2/2.
+- **Payouts page exercised end-to-end in-browser** against seeded data: ₹200
+  outstanding → Mark Paid → list cleared, DB showing `PROCESSED / IMPS /
+  ref=UTR-DEMO-99` and the booking payout-PAID. No console errors. Demo data removed.
+
+### ⚠️ Follow-ups / flags
+- [ ] 🔴 **Add the Razorpay keys.** `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` are
+      empty in `backend/.env` — checkout cannot charge until they're filled in.
+- [ ] 🔴 **Revoke the old Cashfree credentials.** The deleted `.env` block held a
+      **live production** secret (`cfsk_ma_prod_…`) plus a payouts test key and the
+      2FA public key. Removing them from the file doesn't invalidate them — revoke
+      in the Cashfree dashboard.
+- [ ] **Mobile app (separate repo):** swap the checkout SDK back to Razorpay. The
+      `/payment/verify/` payload is unchanged, so only the SDK + order-response
+      fields (`key` instead of `payment_session_id`/`mode`) differ.
+- [ ] The payouts cron service can stay as-is — `run_daily_payouts` still runs
+      daily, it just no longer pays anyone. Payouts happen on the admin page.
+
+---
+
+## 2026-08-05 (auto) — Session update @ 17:23
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 40 changed files).
+
+```
+M CLAUDE.md
+ M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/notifications/CRON_SETUP.md
+ D backend/payments/cashfree_payouts_utils.py
+ D backend/payments/cashfree_utils.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_integration.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ D backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M src/ADMIN/Adashboard.js
+ M src/ADMIN/Settings.js
+ M src/Router/Routing.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? backend/payments/migrations/0010_alter_payoutbatch_payout_mode.py
+?? backend/payments/payout_utils.py
+?? backend/payments/razorpay_utils.py
+?? src/ADMIN/Payouts.js
+```
+
+---
+
+
+## 2026-08-05 (auto) — Session update @ 17:16
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 39 changed files).
+
+```
+M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/notifications/CRON_SETUP.md
+ D backend/payments/cashfree_payouts_utils.py
+ D backend/payments/cashfree_utils.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_integration.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ D backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M src/ADMIN/Adashboard.js
+ M src/ADMIN/Settings.js
+ M src/Router/Routing.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? backend/payments/migrations/0010_alter_payoutbatch_payout_mode.py
+?? backend/payments/payout_utils.py
+?? backend/payments/razorpay_utils.py
+?? src/ADMIN/Payouts.js
+```
+
+---
+
+
+## 2026-08-05 (auto) — Session update @ 11:01
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 39 changed files).
+
+```
+M WORKLOG.md
+ M backend/.env.example
+ M backend/bookings/views.py
+ M backend/doctors/models.py
+ M backend/doctors/serializers.py
+ M backend/doctors/views.py
+ M backend/notifications/CRON_SETUP.md
+ D backend/payments/cashfree_payouts_utils.py
+ D backend/payments/cashfree_utils.py
+ M backend/payments/fees.py
+ M backend/payments/management/commands/run_daily_payouts.py
+ M backend/payments/models.py
+ M backend/payments/refunds.py
+ M backend/payments/tests_integration.py
+ M backend/payments/tests_payments.py
+ M backend/payments/urls.py
+ M backend/payments/views.py
+ D backend/payments/webhooks.py
+ M backend/requirements.txt
+ M backend/tokenwalla/settings.py
+ M backend/tokenwalla/tests_security.py
+ M src/ADMIN/Adashboard.js
+ M src/ADMIN/Settings.js
+ M src/Router/Routing.js
+ M src/componets/DoctorsDetails.js
+ M src/componets/LegalPages.js
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+ M src/componets/Privacy.js
+ M src/componets/Refund.js
+ M src/componets/Terms.js
+ M src/i18n/en.json
+ M src/i18n/hi.json
+ M src/i18n/kn.json
+ M src/i18n/te.json
+?? backend/payments/migrations/0010_alter_payoutbatch_payout_mode.py
+?? backend/payments/payout_utils.py
+?? backend/payments/razorpay_utils.py
+?? src/ADMIN/Payouts.js
+```
+
+---
+
+
+## 2026-08-04 (auto) — Session update @ 19:13
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 8 changed files).
+
+```
+M WORKLOG.md
+ M backend/.env.example
+ M backend/payments/cashfree_utils.py
+ M backend/payments/tests_integration.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+```
+
+---
+
+
+## 2026-08-04 (auto) — Session update @ 19:12
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 7 changed files).
+
+```
+M backend/.env.example
+ M backend/payments/cashfree_utils.py
+ M backend/payments/tests_integration.py
+ M backend/payments/views.py
+ M backend/payments/webhooks.py
+ M src/componets/MyBookings.js
+ M src/componets/Payment.js
+```
+
+---
+
+
 ## 2026-08-02 (auto) — Session update @ 15:09
 
 Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 3 changed files).

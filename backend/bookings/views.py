@@ -13,7 +13,7 @@ from tokenwalla.permissions import IsAdmin, IsHospitalStaff
 from payments.refunds import (
     process_cancellation_refund, record_absence_refund, RefundNotAllowed,
 )
-from payments.cashfree_utils import (
+from payments.razorpay_utils import (
     confirm_order_paid,
     QUEUE_UPGRADE_AMOUNT_INR,
 )
@@ -236,7 +236,7 @@ class UpgradeQueueAccessView(APIView):
         # ── Verify the payment BEFORE unlocking the paid feature ──────────────
         # Previously this endpoint trusted a client-supplied `payment_id` string
         # with no verification, so any user could unlock queue access for free.
-        # We now confirm the payment with Cashfree server-side (there is no client
+        # We now confirm the payment with Razorpay server-side (there is no client
         # signature) and validate it was paid for the right amount, exactly like
         # payments.VerifyPaymentView.
         order_id = str(request.data.get('order_id', '') or '').strip()
@@ -247,11 +247,11 @@ class UpgradeQueueAccessView(APIView):
                 status=400,
             )
 
-        # Confirm the order with Cashfree and that it was paid for the right amount.
+        # Confirm the order with Razorpay and that it was paid for the right amount.
         try:
             paid, payment_ref, amount_rupees, _tags = confirm_order_paid(order_id)
         except Exception as exc:
-            logger.error('Queue upgrade: failed to confirm Cashfree order %s: %s', order_id, exc)
+            logger.error('Queue upgrade: failed to confirm Razorpay order %s: %s', order_id, exc)
             return Response({'message': 'Could not verify order with the payment gateway.'}, status=502)
 
         if not paid:
