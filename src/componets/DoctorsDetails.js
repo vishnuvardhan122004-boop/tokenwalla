@@ -48,10 +48,6 @@ function isOpenNow(open, close, now = new Date()) {
   return o <= c ? (cur >= o && cur < c) : (cur >= o || cur < c);
 }
 
-const PLANS = [
-  { key: 'queue', name: 'Queue View', desc: 'Token + live queue position tracking', price: 15, fee: 1500, popular: true },
-];
-
 const socialBtn = {
   display: 'inline-flex', alignItems: 'center', gap: 6,
   background: '#EAF3FF', border: '1px solid #cfe2f3', color: '#185FA5',
@@ -92,7 +88,9 @@ export default function DoctorDetails() {
 
   const [selectedDate, setSelectedDate] = useState(DAYS[0].full);
   const [selectedSlot, setSelectedSlot] = useState('');
-  const [selectedPlan, setSelectedPlan] = useState('queue');
+  // Single implicit plan now (the old ₹15 "Queue View" chooser was removed);
+  // every booking gets queue access. The full fee (doctor fee + platform +
+  // gateway + GST) is computed server-side at checkout from the doctor's fee.
   const [shared,       setShared]       = useState(false);   // "Copied!" feedback
   const [shareOpen,    setShareOpen]    = useState(false);   // share menu open
 
@@ -163,7 +161,6 @@ export default function DoctorDetails() {
       setSelectedSlot('');
       return;
     }
-    const plan = PLANS.find(p => p.key === selectedPlan);
     navigate('/payment', {
       state: {
         doctorId:     doctor.id,
@@ -172,9 +169,10 @@ export default function DoctorDetails() {
         hospital:     doctor.hospital_name,
         date:         selectedDate,
         slot:         selectedSlot,
-        fee:          plan.price,
-        amount:       plan.fee,
-        queue_access: selectedPlan === 'queue',
+        // Consultation fee (₹) — the checkout adds platform + gateway + GST on
+        // top of this and the SERVER recomputes the authoritative total.
+        doctorFee:    doctor.fee,
+        queue_access: true,
       }
     });
   };
@@ -226,7 +224,6 @@ export default function DoctorDetails() {
   const slots    = doctor?.slots || [];
   const am       = slots.filter(s => s.includes('AM'));
   const pm       = slots.filter(s => s.includes('PM'));
-  const plan     = PLANS.find(p => p.key === selectedPlan);
   const dateLabel = DAYS.find(d => d.full === selectedDate);
 
   // Returns slot visual state: 'available' | 'partial' | 'full' | 'selected'
@@ -1221,34 +1218,9 @@ export default function DoctorDetails() {
                     </span>
                   </div>
 
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ fontSize:10, fontWeight:600, letterSpacing:'1.2px', textTransform:'uppercase', color:'#94A3B8', marginBottom:10 }}>
-                      Choose Plan
-                    </div>
-                    <div className="dd-plans">
-                      {PLANS.map(p => (
-                        <div
-                          key={p.key}
-                          className={`dd-plan ${selectedPlan === p.key ? 'selected' : ''}`}
-                          onClick={() => setSelectedPlan(p.key)}
-                        >
-                          {p.popular && <div className="dd-plan-popular">Popular</div>}
-                          <div className="dd-plan-radio">
-                            <div className="dd-plan-radio-dot" />
-                          </div>
-                          <div className="dd-plan-info">
-                            <div className="dd-plan-name">{p.name}</div>
-                            <div className="dd-plan-desc">{p.desc}</div>
-                          </div>
-                          <div className="dd-plan-price">₹{p.price}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
                   <div className="dd-total-row">
-                    <span className="dd-total-label">Total Amount</span>
-                    <span className="dd-total-amount">₹{plan?.price}</span>
+                    <span className="dd-total-label">Consultation Fee</span>
+                    <span className="dd-total-amount">₹{doctor.fee}</span>
                   </div>
 
                   {user ? (
@@ -1263,7 +1235,7 @@ export default function DoctorDetails() {
                         ? 'Select a Slot First'
                         : slotAvail[selectedSlot]?.full
                         ? '⛔ Slot is Full'
-                        : `💳 Pay ₹${plan?.price} & Book`}
+                        : '💳 Pay & Book'}
                     </button>
                   ) : (
                     <button className="dd-book-btn outline" onClick={() => navigate('/login')}>
@@ -1272,6 +1244,7 @@ export default function DoctorDetails() {
                   )}
 
                   <p className="dd-book-note">
+                    + platform fee &amp; GST shown at checkout<br />
                     Secured by Razorpay · UPI · Cards · Wallets<br />
                     Refundable if cancelled 2hrs before slot
                   </p>

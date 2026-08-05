@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import API from '../services/api';
 
 const STATUS_STYLES = {
-  completed:   { bg: 'var(--color-success-bg)',  text: 'var(--color-success-text)',  border: 'var(--color-success-border)',  label: 'Completed'   },
-  waiting:     { bg: 'var(--color-warning-bg)',  text: 'var(--color-warning-text)',  border: 'var(--color-warning-border)',  label: 'Waiting'     },
-  in_progress: { bg: 'var(--blue-50)',           text: 'var(--blue-700)',            border: 'var(--blue-200)',              label: 'In Progress' },
-  cancelled:   { bg: 'var(--gray-100)',          text: 'var(--gray-600)',            border: 'var(--gray-200)',              label: 'Cancelled'   },
+  COMPLETED:   { bg: 'var(--color-success-bg)',  text: 'var(--color-success-text)',  border: 'var(--color-success-border)',  label: 'Completed'   },
+  CONFIRMED:   { bg: 'var(--color-warning-bg)',  text: 'var(--color-warning-text)',  border: 'var(--color-warning-border)',  label: 'Confirmed'   },
+  IN_PROGRESS: { bg: 'var(--blue-50)',           text: 'var(--blue-700)',            border: 'var(--blue-200)',              label: 'In Progress' },
+  ON_HOLD:     { bg: 'var(--color-warning-bg)',  text: 'var(--color-warning-text)',  border: 'var(--color-warning-border)',  label: 'On Hold'     },
+  CANCELLED:   { bg: 'var(--gray-100)',          text: 'var(--gray-600)',            border: 'var(--gray-200)',              label: 'Cancelled'   },
+  NO_SHOW:     { bg: 'var(--gray-100)',          text: 'var(--gray-600)',            border: 'var(--gray-200)',              label: 'No Show'     },
 };
 
 const Reports = () => {
@@ -32,7 +34,7 @@ const Reports = () => {
   }, []);
 
   const bookingsArr = data.bookings;
-  const inProgress  = bookingsArr.filter(b => b.status === 'in_progress').length;
+  const inProgress  = bookingsArr.filter(b => b.status === 'IN_PROGRESS').length;
   const revenue     = bookingsArr.reduce((a, b) => a + (b.amount || 0), 0);
 
   const filtered = bookingsArr.filter(b => {
@@ -126,13 +128,13 @@ const Reports = () => {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-        {['all', 'waiting', 'in_progress', 'completed', 'cancelled'].map(s => (
+        {['all', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW'].map(s => (
           <button
             key={s}
             className={`rp-filter-btn ${filter === s ? 'active' : ''}`}
             onClick={() => setFilter(s)}
           >
-            {s === 'all' ? 'All' : s.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}
+            {s === 'all' ? 'All' : s.replace('_', ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}
           </button>
         ))}
         <span className="rp-count">{filtered.length} bookings</span>
@@ -164,7 +166,7 @@ const Reports = () => {
                   <tr><td colSpan={8} className="rp-empty">No bookings match your filter</td></tr>
                 )}
                 {filtered.map(b => {
-                  const st = STATUS_STYLES[b.status] || STATUS_STYLES.cancelled;
+                  const st = STATUS_STYLES[b.status] || STATUS_STYLES.CANCELLED;
                   return (
                     <tr key={b.id}>
                       <td><span className="rp-token">{b.token}</span></td>

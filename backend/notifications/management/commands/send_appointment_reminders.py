@@ -2,32 +2,20 @@
 Run every ~10 minutes via Railway Cron Schedule:
     python manage.py send_appointment_reminders
 
-Finds 'waiting' bookings whose slot starts in roughly 1h50m-2h10m from now
+Finds CONFIRMED bookings whose slot starts in roughly 1h50m-2h10m from now
 and haven't had a reminder sent yet, then sends + flags them.
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from bookings.models import Booking
+from bookings.utils import parse_slot_datetime
 from notifications.whatsapp import send_appointment_reminder
 
 logger = logging.getLogger('tokenwalla')
-
-# Matches your DEFAULT_SLOTS format in Hdashboard.js, e.g. "09:00 AM"
-SLOT_FORMAT = '%I:%M %p'
-
-
-def _parse_slot_datetime(date_val, slot_str):
-    """Combine a date and a '09:00 AM'-style slot string into an aware datetime."""
-    try:
-        time_part = datetime.strptime(slot_str.strip(), SLOT_FORMAT).time()
-    except ValueError:
-        return None
-    naive = datetime.combine(date_val, time_part)
-    return timezone.make_aware(naive, timezone.get_current_timezone())
 
 
 class Command(BaseCommand):
@@ -50,7 +38,7 @@ class Command(BaseCommand):
         candidates = (
             Booking.objects
             .filter(
-                status='waiting',
+                status=Booking.CONFIRMED,
                 reminder_sent=False,
                 date__in=candidate_dates,
             )
@@ -59,7 +47,7 @@ class Command(BaseCommand):
 
         sent_count = 0
         for booking in candidates:
-            slot_dt = _parse_slot_datetime(booking.date, booking.slot)
+            slot_dt = parse_slot_datetime(booking.date, booking.slot)
             if slot_dt is None:
                 logger.warning('[reminders] Could not parse slot "%s" for booking %s', booking.slot, booking.id)
                 continue

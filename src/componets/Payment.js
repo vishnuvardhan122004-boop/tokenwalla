@@ -1,17 +1,27 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import API from '../services/api';
+import { computeFeeBreakdown } from '../services/fees';
 
-const RAZORPAY_KEY_ID = process.env.REACT_APP_RAZORPAY_KEY_ID || 'rzp_live_SoKq7xISlxWRoY';
+const inr = (n) => Number(n).toFixed(2);
 
 export default function Payment() {
   const location = useLocation();
   const navigate  = useNavigate();
   const {
     doctorId, doctorName, hospital,
-    date, slot, fee = 15, amount = 1500,
+    date, slot,
     queue_access = true,
   } = location.state || {};
+
+  // The itemised bill comes from the SERVER (doctor.fee_breakdown, computed by
+  // payments/fees.py — the same code that prices the order). We don't recompute
+  // it here: a client-side copy can drift from the backend, and it would get
+  // SERVICE_ONLY doctors wrong (their consultation fee is paid at the clinic,
+  // not online). Until it loads, the pay button stays disabled.
+  const [breakdown, setBreakdown] = useState(null);
+  const [feeError,  setFeeError]  = useState('');
+  const total = breakdown ? breakdown.final_amount : null;
 
   const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(false);
@@ -33,13 +43,34 @@ export default function Payment() {
   }, [navigate]);
 
   useEffect(() => {
-    if (!doctorId) navigate('/alldoctor');
+    if (!doctorId) { navigate('/alldoctor'); return; }
+    let cancelled = false;
+    // Drop the previous doctor's figures first — otherwise a slow or failed
+    // load leaves the last doctor's price on screen as if it were this one's.
+    setBreakdown(null);
+    setFeeError('');
+    API.get(`/doctors/${doctorId}/`)
+      .then(({ data }) => {
+        if (cancelled) return;
+        // A backend that predates fee_breakdown would leave this screen stuck on
+        // "Loading…" forever, so fall back to the local mirror. It's a preview
+        // either way — the amount charged is the server's order amount.
+        setBreakdown(data.fee_breakdown
+          || computeFeeBreakdown(data.fee, data.payment_collection_mode));
+      })
+      .catch(() => { if (!cancelled) setFeeError('Could not load the fee details. Check your connection and try again.'); });
+    return () => { cancelled = true; };
   }, [doctorId, navigate]);
 
   const loadScript = () => new Promise((resolve) => {
-    if (document.getElementById('razorpay-script')) return resolve(true);
+    if (window.Razorpay) return resolve(true);
+    const existing = document.getElementById('razorpay-sdk');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true), { once: true });
+      return;
+    }
     const s = document.createElement('script');
-    s.id = 'razorpay-script';
+    s.id = 'razorpay-sdk';
     s.src = 'https://checkout.razorpay.com/v1/checkout.js';
     s.onload  = () => resolve(true);
     s.onerror = () => resolve(false);
@@ -55,60 +86,69 @@ export default function Payment() {
     setLoading(true);
     try {
       const ready = await loadScript();
-      if (!ready) { alert('Razorpay SDK failed. Check internet.'); setLoading(false); return; }
+      if (!ready || !window.Razorpay) { alert('Razorpay SDK failed. Check internet.'); setLoading(false); return; }
 
+      // Server computes the full fee from the doctor's consultation fee — we
+      // send only doctorId, never an amount. It returns a Razorpay order_id +
+      // the public key id to open Checkout with.
       const { data: orderData } = await API.post('/payment/create-order/', {
-        amount, currency: 'INR',
-        notes: { doctorId, doctorName, hospital, date, slot },
+        doctorId,
       });
 
-      const options = {
-        // Prefer the key returned by the backend so the checkout is always in
-        // the same mode (test/live) as the order. Falls back to env/hardcoded.
-        key:         orderData.key_id || RAZORPAY_KEY_ID,
-        amount:      orderData.amount,
-        currency:    orderData.currency,
-        name:        'TokenWalla',
-        description: `Appointment — ${doctorName}`,
-        order_id:    orderData.order_id,
-        prefill:     { name: user?.name || '', contact: user?.mobile || '' },
-        theme:       { color: '#185FA5' },
-        handler: async (response) => {
-          try {
-            const { data: verifyData } = await API.post('/payment/verify/', {
-              razorpay_order_id:   response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature:  response.razorpay_signature,
-              booking: { doctorId, doctorName, hospital, date, slot, amount: fee, queue_access, bookedForName, bookedForMobile },
+      const verify = async () => {
+        try {
+          const { data: verifyData } = await API.post('/payment/verify/', {
+            order_id: orderData.order_id,
+            booking: { doctorId, doctorName, hospital, date, slot, queue_access, bookedForName, bookedForMobile },
+          });
+          if (verifyData.success) {
+            navigate('/booking-token', {
+              state: {
+                token:        verifyData.token,
+                doctorName,
+                hospital,
+                doctorMobile: location.state?.doctorMobile,
+                date, slot,
+                paymentId:    verifyData.booking?.paymentId,
+                userName:     bookedForName || user?.name || user?.username,
+                queue_access,
+              }
             });
-            if (verifyData.success) {
-              navigate('/booking-token', {
-                state: {
-                  token:        verifyData.token,
-                  doctorName,
-                  hospital,
-                  doctorMobile: location.state?.doctorMobile,
-                  date, slot,
-                  paymentId:    response.razorpay_payment_id,
-                  userName:     bookedForName || user?.name || user?.username,
-                  queue_access,
-                }
-              });
-            } else {
-              alert('Verification failed. Contact support.');
-              setLoading(false);
-            }
-          } catch {
-            alert('Verification error. Contact support.');
+          } else {
+            alert(verifyData.message || 'Verification failed. Contact support.');
             setLoading(false);
           }
-        },
-        modal: { ondismiss: () => setLoading(false) },
+        } catch {
+          alert('Verification error. Contact support.');
+          setLoading(false);
+        }
       };
 
-      const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', (r) => {
-        alert(`Payment failed: ${r.error.description}`);
+      // We ignore the razorpay_signature Checkout hands back here — the
+      // server confirms the payment itself (fetches the order + its
+      // payments from Razorpay) rather than trusting a client signature.
+      const rzp = new window.Razorpay({
+        key:      orderData.key,
+        // The SERVER's amount, not our preview total — the preview is computed
+        // from a client-side mirror of the fee math (services/fees.js) and would
+        // be wrong the moment the two drift, or for a SERVICE_ONLY doctor.
+        amount:   Math.round(Number(orderData.amount) * 100),
+        currency: orderData.currency || 'INR',
+        order_id: orderData.order_id,
+        name:     'TokenWalla',
+        description: `Consultation with ${doctorName}`,
+        prefill: {
+          name:     bookedForName || user?.name || user?.username,
+          contact:  user?.mobile || '',
+        },
+        theme: { color: '#185FA5' },
+        handler: verify,
+        modal: {
+          ondismiss: () => setLoading(false),
+        },
+      });
+      rzp.on('payment.failed', (resp) => {
+        alert(resp?.error?.description || 'Payment was not completed.');
         setLoading(false);
       });
       rzp.open();
@@ -329,14 +369,61 @@ export default function Payment() {
                   {forOther && bookedForName && <span className="pay-for-tag">for someone else</span>}
                 </span>
               </div>
-              <div className="pay-row">
-                <span className="pay-row-label">Plan</span>
-                <span className="pay-plan-badge">📍 Queue View</span>
-              </div>
             </div>
+          </div>
+
+          {/* Fee breakdown — itemised receipt */}
+          <div className="pay-card">
+            <div className="pay-card-header">
+              <div className="pay-card-header-icon">🧾</div>
+              <div className="pay-card-header-title">Payment Details</div>
+            </div>
+            {!breakdown ? (
+              <div className="pay-rows">
+                <div className="pay-row">
+                  <span className="pay-row-label">{feeError || 'Loading fee details…'}</span>
+                  {feeError && (
+                    <button className="pay-back" style={{ margin: 0 }} onClick={() => window.location.reload()}>
+                      Retry
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="pay-rows">
+                {/* SERVICE_ONLY doctors collect the consultation fee at the
+                    clinic, so it is NOT part of the online total. */}
+                {Number(breakdown.offline_doctor_fee) > 0 ? (
+                  <div className="pay-row">
+                    <span className="pay-row-label">
+                      Doctor Consultation Fee
+                      <span className="pay-for-tag">pay at clinic</span>
+                    </span>
+                    <span className="pay-row-value">₹{inr(breakdown.offline_doctor_fee)}</span>
+                  </div>
+                ) : (
+                  <div className="pay-row">
+                    <span className="pay-row-label">Doctor Consultation Fee</span>
+                    <span className="pay-row-value">₹{inr(breakdown.doctor_fee)}</span>
+                  </div>
+                )}
+                <div className="pay-row">
+                  <span className="pay-row-label">Platform Fee</span>
+                  <span className="pay-row-value">₹{inr(breakdown.platform_fee)}</span>
+                </div>
+                <div className="pay-row">
+                  <span className="pay-row-label">Payment Gateway Fee</span>
+                  <span className="pay-row-value">₹{inr(breakdown.gateway_fee)}</span>
+                </div>
+                <div className="pay-row">
+                  <span className="pay-row-label">GST (18%)</span>
+                  <span className="pay-row-value">₹{inr(breakdown.gst_amount)}</span>
+                </div>
+              </div>
+            )}
             <div className="pay-total-row">
-              <span className="pay-total-label">Total Amount</span>
-              <span className="pay-total-amount">₹{fee}</span>
+              <span className="pay-total-label">Total Payable Now</span>
+              <span className="pay-total-amount">{total === null ? '—' : `₹${inr(total)}`}</span>
             </div>
           </div>
 
@@ -402,10 +489,12 @@ export default function Payment() {
           </div>
 
           {/* Pay button */}
-          <button className="pay-btn" onClick={handlePayment} disabled={loading}>
+          <button className="pay-btn" onClick={handlePayment} disabled={loading || !breakdown}>
             {loading
               ? <><div className="pay-spinner" /> Opening Payment Gateway…</>
-              : <>💳 Pay ₹{fee} & Confirm Appointment</>
+              : !breakdown
+                ? <>{feeError ? 'Fee details unavailable' : 'Loading…'}</>
+                : <>💳 Pay ₹{inr(total)} & Confirm Appointment</>
             }
           </button>
 

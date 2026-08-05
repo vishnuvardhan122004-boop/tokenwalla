@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import API from '../services/api';
 import { authCSS } from './authStyles';
+import useAuthKeyboard from './useAuthKeyboard';
 import SEO from './SEO';
 
 export default function Login() {
   const navigate = useNavigate();
+  useAuthKeyboard();
   const [details,    setDetails]    = useState({ mobile: '', password: '' });
   const [loading,    setLoading]    = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);

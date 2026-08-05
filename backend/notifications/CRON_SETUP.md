@@ -63,3 +63,26 @@ reminder each (idempotent — `reminder_sent` flag prevents duplicates).
   variable unset so the code default (`appointment_reminder`) is used.
 - `WHATSAPP_ACCESS_TOKEN` must be a **permanent** System-User token, not a 24h dev token.
 - Booking slot strings must be `"HH:MM AM/PM"` (e.g. `09:00 AM`) — the parser expects that.
+
+---
+
+# Doctor ledger cron
+
+One more scheduled management command, set up as its own Railway cron service
+exactly like the reminder one above (own config file, Root Directory `backend`,
+same DB/env vars):
+
+| Command | Config file | Schedule | Purpose |
+|---|---|---|---|
+| `python manage.py run_daily_payouts` | `backend/railway.payouts.cron.json` | `30 20 * * *` (daily) | Ledger completed bookings so each doctor's outstanding balance is up to date |
+
+Notes:
+- **Nothing is deducted from a doctor or billed to a hospital.** TokenWalla's
+  revenue is the patient's service fee, collected at checkout. The amount owed
+  is exactly `Payment.doctor_fee`.
+- **Idempotent** — safe to re-run: a booking already ledgered is skipped.
+- **Payouts themselves are MANUAL.** This command only writes ledger rows. To
+  actually pay a doctor, transfer the money from TokenWalla's own bank account
+  or UPI, then mark it paid on the admin Doctor Payouts page
+  (`/Adashboard/payouts`) so the ledger clears. No payment-gateway payout API
+  is involved, and no payout keys or webhooks need configuring.

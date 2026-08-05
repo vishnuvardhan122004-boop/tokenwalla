@@ -6,10 +6,12 @@ import { downloadBookingTicket } from '../services/downloadTicket';
 import BookingQR from './BookingQR';
 
 const STATUS_MAP = {
-  waiting:     { label: 'Waiting',         cls: 'badge-amber',  pulse: true  },
-  in_progress: { label: 'In Consultation', cls: 'badge-blue',   pulse: true  },
-  completed:   { label: 'Completed',       cls: 'badge-green',  pulse: false },
-  cancelled:   { label: 'Cancelled',       cls: 'badge-red',    pulse: false },
+  CONFIRMED:   { label: 'Confirmed',       cls: 'badge-amber',  pulse: true  },
+  ON_HOLD:     { label: 'On Hold',         cls: 'badge-amber',  pulse: false },
+  IN_PROGRESS: { label: 'In Consultation', cls: 'badge-blue',   pulse: true  },
+  COMPLETED:   { label: 'Completed',       cls: 'badge-green',  pulse: false },
+  CANCELLED:   { label: 'Cancelled',       cls: 'badge-red',    pulse: false },
+  NO_SHOW:     { label: 'No Show',         cls: 'badge-red',    pulse: false },
 };
 
 const TABS = [
@@ -19,13 +21,12 @@ const TABS = [
 ];
 
 // ── Reschedule payment constants (mirrors mobile RescheduleModal.tsx) ──────
-const RAZORPAY_KEY_ID  = 'rzp_live_SoKq7xISlxWRoY';
-const RESCHEDULE_PAISE = 500;   // ₹5 in paise — must match backend VALID_AMOUNTS_PAISE
-const RESCHEDULE_FEE   = 5;     // display only
+const RESCHEDULE_AMOUNT = 5;   // ₹5 (rupees) — must match backend VALID_PLAN_AMOUNTS
+const RESCHEDULE_FEE    = 5;   // display only
 
 function filterBookings(bookings, tab) {
-  if (tab === 'active')    return bookings.filter(b => b.status === 'waiting' || b.status === 'in_progress');
-  if (tab === 'completed') return bookings.filter(b => b.status === 'completed' || b.status === 'cancelled');
+  if (tab === 'active')    return bookings.filter(b => b.status === 'CONFIRMED' || b.status === 'IN_PROGRESS');
+  if (tab === 'completed') return bookings.filter(b => b.status === 'COMPLETED' || b.status === 'CANCELLED');
   return bookings;
 }
 
@@ -96,7 +97,7 @@ export default function MyBookings() {
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
   // Auto-refresh only when there are active bookings, pauses when tab hidden
-  const hasActive = bookings.some(b => b.status === 'waiting' || b.status === 'in_progress');
+  const hasActive = bookings.some(b => b.status === 'CONFIRMED' || b.status === 'IN_PROGRESS');
   useVisiblePolling(() => fetchBookings(true), 15000, hasActive);
 
   useEffect(() => {
@@ -169,7 +170,7 @@ export default function MyBookings() {
     }
   };
 
-  // ── Reschedule: create ₹5 order → open Razorpay Checkout → verify → confirm ──
+  // ── Reschedule: create ₹5 order → Razorpay Checkout → verify → confirm ──
   const handleReschedule = async () => {
     if (!rescheduleBooking) return;
     if (!newDate) { showToast('Please select a new date', 'error'); return; }
@@ -204,45 +205,29 @@ export default function MyBookings() {
         return;
       }
 
-      // Step 1: create ₹5 order (same endpoint mobile uses)
+      // Step 1: create the ₹5 order (amount in rupees now).
       const { data: order } = await API.post('/payment/create-order/', {
-        amount: RESCHEDULE_PAISE,
-        currency: 'INR',
-        notes: { type: 'reschedule', booking_id: rescheduleBooking.id },
+        amount: RESCHEDULE_AMOUNT,
       });
-      if (!order?.order_id) throw new Error('No order_id returned from server.');
-
-      let user = {};
-      try { user = JSON.parse(localStorage.getItem('user') || '{}'); } catch { user = {}; }
+      if (!order?.order_id) throw new Error('No order returned from server.');
 
       setPayingReschedule(true);
 
+      // Step 2: open Razorpay checkout, then confirm server-side (the server
+      // re-fetches the order from Razorpay — no client signature is trusted).
+      const finish = () => { setPayingReschedule(false); setRescheduling(false); };
       const rzp = new window.Razorpay({
-        key: RAZORPAY_KEY_ID,
-        amount: Number(order.amount),
-        currency: 'INR',
-        name: 'TokenWalla',
-        description: `Reschedule fee - ${rescheduleBooking.doctor_name}`,
-        order_id: String(order.order_id),
-        prefill: {
-          name: user?.name || user?.username || '',
-          contact: user?.mobile ? `91${user.mobile}` : '',
-        },
+        key:      order.key,
+        amount:   Math.round(Number(order.amount) * 100),   // server's amount, not ours
+        currency: order.currency || 'INR',
+        order_id: order.order_id,
+        name:     'TokenWalla',
+        description: 'Appointment reschedule fee',
         theme: { color: '#185FA5' },
-        modal: {
-          ondismiss: () => {
-            setPayingReschedule(false);
-            setRescheduling(false);
-            showToast('Payment cancelled.', 'error');
-          },
-        },
-        handler: async (response) => {
-          // Step 2: verify payment + apply reschedule
+        handler: async () => {
           try {
             const { data } = await API.post('/payment/verify/', {
-              razorpay_order_id:   response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature:  response.razorpay_signature,
+              order_id: order.order_id,
               booking: {
                 booking_id: rescheduleBooking.id,
                 date:       newDate,
@@ -260,18 +245,15 @@ export default function MyBookings() {
           } catch (err) {
             showToast(err?.response?.data?.message || 'Verification error. Contact support.', 'error');
           } finally {
-            setPayingReschedule(false);
-            setRescheduling(false);
+            finish();
           }
         },
+        modal: { ondismiss: finish },
       });
-
       rzp.on('payment.failed', (resp) => {
-        setPayingReschedule(false);
-        setRescheduling(false);
-        showToast(resp?.error?.description || 'Payment failed. Please try again.', 'error');
+        showToast(resp?.error?.description || 'Payment cancelled.', 'error');
+        finish();
       });
-
       rzp.open();
     } catch (err) {
       showToast(err?.response?.data?.message || err?.message || 'Could not create payment order.', 'error');
@@ -288,7 +270,7 @@ export default function MyBookings() {
   };
 
   const visible     = filterBookings(bookings, tab);
-  const activeCount = bookings.filter(b => b.status === 'waiting' || b.status === 'in_progress').length;
+  const activeCount = bookings.filter(b => b.status === 'CONFIRMED' || b.status === 'IN_PROGRESS').length;
   const amSlots     = doctorSlots.filter(s => s.includes('AM'));
   const pmSlots     = doctorSlots.filter(s => s.includes('PM'));
 
@@ -427,8 +409,8 @@ export default function MyBookings() {
           {!loading && visible.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               {visible.map((booking, idx) => {
-                const st       = STATUS_MAP[booking.status] || STATUS_MAP.waiting;
-                const isActive = booking.status === 'waiting' || booking.status === 'in_progress';
+                const st       = STATUS_MAP[booking.status] || STATUS_MAP.CONFIRMED;
+                const isActive = booking.status === 'CONFIRMED' || booking.status === 'IN_PROGRESS';
                 const qPos     = booking.queue_position;
 
                 return (
@@ -462,12 +444,12 @@ export default function MyBookings() {
                     {isActive && booking.queue_access && (
                       <div className="mb-queue-panel">
                         <div className="mb-queue-circle">
-                          {booking.status === 'in_progress' ? '🔔' : (qPos ?? '…')}
+                          {booking.status === 'IN_PROGRESS' ? '🔔' : (qPos ?? '…')}
                         </div>
                         <div style={{ flex: 1 }}>
                           <div className="mb-queue-label">Your position in queue</div>
                           <div className="mb-queue-desc">
-                            {booking.status === 'in_progress' ? '✅ Your turn — please go in now!' : queueMsg(qPos)}
+                            {booking.status === 'IN_PROGRESS' ? '✅ Your turn — please go in now!' : queueMsg(qPos)}
                           </div>
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>Auto-refreshes every 15s</div>
@@ -475,7 +457,7 @@ export default function MyBookings() {
                     )}
 
                     {/* ── QR CODE PANEL (waiting or in_progress) ── */}
-                    {(booking.status === 'waiting' || booking.status === 'in_progress') && (
+                    {(booking.status === 'CONFIRMED' || booking.status === 'IN_PROGRESS') && (
                       <div className="mb-action-panel">
                         <div>
                           <div className="mb-action-title">⬛ Show / Download Token</div>
@@ -503,14 +485,14 @@ export default function MyBookings() {
                     )}
 
                     {/* ── DOCTOR-UNAVAILABLE BANNER ── */}
-                    {booking.status === 'waiting' && booking.free_reschedule && (
+                    {booking.status === 'CONFIRMED' && booking.free_reschedule && (
                       <div className="mb-unavail-banner">
                         ⚠️ {booking.doctor_name} is unavailable. Reschedule below at no charge.
                       </div>
                     )}
 
                     {/* ── RESCHEDULE PANEL ── */}
-                    {booking.status === 'waiting' && (
+                    {booking.status === 'CONFIRMED' && (
                       <div className="mb-action-panel">
                         <div>
                           <div className="mb-action-title">📅 Reschedule Appointment</div>
@@ -530,7 +512,7 @@ export default function MyBookings() {
                     )}
 
                     {/* ── CANCEL PANEL ── */}
-                    {booking.status === 'waiting' && (
+                    {booking.status === 'CONFIRMED' && (
                       <div className="mb-action-panel">
                         <div>
                           <div className="mb-action-title">❌ Cancel Appointment</div>

@@ -2,18 +2,16 @@ import logging
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
-from django.db import transaction, IntegrityError
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 
 from .models import Booking
 from .serializers import BookingSerializer, build_queue_map
 from tokenwalla.permissions import IsAdmin, IsHospitalStaff
-from payments.razorpay_utils import (
-    verify_signature,
-    fetch_order_amount_paise,
-    QUEUE_UPGRADE_AMOUNT_PAISE,
+from payments.refunds import (
+    process_cancellation_refund, record_absence_refund, RefundNotAllowed,
 )
 from notifications.push import push_booking_in_progress
 
@@ -73,19 +71,19 @@ class HospitalQueueView(APIView):
 
         return Response({
             'waiting':    BookingSerializer(
-                base.filter(status='waiting').order_by('created'),
+                base.filter(status='CONFIRMED').order_by('created'),
                 many=True, context={'request': request}
             ).data,
             'onHold':     BookingSerializer(
-                base.filter(status='held').order_by('created'),
+                base.filter(status='ON_HOLD').order_by('created'),
                 many=True, context={'request': request}
             ).data,
             'inProgress': BookingSerializer(
-                base.filter(status='in_progress').order_by('created'),
+                base.filter(status='IN_PROGRESS').order_by('created'),
                 many=True, context={'request': request}
             ).data,
             'completed':  BookingSerializer(
-                base.filter(status='completed').order_by('-created')[:50],
+                base.filter(status='COMPLETED').order_by('-created')[:50],
                 many=True, context={'request': request}
             ).data,
         })
@@ -102,13 +100,13 @@ class CallNextView(APIView):
         if user_hospital_id != booking.hospital_id and request.user.role != 'admin':
             return Response({'message': 'Access denied.'}, status=403)
 
-        if booking.status != 'waiting':
+        if booking.status != 'CONFIRMED':
             return Response(
                 {'message': f'Cannot call a booking with status "{booking.status}".'},
                 status=400
             )
 
-        booking.status = 'in_progress'
+        booking.status = 'IN_PROGRESS'
         booking.save(update_fields=['status'])
         logger.info('Booking %s called by hospital %s', pk, user_hospital_id)
         push_booking_in_progress(booking)  # patient "you're next" alert
@@ -126,13 +124,13 @@ class CompleteBookingView(APIView):
         if user_hospital_id != booking.hospital_id and request.user.role != 'admin':
             return Response({'message': 'Access denied.'}, status=403)
 
-        if booking.status not in ('waiting', 'in_progress'):
+        if booking.status not in ('CONFIRMED', 'IN_PROGRESS'):
             return Response(
                 {'message': f'Cannot complete a booking with status "{booking.status}".'},
                 status=400
             )
 
-        booking.status = 'completed'
+        booking.status = 'COMPLETED'
         booking.save(update_fields=['status'])
         logger.info('Booking %s completed by hospital %s', pk, user_hospital_id)
         return Response(BookingSerializer(booking, context={'request': request}).data)
@@ -145,7 +143,8 @@ class NoShowView(APIView):
 
     Distinct from CancelBookingView, which is the patient cancelling their own
     booking (it filters on user=request.user, so hospital staff get a 404 there).
-    Recorded as 'cancelled'; there is no separate no-show status yet.
+    Recorded as NO_SHOW — a terminal, non-refundable state distinct from a
+    patient-initiated CANCELLED (which may carry a partial refund).
     """
     permission_classes = [IsAuthenticated, IsHospitalStaff]
 
@@ -156,13 +155,13 @@ class NoShowView(APIView):
         if user_hospital_id != booking.hospital_id and request.user.role != 'admin':
             return Response({'message': 'Access denied.'}, status=403)
 
-        if booking.status not in ('waiting', 'in_progress'):
+        if booking.status not in ('CONFIRMED', 'IN_PROGRESS'):
             return Response(
                 {'message': f'Cannot mark a booking with status "{booking.status}" as no-show.'},
                 status=400
             )
 
-        booking.status = 'cancelled'
+        booking.status = Booking.NO_SHOW
         booking.save(update_fields=['status'])
         logger.info('Booking %s marked no-show by hospital %s', pk, user_hospital_id)
         return Response(BookingSerializer(booking, context={'request': request}).data)
@@ -188,10 +187,10 @@ class HoldBookingView(APIView):
         if user_hospital_id != booking.hospital_id and request.user.role != 'admin':
             return Response({'message': 'Access denied.'}, status=403)
 
-        if booking.status == 'waiting':
-            booking.status = 'held'
-        elif booking.status == 'held':
-            booking.status = 'waiting'
+        if booking.status == 'CONFIRMED':
+            booking.status = 'ON_HOLD'
+        elif booking.status == 'ON_HOLD':
+            booking.status = 'CONFIRMED'
         else:
             return Response(
                 {'message': f'Cannot hold/resume a booking with status "{booking.status}".'},
@@ -220,73 +219,6 @@ class AllBookingsView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
-# ── Upgrade queue access ──────────────────────────────────────────────────────
-class UpgradeQueueAccessView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def patch(self, request, pk):
-        booking = get_object_or_404(Booking, pk=pk, user=request.user)
-
-        if booking.queue_access:
-            return Response({'message': 'Queue access already active.'}, status=400)
-
-        # ── Verify the payment BEFORE unlocking the paid feature ──────────────
-        # Previously this endpoint trusted a client-supplied `payment_id` string
-        # with no verification, so any user could unlock queue access for free.
-        # We now require the full Razorpay handshake and validate it exactly like
-        # payments.VerifyPaymentView: HMAC signature + server-side amount check.
-        order_id   = request.data.get('razorpay_order_id',   '').strip()
-        payment_id = request.data.get('razorpay_payment_id', '').strip()
-        sig        = request.data.get('razorpay_signature',  '').strip()
-
-        if not all([order_id, payment_id, sig]):
-            return Response(
-                {'message': 'razorpay_order_id, razorpay_payment_id and '
-                            'razorpay_signature are required to upgrade queue access.'},
-                status=400,
-            )
-
-        if not verify_signature(order_id, payment_id, sig):
-            logger.warning('Invalid Razorpay signature on queue upgrade for booking %s', pk)
-            return Response({'message': 'Invalid payment signature.'}, status=400)
-
-        # Confirm the order with Razorpay and that it was paid for the right amount.
-        try:
-            amount_paise = fetch_order_amount_paise(order_id)
-        except Exception as exc:
-            logger.error('Queue upgrade: failed to fetch Razorpay order %s: %s', order_id, exc)
-            return Response({'message': 'Could not verify order with Razorpay.'}, status=502)
-
-        if amount_paise != QUEUE_UPGRADE_AMOUNT_PAISE:
-            logger.warning('Queue upgrade: wrong amount for order %s: %s paise',
-                           order_id, amount_paise)
-            return Response({'message': 'Invalid payment amount for queue access.'}, status=400)
-
-        # Record the upgrade payment in its OWN fields (never touching the
-        # booking's original payment_id/order_id/amount) and let the partial
-        # unique index on queue_payment_id be the source of truth for reuse.
-        # The pre-check gives a friendly 409; the IntegrityError catch closes
-        # the concurrent-race window the pre-check alone can't.
-        try:
-            with transaction.atomic():
-                if Booking.objects.filter(queue_payment_id=payment_id).exists():
-                    return Response({'message': 'This payment has already been used.'}, status=409)
-                booking.queue_access     = True
-                booking.queue_payment_id = payment_id
-                booking.queue_order_id   = order_id
-                booking.save(update_fields=['queue_access', 'queue_payment_id', 'queue_order_id'])
-        except IntegrityError:
-            logger.warning('Queue upgrade: payment %s already used (unique index)', payment_id)
-            return Response({'message': 'This payment has already been used.'}, status=409)
-        logger.info('Queue access unlocked for booking %s by user %s', pk, request.user.id)
-
-        return Response({
-            'success': True,
-            'message': 'Queue access unlocked!',
-            'booking': BookingSerializer(booking, context={'request': request}).data,
-        })
-
-
 # ── Cancel booking ────────────────────────────────────────────────────────────
 class CancelBookingView(APIView):
     permission_classes = [IsAuthenticated]
@@ -294,19 +226,59 @@ class CancelBookingView(APIView):
     def patch(self, request, pk):
         booking = get_object_or_404(Booking, pk=pk, user=request.user)
 
-        if booking.status != 'waiting':
+        if booking.status != 'CONFIRMED':
             return Response(
                 {'message': f'Cannot cancel a booking with status "{booking.status}".'},
                 status=400
             )
 
-        booking.status = 'cancelled'
+        # Issue the tiered refund BEFORE flipping to CANCELLED. If the gateway
+        # refund fails we abort so the booking is never cancelled without the
+        # patient being refunded — they can retry.
+        try:
+            _, refund_info = process_cancellation_refund(booking)
+        except RefundNotAllowed as exc:
+            return Response({'message': str(exc)}, status=400)
+        except Exception as exc:
+            logger.exception('Refund failed while cancelling booking %s: %s', pk, exc)
+            return Response(
+                {'message': 'Could not process the refund. Please try again.'},
+                status=502,
+            )
+
+        booking.status = 'CANCELLED'
         booking.save(update_fields=['status'])
-        logger.info('Booking %s cancelled by user %s', pk, request.user.id)
+        logger.info('Booking %s cancelled by user %s (refund: %s)', pk, request.user.id, refund_info)
         return Response({
             'message': 'Booking cancelled successfully.',
+            'refund':  refund_info,
             'booking': BookingSerializer(booking, context={'request': request}).data,
         })
+
+
+# ── Hospital/Admin: doctor-absence refund on an already-completed booking ─────
+class AbsenceRefundView(APIView):
+    """Doctor didn't show but the booking was already marked COMPLETED.
+
+    Writes a negative adjustment to the doctor's ledger (netted against their
+    next payout) instead of reversing an already-sent payout. Hospital staff for
+    the booking's hospital, or an admin, may trigger it.
+    """
+    permission_classes = [IsAuthenticated, IsHospitalStaff]
+
+    def post(self, request, pk):
+        booking          = get_object_or_404(Booking, pk=pk)
+        user_hospital_id = _get_user_hospital_id(request.user)
+        if user_hospital_id != booking.hospital_id and request.user.role != 'admin':
+            return Response({'message': 'Access denied.'}, status=403)
+
+        try:
+            _, info = record_absence_refund(booking)
+        except RefundNotAllowed as exc:
+            return Response({'message': str(exc)}, status=400)
+
+        logger.info('Absence refund recorded for booking %s by user %s', pk, request.user.id)
+        return Response({'message': 'Absence adjustment recorded.', 'adjustment': info})
 
 
 # ── Reschedule booking (FREE path) ────────────────────────────────────────────
@@ -323,9 +295,9 @@ class RescheduleBookingView(APIView):
     def patch(self, request, pk):
         booking = get_object_or_404(Booking, pk=pk, user=request.user)
 
-        if booking.status != 'waiting':
+        if booking.status != 'CONFIRMED':
             return Response(
-                {'message': 'Only waiting bookings can be rescheduled.'},
+                {'message': 'Only confirmed bookings can be rescheduled.'},
                 status=400
             )
 
@@ -363,7 +335,7 @@ class RescheduleBookingView(APIView):
                     doctor=booking.doctor,
                     date=new_date,
                     slot=new_slot,
-                    status__in=['waiting', 'in_progress'],
+                    status__in=['CONFIRMED', 'IN_PROGRESS'],
                 )
                 .exclude(pk=booking.pk)
                 .count()
@@ -420,14 +392,14 @@ class ScanQRView(APIView):
         # same doctor + date + slot who are still waiting. Helps hospital staff
         # understand where the patient stands. None once no longer waiting.
         queue_position = None
-        if booking.status == 'waiting':
+        if booking.status == 'CONFIRMED':
             queue_position = (
                 Booking.objects
                 .filter(
                     doctor_id=booking.doctor_id,
                     date=booking.date,
                     slot=booking.slot,
-                    status='waiting',
+                    status='CONFIRMED',
                     created__lte=booking.created,
                 )
                 .count()
@@ -504,7 +476,7 @@ class ScanQRView(APIView):
         if access_err:
             return access_err
  
-        already_done = booking.status in ('in_progress', 'completed', 'cancelled')
+        already_done = booking.status in ('IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW')
  
         return Response({
             'valid':        True,
@@ -535,18 +507,20 @@ class ScanQRView(APIView):
         if access_err:
             return access_err
  
-        # ── Guard: cancelled bookings cannot be attended ──
-        if booking.status == 'cancelled':
+        # ── Guard: cancelled / no-show bookings cannot be attended ──
+        if booking.status in ('CANCELLED', 'NO_SHOW'):
+            msg = ('This booking was cancelled.' if booking.status == 'CANCELLED'
+                   else 'This booking was marked no-show.')
             return Response(
-                {'success': False, 'message': 'This booking was cancelled.'},
+                {'success': False, 'message': msg},
                 status=400,
             )
  
         # ── Guard: already attended ──
-        if booking.status in ('in_progress', 'completed'):
+        if booking.status in ('IN_PROGRESS', 'COMPLETED'):
             msg = (
                 'Patient is already In Consultation.'
-                if booking.status == 'in_progress'
+                if booking.status == 'IN_PROGRESS'
                 else 'This patient has already completed their visit.'
             )
             return Response(
@@ -560,7 +534,7 @@ class ScanQRView(APIView):
                             )
  
         # ── Mark as in_progress ──
-        booking.status = 'in_progress'
+        booking.status = 'IN_PROGRESS'
         booking.save(update_fields=['status'])
 
         logger.info(

@@ -21,6 +21,45 @@ const EMPTY_FORM = {
   description: "", announcement: "", open_time: "", close_time: "",
 };
 
+// ── Payout / settlement account ────────────────────────────────────────────
+const EMPTY_PAY = {
+  payment_method: "", upi_id: "", account_holder_name: "",
+  bank_name: "", account_number: "", ifsc_code: "", payout_notes: "",
+};
+
+const PAY_METHODS = [
+  { value: "",     label: "— Not set —" },
+  { value: "UPI",  label: "UPI" },
+  { value: "BANK", label: "Bank Account" },
+];
+
+// Mask all but the last 4 digits of an account number for the read view.
+const maskAccount = (n) => {
+  const s = String(n || "");
+  return s.length <= 4 ? s : "•••• " + s.slice(-4);
+};
+
+// Mirrors the backend validation for instant feedback.
+const validatePay = (f) => {
+  const e = {};
+  if (f.payment_method === "UPI") {
+    if (!f.upi_id.trim()) e.upi_id = "UPI ID is required for a UPI payout.";
+    else if (!/^[\w.\-]{2,256}@[a-zA-Z]{2,64}$/.test(f.upi_id.trim()))
+      e.upi_id = "Enter a valid UPI ID (e.g. name@bank).";
+  }
+  if (f.payment_method === "BANK") {
+    if (!f.account_holder_name.trim()) e.account_holder_name = "Account holder name is required.";
+    if (!f.account_number.trim()) e.account_number = "Account number is required.";
+    if (!f.ifsc_code.trim()) e.ifsc_code = "IFSC is required.";
+    else if (!/^[A-Za-z]{4}0[A-Za-z0-9]{6}$/.test(f.ifsc_code.trim()))
+      e.ifsc_code = "Enter a valid 11-character IFSC (e.g. HDFC0001234).";
+  }
+  if (f.ifsc_code.trim() && f.payment_method !== "BANK" &&
+      !/^[A-Za-z]{4}0[A-Za-z0-9]{6}$/.test(f.ifsc_code.trim()))
+    e.ifsc_code = "Enter a valid 11-character IFSC (e.g. HDFC0001234).";
+  return e;
+};
+
 const Hprofile = () => {
   const navigate = useNavigate();
 
@@ -40,6 +79,13 @@ const Hprofile = () => {
   const [logoPreview,   setLogoPreview]   = useState(null);
   const [gallery,       setGallery]       = useState([]);
   const [photoBusy,     setPhotoBusy]     = useState(false);
+
+  // Payout / settlement account
+  const [payDetails,  setPayDetails]  = useState(null);   // last-saved values (read view)
+  const [payEditing,  setPayEditing]  = useState(false);
+  const [payForm,     setPayForm]     = useState(EMPTY_PAY);
+  const [payErrors,   setPayErrors]   = useState({});
+  const [paySaving,   setPaySaving]   = useState(false);
 
   // OTP state for a mobile change
   const [origMobile,  setOrigMobile]  = useState("");
@@ -99,7 +145,62 @@ const Hprofile = () => {
     API.get(`/doctors/?hospital=${user.hospital.id}`)
       .then(({ data }) => setDoctorCount((Array.isArray(data) ? data : data?.results || []).length))
       .catch(() => {});
+
+    API.get(`/hospitals/${user.hospital.id}/payment-details/`)
+      .then(({ data }) => setPayDetails(data))
+      .catch(() => setPayDetails({ ...EMPTY_PAY }));
   }, [navigate]);
+
+  // ── Payout details edit / save ───────────────────────────────────────────────
+  const startPayEdit = () => {
+    const d = payDetails || EMPTY_PAY;
+    setPayForm({
+      payment_method:      d.payment_method || "",
+      upi_id:              d.upi_id || "",
+      account_holder_name: d.account_holder_name || "",
+      bank_name:           d.bank_name || "",
+      account_number:      d.account_number || "",
+      ifsc_code:           d.ifsc_code || "",
+      payout_notes:        d.payout_notes || "",
+    });
+    setPayErrors({});
+    setPayEditing(true);
+  };
+
+  const setPayField = (k, v) => setPayForm(p => ({ ...p, [k]: v }));
+
+  const savePayDetails = async () => {
+    if (!hospital) return;
+    const errs = validatePay(payForm);
+    setPayErrors(errs);
+    if (Object.keys(errs).length) return;
+    setPaySaving(true);
+    try {
+      const { data } = await API.put(`/hospitals/${hospital.id}/payment-details/`, {
+        payment_method:      payForm.payment_method,
+        upi_id:              payForm.upi_id.trim(),
+        account_holder_name: payForm.account_holder_name.trim(),
+        bank_name:           payForm.bank_name.trim(),
+        account_number:      payForm.account_number.trim(),
+        ifsc_code:           payForm.ifsc_code.trim().toUpperCase(),
+        payout_notes:        payForm.payout_notes.trim(),
+      });
+      setPayDetails(data);
+      setPayEditing(false);
+      showToast("✅ Payout details saved.");
+    } catch (err) {
+      const apiErrs = err?.response?.data?.errors;
+      if (apiErrs && typeof apiErrs === "object") {
+        const flat = {};
+        Object.entries(apiErrs).forEach(([k, v]) => { flat[k] = Array.isArray(v) ? v[0] : String(v); });
+        setPayErrors(flat);
+      } else {
+        showToast(err?.response?.data?.message || "Could not save payout details.", "error");
+      }
+    } finally {
+      setPaySaving(false);
+    }
+  };
 
   const setField      = (field, value) => setForm(p => ({ ...p, [field]: value }));
   const mobileChanged = form.mobile.trim() !== origMobile;
@@ -510,6 +611,111 @@ const Hprofile = () => {
                 </div>
               )}
             </>
+          )}
+        </div>
+
+        {/* Payout / settlement account */}
+        <div className="card shadow-sm border-0 p-4 mb-4">
+          <div className="d-flex justify-content-between align-items-center mb-1">
+            <h6 className="fw-bold mb-0">💳 Payout Details</h6>
+            {!payEditing && (
+              <button className="btn btn-sm btn-outline-primary" onClick={startPayEdit}>
+                ✏️ {payDetails && (payDetails.upi_id || payDetails.account_number) ? "Edit" : "Add Payment"}
+              </button>
+            )}
+          </div>
+          <p className="text-muted small mb-3">
+            Where TokenWalla settles your hospital's earnings. Add a UPI ID or your bank account details.
+          </p>
+
+          {payEditing ? (
+            <>
+              <label className="form-label fw-semibold small">Payment Method</label>
+              <select className="form-select mb-3" value={payForm.payment_method}
+                      onChange={e => setPayField("payment_method", e.target.value)}>
+                {PAY_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+
+              {payForm.payment_method === "UPI" && (
+                <>
+                  <label className="form-label fw-semibold small">UPI ID *</label>
+                  <input className={`form-control ${payErrors.upi_id ? "is-invalid" : "mb-1"}`}
+                         placeholder="hospital@okhdfc" value={payForm.upi_id}
+                         onChange={e => setPayField("upi_id", e.target.value)} />
+                  {payErrors.upi_id
+                    ? <div className="invalid-feedback">{payErrors.upi_id}</div>
+                    : <div className="form-text mb-3">Share the UPI ID (VPA) linked to your hospital's bank account.</div>}
+                </>
+              )}
+
+              {payForm.payment_method === "BANK" && (
+                <>
+                  <label className="form-label fw-semibold small">Account Holder Name *</label>
+                  <input className={`form-control mb-3 ${payErrors.account_holder_name ? "is-invalid" : ""}`}
+                         placeholder="As printed on the passbook / cheque" value={payForm.account_holder_name}
+                         onChange={e => setPayField("account_holder_name", e.target.value)} />
+                  {payErrors.account_holder_name && <div className="invalid-feedback d-block mb-2">{payErrors.account_holder_name}</div>}
+
+                  <label className="form-label fw-semibold small">Bank Name</label>
+                  <input className="form-control mb-3" placeholder="e.g. HDFC Bank" value={payForm.bank_name}
+                         onChange={e => setPayField("bank_name", e.target.value)} />
+
+                  <label className="form-label fw-semibold small">Account Number *</label>
+                  <input className={`form-control mb-3 ${payErrors.account_number ? "is-invalid" : ""}`}
+                         placeholder="Bank account number" value={payForm.account_number}
+                         onChange={e => setPayField("account_number", e.target.value.replace(/\s/g, ""))} />
+                  {payErrors.account_number && <div className="invalid-feedback d-block mb-2">{payErrors.account_number}</div>}
+
+                  <label className="form-label fw-semibold small">IFSC Code *</label>
+                  <input className={`form-control text-uppercase ${payErrors.ifsc_code ? "is-invalid" : "mb-1"}`}
+                         placeholder="HDFC0001234" value={payForm.ifsc_code}
+                         onChange={e => setPayField("ifsc_code", e.target.value)} />
+                  {payErrors.ifsc_code
+                    ? <div className="invalid-feedback">{payErrors.ifsc_code}</div>
+                    : <div className="form-text mb-3">11-character branch code, found on your cheque / passbook.</div>}
+                </>
+              )}
+
+              <label className="form-label fw-semibold small">Notes <span className="text-muted fw-normal">(optional)</span></label>
+              <textarea className="form-control mb-3" rows={2} value={payForm.payout_notes}
+                        placeholder="e.g. Settle weekly; GST invoice to accounts@…"
+                        onChange={e => setPayField("payout_notes", e.target.value)} />
+
+              <div className="d-flex gap-2">
+                <button className="btn btn-outline-secondary flex-fill" onClick={() => setPayEditing(false)} disabled={paySaving}>Cancel</button>
+                <button className="btn btn-primary flex-fill" onClick={savePayDetails} disabled={paySaving}>
+                  {paySaving ? <span className="spinner-border spinner-border-sm" /> : "Save Payout Details"}
+                </button>
+              </div>
+            </>
+          ) : (
+            (() => {
+              const d = payDetails || {};
+              const hasAny = d.upi_id || d.account_number;
+              if (!hasAny) {
+                return (
+                  <div className="rounded p-3 text-center" style={{ background: "#FFF7E6", border: "1px solid #FFE1A8" }}>
+                    <div className="small text-muted">No payout account added yet.</div>
+                    <div className="small text-muted">Add a UPI ID or bank account so you can receive settlements.</div>
+                  </div>
+                );
+              }
+              const rows = [
+                { label: "Method", value: d.payment_method === "BANK" ? "Bank Account" : d.payment_method === "UPI" ? "UPI" : "—" },
+                ...(d.upi_id ? [{ label: "UPI ID", value: d.upi_id }] : []),
+                ...(d.account_holder_name ? [{ label: "Account Holder", value: d.account_holder_name }] : []),
+                ...(d.bank_name ? [{ label: "Bank", value: d.bank_name }] : []),
+                ...(d.account_number ? [{ label: "Account No.", value: maskAccount(d.account_number) }] : []),
+                ...(d.ifsc_code ? [{ label: "IFSC", value: d.ifsc_code }] : []),
+                ...(d.payout_notes ? [{ label: "Notes", value: d.payout_notes }] : []),
+              ];
+              return rows.map(({ label, value }) => (
+                <div key={label} className="d-flex justify-content-between py-2 border-bottom">
+                  <span className="text-muted small">{label}</span>
+                  <span className="fw-semibold small text-end" style={{ maxWidth: "65%" }}>{value}</span>
+                </div>
+              ));
+            })()
           )}
         </div>
 

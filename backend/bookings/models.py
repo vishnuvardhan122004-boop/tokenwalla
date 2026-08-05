@@ -2,17 +2,51 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from doctors.models import Doctor
 from hospitals.models import Hospital
+from bookings.utils import parse_slot_datetime
 
 User = get_user_model()
 
 
 class Booking(models.Model):
+    # ── Booking lifecycle ─────────────────────────────────────────────────────
+    #   PENDING → CONFIRMED → IN_PROGRESS → COMPLETED
+    #                       → ON_HOLD (skip/resume)     → CANCELLED
+    #                                                   → NO_SHOW
+    # Renamed from the legacy waiting/held/in_progress/completed/cancelled set
+    # (data migration 0010) to the spec-aligned settlement lifecycle. The
+    # values gate money movement: refunds are only allowed BEFORE COMPLETED,
+    # and payouts are only ever generated FROM COMPLETED bookings.
+    # IN_PROGRESS / ON_HOLD keep the live hospital-queue semantics.
+    PENDING     = 'PENDING'
+    CONFIRMED   = 'CONFIRMED'
+    IN_PROGRESS = 'IN_PROGRESS'
+    ON_HOLD     = 'ON_HOLD'
+    COMPLETED   = 'COMPLETED'
+    CANCELLED   = 'CANCELLED'
+    NO_SHOW     = 'NO_SHOW'
     STATUS = [
-        ('waiting',     'Waiting'),
-        ('held',        'On Hold'),
-        ('in_progress', 'In Progress'),
-        ('completed',   'Completed'),
-        ('cancelled',   'Cancelled'),
+        (PENDING,     'Pending'),
+        (CONFIRMED,   'Confirmed'),
+        (IN_PROGRESS, 'In Progress'),
+        (ON_HOLD,     'On Hold'),
+        (COMPLETED,   'Completed'),
+        (CANCELLED,   'Cancelled'),
+        (NO_SHOW,     'No Show'),
+    ]
+    # Statuses in which money is still refundable to the patient (before the
+    # visit is finalised). COMPLETED / CANCELLED / NO_SHOW are terminal.
+    REFUNDABLE_STATUSES = (PENDING, CONFIRMED, IN_PROGRESS, ON_HOLD)
+
+    # ── Doctor payout tracking ────────────────────────────────────────────────
+    # Whether this booking's doctor share has been paid out. Only COMPLETED
+    # bookings are ever picked up by the daily payout task.
+    PAYOUT_PENDING    = 'PENDING'
+    PAYOUT_PROCESSING = 'PROCESSING'
+    PAYOUT_PAID       = 'PAID'
+    PAYOUT_STATUS = [
+        (PAYOUT_PENDING,    'Pending'),
+        (PAYOUT_PROCESSING, 'Processing'),
+        (PAYOUT_PAID,       'Paid'),
     ]
     user         = models.ForeignKey(User,     on_delete=models.CASCADE,  related_name='bookings')
     doctor       = models.ForeignKey(Doctor,   on_delete=models.PROTECT,  related_name='bookings')
@@ -20,7 +54,10 @@ class Booking(models.Model):
     date         = models.DateField()
     slot         = models.CharField(max_length=20)
     token        = models.CharField(max_length=30, unique=True)
-    status       = models.CharField(max_length=20, choices=STATUS, default='waiting')
+    status       = models.CharField(max_length=20, choices=STATUS, default=CONFIRMED)
+    doctor_payout_status = models.CharField(
+        max_length=12, choices=PAYOUT_STATUS, default=PAYOUT_PENDING,
+    )
     payment_id   = models.CharField(max_length=100, blank=True)
     order_id     = models.CharField(max_length=100, blank=True)
     amount       = models.IntegerField(default=0)
@@ -55,6 +92,16 @@ class Booking(models.Model):
     def patient_display_mobile(self):
         """Best contact number for the patient at the hospital — beneficiary's if given, else the account holder's."""
         return self.booked_for_mobile or self.user.mobile
+
+    @property
+    def scheduled_datetime(self):
+        """The slot's start as an aware datetime (Asia/Kolkata).
+
+        Derived from `date` + the human `slot` string ("09:30 AM"). Returns
+        None if the slot can't be parsed. Used by the refund-tier logic to
+        measure how long before the appointment a cancellation happens.
+        """
+        return parse_slot_datetime(self.date, self.slot)
 
     class Meta:
         ordering = ['-created']

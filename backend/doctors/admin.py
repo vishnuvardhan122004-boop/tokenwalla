@@ -25,7 +25,7 @@ class DoctorAdmin(admin.ModelAdmin):
 
     @admin.display(description='Active')
     def active_bookings(self, obj):
-        count = obj.bookings.filter(status__in=['waiting', 'in_progress']).count()
+        count = obj.bookings.filter(status__in=['CONFIRMED', 'IN_PROGRESS']).count()
         if count:
             return format_html(
                 '<span style="color:#854F0B;font-weight:700;background:#FAEEDA;'
@@ -70,8 +70,8 @@ class DoctorAdmin(admin.ModelAdmin):
                     # Cancel active bookings first
                     cancelled = Booking.objects.filter(
                         doctor=doctor,
-                        status__in=['waiting', 'in_progress']
-                    ).update(status='cancelled')
+                        status__in=['CONFIRMED', 'IN_PROGRESS']
+                    ).update(status='CANCELLED')
 
                     # Delete all booking records for this doctor
                     Booking.objects.filter(doctor=doctor).delete()
@@ -107,7 +107,7 @@ class DoctorAdmin(admin.ModelAdmin):
         with transaction.atomic():
             Booking.objects.filter(
                 doctor=obj,
-                status__in=['waiting', 'in_progress']
-            ).update(status='cancelled')
+                status__in=['CONFIRMED', 'IN_PROGRESS']
+            ).update(status='CANCELLED')
             Booking.objects.filter(doctor=obj).delete()
             obj.delete()

@@ -29,6 +29,24 @@ class Hospital(models.Model):
     close_time   = models.CharField(max_length=5, blank=True)
     password = models.CharField(max_length=128)
     status   = models.CharField(max_length=20, default='active')
+
+    # ── Payout / settlement account ───────────────────────────────────────────
+    # Where TokenWalla settles the hospital's share. Managed by the hospital
+    # itself from its Profile page and served ONLY by the owner/admin-gated
+    # payment-details endpoint — these are NEVER exposed on the public
+    # HospitalSerializer. `payment_method` records the preferred rail (UPI when
+    # a VPA is present, else the bank account via IMPS).
+    UPI  = 'UPI'
+    BANK = 'BANK'
+    PAYMENT_METHOD_CHOICES = [(UPI, 'UPI'), (BANK, 'Bank Account')]
+    payment_method      = models.CharField(max_length=10, choices=PAYMENT_METHOD_CHOICES, blank=True, default='')
+    upi_vpa             = models.CharField(max_length=100, blank=True, default='')
+    account_holder_name = models.CharField(max_length=200, blank=True, default='')
+    bank_name           = models.CharField(max_length=200, blank=True, default='')
+    bank_account_number = models.CharField(max_length=30,  blank=True, default='')
+    ifsc                = models.CharField(max_length=15,  blank=True, default='')
+    payout_notes        = models.CharField(max_length=300, blank=True, default='')
+
     created  = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

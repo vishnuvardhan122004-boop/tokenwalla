@@ -16,3 +16,4 @@ src/.env
 
 # Claude Code local preview config
 .claude/
+.claude/skills/

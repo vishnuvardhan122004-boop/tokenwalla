@@ -195,9 +195,14 @@ else:
 MEDIA_URL  = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# ── Third-party Keys ──────────────────────────────────────────────────────────
+# ── Razorpay Payment Gateway (patient checkout) ───────────────────────────────
+# The accept-payment flow. Doctor payouts are MANUAL (see payments.payout_utils
+# / payments.views.MarkPayoutPaidView) — no payout API keys needed here.
 RAZORPAY_KEY_ID     = config('RAZORPAY_KEY_ID',     default='')
 RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
+
+# ── TokenWalla GST identity (for patient receipts) ────────────────────────────
+TOKENWALLA_GSTIN = config('TOKENWALLA_GSTIN', default='')
 TWOFACTOR_API_KEY   = config('TWOFACTOR_API_KEY',   default='')
 WHATSAPP_ACCESS_TOKEN            = config('WHATSAPP_ACCESS_TOKEN', default='')
 WHATSAPP_PHONE_NUMBER_ID         = config('WHATSAPP_PHONE_NUMBER_ID', default='')

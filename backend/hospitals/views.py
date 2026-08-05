@@ -2,7 +2,6 @@ import logging
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password, check_password
-from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
 
@@ -373,6 +372,54 @@ class HospitalPhotoDeleteView(APIView):
         return Response({'message': 'Deleted.'})
 
 
+class HospitalPaymentDetailsView(APIView):
+    """
+    GET  /api/hospitals/<pk>/payment-details/ — read the hospital's payout account.
+    PUT  /api/hospitals/<pk>/payment-details/ — the owning hospital (or admin)
+         updates its UPI / bank / IFSC settlement details.
+
+    Sensitive bank/UPI details are served ONLY here (never on the public
+    hospital list/detail), gated to the owning hospital or an admin.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get(self, pk):
+        try:
+            return Hospital.objects.get(pk=pk)
+        except Hospital.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        from .serializers import HospitalPaymentDetailsSerializer
+        hospital = self._get(pk)
+        if hospital is None:
+            return Response({'message': 'Not found.'}, status=404)
+        if not _is_owner_or_admin(request.user, hospital):
+            return Response({'message': 'You can only view your own hospital.'}, status=403)
+        return Response(HospitalPaymentDetailsSerializer(hospital).data)
+
+    def put(self, request, pk):
+        from .serializers import HospitalPaymentDetailsSerializer
+        hospital = self._get(pk)
+        if hospital is None:
+            return Response({'message': 'Not found.'}, status=404)
+        if not _is_owner_or_admin(request.user, hospital):
+            return Response({'message': 'You can only edit your own hospital.'}, status=403)
+
+        serializer = HospitalPaymentDetailsSerializer(hospital, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(
+                {'message': 'Validation failed', 'errors': serializer.errors},
+                status=400,
+            )
+        serializer.save()
+        logger.info('Payout details updated for hospital %s', hospital.id)
+        return Response(serializer.data)
+
+    # Allow PATCH as an alias for PUT (both partial here).
+    patch = put
+
+
 class HospitalResetPasswordView(APIView):
     """Public — reset hospital password after OTP verification."""
     permission_classes = [AllowAny]
@@ -512,11 +559,11 @@ class HospitalBookingSummaryView(APIView):
         qs = Booking.objects.filter(hospital=hospital)
         return Response({
             'total': qs.count(),
-            'active': qs.filter(status__in=['waiting', 'in_progress']).count(),
-            'waiting': qs.filter(status='waiting').count(),
-            'in_progress': qs.filter(status='in_progress').count(),
-            'completed': qs.filter(status='completed').count(),
-            'cancelled': qs.filter(status='cancelled').count(),
+            'active': qs.filter(status__in=['CONFIRMED', 'IN_PROGRESS']).count(),
+            'waiting': qs.filter(status='CONFIRMED').count(),
+            'in_progress': qs.filter(status='IN_PROGRESS').count(),
+            'completed': qs.filter(status='COMPLETED').count(),
+            'cancelled': qs.filter(status='CANCELLED').count(),
             'doctors': hospital.doctors.count(),
         })
 
@@ -547,8 +594,8 @@ class HospitalForceDeleteView(APIView):
             with transaction.atomic():
                 cancelled = Booking.objects.filter(
                     hospital=hospital,
-                    status__in=['waiting', 'in_progress'],
-                ).update(status='cancelled')
+                    status__in=['CONFIRMED', 'IN_PROGRESS'],
+                ).update(status='CANCELLED')
 
                 bookings_deleted = Booking.objects.filter(hospital=hospital).delete()[0]
 

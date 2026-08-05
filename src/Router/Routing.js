@@ -25,6 +25,7 @@ import Adashboard     from '../ADMIN/Adashboard';
 import Admin          from '../ADMIN/Admin';
 import UserManagement from '../ADMIN/UserManagement';
 import Reports        from '../ADMIN/Reports';
+import Payouts        from '../ADMIN/Payouts';
 import Hospitals      from '../ADMIN/Hospitals';
 import Support        from '../ADMIN/Support';
 import Settings       from '../ADMIN/Settings';
@@ -94,6 +95,7 @@ const Routing = () => (
     <Route path="/Adashboard" element={<RequireAdmin><Adashboard /></RequireAdmin>}>
       <Route path="user-management" element={<UserManagement />} />
       <Route path="reports"         element={<Reports />} />
+      <Route path="payouts"         element={<Payouts />} />
       <Route path="hospitals"       element={<Hospitals />} />
       <Route path="support"         element={<Support />} />
       <Route path="settings"        element={<Settings />} />

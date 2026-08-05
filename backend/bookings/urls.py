@@ -14,8 +14,8 @@ from .views import (
     NoShowView,
     HoldBookingView,
     AllBookingsView,
-    UpgradeQueueAccessView,
     CancelBookingView,
+    AbsenceRefundView,
     RescheduleBookingView,
     ScanQRView,
 )
@@ -28,8 +28,8 @@ urlpatterns = [
     path('complete/<int:pk>/',       CompleteBookingView.as_view()),
     path('no-show/<int:pk>/',        NoShowView.as_view()),
     path('hold/<int:pk>/',           HoldBookingView.as_view()),
-    path('upgrade/<int:pk>/',        UpgradeQueueAccessView.as_view()),
     path('cancel/<int:pk>/',         CancelBookingView.as_view()),
+    path('absence-refund/<int:pk>/', AbsenceRefundView.as_view()),
     path('reschedule/<int:pk>/',     RescheduleBookingView.as_view()),
 
     # ── QR Scanner endpoints ──────────────────────────────────────────────────

@@ -76,7 +76,7 @@
       "steps": [
         { "title": "Find a Doctor", "desc": "Browse by specialty, city, or hospital with live availability." },
         { "title": "Pick a Slot", "desc": "Choose a date and time and confirm in seconds." },
-        { "title": "Pay Securely", "desc": "Pay ₹15 by UPI, card, or wallet — token confirmed instantly." },
+        { "title": "Pay Securely", "desc": "Pay the consultation fee by UPI, card, or wallet — token confirmed instantly." },
         { "title": "Walk In on Time", "desc": "Track your live position and arrive when you're called." }
       ]
     },
@@ -104,8 +104,9 @@
       "heading": "Simple, Transparent Pricing",
       "sub": "No hidden fees. Pay only for what you need.",
       "badge": "Best Value",
-      "planName": "Queue View",
-      "planSub": "Per appointment · No hidden fees",
+      "planName": "Booking Fee",
+      "planSub": "Per appointment · doctor’s consultation fee shown at checkout",
+      "note": "+ payment gateway & 18% GST",
       "features": [
         "Confirmed token number",
         "Appointment details",

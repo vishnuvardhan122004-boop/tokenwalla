@@ -20,7 +20,8 @@ python-decouple==3.8
 PyJWT==2.10.1
 
 # ── Payments ──────────────────────────────────────────────────────────────────
-# razorpay 2.0.1: removed pkg_resources dep, compatible with Python 3.12-3.14
+# Razorpay Payment Gateway SDK (patient checkout). Doctor payouts are manual —
+# no payout SDK/API needed.
 razorpay==2.0.1
 
 # ── HTTP ──────────────────────────────────────────────────────────────────────
