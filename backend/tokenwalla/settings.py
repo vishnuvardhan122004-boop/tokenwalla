@@ -1,3 +1,5 @@
+import sys
+
 import dj_database_url
 from pathlib import Path
 from decouple import config, Csv
@@ -280,3 +282,10 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD            = True
     SECURE_PROXY_SSL_HEADER        = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# The test client speaks plain HTTP, so SECURE_SSL_REDIRECT turns every request
+# into a 301 and the whole suite fails on status codes. Whether the suite runs
+# is then decided by whatever DEBUG happens to be in the local .env, which is
+# not something a test result should depend on.
+if 'test' in sys.argv:
+    SECURE_SSL_REDIRECT = False
