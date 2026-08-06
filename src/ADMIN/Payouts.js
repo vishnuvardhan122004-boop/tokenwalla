@@ -23,6 +23,8 @@ const Payouts = () => {
 
   const total = rows.reduce((a, r) => a + Number(r.pending_amount || 0), 0);
 
+  const copy = (text) => navigator.clipboard?.writeText(text);
+
   const markPaid = async (row) => {
     const ok = window.confirm(
       `Confirm you have ALREADY transferred ₹${row.pending_amount} to ${row.recipient_name}.\n\n` +
@@ -66,6 +68,8 @@ const Payouts = () => {
         .po-table tr:hover td { background: var(--blue-50); }
         .po-badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 100px; font-size: 12px; font-weight: 600; background: var(--blue-50); color: var(--blue-700); border: 1px solid var(--blue-200); }
         .po-badge.none { background: var(--color-warning-bg); color: var(--color-warning-text); border-color: var(--color-warning-border); }
+        .po-acct { margin-top: 6px; font-size: 12px; line-height: 1.5; color: var(--gray-600); font-family: ui-monospace, monospace; cursor: pointer; }
+        .po-acct:hover { color: var(--blue-700); }
         .po-amount { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; color: var(--blue-600); }
         .po-btn { padding: 8px 14px; border-radius: 10px; border: none; background: var(--blue-600); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
         .po-btn:hover:not(:disabled) { background: var(--blue-800); }
@@ -121,7 +125,7 @@ const Payouts = () => {
                   <th>Doctor</th>
                   <th>Hospital</th>
                   <th>Pay To</th>
-                  <th>Rail</th>
+                  <th>Pay Into</th>
                   <th>Amount Due</th>
                   <th />
                 </tr>
@@ -146,6 +150,18 @@ const Payouts = () => {
                       {r.mode
                         ? <span className="po-badge">{r.mode}</span>
                         : <span className="po-badge none">No details on file</span>}
+                      {r.mode === 'UPI' && r.upi_vpa && (
+                        <div className="po-acct" title="Click to copy" onClick={() => copy(r.upi_vpa)}>
+                          {r.upi_vpa}
+                        </div>
+                      )}
+                      {r.mode === 'IMPS' && (
+                        <div className="po-acct" title="Click to copy" onClick={() => copy(`${r.account_number} ${r.ifsc}`)}>
+                          {r.bank_name && <>{r.bank_name}<br /></>}
+                          A/C {r.account_number}<br />
+                          IFSC {r.ifsc}
+                        </div>
+                      )}
                     </td>
                     <td className="po-amount">₹{Number(r.pending_amount).toFixed(2)}</td>
                     <td style={{ textAlign: 'right' }}>

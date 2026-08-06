@@ -765,13 +765,20 @@ class PendingPayoutsView(APIView):
             doctor = (Doctor.objects.select_related('hospital')
                       .get(pk=row['doctor_id']))
             target = payout_target(doctor)
+            mode   = choose_mode(target)
             rows.append({
                 'doctor_id':      doctor.id,
                 'doctor_name':    doctor.name,
                 'hospital_name':  doctor.hospital.name if doctor.hospital_id else None,
                 'pay_to':         'hospital' if target is not doctor else 'doctor',
                 'recipient_name': target.account_holder_name or target.name,
-                'mode':           choose_mode(target),
+                'mode':           mode,
+                # Where to actually send it — staff wire this by hand, so the
+                # page has to show the account, not just the rail.
+                'upi_vpa':        (target.upi_vpa or '').strip() if mode == 'UPI' else '',
+                'bank_name':      (target.bank_name or '').strip() if mode == 'IMPS' else '',
+                'account_number': (target.bank_account_number or '').strip() if mode == 'IMPS' else '',
+                'ifsc':           (target.ifsc or '').strip() if mode == 'IMPS' else '',
                 'pending_amount': str(amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
             })
         rows.sort(key=lambda r: r['doctor_name'])
