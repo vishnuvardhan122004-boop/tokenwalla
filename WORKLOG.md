@@ -16,6 +16,142 @@ Newest entry on top. Update the **Status** columns as things land.
 
 ---
 
+## 2026-08-06 (auto) — Session update @ 14:28
+
+Auto-generated snapshot (branch `fix/token-page-pay-at-clinic-note`, 1 changed file).
+
+```
+M WORKLOG.md
+```
+
+---
+
+
+## 2026-08-06 (auto) — Session update @ 14:26
+
+Auto-generated snapshot (branch `fix/token-page-pay-at-clinic-note`, 3 changed files).
+
+```
+M WORKLOG.md
+ M backend/payments/views.py
+ M src/ADMIN/Payouts.js
+```
+
+---
+
+
+## 2026-08-06 (auto) — Session update @ 12:58
+
+Auto-generated snapshot (branch `fix/token-page-pay-at-clinic-note`, 1 changed file).
+
+```
+M WORKLOG.md
+```
+
+---
+
+
+## 2026-08-06 (auto) — Session update @ 12:56
+
+Auto-generated snapshot (branch `fix/token-page-pay-at-clinic-note`, 1 changed file).
+
+```
+M WORKLOG.md
+```
+
+---
+
+
+## 2026-08-06 (auto) — Session update @ 11:41
+
+Auto-generated snapshot (branch `fix/token-page-pay-at-clinic-note`, 1 changed file).
+
+```
+M WORKLOG.md
+```
+
+---
+
+
+## 2026-08-06 (auto) — Session update @ 03:33
+
+Auto-generated snapshot (branch `fix/token-page-pay-at-clinic-note`, 1 changed file).
+
+```
+M WORKLOG.md
+```
+
+---
+
+
+## 2026-08-06 (auto) — Session update @ 03:28
+
+Auto-generated snapshot (branch `fix/token-page-pay-at-clinic-note`, 1 changed file).
+
+```
+M WORKLOG.md
+```
+
+---
+
+
+## 2026-08-05 (auto) — Session update @ 22:22
+
+Auto-generated snapshot (branch `fix/token-page-pay-at-clinic-note`, 1 changed file).
+
+```
+M WORKLOG.md
+```
+
+---
+
+
+## 2026-08-05 (auto) — Session update @ 22:20
+
+Auto-generated snapshot (branch `fix/token-page-pay-at-clinic-note`, 1 changed file).
+
+```
+M WORKLOG.md
+```
+
+---
+
+
+## 2026-08-05 (auto) — Session update @ 22:19
+
+Auto-generated snapshot (branch `main`, 3 changed files).
+
+```
+M WORKLOG.md
+ M src/componets/BookingToken.js
+ M src/componets/Payment.js
+```
+
+---
+
+
+## 2026-08-05 (auto) — Session update @ 22:09
+
+Auto-generated snapshot (branch `main`, 1 changed file).
+
+```
+M WORKLOG.md
+```
+
+---
+
+
+## 2026-08-05 (auto) — Session update @ 22:02
+
+Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 1 changed file).
+
+```
+M CLAUDE.md
+```
+
+---
+
+
 ## 2026-08-05 (auto) — Session update @ 21:20
 
 Auto-generated snapshot (branch `feature/fee-splitting-refunds-payouts`, 10 changed files).
