@@ -74,9 +74,14 @@ same DB/env vars):
 
 | Command | Config file | Schedule | Purpose |
 |---|---|---|---|
-| `python manage.py run_daily_payouts` | `backend/railway.payouts.cron.json` | `30 20 * * *` (daily) | Ledger completed bookings so each doctor's outstanding balance is up to date |
+| `python manage.py run_daily_payouts` | `backend/railway.payouts.cron.json` | `0 15 * * *` (daily, 20:30 IST) | Ledger completed bookings so each doctor's outstanding balance is up to date |
 
 Notes:
+- **Railway cron schedules are UTC.** `0 15 * * *` is 20:30 IST — late enough
+  that Razorpay's settlement for the day has landed. Writing the IST time
+  directly (`30 20 * * *`) would run it at 02:00 IST the *next* day, ahead of
+  some settlements, and the run would look fine in the logs while ledgering
+  less than it should.
 - **Nothing is deducted from a doctor or billed to a hospital.** TokenWalla's
   revenue is the patient's service fee, collected at checkout. The amount owed
   is exactly `Payment.doctor_fee`.
