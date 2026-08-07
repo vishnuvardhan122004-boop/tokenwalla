@@ -5,7 +5,7 @@ scheduled management command that must run every ~10 minutes:
 
     python manage.py send_appointment_reminders
 
-It finds `waiting` bookings whose slot starts in ~1h50m–2h10m and sends one WhatsApp
+It finds `CONFIRMED` bookings whose slot starts in ~1h50m–2h10m and sends one WhatsApp
 reminder each (idempotent — `reminder_sent` flag prevents duplicates).
 
 ## One-time Railway setup
