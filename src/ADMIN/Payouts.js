@@ -5,6 +5,31 @@ import API from '../services/api';
 // TokenWalla's own bank account / UPI, then mark it paid here so the ledger
 // stops showing it as outstanding.
 
+const CSV_COLS = ['Recipient', 'Mode', 'UPI ID', 'Account Number', 'IFSC', 'Amount', 'Remarks'];
+
+// A name a doctor typed themselves lands in a file a human opens in Excel, so
+// neutralise the formula-trigger characters before quoting.
+const csvCell = (v) => {
+  const s = String(v ?? '');
+  return `"${(/^[=+\-@]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"`;
+};
+
+// Bulk-transfer file for the bank's upload. Rows with no rail (`mode` null)
+// have nowhere to send the money, so they stay off the file — same rows the
+// table badges as "No details on file".
+export const buildPayoutCsv = (rows) => [
+  CSV_COLS,
+  ...rows.filter(r => r.mode).map(r => [
+    r.recipient_name,
+    r.mode,
+    r.upi_vpa || '',
+    r.account_number || '',
+    r.ifsc || '',
+    Number(r.pending_amount).toFixed(2),
+    `TokenWalla payout ${r.doctor_name}`,
+  ]),
+].map(cols => cols.map(csvCell).join(',')).join('\r\n');
+
 const Payouts = () => {
   const [rows,    setRows]    = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +49,20 @@ const Payouts = () => {
   const total = rows.reduce((a, r) => a + Number(r.pending_amount || 0), 0);
 
   const copy = (text) => navigator.clipboard?.writeText(text);
+
+  const payable = rows.filter(r => r.mode).length;
+
+  const downloadCsv = () => {
+    const url = URL.createObjectURL(
+      new Blob([buildPayoutCsv(rows)], { type: 'text/csv;charset=utf-8' })
+    );
+    const a = Object.assign(document.createElement('a'), {
+      href: url,
+      download: `tokenwalla-payouts-${new Date().toISOString().slice(0, 10)}.csv`,
+    });
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const markPaid = async (row) => {
     const ok = window.confirm(
@@ -74,6 +113,10 @@ const Payouts = () => {
         .po-btn { padding: 8px 14px; border-radius: 10px; border: none; background: var(--blue-600); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
         .po-btn:hover:not(:disabled) { background: var(--blue-800); }
         .po-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .po-btn.ghost { background: #fff; color: var(--blue-700); border: 1px solid var(--blue-200); }
+        .po-btn.ghost:hover:not(:disabled) { background: var(--blue-50); }
+        .po-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 18px; border-bottom: 1px solid var(--blue-50); }
+        .po-toolbar-note { font-size: 12px; color: var(--gray-400); }
         .po-empty { text-align: center; padding: 60px 20px; color: var(--gray-400); font-size: 14px; }
         @media (max-width: 700px) { .po-stats { grid-template-columns: 1fr; } }
       `}</style>
@@ -118,6 +161,15 @@ const Payouts = () => {
         </div>
       ) : (
         <div className="po-card">
+          <div className="po-toolbar">
+            <button className="po-btn ghost" onClick={downloadCsv} disabled={!payable}>
+              ⬇ Export bulk-transfer CSV
+            </button>
+            <span className="po-toolbar-note">
+              {payable} of {rows.length} payable
+              {payable < rows.length && ' — the rest have no account on file'}
+            </span>
+          </div>
           <div style={{ overflowX: 'auto' }}>
             <table className="po-table">
               <thead>
