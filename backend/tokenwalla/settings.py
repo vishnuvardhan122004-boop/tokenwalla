@@ -214,6 +214,7 @@ WHATSAPP_TEMPLATE_BOOKING_CONFIRM = config('WHATSAPP_TEMPLATE_BOOKING_CONFIRM', 
 WHATSAPP_TEMPLATE_REMINDER       = config('WHATSAPP_TEMPLATE_REMINDER', default='appointment_reminder')
 WHATSAPP_TEMPLATE_DOCTOR_UNAVAILABLE = config('WHATSAPP_TEMPLATE_DOCTOR_UNAVAILABLE', default='doctor_unavailable')
 WHATSAPP_TEMPLATE_HOSPITAL_NEW_BOOKING = config('WHATSAPP_TEMPLATE_HOSPITAL_NEW_BOOKING', default='hospital_new_booking')
+WHATSAPP_TEMPLATE_DOCTOR_PAYOUT  = config('WHATSAPP_TEMPLATE_DOCTOR_PAYOUT', default='doctor_payout')
 WHATSAPP_TEMPLATE_LANG           = config('WHATSAPP_TEMPLATE_LANG', default='en')
 ADMIN_SETUP_KEY = config('ADMIN_SETUP_KEY', default='')
 # ── Logging ───────────────────────────────────────────────────────────────────

@@ -153,6 +153,50 @@ Please arrive a few minutes early. Booking reference {{6}}. Track your live queu
 
 ---
 
+## 5. `doctor_payout`  ← submit this
+
+Sent when an admin marks a doctor's pending balance as paid on
+`/Adashboard/payouts` (`payments.views.MarkPayoutPaidView`). Sender:
+`send_doctor_payout_paid(batch)`.
+
+Doctors have **no TokenWalla login** — the `Doctor` model carries a `mobile`,
+not a `User` — so there is no push token to send to and WhatsApp is the only
+channel that reaches them. Goes to `doctor.mobile`, so no patient
+`whatsapp_opt_in` gate applies.
+
+| Field | Value |
+|-------|-------|
+| **Name** | `doctor_payout` |
+| **Category** | **Utility** (transactional) |
+| **Language** | English (`en`) |
+| **Header** | None |
+| **Footer** | `TokenWalla` |
+| **Buttons** | None |
+
+**Body** (sentence form — paste exactly):
+
+```
+Hi {{1}}, your TokenWalla payout of ₹{{2}} for consultations at {{3}} has been transferred.
+
+Reference {{4}}. Please allow a few hours for it to reflect in your account.
+```
+
+**Variable mapping** (order matters — matches the `params` list in code):
+
+| Placeholder | Meaning | Sample value for review |
+|-------------|---------|-------------------------|
+| `{{1}}` | Doctor name | Anita Rao |
+| `{{2}}` | Amount paid, 2 decimals | 1250.00 |
+| `{{3}}` | Hospital name | City Care Clinic |
+| `{{4}}` | Payment reference / UTR (`NA` when the admin left it blank) | UTR123456789 |
+
+> Meta rejects blank template params, so an empty reference is sent as `NA`
+> rather than `''`.
+
+Env var: `WHATSAPP_TEMPLATE_DOCTOR_PAYOUT` (default `doctor_payout`).
+
+---
+
 ## Submission checklist
 
 1. WhatsApp Manager → **Message templates** → **Create template**.

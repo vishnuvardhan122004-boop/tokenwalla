@@ -129,6 +129,28 @@ def _dispatch_booking_notifications(booking):
     ).start()
 
 
+def _notify_doctor_payout_async(batch):
+    """Tell the doctor their payout was sent — background thread, same contract
+    as _notify_booking_async: the PayoutBatch is already committed, so a failed
+    or slow WhatsApp call is logged and never surfaces to the admin.
+    """
+    from notifications.whatsapp import send_doctor_payout_paid
+
+    def _run():
+        try:
+            send_doctor_payout_paid(batch)
+        except Exception as exc:
+            logger.warning('Doctor payout WhatsApp failed for batch %s: %s', batch.id, exc)
+        finally:
+            connection.close()
+
+    threading.Thread(
+        target=_run,
+        name=f'payout-notify-{batch.id}',
+        daemon=True,
+    ).start()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CreateOrderView  — full-fee booking orders + the ₹5 reschedule fee
 # ─────────────────────────────────────────────────────────────────────────────
@@ -842,6 +864,15 @@ class MarkPayoutPaidView(APIView):
 
         logger.info('Payout batch %s: doctor %s paid ₹%s manually (ref=%s)',
                     batch.id, doctor_id, total, reference or '—')
+
+        # Tell the doctor their money went out. Best-effort and off the request
+        # thread: the payout is already recorded, so a slow or failing Meta call
+        # must never fail the admin's "mark paid" action.
+        # `doctor` already has `hospital` select_related — attach it so the
+        # background thread doesn't lazy-load either FK on its own connection.
+        batch.doctor = doctor
+        _notify_doctor_payout_async(batch)
+
         return Response({
             'success': True,
             'batch_id': batch.id,

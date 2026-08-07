@@ -219,3 +219,45 @@ def send_appointment_reminder(booking):
     if result['success']:
         booking.reminder_sent = True
         booking.save(update_fields=['reminder_sent'])
+
+
+def send_doctor_payout_paid(batch):
+    """Tell the doctor on WhatsApp that their pending balance has been paid out.
+
+    batch: a PayoutBatch that has just been marked PROCESSED by
+    payments.views.MarkPayoutPaidView. Doctors have no TokenWalla login (the
+    Doctor model carries a `mobile`, not a User), so WhatsApp is the ONLY channel
+    that reaches them — there is no push token to send to.
+
+    Goes to doctor.mobile, so no patient `whatsapp_opt_in` gate applies.
+
+    Template body (see notifications/WHATSAPP_TEMPLATES.md) params:
+      {{1}} doctor name  {{2}} amount  {{3}} hospital name  {{4}} reference
+    """
+    from .models import WhatsAppLog
+
+    doctor = batch.doctor
+    if not doctor.mobile:
+        logger.info('[notifications] doctor %s has no mobile — skipping payout WhatsApp', doctor.id)
+        return
+
+    # Meta rejects blank template params, so an absent UTR needs a placeholder.
+    reference = (batch.razorpay_payout_id or '').strip() or 'NA'
+
+    result = send_template(
+        to_mobile=doctor.mobile,
+        template_name=settings.WHATSAPP_TEMPLATE_DOCTOR_PAYOUT,
+        params=[
+            doctor.name,
+            f'{batch.total_amount:.2f}',
+            doctor.hospital.name,
+            reference,
+        ],
+    )
+    WhatsAppLog.objects.create(
+        booking=None,
+        event_type='doctor_payout',
+        status='sent' if result['success'] else 'failed',
+        wa_message_id=result.get('message_id') or '',
+        error=result.get('error') or '',
+    )
