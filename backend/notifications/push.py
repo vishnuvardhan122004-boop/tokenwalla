@@ -98,6 +98,23 @@ def push_to_user(user, title, body, data=None, role='patient'):
         logger.warning('[push] push_to_user(%s) failed: %s', getattr(user, 'id', '?'), exc)
 
 
+def push_to_hospital(hospital_id, title, body, data=None):
+    """Push to every device registered by any staff account of one hospital."""
+    try:
+        staff_ids = _hospital_user_ids(hospital_id)
+        if not staff_ids:
+            logger.info('[push] hospital %s has no staff accounts — skipping', hospital_id)
+            return
+        tokens = (
+            DeviceToken.objects
+            .filter(user_id__in=staff_ids, role='hospital')
+            .values_list('expo_token', flat=True)
+        )
+        _send(list(tokens), title, body, data)
+    except Exception as exc:
+        logger.warning('[push] push_to_hospital(%s) failed: %s', hospital_id, exc)
+
+
 # ── Event helpers used by the views ──────────────────────────────────────────
 
 def push_doctor_unavailable(booking):
@@ -152,17 +169,9 @@ def push_booking_in_progress(booking):
 def push_new_booking_to_hospital(booking):
     """Hospital alert on a new booking, independent of the dashboard being open."""
     try:
-        staff_ids = _hospital_user_ids(booking.hospital_id)
-        if not staff_ids:
-            return
-        tokens = (
-            DeviceToken.objects
-            .filter(user_id__in=staff_ids, role='hospital')
-            .values_list('expo_token', flat=True)
-        )
         patient = booking.user.first_name or booking.user.username
-        _send(
-            list(tokens),
+        push_to_hospital(
+            booking.hospital_id,
             title='🔔 New Appointment Booked',
             body=f'{patient} booked {booking.doctor.name} at {booking.slot}. Token {booking.token}.',
             data={
@@ -175,3 +184,137 @@ def push_new_booking_to_hospital(booking):
         )
     except Exception as exc:
         logger.warning('[push] new-booking push failed for booking %s: %s', booking.id, exc)
+
+
+def push_booking_cancelled(booking, refund_info=None):
+    """Patient alert after they cancel — names the refund so the tiered
+    percentage isn't a surprise they only discover on their bank statement.
+
+    refund_info is the dict from payments.refunds.process_cancellation_refund:
+    {'refunded': bool, 'percentage': str, 'amount': str}.
+    """
+    try:
+        info = refund_info or {}
+        if info.get('refunded'):
+            money = f'A refund of ₹{info.get("amount", "0")} is on its way — allow 5-7 working days.'
+        else:
+            # No pool to refund (e.g. service-only booking, or cancelled too late
+            # for the tier to pay out). Say so rather than implying money is coming.
+            money = 'No refund was due on this booking.'
+        push_to_user(
+            booking.user,
+            title='Booking cancelled',
+            body=f'Token {booking.token} with {booking.doctor.name} is cancelled. {money}',
+            data={
+                'screen': 'my-bookings',
+                'type': 'booking_cancelled',
+                'appId': f'cancel-{booking.id}',
+                'audience': 'patient',
+                'token': booking.token,
+            },
+            role='patient',
+        )
+    except Exception as exc:
+        logger.warning('[push] cancelled push failed for booking %s: %s', booking.id, exc)
+
+
+def push_booking_on_hold(booking):
+    """Patient alert when staff skip them (CONFIRMED → ON_HOLD).
+
+    Without this the queue visibly moves past the patient with no explanation —
+    the most common reason someone walks out thinking they were forgotten.
+    """
+    try:
+        push_to_user(
+            booking.user,
+            title='Your turn is on hold',
+            body=(
+                f'{booking.hospital.name} has paused token {booking.token} for now. '
+                f'You have not lost your place — please stay nearby.'
+            ),
+            data={
+                'screen': 'my-bookings',
+                'type': 'booking_on_hold',
+                'appId': f'hold-{booking.id}',
+                'audience': 'patient',
+                'token': booking.token,
+            },
+            role='patient',
+        )
+    except Exception as exc:
+        logger.warning('[push] on-hold push failed for booking %s: %s', booking.id, exc)
+
+
+def push_booking_no_show(booking):
+    """Patient alert when the hospital marks them a no-show — terminal and
+    non-refundable, so they should hear it from us rather than find out later.
+    """
+    try:
+        push_to_user(
+            booking.user,
+            title='Marked as no-show',
+            body=(
+                f'Token {booking.token} at {booking.hospital.name} was marked as a no-show. '
+                f'No refund applies. Book again any time.'
+            ),
+            data={
+                'screen': 'my-bookings',
+                'type': 'booking_no_show',
+                'appId': f'noshow-{booking.id}',
+                'audience': 'patient',
+                'token': booking.token,
+            },
+            role='patient',
+        )
+    except Exception as exc:
+        logger.warning('[push] no-show push failed for booking %s: %s', booking.id, exc)
+
+
+def push_cancellation_to_hospital(booking):
+    """Tell the hospital a patient cancelled, so the slot can be refilled."""
+    try:
+        patient = booking.user.first_name or booking.user.username
+        push_to_hospital(
+            booking.hospital_id,
+            title='Booking cancelled',
+            body=(
+                f'{patient} cancelled token {booking.token} with {booking.doctor.name} '
+                f'at {booking.slot}. The slot is free again.'
+            ),
+            data={
+                'screen': 'hospital-dashboard',
+                'type': 'booking_cancelled',
+                'appId': f'hcancel-{booking.id}',
+                'audience': 'hospital',
+                'token': booking.token,
+            },
+        )
+    except Exception as exc:
+        logger.warning('[push] hospital cancellation push failed for booking %s: %s', booking.id, exc)
+
+
+def push_payout_to_hospital(batch):
+    """Tell the hospital a payout batch was settled.
+
+    Salaried doctors settle to the hospital's own payout account, so the hospital
+    — not the doctor — is the party that needs to reconcile this one.
+    """
+    try:
+        doctor = batch.doctor
+        ref = (batch.razorpay_payout_id or '').strip()
+        push_to_hospital(
+            doctor.hospital_id,
+            title='Payout sent',
+            body=(
+                f'₹{batch.total_amount} for {doctor.name} has been transferred'
+                f'{f" (ref {ref})" if ref else ""}.'
+            ),
+            data={
+                'screen': 'hospital-dashboard',
+                'type': 'payout_paid',
+                'appId': f'payout-{batch.id}',
+                'audience': 'hospital',
+            },
+        )
+    except Exception as exc:
+        logger.warning('[push] hospital payout push failed for batch %s: %s', batch.id, exc)

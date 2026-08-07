@@ -134,9 +134,16 @@ def _notify_doctor_payout_async(batch):
     as _notify_booking_async: the PayoutBatch is already committed, so a failed
     or slow WhatsApp call is logged and never surfaces to the admin.
     """
+    from notifications.push import push_payout_to_hospital
     from notifications.whatsapp import send_doctor_payout_paid
 
     def _run():
+        try:
+            # Hospital first: it's a push (fast, no external approval), and for a
+            # salaried doctor the money lands in the hospital's account anyway.
+            push_payout_to_hospital(batch)
+        except Exception as exc:
+            logger.warning('Hospital payout push failed for batch %s: %s', batch.id, exc)
         try:
             send_doctor_payout_paid(batch)
         except Exception as exc:

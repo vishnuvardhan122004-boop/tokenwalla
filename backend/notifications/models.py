@@ -45,6 +45,8 @@ class WhatsAppLog(models.Model):
         ('doctor_unavailable',   'Doctor Unavailable'),
         ('hospital_new_booking', 'Hospital New Booking'),
         ('doctor_payout',        'Doctor Payout Paid'),
+        ('booking_cancelled',    'Booking Cancelled'),
+        ('booking_no_show',      'Booking No-show'),
     ]
     STATUS_CHOICES = [
         ('sent',   'Sent'),

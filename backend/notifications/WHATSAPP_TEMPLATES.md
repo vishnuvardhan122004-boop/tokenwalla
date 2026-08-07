@@ -197,6 +197,91 @@ Env var: `WHATSAPP_TEMPLATE_DOCTOR_PAYOUT` (default `doctor_payout`).
 
 ---
 
+## 6. `booking_cancelled`  ← submit this
+
+Sent when a patient cancels their own booking (`bookings.views.CancelBookingView`).
+Sender: `send_booking_cancelled(booking, refund_info)`.
+
+Money moves on this one and the tiered refund is rarely 100%, so the patient
+needs a durable record — this is the event most likely to become a support
+conversation. Also pushed in-app; WhatsApp is the copy that survives.
+
+| Field | Value |
+|-------|-------|
+| **Name** | `booking_cancelled` |
+| **Category** | **Utility** (transactional) |
+| **Language** | English (`en`) |
+| **Header** | None |
+| **Footer** | `TokenWalla` |
+| **Buttons** | None |
+
+**Body** (sentence form — paste exactly):
+
+```
+Hi {{1}}, your appointment with {{2}} at {{3}} on {{4}} has been cancelled.
+
+Booking reference {{5}}. {{6}}.
+```
+
+**Variable mapping** (order matters — matches the `params` list in code):
+
+| Placeholder | Meaning | Sample value for review |
+|-------------|---------|-------------------------|
+| `{{1}}` | Patient name | Rahul |
+| `{{2}}` | Doctor name | Anita Rao |
+| `{{3}}` | Hospital name | City Care Clinic |
+| `{{4}}` | Appointment date | 2026-08-12 |
+| `{{5}}` | Booking reference (token) | TW-024607-E90BC0 |
+| `{{6}}` | Refund line | A refund of ₹112.50 will reach you in 5-7 working days |
+
+> `{{6}}` is a **pre-rendered sentence**, not just an amount — Meta templates are
+> fixed text, so the refunded / not-refunded wording has to be chosen in code.
+> The other value it takes is `No refund was due on this booking`.
+
+Env var: `WHATSAPP_TEMPLATE_BOOKING_CANCELLED` (default `booking_cancelled`).
+
+---
+
+## 7. `booking_no_show`  ← submit this
+
+Sent when hospital staff mark a patient as a no-show (`bookings.views.NoShowView`).
+Sender: `send_booking_no_show(booking)`.
+
+Terminal and non-refundable, and the patient was by definition not there to be
+told — so this is the status most often disputed afterwards. The timestamped
+WhatsApp record is what settles it.
+
+| Field | Value |
+|-------|-------|
+| **Name** | `booking_no_show` |
+| **Category** | **Utility** (transactional) |
+| **Language** | English (`en`) |
+| **Header** | None |
+| **Footer** | `TokenWalla` |
+| **Buttons** | None |
+
+**Body** (sentence form — paste exactly):
+
+```
+Hi {{1}}, your appointment with {{2}} at {{3}} on {{4}} was marked as a no-show because the token was not presented.
+
+Booking reference {{5}}. No refund applies to a no-show. You can book again any time in the TokenWalla app.
+```
+
+**Variable mapping** (order matters — matches the `params` list in code):
+
+| Placeholder | Meaning | Sample value for review |
+|-------------|---------|-------------------------|
+| `{{1}}` | Patient name | Rahul |
+| `{{2}}` | Doctor name | Anita Rao |
+| `{{3}}` | Hospital name | City Care Clinic |
+| `{{4}}` | Appointment date | 2026-08-12 |
+| `{{5}}` | Booking reference (token) | TW-024607-E90BC0 |
+
+Env var: `WHATSAPP_TEMPLATE_NO_SHOW` (default `booking_no_show`).
+
+---
+
 ## Submission checklist
 
 1. WhatsApp Manager → **Message templates** → **Create template**.
