@@ -17,6 +17,17 @@ the things that can lose money or break a live booking come first.
 
 Work these top-down. Don't start a second one until the first is merged.
 
+### ~~1. Enforce slot capacity where the booking is created~~ ✅ 2026-08-09
+
+Done on `fix/enforce-slot-capacity` (`b93be14`). Left below for the record of
+what the problem was; delete once the PR is merged.
+
+**⚠️ Not merged yet — needs a PR and CI.** And the mobile app has a follow-up:
+it should send `date`/`slot` to `/api/payment/create-order/` so a collision is
+rejected before payment instead of charge-then-refund. It works without it.
+
+<details><summary>original entry</summary>
+
 ### 1. Enforce slot capacity where the booking is created 🔴
 
 **Why first:** `payments/views.py:_handle_new_booking` creates the booking
@@ -39,6 +50,8 @@ Full analysis in `CAPACITY.md` §1.
 
 **Done when:** a test books two patients concurrently into a 1-seat slot, one
 succeeds, one is rejected and refunded.
+
+</details>
 
 ### 2. Bound `HospitalQueueView` 🔴
 
