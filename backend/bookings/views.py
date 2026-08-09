@@ -1,12 +1,15 @@
 import logging
 import threading
 
+from datetime import timedelta
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django.db import connection, transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from .models import Booking
 from .serializers import BookingSerializer, build_queue_map
@@ -24,6 +27,14 @@ from notifications.push import (
 from notifications.whatsapp import send_booking_cancelled, send_booking_no_show
 
 logger = logging.getLogger('tokenwalla')
+
+# How far the hospital queue looks either side of today. The look-back keeps
+# bookings left in an active status on a previous day visible so staff can
+# close them out; the look-ahead covers the dashboard's Tomorrow and All tabs
+# with room to spare. Both exist to stop the queue query growing without
+# bound — see HospitalQueueView.
+QUEUE_LOOKBACK_DAYS  = 7
+QUEUE_LOOKAHEAD_DAYS = 30
 
 
 def _whatsapp_async(send, booking, label):
@@ -91,9 +102,31 @@ class HospitalQueueView(APIView):
                 status=403
             )
 
+        # Bound the queue to a date window.
+        #
+        # This filtered on hospital + status only, with no date bound and no
+        # pagination — so every CONFIRMED/ON_HOLD/IN_PROGRESS booking the
+        # hospital had EVER taken was serialised on every poll, and the
+        # dashboard polls every 10 seconds. The set only grows: abandoned past
+        # bookings never leave an active status on their own. CAPACITY.md §2
+        # called this the first endpoint that would fall over.
+        #
+        # Not filtered to today, though the analysis suggested it — the
+        # dashboard has Today / Tomorrow / All tabs (Hdashboard.js `dayFilter`)
+        # and today-only would silently empty two of them. A window keeps every
+        # tab working while dropping the unbounded tail.
+        #
+        # The look-back is deliberate: a booking left CONFIRMED or ON_HOLD from
+        # a previous day is exactly what staff need to see in order to close it
+        # out (the same rows the admin daily check flags as `stale_queue`).
+        today = timezone.localdate()
+        window_start = today - timedelta(days=QUEUE_LOOKBACK_DAYS)
+        window_end   = today + timedelta(days=QUEUE_LOOKAHEAD_DAYS)
+
         base = (
             Booking.objects
-            .filter(hospital_id=hospital_id)
+            .filter(hospital_id=hospital_id,
+                    date__gte=window_start, date__lte=window_end)
             .select_related('doctor', 'user')
         )
 
