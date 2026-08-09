@@ -28,9 +28,16 @@ patient until it is on `main`.
 git push -u origin fix/enforce-slot-capacity
 ```
 
-Then `/ship` for the gate, open the PR, let CI run, merge. Railway migrates and
-deploys separately — there is no migration in this branch, so the deploy is
-just code.
+Then `/ship` for the gate, open the PR, let CI run, merge.
+
+**There IS one migration: `users/0003_ratecounter`.** It is a plain
+`CreateModel` — a new table, nothing dropped or renamed — so it is safe under
+the additive-only rule and safe to run BEFORE the code that uses it, which is
+the order Railway does it in. No existing booking, payment or ledger row is
+touched.
+
+CI now runs on the PR itself (it used to run only after a merge, which was too
+late to stop anything), and gates on `makemigrations --check`.
 
 **Call out in the PR body** (the app is a separate repo and cannot be updated
 on your schedule):
