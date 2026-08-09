@@ -1,11 +1,28 @@
-name: Deploy TokenWalla
+# TokenWalla CI
+#
+# This runs TESTS ONLY. It does not deploy.
+#
+# Deployment is Railway's own GitHub integration (API) and Vercel's (website),
+# both triggered by a push to `main`. This workflow used to POST to Render
+# deploy hooks; the project left Render entirely, so those steps were firing at
+# a dead secret on every merge and turning the run red for no reason — which
+# matters, because Railway's "Wait for CI" setting will hold a deploy back on a
+# red run.
+#
+# It runs on pull_request as well as push. It previously ran only on push to
+# main/develop, which meant CI executed AFTER a merge — too late to stop
+# anything. A PR to a live product needs the tests green BEFORE it lands.
+
+name: CI
 
 on:
+  pull_request:
   push:
     branches: [main, develop]
 
 jobs:
-  test-and-deploy:
+  backend:
+    name: Backend tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -18,6 +35,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -27,12 +46,46 @@ jobs:
           SECRET_KEY: ci-test-secret-key
           DEBUG: 'True'
           DATABASE_URL: sqlite:///test.db
+          # Left unset on purpose: the cache must fall back to the database
+          # table under test. settings.py forces LocMemCache during the suite
+          # regardless, so this only documents the intent.
+          USE_REDIS_CACHE: 'False'
         run: python manage.py test --verbosity=2
 
-      - name: Deploy to Production (Render)
-        if: github.ref == 'refs/heads/main'
-        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_PROD }}
+      # Migrations run as a separate Railway step BEFORE the code that needs
+      # them deploys, against real bookings and ledger rows. A model change that
+      # never got a migration would break that ordering silently.
+      - name: Check for missing migrations
+        env:
+          SECRET_KEY: ci-test-secret-key
+          DEBUG: 'True'
+          DATABASE_URL: sqlite:///test.db
+        run: python manage.py makemigrations --check --dry-run
 
-      - name: Deploy to Staging (Render)
-        if: github.ref == 'refs/heads/develop'
-        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}
+  frontend:
+    name: Website tests & build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npx react-scripts test --watchAll=false
+        env:
+          CI: 'true'
+
+      # Vercel builds on its own, but catching a broken build here means the PR
+      # goes red instead of the live website.
+      - name: Build
+        run: npm run build
+        env:
+          CI: 'false'

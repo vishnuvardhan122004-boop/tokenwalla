@@ -17,9 +17,16 @@ are not suggestions.
 - Touch the production database. No `railway run`, no `railway connect`, no
   `psql`. If something can only be diagnosed against prod, say so and hand it to
   Vishnu — don't improvise.
-- Push to `main` or `develop`. Both deploy (see `.github/workflows/deploy.yml`).
-  Work on a feature branch, open a PR, let CI run the tests.
+- Push to `main` or `develop`. Both deploy. Work on a feature branch, open a
+  PR, let CI run the tests.
 - Deploy. No `vercel --prod`, no deploy hooks. Merging is the deploy.
+
+**Deployment is Railway + Vercel only. Render is gone** — don't reintroduce it,
+and treat any older note mentioning a Render deploy hook as stale.
+`.github/workflows/deploy.yml` is named for history but runs **tests only**;
+Railway and Vercel each deploy off their own GitHub integration on a push to
+`main`. Keep CI green — Railway's "Wait for CI" will hold a deploy back on a
+red run.
 - Put an `rzp_live_` key anywhere near local dev — it charges a real card on
   every test payment. Razorpay has no sandbox for live credentials.
 
