@@ -123,6 +123,14 @@ class OtpCapTests(TestCase):
             RateCounter.objects.filter(key=f'otp_attempts:{self.MOBILE}').exists())
 
 
+# The base class is chosen at import time, not merely skipped. Real threads need
+# committed transactions, so this must be a TransactionTestCase on Postgres. CI
+# runs SQLite, where the class can never execute anyway, and a TransactionTestCase
+# there only adds a destructive table flush on teardown for no benefit.
+_ConcurrencyBase = (TransactionTestCase if connection.vendor == 'postgresql'
+                    else TestCase)
+
+
 @unittest.skipUnless(
     connection.vendor == 'postgresql',
     'Needs Postgres. SQLite in shared-cache mode raises "database table is '
@@ -130,7 +138,7 @@ class OtpCapTests(TestCase):
     'would be testing the harness, not the lock. Production is Postgres — run '
     'this against it with DATABASE_URL=postgres://... before trusting the cap.'
 )
-class ConcurrentCapTests(TransactionTestCase):
+class ConcurrentCapTests(_ConcurrencyBase):
     """The regression this whole change exists for.
 
     TransactionTestCase, not TestCase: real threads need real committed

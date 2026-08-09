@@ -15,11 +15,12 @@ Run:  python manage.py test payments.tests_capacity
 """
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -164,7 +165,20 @@ class PrePaymentRejectionTests(CapacityMixin, TestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 # After the money moves — the part that must never keep a patient's money
 # ─────────────────────────────────────────────────────────────────────────────
+@mock.patch('payments.views._dispatch_booking_notifications', lambda b: None)
 class OversellRefundTests(CapacityMixin, TestCase):
+    """
+    The notification dispatch is stubbed for a reason that is easy to miss.
+    A successful /verify/ fires WhatsApp + push on a BACKGROUND THREAD, which
+    opens its own database connection and outlives the test. Against Django's
+    shared-cache in-memory SQLite that stray connection intermittently collides
+    with the next test's very first INSERT and fails it with "database table is
+    locked" — in a completely unrelated test, minutes later, only sometimes.
+
+    tests_integration.VerifyNewBookingTests stubs it for the same reason. Any
+    new test that books through the API must do the same.
+    """
+
     URL = '/api/payment/verify/'
 
     def setUp(self):
@@ -294,23 +308,29 @@ class ConcurrentBookingTests(CapacityMixin, TestCase):
         self.assertFalse(Booking.objects.filter(token='TW-RACE-2').exists())
 
 
-class LockedCheckGuardTests(CapacityMixin, TransactionTestCase):
+class LockedCheckGuardTests(CapacityMixin, TestCase):
     """The lock is the whole point: running the check unlocked would give false
     confidence against exactly the race it exists to stop, so it refuses.
 
-    TransactionTestCase, not TestCase — TestCase wraps every test in an atomic
-    block, which would make the guard pass vacuously.
+    TestCase wraps every test in an atomic block, so the "outside a transaction"
+    case is simulated by patching the connection rather than by using
+    TransactionTestCase. A TransactionTestCase would truncate tables on
+    teardown, which is a lot of destructive machinery to assert one guard
+    clause — and this suite had none before.
     """
 
-    def test_locked_check_refuses_to_run_outside_a_transaction(self):
-        from bookings.capacity import check_slot_available_locked
+    def setUp(self):
         self.make_world(max_per_slot=1)
+
+    @mock.patch('bookings.capacity.transaction.get_connection')
+    def test_locked_check_refuses_to_run_outside_a_transaction(self, m_conn):
+        from bookings.capacity import check_slot_available_locked
+        m_conn.return_value = SimpleNamespace(in_atomic_block=False)
         with self.assertRaises(RuntimeError):
             check_slot_available_locked(self.doctor.id, self.tomorrow, SLOT)
 
     def test_inside_a_transaction_it_runs(self):
         from bookings.capacity import check_slot_available_locked
-        self.make_world(max_per_slot=1)
         with transaction.atomic():
             doctor = check_slot_available_locked(
                 self.doctor.id, self.tomorrow, SLOT)
