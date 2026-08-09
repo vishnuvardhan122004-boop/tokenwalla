@@ -20,3 +20,4 @@ src/.env
 .claude/settings.local.json
 .claude/worktrees/
 .claude/skills/
+.claude/launch.json

@@ -175,7 +175,10 @@ class BookForOtherTests(TestCase):
             'doctorId': self.doctor.id,
             'doctorName': self.doctor.name,
             'hospital': self.hospital.name,
-            'date': str(datetime.date.today()),
+            # Far enough out to clear BOOKING_CUTOFF_HOURS, now enforced
+            # server-side on checkout (bookings/capacity.py). Today's 09:00 AM
+            # is in the past by the time this suite runs.
+            'date': str(datetime.date.today() + datetime.timedelta(days=3)),
             'slot': '09:00 AM',
             'queue_access': True,
         }

@@ -19,6 +19,7 @@ integration.
 
 Run:  python manage.py test payments
 """
+from datetime import timedelta
 from decimal import Decimal
 from unittest import mock
 
@@ -38,6 +39,13 @@ from payments.fees import compute_fee_breakdown
 from payments.payout_utils import choose_mode, payout_target
 
 User = get_user_model()
+
+# Booking dates must be far enough out to clear BOOKING_CUTOFF_HOURS, which is
+# now enforced server-side on the checkout path (bookings/capacity.py) and not
+# only in the UI. Computed rather than a literal so these tests don't quietly
+# start failing once the hard-coded date drifts into the past — which is
+# exactly what happened to the fixed '2026-08-01' this replaced.
+FUTURE_DATE = str(timezone.localdate() + timedelta(days=3))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -142,7 +150,7 @@ class VerifyNewBookingTests(WorldMixin, TestCase):
     def _verify(self, **overrides):
         body = {
             'order_id': 'order_book',
-            'booking': {'doctorId': self.doctor.id, 'date': '2026-08-01', 'slot': '09:00 AM'},
+            'booking': {'doctorId': self.doctor.id, 'date': FUTURE_DATE, 'slot': '09:00 AM'},
         }
         body.update(overrides)
         return self.client.post('/api/payment/verify/', body, format='json')
@@ -184,11 +192,17 @@ class VerifyNewBookingTests(WorldMixin, TestCase):
         self.assertIn('mismatch', r.json()['message'].lower())
         self.assertFalse(Booking.objects.filter(payment_id='rzp_pay_1').exists())
 
+    @mock.patch('payments.views.refund_payment', return_value={'id': 'rfnd_slot'})
     @mock.patch('payments.views.confirm_order_paid')
-    def test_invalid_slot_rejected(self, mock_confirm):
+    def test_invalid_slot_rejected(self, mock_confirm, mock_refund):
         mock_confirm.return_value = self._confirm()
-        r = self._verify(booking={'doctorId': self.doctor.id, 'date': '2026-08-01', 'slot': '11:59 PM'})
+        r = self._verify(booking={'doctorId': self.doctor.id, 'date': FUTURE_DATE, 'slot': '11:59 PM'})
         self.assertEqual(r.status_code, 400)
+        # Status stays 400 for installed clients, but the money no longer
+        # stays with us: this path used to reject *after* capture and keep it.
+        self.assertTrue(r.json()['refunded'])
+        self.assertEqual(mock_refund.call_args[0][1], self.amount)
+        self.assertFalse(Booking.objects.filter(payment_id='rzp_pay_1').exists())
 
     @mock.patch('payments.views.confirm_order_paid')
     def test_duplicate_verify_is_idempotent(self, mock_confirm):
@@ -234,7 +248,7 @@ class VerifyOrderBindingTests(WorldMixin, TestCase):
         r = self.client.post('/api/payment/verify/', {
             'order_id': 'order_book',
             # Paid for self.doctor (₹200) — claiming the ₹2000 doctor instead.
-            'booking': {'doctorId': self.dear.id, 'date': '2026-08-01', 'slot': '09:00 AM'},
+            'booking': {'doctorId': self.dear.id, 'date': FUTURE_DATE, 'slot': '09:00 AM'},
         }, format='json')
         self.assertEqual(r.status_code, 400, r.content)
         self.assertFalse(Booking.objects.filter(doctor=self.dear).exists())
@@ -245,7 +259,7 @@ class VerifyOrderBindingTests(WorldMixin, TestCase):
         mock_confirm.return_value = self._confirm()
         r = self.client.post('/api/payment/verify/', {
             'order_id': 'order_book',
-            'booking': {'doctorId': self.doctor.id, 'date': '2026-08-01', 'slot': '09:00 AM'},
+            'booking': {'doctorId': self.doctor.id, 'date': FUTURE_DATE, 'slot': '09:00 AM'},
         }, format='json')
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(Booking.objects.get(payment_id='rzp_pay_bind').doctor_id, self.doctor.id)
@@ -257,7 +271,7 @@ class VerifyOrderBindingTests(WorldMixin, TestCase):
         mock_confirm.return_value = self._confirm(user_id=str(other.id))
         r = self.client.post('/api/payment/verify/', {
             'order_id': 'order_book',
-            'booking': {'doctorId': self.doctor.id, 'date': '2026-08-01', 'slot': '09:00 AM'},
+            'booking': {'doctorId': self.doctor.id, 'date': FUTURE_DATE, 'slot': '09:00 AM'},
         }, format='json')
         self.assertEqual(r.status_code, 403, r.content)
         self.assertFalse(Booking.objects.filter(payment_id='rzp_pay_bind').exists())
