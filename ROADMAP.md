@@ -15,90 +15,65 @@ the things that can lose money or break a live booking come first.
 
 ## Now
 
-Work these top-down. Don't start a second one until the first is merged.
+All four hardening items are **written and green, but nothing is merged.**
+Branch `fix/enforce-slot-capacity`. That is the only thing standing between
+this work and production.
 
-### ~~1. Enforce slot capacity where the booking is created~~ ✅ 2026-08-09
+### 1. Open the PR and merge 🔴
 
-Done on `fix/enforce-slot-capacity` (`b93be14`). Left below for the record of
-what the problem was; delete once the PR is merged.
+The single next action. Everything below is done code; none of it protects a
+patient until it is on `main`.
 
-**⚠️ Not merged yet — needs a PR and CI.** And the mobile app has a follow-up:
-it should send `date`/`slot` to `/api/payment/create-order/` so a collision is
-rejected before payment instead of charge-then-refund. It works without it.
+```bash
+git push -u origin fix/enforce-slot-capacity
+```
 
-<details><summary>original entry</summary>
+Then `/ship` for the gate, open the PR, let CI run, merge. Railway migrates and
+deploys separately — there is no migration in this branch, so the deploy is
+just code.
 
-### 1. Enforce slot capacity where the booking is created 🔴
+**Call out in the PR body** (the app is a separate repo and cannot be updated
+on your schedule):
 
-**Why first:** `payments/views.py:_handle_new_booking` creates the booking
-*after* payment is captured and never checks `max_per_slot`. Two patients on the
-last seat both pay and both get a token. Money is already taken by then, so the
-only fix at that point is a refund. Low traffic is the only reason this hasn't
-bitten yet — it breaks the first time two people want the same popular slot.
-Full analysis in `CAPACITY.md` §1.
+- `/api/payment/create-order/` accepts optional `date` + `slot`. Additive; older
+  clients unaffected.
+- `/api/payment/verify/` can now return **409** with `{success:false, refunded:bool}`
+  when a slot is full or past its cutoff. New status for a new condition.
+- Invalid slot still returns **400**, unchanged — but now includes `refunded`
+  and actually gives the money back.
 
-- Count CONFIRMED + IN_PROGRESS for `(doctor, date, slot)` under
-  `select_for_update()` inside the existing `transaction.atomic()`
-- Mirror the logic already correct in `bookings/views.py:371-388`
-- The rejection path must **auto-refund** — payment is captured, so a bare 400
-  strands the patient's money
-- Also check in `CreateOrderView._create_booking_order` so most collisions are
-  caught before an order exists at all; the `_handle_new_booking` check stays as
-  the race backstop
-- Call `is_slot_bookable(date, slot)` server-side on both paths — the 2h cutoff
-  is currently frontend-only too
+### 2. Turn on the two Railway crons 🟠
 
-**Done when:** a test books two patients concurrently into a 1-seat slot, one
-succeeds, one is rejected and refunded.
+Dashboard work, not code — I cannot do this from a session. Both config files
+exist and are correct; the services were never created.
+`backend/notifications/CRON_SETUP.md` now documents both, including the two
+traps (config path is from the repo root; without its own config file the
+service inherits `railway.json` and boots gunicorn instead of the command).
 
-</details>
+- `backend/railway.cron.json` — appointment reminders, every 10 min
+- `backend/railway.payouts.cron.json` — `run_daily_payouts`, 20:30 IST
 
-### 2. Bound `HospitalQueueView` 🔴
+Until the second one runs, no doctor ever appears on the payouts page. The new
+`ledger_not_running` alert on the admin dashboard is the alarm for it.
 
-**Why:** `bookings/views.py:82` filters by hospital and status with **no date
-filter and no pagination**. Every booking a hospital has ever taken is
-serialized every 10 seconds by the dashboard poll. At 100 bookings/day this is
-moving thousands of rows per request within a month — it's the first endpoint
-that will fall over, and it degrades silently until it doesn't.
+### 3. Attach Redis and flip the flag 🟠
 
-- Filter to `date=today` (the queue is a today-only view by definition)
-- Bound the `completed` list to today as well
-- `idx_booking_hosp_date_status` already exists for exactly this query
+Also dashboard work. Railway has one-click Redis. Once attached, set
+`USE_REDIS_CACHE=True` **and** `REDIS_URL` on the web service.
 
-**Done when:** the response is O(today), and the dashboard still shows what it
-showed before.
+Deliberately gated behind its own flag rather than `REDIS_URL` alone: that
+variable already contains a stale `redis://localhost` in local `.env` files, and
+switching on it would point every throttled request at a dead connection. See
+the local-dev section of `CLAUDE.md`.
 
-### 3. Give the server room to breathe 🟠
+### 4. Watch it for a day 🟡
 
-**Why:** `Procfile` and `railway.json` both start gunicorn with no `--workers`
-or `--threads` — that's **one sync worker, one request at a time**. That worker
-also blocks on Razorpay during `/verify/` (~0.5–1.5s), so a single checkout
-stalls every other request on the box. `CAPACITY.md` §2 puts the ceiling at
-~120 concurrent patients before booking traffic.
+The first day after merge, check the admin **Today's check** card and confirm:
 
-- `gunicorn tokenwalla.wsgi --workers 3 --threads 4 --timeout 60` in **both**
-  files (they must not drift)
-- Point `CACHES` at Redis — `REDIS_URL` is already read in `settings.py:93` and
-  then ignored, so every throttled request is doing DB writes on a read path
-- Railway has one-click Redis; add the addon first
-
-**Done when:** both start commands match, Redis is live, and throttling no
-longer touches `tw_cache_table`.
-
-### 4. Fix the Railway cron for `run_daily_payouts` 🟠
-
-**Surfaced by the new daily check.** `daily_ops` now raises
-`ledger_not_running` when completed bookings sit more than 2 days without a
-ledger row. That alert is only useful if the cron it's watching actually exists
-— and per `backend/notifications/CRON_SETUP.md` the two cron services were never
-set up.
-
-- Create the Railway cron services (`railway.cron.json`, `railway.payouts.cron.json`)
-- Confirm the logs show a run
-- Then confirm the dashboard alert clears on its own
-
-**Done when:** the daily check says "Nothing needs you" because it's true, not
-because nothing is being measured.
+- `ledger_not_running` clears once the payouts cron runs
+- no `oversold_refund` lines in the Railway logs (`grep oversold_refund`) — if
+  there are, a patient was charged and refunded, and it is worth knowing why
+- the hospital dashboard still shows Today / Tomorrow / All correctly
 
 ---
 
@@ -109,7 +84,6 @@ because nothing is being measured.
   day whether or not anyone is looking
 - **Verify the WhatsApp token is a permanent System-User token**, not the 24h
   temp one — if it's temporary, every notification is silently dead already
-- **Set up the 2 Railway cron services** (`backend/notifications/CRON_SETUP.md`)
 - **Mobile app: `/api/bookings/upgrade/` contract** — still sends bare
   `payment_id`, which now returns 400. Installed apps are broken on this path
 - **Raise the 6-char password floor**
@@ -137,6 +111,21 @@ because nothing is being measured.
 
 ## Done
 
+- **2026-08-09** — **Slot capacity enforced on the money paths.**
+  `bookings/capacity.py` is now the single definition; `CreateOrderView` rejects
+  before payment, `_handle_new_booking` re-checks under a doctor-row lock and
+  auto-refunds in full if the money was already captured. `BOOKING_CUTOFF_HOURS`
+  is server-side too. Also fixed a money leak: an unknown slot used to reject
+  after capture and keep the payment. 19 tests.
+- **2026-08-09** — **Hospital queue bounded** to a −7/+30 day window. It had no
+  date filter and no pagination while being polled every 10s. Not today-only as
+  the audit suggested — that would have emptied the dashboard's Tomorrow and All
+  tabs. 9 tests.
+- **2026-08-09** — **Throughput:** gunicorn `--workers 3 --threads 4
+  --timeout 60` in both `Procfile` and `railway.json` (was one sync worker
+  blocking on Razorpay), and a real Redis cache backend behind `USE_REDIS_CACHE`.
+- **2026-08-09** — **Cron setup documented** for `run_daily_payouts`; the
+  service was never created, which is why no doctor ever reaches the payouts page.
 - **2026-08-09** — **Daily ops check** on `/Adashboard`. `payments/daily_ops.py`
   + `GET /api/payment/daily-summary/` (admin-only, read-only) + `src/ADMIN/DailyOps.js`.
   Today's bookings, gross collected, our actual revenue (service fee — doctor

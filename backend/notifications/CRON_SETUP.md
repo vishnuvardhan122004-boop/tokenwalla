@@ -91,3 +91,66 @@ Notes:
   or UPI, then mark it paid on the admin Doctor Payouts page
   (`/Adashboard/payouts`) so the ledger clears. No payment-gateway payout API
   is involved, and no payout keys or webhooks need configuring.
+
+---
+
+# Doctor-ledger cron (Railway) — `run_daily_payouts`
+
+**Status: this service has never been created.** Everything below is the
+one-time setup. Until it exists, completed bookings never get a `DoctorLedger`
+row, so doctors simply never appear on the admin payouts page and nothing tells
+you — the failure is silent. The admin daily check now raises
+`ledger_not_running` when completed bookings sit more than two days without a
+ledger row, which is the alarm for exactly this.
+
+    python manage.py run_daily_payouts
+
+**It does not move money.** Doctor payouts are manual by design: this command
+only writes the ledger rows that say who is owed what. Vishnu wires the money
+from the Slice current account and marks it paid at `/Adashboard/payouts`.
+
+## Setup
+
+Same shape as the reminder cron above, with two differences — the config file
+and the schedule:
+
+1. Railway → **New → GitHub Repo** → the same repo. This creates a third service.
+2. **Settings → Config-as-code → Railway Config File**:
+
+       backend/railway.payouts.cron.json
+
+   and **Root Directory** = `backend`.
+
+   > Same trap as the reminder cron: the path is from the repo root, not from
+   > the Root Directory. A bare `railway.payouts.cron.json` fails to resolve and
+   > the deploy dies at snapshot. And without its own config file the service
+   > inherits the root `railway.json` and boots gunicorn instead — a web server
+   > pretending to be a cron, which looks healthy and does nothing.
+
+3. **Variables** — it needs the database and nothing else exotic:
+   - `DATABASE_URL` (the same Postgres as web — reference the shared variable)
+   - `DJANGO_SETTINGS_MODULE`, `SECRET_KEY`, `DEBUG`
+   - `WHATSAPP_*` only if you want the "payout marked paid" message to send
+     from this service too; the mark-paid action itself runs on web.
+
+4. Deploy.
+
+## Schedule
+
+`railway.payouts.cron.json` uses `0 15 * * *`. Railway cron is **UTC**, so that
+is **20:30 IST** — deliberately after Razorpay's settlement to our account has
+landed, so a ledger row is never written for money we haven't received.
+
+Don't "fix" this to `0 20 * * *` thinking it's IST. That would run at 01:30 IST
+the next morning and attribute the day's bookings to the wrong day.
+
+## Verify
+
+- Railway → this service → **Logs**: each run prints
+  `Ledgered N booking(s). Payouts are manual — see the admin payouts page.`
+- Admin → `/Adashboard/payouts`: doctors with completed bookings now appear.
+- Admin dashboard → **Today's check**: the `ledger_not_running` alert clears on
+  its own once rows are being written.
+
+Idempotent — a booking already `PROCESSING`/`PAID` is skipped, so a double run
+cannot double-pay anyone.
