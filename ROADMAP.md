@@ -56,15 +56,19 @@ service inherits `railway.json` and boots gunicorn instead of the command).
 Until the second one runs, no doctor ever appears on the payouts page. The new
 `ledger_not_running` alert on the admin dashboard is the alarm for it.
 
-### 3. Attach Redis and flip the flag 🟠
+### 3. Delete the zombie reminder cron 🟠
 
-Also dashboard work. Railway has one-click Redis. Once attached, set
-`USE_REDIS_CACHE=True` **and** `REDIS_URL` on the web service.
+`tokenwalla-reminders-cron` on Railway is a duplicate of the working
+`send_appointment_reminders` service, and it is dead:
 
-Deliberately gated behind its own flag rather than `REDIS_URL` alone: that
-variable already contains a stale `redis://localhost` in local `.env` files, and
-switching on it would point every throttled request at a dead connection. See
-the local-dev section of `CLAUDE.md`.
+- its active deployment is from **2026-07-26** — 14 days stale
+- every deployment since has **failed**: `service config at 'railway.cron.json'
+  not found` (the path needs the `backend/` prefix)
+- its logs contain only `Starting Container`, every 10 minutes, all day, with no
+  application output at all
+
+It boots a container 144 times a day and does nothing. Delete the service.
+`send_appointment_reminders` is the correctly-wired one — leave that alone.
 
 ### 4. Watch it for a day 🟡
 
@@ -99,6 +103,13 @@ The first day after merge, check the admin **Today's check** card and confirm:
 - **Automated doctor payouts — NOT BEFORE ~OCTOBER 2026, and only if Vishnu says
   so.** Manual is the deliberate design (see `CLAUDE.md`). Don't start this
   because it looks like an obvious improvement; the human checkpoint is the point.
+- **Redis cache — deferred 2026-08-09, on purpose.** The code is ready and
+  gated behind `USE_REDIS_CACHE`; the flag is off and no addon is attached.
+  At current traffic the database cache table is genuinely fine, and the
+  gunicorn worker/thread change is where the throughput actually came from.
+  Attach the addon and flip the flag when polling load makes the cache writes
+  show up in the DB metrics — not before, and never point it at the stale
+  `redis://localhost` already sitting in local `.env` files.
 - Server-Sent Events (or push) for queue updates instead of polling — polling is
   what makes concurrent users expensive
 - Per-day booking archive/purge so queue tables stay small
