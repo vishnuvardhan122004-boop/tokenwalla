@@ -13,7 +13,7 @@ is the worst outcome in this codebase.
 
 Run:  python manage.py test payments.tests_capacity
 """
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from unittest import mock
 
@@ -96,11 +96,26 @@ class CapacityRuleTests(CapacityMixin, TestCase):
         check_slot_available(
             self.doctor, self.tomorrow + timedelta(days=1), SLOT)
 
-    def test_slot_inside_the_2h_cutoff_is_rejected(self):
-        """The cutoff was frontend-only — a direct API call ignored it."""
+    @mock.patch('tokenwalla.utils.timezone.now')
+    def test_slot_inside_the_2h_cutoff_is_rejected(self, m_now):
+        """The cutoff was frontend-only — a direct API call ignored it.
+
+        `now` is pinned rather than taken from the clock: an earlier version of
+        this test used today's date with a 09:00 slot, which passes when the
+        suite runs in the evening and fails when it runs before 07:00. A test
+        whose result depends on what time you run it is worse than no test.
+        """
+        m_now.return_value = timezone.make_aware(datetime(2026, 8, 10, 8, 0))
         with self.assertRaises(SlotUnavailable) as ctx:
-            check_slot_available(self.doctor, timezone.localdate(), SLOT)
-        self.assertIn(ctx.exception.reason, ('too_soon',))
+            check_slot_available(self.doctor, date(2026, 8, 10), SLOT)  # 09:00, 1h away
+        self.assertEqual(ctx.exception.reason, 'too_soon')
+
+    @mock.patch('tokenwalla.utils.timezone.now')
+    def test_a_slot_exactly_at_the_cutoff_is_still_bookable(self, m_now):
+        m_now.return_value = timezone.make_aware(datetime(2026, 8, 10, 8, 0))
+        # 10:00 AM is exactly BOOKING_CUTOFF_HOURS away — the boundary is
+        # inclusive, so this must be allowed.
+        check_slot_available(self.doctor, date(2026, 8, 10), '10:00 AM')
 
     def test_unknown_slot_is_rejected(self):
         with self.assertRaises(SlotUnavailable) as ctx:

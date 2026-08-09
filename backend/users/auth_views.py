@@ -13,6 +13,7 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 
+from .models import RateCounter
 from .serializers import RegisterSerializer, UserSerializer
 from tokenwalla.permissions import IsAdmin
 
@@ -55,56 +56,61 @@ OTP_MAX_SENDS_PER_DAY = 10
 OTP_SEND_CAP_WINDOW   = 60 * 60 * 24  # seconds (24h)
 
 
-def _reserve_otp_send(mobile):
-    """Atomically count an OTP send against the per-number daily cap.
+OTP_ATTEMPT_WINDOW = 300   # seconds a wrong-guess count stays alive
 
-    Returns True if the send is allowed (slot reserved), False if the number
-    has already hit OTP_MAX_SENDS_PER_DAY in the current 24h window. Uses the
-    same atomic ``add``+``incr`` pattern as the attempt counter so parallel
-    requests can't race past the cap. The window is a rolling 24h from the
-    first send (the key's timeout is not refreshed on later sends).
+
+# Both caps below are counted in the DATABASE (users.RateCounter), not the
+# cache. They used to use cache.add + cache.incr, which is only atomic on Redis:
+# DatabaseCache inherits BaseCache.incr, a read-modify-write. That was harmless
+# while gunicorn ran one sync worker and requests were strictly serialised, but
+# with 3 workers x 4 threads twelve requests run at once and parallel attempts
+# could each read the same count before any wrote back. These caps are the
+# defence against OTP brute force and paid-SMS flooding, so they must not depend
+# on which cache backend an env var happens to select.
+
+def _reserve_otp_send(mobile):
+    """Count an OTP send against the per-number daily cap.
+
+    Returns True if the send is allowed, False once the number has hit
+    OTP_MAX_SENDS_PER_DAY within the rolling 24h window (measured from the first
+    send, not refreshed by later ones).
     """
-    key = f'otp_sends:{mobile}'
-    cache.add(key, 0, timeout=OTP_SEND_CAP_WINDOW)
-    try:
-        sends = cache.incr(key)
-    except ValueError:
-        # Key expired between the add and the incr — treat as the first send.
-        cache.set(key, 1, timeout=OTP_SEND_CAP_WINDOW)
-        sends = 1
-    if sends > OTP_MAX_SENDS_PER_DAY:
-        logger.warning('OTP daily send cap reached for mobile ...%s', mobile[-4:])
-        return False
-    return True
+    allowed, sends = RateCounter.bump(
+        f'otp_sends:{mobile}',
+        limit=OTP_MAX_SENDS_PER_DAY,
+        window_seconds=OTP_SEND_CAP_WINDOW,
+    )
+    if not allowed:
+        logger.warning('OTP daily send cap reached for mobile ...%s (%s sends)',
+                       mobile[-4:], sends)
+    return allowed
 
 
 def _register_otp_failure(mobile):
-    """Count a wrong OTP guess; invalidate the session once the cap is hit.
-
-    Uses the cache's atomic ``incr`` where the backend supports it (e.g. Redis)
-    so parallel wrong guesses can't race past the cap; on backends without a
-    native atomic incr this still narrows the window versus a read-modify-write.
-    """
-    key = f'otp_attempts:{mobile}'
-    cache.add(key, 0, timeout=300)
-    try:
-        attempts = cache.incr(key)
-    except ValueError:
-        # Key expired between the add and the incr — treat as the first failure.
-        cache.set(key, 1, timeout=300)
-        attempts = 1
+    """Count a wrong OTP guess; burn the code once the cap is hit."""
+    _, attempts = RateCounter.bump(
+        f'otp_attempts:{mobile}',
+        limit=OTP_MAX_ATTEMPTS,
+        window_seconds=OTP_ATTEMPT_WINDOW,
+    )
     if attempts >= OTP_MAX_ATTEMPTS:
         cache.delete(f'otp_session:{mobile}')
         cache.delete(f'otp_via:{mobile}')
-        cache.delete(key)
+        RateCounter.reset(f'otp_attempts:{mobile}')
         logger.warning('OTP attempt cap reached for mobile ...%s — code invalidated', mobile[-4:])
 
 
 def _clear_otp_state(mobile):
-    """Clear all OTP cache entries for a mobile after a successful verify."""
+    """Clear all OTP state for a mobile after a successful verify.
+
+    The issued code lives in the cache (losing it just means requesting another
+    one); the attempt counter lives in the database. The daily SEND cap is
+    deliberately NOT cleared — a successful login must not reset the spend
+    ceiling, or flooding becomes free again by logging in once.
+    """
     cache.delete(f'otp_session:{mobile}')
     cache.delete(f'otp_via:{mobile}')
-    cache.delete(f'otp_attempts:{mobile}')
+    RateCounter.reset(f'otp_attempts:{mobile}')
 
 
 # ── OTP Helpers ───────────────────────────────────────────────────────────────
