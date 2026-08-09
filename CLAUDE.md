@@ -163,3 +163,14 @@ suite is insulated from this: `settings.py` forces the redirect off under
 Local checkout needs the `rzp_test_` key pair. An `rzp_live_` key in `.env`
 charges a real card on every test payment — Razorpay has no sandbox for live
 credentials.
+
+**Redis is opt-in, and deliberately not switched on by `REDIS_URL`.** That
+variable defaulted to `redis://localhost:6379/0` and was read but never used, so
+the stale value is already sitting in local `.env` files pointing at a Redis
+nobody runs. Keying the cache backend off it would send every throttled request
+— which is all of them — at a dead connection, and the site would look broken
+for a reason that isn't in the code. So the cache uses Redis only when
+`USE_REDIS_CACHE=True` *and* `REDIS_URL` is set; otherwise it falls back to the
+database cache table, which needs nothing running. Set the flag on Railway once
+a Redis addon is attached, never locally. (The test suite forces LocMemCache
+regardless, so a developer with Redis configured doesn't get cross-test bleed.)

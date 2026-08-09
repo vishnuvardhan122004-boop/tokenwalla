@@ -89,16 +89,45 @@ else:
         }
     }
 
-# ── Cache (Redis) ─────────────────────────────────────────────────────────────
-REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
+# ── Cache ─────────────────────────────────────────────────────────────────────
+# Use Redis when REDIS_URL is actually configured, otherwise fall back to the
+# database cache table.
+#
+# Why it matters: DRF's AnonRateThrottle and UserRateThrottle are global, so
+# EVERY api request reads and writes the cache. On DatabaseCache that is extra
+# SELECT + UPDATE round trips against tw_cache_table on a polling-heavy read
+# path, and a lock hotspot under load (CAPACITY.md §2). The OTP attempt
+# counters also rely on atomic incr, which Redis does properly.
+#
+# Switching on REDIS_URL alone is NOT safe here. It defaulted to
+# 'redis://localhost:6379/0' and was read but never used, so that value is
+# already sitting in local .env files pointing at a Redis nobody runs — and
+# python-decouple would happily hand it over. Every throttled request (which is
+# all of them) would then fail against a dead connection, and the site would
+# look broken for a reason that isn't in the code. That is the same class of
+# trap as the duplicate DEBUG=False documented in CLAUDE.md.
+#
+# So Redis is an explicit opt-in: set USE_REDIS_CACHE=True on the service that
+# actually has a Redis addon attached. A stale REDIS_URL on its own does nothing.
+USE_REDIS_CACHE = config('USE_REDIS_CACHE', default=False, cast=bool)
+REDIS_URL = config('REDIS_URL', default='')
 
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
-        'LOCATION': 'tw_cache_table',
-        'TIMEOUT': 300,
+if USE_REDIS_CACHE and REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND':  'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+            'TIMEOUT':  300,
+        }
     }
-}
+else:
+    CACHES = {
+        'default': {
+            'BACKEND':  'django.core.cache.backends.db.DatabaseCache',
+            'LOCATION': 'tw_cache_table',
+            'TIMEOUT':  300,
+        }
+    }
 
 # ── REST Framework ────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
@@ -292,3 +321,13 @@ if not DEBUG:
 # not something a test result should depend on.
 if 'test' in sys.argv:
     SECURE_SSL_REDIRECT = False
+    # Never let the suite talk to a real Redis (or a real cache table): the
+    # throttle and OTP tests assume an isolated cache they can clear between
+    # cases, and a developer with REDIS_URL set locally would otherwise get
+    # cross-test bleed that looks like flakiness.
+    CACHES = {
+        'default': {
+            'BACKEND':  'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'tokenwalla-tests',
+        }
+    }
