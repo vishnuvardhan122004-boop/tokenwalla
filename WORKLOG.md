@@ -16,6 +16,33 @@ Newest entry on top. Update the **Status** columns as things land.
 
 ---
 
+## 2026-08-07 (auto) — Session update @ 22:55
+
+Auto-generated snapshot (branch `fix/token-page-pay-at-clinic-note`, 4 changed files).
+
+```
+M WORKLOG.md
+ M backend/bookings/views.py
+ M backend/notifications/push.py
+ M backend/payments/views.py
+```
+
+---
+
+
+## 2026-08-07 (auto) — Session update @ 22:54
+
+Auto-generated snapshot (branch `fix/token-page-pay-at-clinic-note`, 3 changed files).
+
+```
+M backend/notifications/push.py
+ M src/ADMIN/Payouts.js
+?? src/ADMIN/Payouts.test.js
+```
+
+---
+
+
 ## 2026-08-06 (auto) — Session update @ 14:28
 
 Auto-generated snapshot (branch `fix/token-page-pay-at-clinic-note`, 1 changed file).

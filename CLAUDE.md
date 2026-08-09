@@ -5,6 +5,68 @@ Doctor-appointment booking with a live hospital queue. Django REST backend
 **separate repo** — any change to the `/api/payment/*` contract must be mirrored
 there.
 
+## ⚠️ This product is LIVE
+
+Real patients hold tokens. Real money moves through Razorpay. Traffic is low
+today, which buys room to make mistakes — it does not make them free. From
+2026-08-09 onward this repo is in **production-ready mode**, and the rules below
+are not suggestions.
+
+**Never, from a session:**
+
+- Touch the production database. No `railway run`, no `railway connect`, no
+  `psql`. If something can only be diagnosed against prod, say so and hand it to
+  Vishnu — don't improvise.
+- Push to `main` or `develop`. Both deploy (see `.github/workflows/deploy.yml`).
+  Work on a feature branch, open a PR, let CI run the tests.
+- Deploy. No `vercel --prod`, no deploy hooks. Merging is the deploy.
+- Put an `rzp_live_` key anywhere near local dev — it charges a real card on
+  every test payment. Razorpay has no sandbox for live credentials.
+
+`.claude/hooks/guard-production.py` blocks all of the above. If it fires, that's
+the system working: surface it, don't route around it.
+
+**Migrations against live data.** Additive only — new nullable columns, new
+tables. Never drop or rename a column that deployed code still reads. Railway
+migrates and deploys as separate steps, so every migration must be safe to run
+*before* the code that needs it. Real bookings, payments and ledger rows already
+exist; a migration that assumes an empty table will corrupt them.
+
+**The default is to do less.** When a change could be narrow or broad, take the
+narrow one. When you're unsure whether something is safe, stop and ask — a
+question costs a minute, a bad refund path costs a patient.
+
+## The three repos
+
+| Repo | Contains | Deploys to |
+|---|---|---|
+| **this one** (`tokenwalla`) | Django backend (`backend/`) + React website (`src/`) | Railway (API) + Vercel (web) |
+| **mobile app** (`tokenwalla.app`) | Expo/React Native patient app | EAS build → stores |
+
+The app is a **separate repo with its own release cycle**, and that asymmetry is
+the single most common source of breakage: the website ships the moment a PR
+merges, the app ships when someone builds and the stores approve it.
+
+So: **the API is a contract, not an implementation detail.** Any change to
+request shape, response shape, status values or error codes on `/api/payment/*`
+or `/api/bookings/*` breaks installed apps that cannot be updated on your
+schedule. Additive changes only; if a breaking change is unavoidable, version
+the endpoint and keep the old one alive until the app release has rolled out.
+Call it out explicitly in the PR — `/ship` checks for this.
+
+## How we work
+
+Sessions are ~3 hours. One slice per session, merged before it ends.
+
+- `/start` — orient, pick the top ROADMAP item, agree the scope, cut a branch
+- work the slice
+- `/ship` — the pre-merge gate (tests, money paths, migrations, secrets, API contract)
+- `/wrap` — update ROADMAP + WORKLOG, write tomorrow's first move
+
+`ROADMAP.md` is the single source of truth for what's next. If a plan lives in a
+chat message and not in ROADMAP.md, it doesn't exist — tomorrow's session won't
+see it.
+
 ## Payments
 
 **Gateway: Razorpay.** (The project ran on Cashfree from 2026-07-29 to
@@ -24,7 +86,21 @@ there.
   only inside `razorpay_utils.py` at the API boundary.
 - Razorpay refunds are keyed by **payment id**, not order id.
 
-### Doctor payouts are MANUAL
+### Doctor payouts are MANUAL — and this is deliberate
+
+**This is the chosen design, not a missing feature.** Do not propose automating
+it, do not add a payout API, do not reintroduce RazorpayX. Any older note
+calling automated payouts a priority is stale — it lost.
+
+The money path is: patient pays → **Razorpay settles to TokenWalla** → Vishnu
+pays each doctor from the **Slice current account** → the payment is recorded in
+the admin. A human sits in the middle on purpose: at this stage Vishnu wants
+eyes on every rupee daily — sales, who's owed, whether anything looks wrong —
+and an automated payout removes the one checkpoint that catches a bad number
+before it leaves the bank.
+
+Revisit around **October 2026**, only once the daily numbers are boring and
+Vishnu says so explicitly. Until then, treat automation as out of scope.
 
 There is no payout API call anywhere, and no payout keys or webhooks to
 configure. Staff wire the money from TokenWalla's own bank account, then record

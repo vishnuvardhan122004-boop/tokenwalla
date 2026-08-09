@@ -14,6 +14,9 @@ build/
 .env
 src/.env
 
-# Claude Code local preview config
-.claude/
+# Claude Code
+# Shared config IS committed on purpose — settings.json, commands/ and hooks/
+# are the production guardrails, and they only work if everyone has them.
+.claude/settings.local.json
+.claude/worktrees/
 .claude/skills/
