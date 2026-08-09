@@ -886,3 +886,21 @@ class MarkPayoutPaidView(APIView):
             'doctor_id': doctor.id,
             'amount_paid': str(total),
         })
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Daily ops summary — the one screen checked before deciding what to do today
+# ─────────────────────────────────────────────────────────────────────────────
+
+class DailyOpsSummaryView(APIView):
+    """Admin-only, READ-ONLY snapshot of today: bookings, money collected,
+    what's owed to doctors, and anything that needs a human.
+
+    Payouts are manual by design, so this exists to make the daily human check
+    fast — it never moves money and never writes a row. The heavy lifting is in
+    payments/daily_ops.py so the numbers are testable without HTTP.
+    """
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get(self, request):
+        from payments.daily_ops import build_daily_summary
+        return Response(build_daily_summary())
