@@ -248,6 +248,27 @@ WHATSAPP_TEMPLATE_BOOKING_CANCELLED = config('WHATSAPP_TEMPLATE_BOOKING_CANCELLE
 WHATSAPP_TEMPLATE_NO_SHOW        = config('WHATSAPP_TEMPLATE_NO_SHOW', default='booking_no_show')
 WHATSAPP_TEMPLATE_LANG           = config('WHATSAPP_TEMPLATE_LANG', default='en')
 ADMIN_SETUP_KEY = config('ADMIN_SETUP_KEY', default='')
+
+# ── Mobile app version gate ───────────────────────────────────────────────────
+# Read by GET /api/app-version/ and used by the app to decide whether to nag or
+# block on launch. Set on Railway; changing a variable there redeploys the
+# service, and every installed app picks the new values up on its next launch —
+# no store release needed to start or stop prompting.
+#
+#   APP_MIN_VERSION    below this, the app blocks (its API calls no longer match
+#                      this backend). Leave EMPTY to never block — that is the
+#                      default on purpose, so a typo can't brick every install.
+#   APP_LATEST_VERSION below this, the app shows a dismissible "update available".
+#
+# Both are dotted numeric strings ('1.2.0'). An empty value disables that tier.
+APP_MIN_VERSION    = config('APP_MIN_VERSION',    default='')
+APP_LATEST_VERSION = config('APP_LATEST_VERSION', default='')
+APP_STORE_URL      = config(
+    'APP_STORE_URL',
+    default='https://play.google.com/store/apps/details?id=com.vishnu2004.Tokenwalla',
+)
+APP_UPDATE_MESSAGE = config('APP_UPDATE_MESSAGE', default='')
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 LOGGING = {
     'version':                  1,

@@ -10,6 +10,26 @@ def health_check(request):
     return JsonResponse({'status': 'ok', 'version': '1.0.0'})
 
 
+def app_version(request):
+    """What the mobile app should do about its own version, on launch.
+
+    Public and read-only: the app calls this before anyone logs in, and it
+    leaks nothing an installed APK doesn't already contain. Driven entirely by
+    Railway env vars (see settings), so the prompt can be turned on, retargeted
+    or turned off without a store release.
+
+    An empty `min_version` means "never block" and is the default — a blocking
+    prompt is unrecoverable for the patient, so it has to be switched on
+    deliberately.
+    """
+    return JsonResponse({
+        'min_version':    settings.APP_MIN_VERSION,
+        'latest_version': settings.APP_LATEST_VERSION,
+        'store_url':      settings.APP_STORE_URL,
+        'message':        settings.APP_UPDATE_MESSAGE,
+    })
+
+
 admin.site.site_header = 'TokenWalla Admin'
 admin.site.site_title  = 'TokenWalla'
 admin.site.index_title = 'Administration'
@@ -19,6 +39,10 @@ urlpatterns = [
     # ── Internal / infra ──────────────────────────────────────────────────────
     path('secure-admin-tw/',  admin.site.urls),
     path('health/',           health_check),
+
+    # Public, read-only. Additive: installed apps that never call it are
+    # unaffected, so this is safe to deploy ahead of any app release.
+    path('api/app-version/',  app_version),
 
     # ── API routes ────────────────────────────────────────────────────────────
     path('api/auth/',         include('users.urls')),
