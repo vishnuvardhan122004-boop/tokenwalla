@@ -30,15 +30,82 @@ from rest_framework.permissions import IsAuthenticated
 
 from bookings.models import Booking
 from bookings.serializers import BookingSerializer
+# One definition of "can this slot take another booking", shared with the
+# read-only availability endpoint. See CAPACITY.md §1 for why this has to be
+# enforced here and not just in the UI.
+from bookings.capacity import (
+    SlotUnavailable, check_slot_available, check_slot_available_locked,
+)
 from tokenwalla.permissions import IsAdmin
 # Shared, single-source-of-truth Razorpay PG helpers (see payments/razorpay_utils.py).
 from payments.razorpay_utils import (
     create_order, confirm_order_paid, plan_for_amount, VALID_PLAN_AMOUNTS,
+    refund_payment,
 )
 # Server-side fee math — the client is never trusted for booking amounts.
 from payments.fees import compute_fee_breakdown, SAC_CODE, GST_RATE
 
 logger = logging.getLogger('tokenwalla')
+
+
+def _refund_unfulfillable_booking(*, payment_id, amount_inr, breakdown, reason, user_id):
+    """Refund a captured payment for a booking we could not create.
+
+    Reached only when the slot filled between checkout opening and the payment
+    being captured. Nothing was written — the transaction rolled back — so the
+    patient has paid for an appointment that does not exist.
+
+    The refund is the FULL amount captured, deliberately. Everywhere else the
+    gateway fee and GST are not returned, because Razorpay does not give them
+    back to us on a refund — but that rule exists for a patient who chose to
+    cancel. Here the patient did nothing wrong and receives no service at all,
+    so TokenWalla absorbs that loss rather than passing it on. The amounts are
+    small and the alternative is charging someone for our own defect.
+
+    Recorded in the log rather than the database: Payment requires a Booking,
+    and no Booking exists. Grep `oversold_refund` to reconcile against
+    Razorpay.
+    """
+    amount = breakdown['final_amount'] if breakdown else amount_inr
+    # An unknown slot already returned 400 before this change (it just kept the
+    # money, which was the bug). Keep that status so installed mobile clients
+    # see exactly what they saw before — only the refund is new. The genuinely
+    # new conditions, full and too-soon, get 409.
+    status_code = 400 if reason.reason == 'invalid_slot' else 409
+    try:
+        result = refund_payment(
+            payment_id, amount, payment_id,
+            note=f'TokenWalla: slot unavailable ({reason.reason})',
+        )
+        logger.error(
+            'oversold_refund OK payment_id=%s amount=%s user=%s reason=%s refund_id=%s',
+            payment_id, amount, user_id, reason.reason, result.get('id'),
+        )
+        return Response({
+            'success': False,
+            'refunded': True,
+            'message': (
+                f'{reason.message} Your payment of ₹{amount} has been refunded '
+                f'in full — it should reach your account in 5–7 working days.'
+            ),
+        }, status=status_code)
+    except Exception as exc:
+        # The gateway call failed. The money is still ours and the patient has
+        # nothing. This must be loud: it needs a human to refund by hand.
+        logger.error(
+            'oversold_refund FAILED payment_id=%s amount=%s user=%s reason=%s err=%s '
+            '— REFUND THIS BY HAND IN THE RAZORPAY DASHBOARD',
+            payment_id, amount, user_id, reason.reason, exc,
+        )
+        return Response({
+            'success': False,
+            'refunded': False,
+            'message': (
+                f'{reason.message} Your payment could not be reversed '
+                f'automatically — our team has been alerted and will refund you '
+                f'within 24 hours.'
+            ),
+        }, status=status_code)
 
 
 def _serialize_breakdown(b):
@@ -129,6 +196,35 @@ def _dispatch_booking_notifications(booking):
     ).start()
 
 
+def _notify_doctor_payout_async(batch):
+    """Tell the doctor their payout was sent — background thread, same contract
+    as _notify_booking_async: the PayoutBatch is already committed, so a failed
+    or slow WhatsApp call is logged and never surfaces to the admin.
+    """
+    from notifications.push import push_payout_to_hospital
+    from notifications.whatsapp import send_doctor_payout_paid
+
+    def _run():
+        try:
+            # Hospital first: it's a push (fast, no external approval), and for a
+            # salaried doctor the money lands in the hospital's account anyway.
+            push_payout_to_hospital(batch)
+        except Exception as exc:
+            logger.warning('Hospital payout push failed for batch %s: %s', batch.id, exc)
+        try:
+            send_doctor_payout_paid(batch)
+        except Exception as exc:
+            logger.warning('Doctor payout WhatsApp failed for batch %s: %s', batch.id, exc)
+        finally:
+            connection.close()
+
+    threading.Thread(
+        target=_run,
+        name=f'payout-notify-{batch.id}',
+        daemon=True,
+    ).start()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CreateOrderView  — full-fee booking orders + the ₹5 reschedule fee
 # ─────────────────────────────────────────────────────────────────────────────
@@ -194,6 +290,20 @@ class CreateOrderView(APIView):
             doctor = Doctor.objects.get(pk=doctor_id)
         except (Doctor.DoesNotExist, ValueError, TypeError):
             return Response({'message': 'Doctor not found.'}, status=404)
+
+        # Reject a full or expired slot BEFORE any money moves. `date`/`slot`
+        # are optional so older clients (the mobile app ships on its own
+        # release cycle) keep working unchanged — they just fall through to the
+        # after-capture backstop in _handle_new_booking, which refunds. Sending
+        # them turns nearly every collision into a clean "slot full" message
+        # with no payment involved.
+        date_val = str(request.data.get('date', '') or '').strip()
+        slot_val = str(request.data.get('slot', '') or '').strip()
+        if date_val and slot_val:
+            try:
+                check_slot_available(doctor, date_val, slot_val)
+            except SlotUnavailable as exc:
+                return Response({'message': exc.message}, status=409)
 
         collection_mode = doctor.payment_collection_mode
         breakdown = compute_fee_breakdown(doctor.fee, collection_mode)
@@ -387,9 +497,6 @@ class VerifyPaymentView(APIView):
         except Doctor.DoesNotExist:
             return Response({'success': False, 'message': 'Doctor not found.'}, status=404)
 
-        if slot_val not in (doctor.slots or []):
-            return Response({'success': False, 'message': 'Invalid slot for this doctor.'}, status=400)
-
         # "Book for someone else" — optional beneficiary details. Blank ⇒ self.
         booked_for_name   = str(booking_data.get('bookedForName', '')   or '').strip()[:100]
         booked_for_mobile = str(booking_data.get('bookedForMobile', '') or '').strip()[:15]
@@ -399,6 +506,16 @@ class VerifyPaymentView(APIView):
 
         try:
             with transaction.atomic():
+                # Capacity backstop. The money is already captured by the time
+                # we get here, so this is the last line of defence against
+                # overselling a slot — and the only one that survives a race.
+                # Re-fetches the doctor under a row lock; see
+                # bookings/capacity.py for why the lock is on the doctor and
+                # not on the booking rows. Raising rolls this block back before
+                # anything is created, and the handler below refunds.
+                doctor   = check_slot_available_locked(doctor.id, date_val, slot_val)
+                hospital = doctor.hospital
+
                 token = _generate_token()
 
                 new_booking = Booking.objects.create(
@@ -473,6 +590,17 @@ class VerifyPaymentView(APIView):
                 },
             })
 
+        except SlotUnavailable as exc:
+            # We took the patient's money and cannot give them the appointment.
+            # Nothing was created (the atomic block rolled back), so refund and
+            # say so plainly. Must be caught before the generic handler below.
+            return _refund_unfulfillable_booking(
+                payment_id=payment_id,
+                amount_inr=amount_inr,
+                breakdown=breakdown,
+                reason=exc,
+                user_id=request.user.id,
+            )
         except IntegrityError as exc:
             # Most likely cause: a concurrent /verify/ for the SAME payment_id
             # won the race and already committed a Booking + Payment (the unique
@@ -765,13 +893,20 @@ class PendingPayoutsView(APIView):
             doctor = (Doctor.objects.select_related('hospital')
                       .get(pk=row['doctor_id']))
             target = payout_target(doctor)
+            mode   = choose_mode(target)
             rows.append({
                 'doctor_id':      doctor.id,
                 'doctor_name':    doctor.name,
                 'hospital_name':  doctor.hospital.name if doctor.hospital_id else None,
                 'pay_to':         'hospital' if target is not doctor else 'doctor',
                 'recipient_name': target.account_holder_name or target.name,
-                'mode':           choose_mode(target),
+                'mode':           mode,
+                # Where to actually send it — staff wire this by hand, so the
+                # page has to show the account, not just the rail.
+                'upi_vpa':        (target.upi_vpa or '').strip() if mode == 'UPI' else '',
+                'bank_name':      (target.bank_name or '').strip() if mode == 'IMPS' else '',
+                'account_number': (target.bank_account_number or '').strip() if mode == 'IMPS' else '',
+                'ifsc':           (target.ifsc or '').strip() if mode == 'IMPS' else '',
                 'pending_amount': str(amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
             })
         rows.sort(key=lambda r: r['doctor_name'])
@@ -835,9 +970,36 @@ class MarkPayoutPaidView(APIView):
 
         logger.info('Payout batch %s: doctor %s paid ₹%s manually (ref=%s)',
                     batch.id, doctor_id, total, reference or '—')
+
+        # Tell the doctor their money went out. Best-effort and off the request
+        # thread: the payout is already recorded, so a slow or failing Meta call
+        # must never fail the admin's "mark paid" action.
+        # `doctor` already has `hospital` select_related — attach it so the
+        # background thread doesn't lazy-load either FK on its own connection.
+        batch.doctor = doctor
+        _notify_doctor_payout_async(batch)
+
         return Response({
             'success': True,
             'batch_id': batch.id,
             'doctor_id': doctor.id,
             'amount_paid': str(total),
         })
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Daily ops summary — the one screen checked before deciding what to do today
+# ─────────────────────────────────────────────────────────────────────────────
+
+class DailyOpsSummaryView(APIView):
+    """Admin-only, READ-ONLY snapshot of today: bookings, money collected,
+    what's owed to doctors, and anything that needs a human.
+
+    Payouts are manual by design, so this exists to make the daily human check
+    fast — it never moves money and never writes a row. The heavy lifting is in
+    payments/daily_ops.py so the numbers are testable without HTTP.
+    """
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get(self, request):
+        from payments.daily_ops import build_daily_summary
+        return Response(build_daily_summary())

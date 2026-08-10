@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router';
 import API from '../services/api';
+import DailyOps from './DailyOps';
 
 /* ── Overview panel ─────────────────────────────────────────────────────────── */
 const Overview = ({ pendingCount }) => {
@@ -103,6 +104,11 @@ const Overview = ({ pendingCount }) => {
         <h2>Platform Overview</h2>
         <p>Real-time stats across the TokenWalla platform</p>
       </div>
+
+      {/* Today's check — first thing on the page, because it's the thing that
+          gets looked at every day. Renders nothing until it has loaded, so it
+          never delays the rest of the dashboard. */}
+      <DailyOps />
 
       {/* Pending hospitals alert on overview */}
       {pendingCount > 0 && (

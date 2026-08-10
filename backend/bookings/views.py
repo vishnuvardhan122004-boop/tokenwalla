@@ -1,11 +1,15 @@
 import logging
+import threading
+
+from datetime import timedelta
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
-from django.db import transaction
+from django.db import connection, transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from .models import Booking
 from .serializers import BookingSerializer, build_queue_map
@@ -13,9 +17,44 @@ from tokenwalla.permissions import IsAdmin, IsHospitalStaff
 from payments.refunds import (
     process_cancellation_refund, record_absence_refund, RefundNotAllowed,
 )
-from notifications.push import push_booking_in_progress
+from notifications.push import (
+    push_booking_cancelled,
+    push_booking_in_progress,
+    push_booking_no_show,
+    push_booking_on_hold,
+    push_cancellation_to_hospital,
+)
+from notifications.whatsapp import send_booking_cancelled, send_booking_no_show
 
 logger = logging.getLogger('tokenwalla')
+
+# How far the hospital queue looks either side of today. The look-back keeps
+# bookings left in an active status on a previous day visible so staff can
+# close them out; the look-ahead covers the dashboard's Tomorrow and All tabs
+# with room to spare. Both exist to stop the queue query growing without
+# bound — see HospitalQueueView.
+QUEUE_LOOKBACK_DAYS  = 7
+QUEUE_LOOKAHEAD_DAYS = 30
+
+
+def _whatsapp_async(send, booking, label):
+    """Run one WhatsApp sender on a background thread.
+
+    Same contract as payments.views._notify_booking_async: a Meta call can take
+    up to 10s, and the booking state it describes is already committed — so it
+    must never sit inside the request (the cancel view already pays for a
+    synchronous Razorpay refund) and never fail it.
+    """
+    def _run():
+        try:
+            send(booking)
+        except Exception as exc:
+            logger.warning('%s WhatsApp failed for booking %s: %s', label, booking.id, exc)
+        finally:
+            # Threads get their own DB connection; close it so we don't leak.
+            connection.close()
+
+    threading.Thread(target=_run, name=f'{label}-{booking.id}', daemon=True).start()
 
 
 class StandardPagination(PageNumberPagination):
@@ -63,9 +102,31 @@ class HospitalQueueView(APIView):
                 status=403
             )
 
+        # Bound the queue to a date window.
+        #
+        # This filtered on hospital + status only, with no date bound and no
+        # pagination — so every CONFIRMED/ON_HOLD/IN_PROGRESS booking the
+        # hospital had EVER taken was serialised on every poll, and the
+        # dashboard polls every 10 seconds. The set only grows: abandoned past
+        # bookings never leave an active status on their own. CAPACITY.md §2
+        # called this the first endpoint that would fall over.
+        #
+        # Not filtered to today, though the analysis suggested it — the
+        # dashboard has Today / Tomorrow / All tabs (Hdashboard.js `dayFilter`)
+        # and today-only would silently empty two of them. A window keeps every
+        # tab working while dropping the unbounded tail.
+        #
+        # The look-back is deliberate: a booking left CONFIRMED or ON_HOLD from
+        # a previous day is exactly what staff need to see in order to close it
+        # out (the same rows the admin daily check flags as `stale_queue`).
+        today = timezone.localdate()
+        window_start = today - timedelta(days=QUEUE_LOOKBACK_DAYS)
+        window_end   = today + timedelta(days=QUEUE_LOOKAHEAD_DAYS)
+
         base = (
             Booking.objects
-            .filter(hospital_id=hospital_id)
+            .filter(hospital_id=hospital_id,
+                    date__gte=window_start, date__lte=window_end)
             .select_related('doctor', 'user')
         )
 
@@ -164,6 +225,8 @@ class NoShowView(APIView):
         booking.status = Booking.NO_SHOW
         booking.save(update_fields=['status'])
         logger.info('Booking %s marked no-show by hospital %s', pk, user_hospital_id)
+        push_booking_no_show(booking)
+        _whatsapp_async(send_booking_no_show, booking, 'no-show')
         return Response(BookingSerializer(booking, context={'request': request}).data)
 
 
@@ -199,6 +262,10 @@ class HoldBookingView(APIView):
 
         booking.save(update_fields=['status'])
         logger.info('Booking %s set to %s by hospital %s', pk, booking.status, user_hospital_id)
+        # Only the hold direction needs an alert — a resume is followed by the
+        # existing "you're next" push when staff actually call them.
+        if booking.status == 'ON_HOLD':
+            push_booking_on_hold(booking)
         return Response(BookingSerializer(booking, context={'request': request}).data)
 
 
@@ -249,6 +316,14 @@ class CancelBookingView(APIView):
         booking.status = 'CANCELLED'
         booking.save(update_fields=['status'])
         logger.info('Booking %s cancelled by user %s (refund: %s)', pk, request.user.id, refund_info)
+
+        # All best-effort: the cancellation + refund are already committed, so a
+        # notification failure must never turn a successful cancellation into an
+        # error. Pushes are local and cheap; the WhatsApp call is threaded.
+        push_booking_cancelled(booking, refund_info)   # patient: what was refunded
+        push_cancellation_to_hospital(booking)         # hospital: slot is free again
+        _whatsapp_async(
+            lambda b: send_booking_cancelled(b, refund_info), booking, 'cancellation')
         return Response({
             'message': 'Booking cancelled successfully.',
             'refund':  refund_info,

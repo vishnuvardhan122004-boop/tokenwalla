@@ -5,6 +5,75 @@ Doctor-appointment booking with a live hospital queue. Django REST backend
 **separate repo** — any change to the `/api/payment/*` contract must be mirrored
 there.
 
+## ⚠️ This product is LIVE
+
+Real patients hold tokens. Real money moves through Razorpay. Traffic is low
+today, which buys room to make mistakes — it does not make them free. From
+2026-08-09 onward this repo is in **production-ready mode**, and the rules below
+are not suggestions.
+
+**Never, from a session:**
+
+- Touch the production database. No `railway run`, no `railway connect`, no
+  `psql`. If something can only be diagnosed against prod, say so and hand it to
+  Vishnu — don't improvise.
+- Push to `main` or `develop`. Both deploy. Work on a feature branch, open a
+  PR, let CI run the tests.
+- Deploy. No `vercel --prod`, no deploy hooks. Merging is the deploy.
+
+**Deployment is Railway + Vercel only. Render is gone** — don't reintroduce it,
+and treat any older note mentioning a Render deploy hook as stale.
+`.github/workflows/deploy.yml` is named for history but runs **tests only**;
+Railway and Vercel each deploy off their own GitHub integration on a push to
+`main`. Keep CI green — Railway's "Wait for CI" will hold a deploy back on a
+red run.
+- Put an `rzp_live_` key anywhere near local dev — it charges a real card on
+  every test payment. Razorpay has no sandbox for live credentials.
+
+`.claude/hooks/guard-production.py` blocks all of the above. If it fires, that's
+the system working: surface it, don't route around it.
+
+**Migrations against live data.** Additive only — new nullable columns, new
+tables. Never drop or rename a column that deployed code still reads. Railway
+migrates and deploys as separate steps, so every migration must be safe to run
+*before* the code that needs it. Real bookings, payments and ledger rows already
+exist; a migration that assumes an empty table will corrupt them.
+
+**The default is to do less.** When a change could be narrow or broad, take the
+narrow one. When you're unsure whether something is safe, stop and ask — a
+question costs a minute, a bad refund path costs a patient.
+
+## The three repos
+
+| Repo | Contains | Deploys to |
+|---|---|---|
+| **this one** (`tokenwalla`) | Django backend (`backend/`) + React website (`src/`) | Railway (API) + Vercel (web) |
+| **mobile app** (`tokenwalla.app`) | Expo/React Native patient app | EAS build → stores |
+
+The app is a **separate repo with its own release cycle**, and that asymmetry is
+the single most common source of breakage: the website ships the moment a PR
+merges, the app ships when someone builds and the stores approve it.
+
+So: **the API is a contract, not an implementation detail.** Any change to
+request shape, response shape, status values or error codes on `/api/payment/*`
+or `/api/bookings/*` breaks installed apps that cannot be updated on your
+schedule. Additive changes only; if a breaking change is unavoidable, version
+the endpoint and keep the old one alive until the app release has rolled out.
+Call it out explicitly in the PR — `/ship` checks for this.
+
+## How we work
+
+Sessions are ~3 hours. One slice per session, merged before it ends.
+
+- `/start` — orient, pick the top ROADMAP item, agree the scope, cut a branch
+- work the slice
+- `/ship` — the pre-merge gate (tests, money paths, migrations, secrets, API contract)
+- `/wrap` — update ROADMAP + WORKLOG, write tomorrow's first move
+
+`ROADMAP.md` is the single source of truth for what's next. If a plan lives in a
+chat message and not in ROADMAP.md, it doesn't exist — tomorrow's session won't
+see it.
+
 ## Payments
 
 **Gateway: Razorpay.** (The project ran on Cashfree from 2026-07-29 to
@@ -24,7 +93,21 @@ there.
   only inside `razorpay_utils.py` at the API boundary.
 - Razorpay refunds are keyed by **payment id**, not order id.
 
-### Doctor payouts are MANUAL
+### Doctor payouts are MANUAL — and this is deliberate
+
+**This is the chosen design, not a missing feature.** Do not propose automating
+it, do not add a payout API, do not reintroduce RazorpayX. Any older note
+calling automated payouts a priority is stale — it lost.
+
+The money path is: patient pays → **Razorpay settles to TokenWalla** → Vishnu
+pays each doctor from the **Slice current account** → the payment is recorded in
+the admin. A human sits in the middle on purpose: at this stage Vishnu wants
+eyes on every rupee daily — sales, who's owed, whether anything looks wrong —
+and an automated payout removes the one checkpoint that catches a bad number
+before it leaves the bank.
+
+Revisit around **October 2026**, only once the daily numbers are boring and
+Vishnu says so explicitly. Until then, treat automation as out of scope.
 
 There is no payout API call anywhere, and no payout keys or webhooks to
 configure. Staff wire the money from TokenWalla's own bank account, then record
@@ -68,10 +151,76 @@ salaried doctor's money goes to their hospital) and *on which rail*
 
 ## Testing
 
-`cd backend && python manage.py test` (99 tests) and `CI=true npx react-scripts
-test --watchAll=false`. Payment changes must keep `payments/tests_payments.py`
+`cd backend && python manage.py test` (158 tests) and `CI=true npx react-scripts
+test --watchAll=false` (13). Payment changes must keep `payments/tests_payments.py`
 and `payments/tests_integration.py` green — they cover the fee math, refund
 tiers, the manual-payout flow, and the order-binding/idempotency regressions.
+
+CI (`.github/workflows/deploy.yml`) runs **tests only** and runs on
+`pull_request`, so a PR is gated before it lands. It also gates on
+`makemigrations --check`.
+
+### Four traps that have already cost a session
+
+**1. Every `threading.Thread` in a view is a test-isolation hazard.** Views fire
+WhatsApp + push on a **background thread** that opens its own DB connection and
+outlives the test. Against Django's shared-cache in-memory SQLite it then
+collides with a LATER, UNRELATED test's first write and fails it with
+`database table is locked`. It reproduces about one run in four, on a different
+test each time, so a single green run proves nothing.
+
+There are four such threads. Any test that reaches one must patch it:
+
+| Fires on | Patch |
+|---|---|
+| booking through `/verify/` | `payments.views._dispatch_booking_notifications` |
+| `/api/payment/payouts/mark-paid/` | `payments.views._notify_doctor_payout_async` |
+| doctor toggled to unavailable | `doctors.views._notify_doctor_unavailable` |
+| booking cancel / hold / no-show | `bookings.views._whatsapp_async` |
+
+```python
+@mock.patch('payments.views._dispatch_booking_notifications', lambda b: None)
+```
+
+The tell in a verbose log is a `graph.facebook.com` proxy error, or a
+`push_to_hospital(N) failed` line, attributed to a test that has nothing to do
+with the feature — the thread's output lands on whichever test is running when
+it finishes, so the *reported* test is never the offender. **The check that
+actually proves it: `manage.py test -v 2` with zero `graph.facebook.com` lines.**
+A live outbound call during the suite means a thread escaped.
+
+**2. Never hard-code a date in a test.** `payments/tests_integration.py` had
+`'2026-08-01'` literals that silently rotted into the past and then started
+failing the 2h booking cutoff. Compute dates from `timezone.localdate()`.
+
+**3. Never let a test depend on the time of day.** A cutoff test using today's
+date with an `09:00 AM` slot passed at 23:00 and failed at 01:00. Pin the clock
+instead: `@mock.patch('tokenwalla.utils.timezone.now')`.
+
+**4. Don't add `TransactionTestCase` to this suite.** Its teardown truncates
+every table, which is a lot of destructive machinery against the shared-cache
+SQLite test DB. Simulate "outside a transaction" by patching the connection.
+True-concurrency tests genuinely need Postgres and are `skipUnless`'d — they do
+not run in CI, so a row-lock guarantee is code review plus a manual
+`DATABASE_URL=postgres://...` run, not something CI proves.
+
+## Rate limiting and the OTP caps
+
+The OTP attempt cap and the daily SMS-send cap are counted in the **database**
+(`users.RateCounter.bump()`, under `select_for_update()`), not the cache.
+
+`cache.incr()` is only atomic on Redis — `DatabaseCache` inherits
+`BaseCache.incr`, a read-modify-write. That was harmless when gunicorn ran one
+sync worker and requests were strictly serialised, but the worker/thread change
+(3 × 4) makes twelve requests concurrent, and parallel guesses could each read
+the same count before any wrote back. These caps are a security control; they
+must not weaken because an env var changed the cache backend. Don't move them
+back into the cache, and don't assume `cache.incr` is atomic anywhere else.
+
+Two behaviours that look like bugs and aren't: the window rolls from the FIRST
+event (so hammering the endpoint can't hold your own counter open), and a
+successful login clears the attempt counter but deliberately NOT the daily send
+cap (resetting the spend ceiling on login would make flooding free again).
 
 ## Local dev gotchas
 
@@ -87,3 +236,14 @@ suite is insulated from this: `settings.py` forces the redirect off under
 Local checkout needs the `rzp_test_` key pair. An `rzp_live_` key in `.env`
 charges a real card on every test payment — Razorpay has no sandbox for live
 credentials.
+
+**Redis is opt-in, and deliberately not switched on by `REDIS_URL`.** That
+variable defaulted to `redis://localhost:6379/0` and was read but never used, so
+the stale value is already sitting in local `.env` files pointing at a Redis
+nobody runs. Keying the cache backend off it would send every throttled request
+— which is all of them — at a dead connection, and the site would look broken
+for a reason that isn't in the code. So the cache uses Redis only when
+`USE_REDIS_CACHE=True` *and* `REDIS_URL` is set; otherwise it falls back to the
+database cache table, which needs nothing running. Set the flag on Railway once
+a Redis addon is attached, never locally. (The test suite forces LocMemCache
+regardless, so a developer with Redis configured doesn't get cross-test bleed.)

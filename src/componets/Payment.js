@@ -91,8 +91,11 @@ export default function Payment() {
       // Server computes the full fee from the doctor's consultation fee — we
       // send only doctorId, never an amount. It returns a Razorpay order_id +
       // the public key id to open Checkout with.
+      // date + slot let the server reject a full or expired slot BEFORE the
+      // payment happens, so a collision is a clean message instead of a
+      // charge-then-refund. The server re-checks after capture regardless.
       const { data: orderData } = await API.post('/payment/create-order/', {
-        doctorId,
+        doctorId, date, slot,
       });
 
       const verify = async () => {
@@ -112,6 +115,14 @@ export default function Payment() {
                 paymentId:    verifyData.booking?.paymentId,
                 userName:     bookedForName || user?.name || user?.username,
                 queue_access,
+                // >0 only for a SERVICE_ONLY doctor — the token page shows the
+                // "pay the consultation fee at the hospital" note off this.
+                // The verify response is authoritative; the checkout preview
+                // covers the idempotent replay, which omits the breakdown.
+                offlineDoctorFee: Number(
+                  verifyData.booking?.breakdown?.offline_doctor_fee
+                  ?? breakdown?.offline_doctor_fee ?? 0
+                ),
               }
             });
           } else {

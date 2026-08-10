@@ -1,0 +1,101 @@
+{
+  "$comment": "SHARED project settings — committed to git. Personal overrides go in settings.local.json (gitignored). Production-phase guardrails: see .claude/hooks/guard-production.py for the hard blocks.",
+
+  "permissions": {
+    "defaultMode": "default",
+
+    "deny": [
+      "Read(./backend/.env)",
+      "Read(./.env)",
+      "Read(./src/.env)",
+      "Read(./**/.env.production)",
+      "Read(./**/.env.local)",
+      "Edit(./backend/.env)",
+      "Edit(./.env)",
+      "Edit(./src/.env)",
+      "Read(./backend/db.sqlite3)",
+      "Read(./backend/media/**)",
+
+      "Bash(railway run:*)",
+      "Bash(railway connect:*)",
+      "Bash(railway up:*)",
+      "Bash(railway redeploy:*)",
+      "Bash(railway variables:*)",
+      "Bash(vercel --prod:*)",
+      "Bash(vercel deploy:*)",
+      "Bash(psql:*)",
+      "Bash(pg_dump:*)",
+      "Bash(pg_restore:*)",
+      "Bash(dropdb:*)",
+
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -fd:*)",
+      "Bash(rm -rf:*)"
+    ],
+
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(git checkout main:*)",
+      "Bash(git switch main:*)",
+      "Bash(git merge:*)",
+      "Bash(git rebase:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(python manage.py migrate:*)",
+      "Bash(python manage.py makemigrations:*)",
+      "Bash(npm install:*)",
+      "Bash(pip install:*)"
+    ],
+
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git stash:*)",
+      "Bash(git checkout -b:*)",
+      "Bash(git switch -c:*)",
+      "Bash(python manage.py test:*)",
+      "Bash(python manage.py check:*)",
+      "Bash(python manage.py showmigrations:*)",
+      "Bash(python manage.py makemigrations --check --dry-run:*)",
+      "Bash(npm test:*)",
+      "Bash(npm run build:*)",
+      "Bash(CI=true npx react-scripts test:*)",
+      "Bash(npx eslint:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(rg:*)",
+      "Bash(find:*)"
+    ]
+  },
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-production.py\"",
+            "statusMessage": "Checking production safety"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/update-worklog.py\" 2>/dev/null || true",
+            "statusMessage": "Updating WORKLOG.md"
+          }
+        ]
+      }
+    ]
+  }
+}

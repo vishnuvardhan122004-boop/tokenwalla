@@ -10,8 +10,13 @@ export default function BookingToken() {
   const navigate  = useNavigate();
   const {
     token, doctorName, hospital, date, slot,
-    paymentId, userName, queue_access,
+    paymentId, userName, queue_access, offlineDoctorFee,
   } = location.state || {};
+
+  // Only a SERVICE_ONLY booking leaves the consultation fee due at the desk.
+  // Unknown (legacy state) ⇒ stay quiet rather than tell a patient who paid in
+  // full to pay again.
+  const payAtClinic = Number(offlineDoctorFee) > 0;
 
   const [queuePos,  setQueuePos]  = useState(null);
   const [bookingId, setBookingId] = useState(null);
@@ -262,9 +267,11 @@ export default function BookingToken() {
                   slot={slot}
                   variant="inline"
                 />
-                <div className="bt-qr-note">
-                  ℹ️ You have paid only for the service to Tokenwalla. The doctor's consultation fee is to be paid separately at the hospital.
-                </div>
+                {payAtClinic && (
+                  <div className="bt-qr-note">
+                    ℹ️ You have paid only for the service to Tokenwalla. The doctor's consultation fee (₹{Number(offlineDoctorFee).toFixed(2)}) is to be paid separately at the hospital.
+                  </div>
+                )}
               </div>
             </div>
 

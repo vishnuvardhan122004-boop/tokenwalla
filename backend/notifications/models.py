@@ -44,13 +44,19 @@ class WhatsAppLog(models.Model):
         ('appointment_reminder', 'Appointment Reminder'),
         ('doctor_unavailable',   'Doctor Unavailable'),
         ('hospital_new_booking', 'Hospital New Booking'),
+        ('doctor_payout',        'Doctor Payout Paid'),
+        ('booking_cancelled',    'Booking Cancelled'),
+        ('booking_no_show',      'Booking No-show'),
     ]
     STATUS_CHOICES = [
         ('sent',   'Sent'),
         ('failed', 'Failed'),
     ]
 
-    booking       = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='whatsapp_logs')
+    # Nullable: a payout notification covers a whole PayoutBatch (many bookings,
+    # sometimes none still referenced), so it has no single booking to point at.
+    booking       = models.ForeignKey(Booking, null=True, blank=True,
+                                      on_delete=models.CASCADE, related_name='whatsapp_logs')
     event_type    = models.CharField(max_length=30, choices=EVENT_CHOICES)
     status        = models.CharField(max_length=10, choices=STATUS_CHOICES)
     wa_message_id = models.CharField(max_length=120, blank=True)
@@ -64,4 +70,5 @@ class WhatsAppLog(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.event_type} -> booking {self.booking_id} [{self.status}]'
+        target = f'booking {self.booking_id}' if self.booking_id else 'no booking'
+        return f'{self.event_type} -> {target} [{self.status}]'

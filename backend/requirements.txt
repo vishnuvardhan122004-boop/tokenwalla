@@ -10,6 +10,12 @@ gunicorn==23.0.0
 psycopg2-binary==2.9.10
 dj-database-url==2.3.0
 
+# ── Cache ─────────────────────────────────────────────────────────────────────
+# Client for django.core.cache.backends.redis (built into Django, but the
+# driver is not). Only imported when REDIS_URL is set; without it the cache
+# falls back to the database table and this dependency sits unused.
+redis==5.2.1
+
 # ── Storage ───────────────────────────────────────────────────────────────────
 cloudinary==1.41.0
 django-cloudinary-storage==0.3.0

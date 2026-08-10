@@ -178,6 +178,10 @@ class PayoutPipelineTests(BaseDataMixin, TestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 # Manual payouts — admin payouts page (PendingPayoutsView / MarkPayoutPaidView)
 # ─────────────────────────────────────────────────────────────────────────────
+# mark-paid fires _notify_doctor_payout_async on a background thread that opens
+# its own DB connection and outlives the test — the same trap as
+# _dispatch_booking_notifications. See "Four traps" in CLAUDE.md.
+@mock.patch('payments.views._notify_doctor_payout_async', lambda b: None)
 class ManualPayoutTests(BaseDataMixin, TestCase):
     def _admin_client(self):
         admin = User.objects.create(username='adm', mobile='9000000099',
@@ -254,6 +258,7 @@ class ManualPayoutTests(BaseDataMixin, TestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 # Multi-booking batching
 # ─────────────────────────────────────────────────────────────────────────────
+@mock.patch('payments.views._notify_doctor_payout_async', lambda b: None)
 class MultiBookingPayoutTests(BaseDataMixin, TestCase):
     def test_two_completed_bookings_pay_out_as_one_batch(self):
         self.make_world(status=Booking.COMPLETED, token='TW-I2')

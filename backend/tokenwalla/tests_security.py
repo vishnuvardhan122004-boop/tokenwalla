@@ -56,6 +56,11 @@ def _auth(client, user):
     client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
 
 
+# Toggling a doctor to unavailable fires _notify_doctor_unavailable on a
+# background thread that opens its own DB connection and outlives the test —
+# the same trap as _dispatch_booking_notifications. See "Four traps" in
+# CLAUDE.md.
+@patch('doctors.views._notify_doctor_unavailable', lambda doctor_id: None)
 @override_settings(CACHES=LOCMEM_CACHE)
 class DoctorAccessControlTests(TestCase):
     """Vuln 1: only authenticated hospital/admin may write doctors."""
@@ -175,7 +180,10 @@ class BookForOtherTests(TestCase):
             'doctorId': self.doctor.id,
             'doctorName': self.doctor.name,
             'hospital': self.hospital.name,
-            'date': str(datetime.date.today()),
+            # Far enough out to clear BOOKING_CUTOFF_HOURS, now enforced
+            # server-side on checkout (bookings/capacity.py). Today's 09:00 AM
+            # is in the past by the time this suite runs.
+            'date': str(datetime.date.today() + datetime.timedelta(days=3)),
             'slot': '09:00 AM',
             'queue_access': True,
         }
