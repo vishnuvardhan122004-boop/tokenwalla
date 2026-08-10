@@ -151,10 +151,61 @@ salaried doctor's money goes to their hospital) and *on which rail*
 
 ## Testing
 
-`cd backend && python manage.py test` (99 tests) and `CI=true npx react-scripts
-test --watchAll=false`. Payment changes must keep `payments/tests_payments.py`
+`cd backend && python manage.py test` (158 tests) and `CI=true npx react-scripts
+test --watchAll=false` (13). Payment changes must keep `payments/tests_payments.py`
 and `payments/tests_integration.py` green — they cover the fee math, refund
 tiers, the manual-payout flow, and the order-binding/idempotency regressions.
+
+CI (`.github/workflows/deploy.yml`) runs **tests only** and runs on
+`pull_request`, so a PR is gated before it lands. It also gates on
+`makemigrations --check`.
+
+### Four traps that have already cost a session
+
+**1. Booking through `/verify/` leaks a thread.** A successful verify fires
+WhatsApp + push via `_dispatch_booking_notifications` on a **background thread**
+that opens its own DB connection and outlives the test. Against Django's
+shared-cache in-memory SQLite it then collides with a LATER, UNRELATED test's
+first write and fails it with `database table is locked`. It reproduces about
+one run in seven, on a different test each time, so a single green run proves
+nothing. Any test that books through the API must patch it:
+
+```python
+@mock.patch('payments.views._dispatch_booking_notifications', lambda b: None)
+```
+
+**2. Never hard-code a date in a test.** `payments/tests_integration.py` had
+`'2026-08-01'` literals that silently rotted into the past and then started
+failing the 2h booking cutoff. Compute dates from `timezone.localdate()`.
+
+**3. Never let a test depend on the time of day.** A cutoff test using today's
+date with an `09:00 AM` slot passed at 23:00 and failed at 01:00. Pin the clock
+instead: `@mock.patch('tokenwalla.utils.timezone.now')`.
+
+**4. Don't add `TransactionTestCase` to this suite.** Its teardown truncates
+every table, which is a lot of destructive machinery against the shared-cache
+SQLite test DB. Simulate "outside a transaction" by patching the connection.
+True-concurrency tests genuinely need Postgres and are `skipUnless`'d — they do
+not run in CI, so a row-lock guarantee is code review plus a manual
+`DATABASE_URL=postgres://...` run, not something CI proves.
+
+## Rate limiting and the OTP caps
+
+The OTP attempt cap and the daily SMS-send cap are counted in the **database**
+(`users.RateCounter.bump()`, under `select_for_update()`), not the cache.
+
+`cache.incr()` is only atomic on Redis — `DatabaseCache` inherits
+`BaseCache.incr`, a read-modify-write. That was harmless when gunicorn ran one
+sync worker and requests were strictly serialised, but the worker/thread change
+(3 × 4) makes twelve requests concurrent, and parallel guesses could each read
+the same count before any wrote back. These caps are a security control; they
+must not weaken because an env var changed the cache backend. Don't move them
+back into the cache, and don't assume `cache.incr` is atomic anywhere else.
+
+Two behaviours that look like bugs and aren't: the window rolls from the FIRST
+event (so hammering the endpoint can't hold your own counter open), and a
+successful login clears the attempt counter but deliberately NOT the daily send
+cap (resetting the spend ceiling on login would make flooding free again).
 
 ## Local dev gotchas
 

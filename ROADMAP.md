@@ -15,18 +15,39 @@ the things that can lose money or break a live booking come first.
 
 ## Now
 
-All four hardening items are **written and green, but nothing is merged.**
-Branch `fix/enforce-slot-capacity`. That is the only thing standing between
-this work and production.
+**PR #10 is open and CI is RED.** Branch `fix/enforce-slot-capacity`, 20 commits,
+pushed. Website job passes; the backend job fails. Nothing merges until it's green.
 
-### 1. Open the PR and merge 🔴
+### 1. Get PR #10's backend job green 🔴
 
-The single next action. Everything below is done code; none of it protects a
-patient until it is on `main`.
+Open the Backend tests job on the PR, search the log for `ERROR:` or `FAIL:`,
+and read the traceback under it.
+
+**If it says `database table is locked`** — another test is leaking the
+notification background thread. See "Four traps" in `CLAUDE.md`; the fix is to
+patch `payments.views._dispatch_booking_notifications` on the offending class.
+One fix for this already landed (`1aa50cc`) and was not enough, so look for a
+second offender rather than assuming it's the same one.
+
+**If it says anything else** — it's a real failure the local suite didn't hit.
+
+A single local run proves nothing here; this class of flake is roughly 1-in-7.
+Loop it:
 
 ```bash
-git push -u origin fix/enforce-slot-capacity
+cd backend
+export SECRET_KEY=ci DEBUG=True DATABASE_URL="sqlite:///test.db"
+for i in $(seq 1 15); do
+  out=$(python manage.py test 2>&1)
+  echo "$out" | grep -q '^FAILED' && { echo "run $i FAILED"; echo "$out" | grep -A 25 -E '^(ERROR|FAIL): '; break; }
+done
+rm -f test.db
 ```
+
+### 2. Then merge 🔴
+
+Everything in the branch is done code; none of it protects a patient until it
+is on `main`.
 
 Then `/ship` for the gate, open the PR, let CI run, merge.
 
@@ -63,7 +84,11 @@ service inherits `railway.json` and boots gunicorn instead of the command).
 Until the second one runs, no doctor ever appears on the payouts page. The new
 `ledger_not_running` alert on the admin dashboard is the alarm for it.
 
-### 3. Delete the zombie reminder cron 🟠
+### ~~3. Delete the zombie reminder cron~~ ✅ 2026-08-09 — deleted
+
+Audited on Railway and removed. Kept for the record of what to look for:
+
+
 
 `tokenwalla-reminders-cron` on Railway is a duplicate of the working
 `send_appointment_reminders` service, and it is dead:
