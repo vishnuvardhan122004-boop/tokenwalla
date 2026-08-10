@@ -8,55 +8,113 @@ that aren't code.
 
 ---
 
-## Today — 2026-08-10
+## Open right now
 
-- [x] Reproduce PR #10's backend CI failure locally (`database table is locked`, ~1 run in 4)
-- [x] Find the second and third thread leakers — payout mark-paid and the doctor-unavailable toggle
-- [x] Patch them; 57 consecutive green runs (`dcd4c16`)
-- [x] Replace the last hard-coded date literal (`payments/tests_integration.py`)
-- [ ] **Remove the stale `.git/index.lock`** — a zero-byte lock is blocking all commits
-- [ ] Commit the ROADMAP / CLAUDE.md / TASKS.md edits (staged and ready on disk)
-- [ ] **Push `fix/enforce-slot-capacity`** — `origin` is still 2 commits behind, so PR #10
-      has never seen either fix. This is the whole reason CI is red.
-- [ ] `/ship` gate, then merge PR #10 — nothing in the branch protects a patient until it's on `main`
+### 1. Verify the two Railway crons actually ran 🟠
 
-## Blocked on Vishnu (dashboard work, not code)
+Both services exist as of today, but **a cron service that exists is not a cron
+service that works.** Without its own config file a service inherits
+`railway.json` and boots gunicorn instead of the command — which looks identical
+from the services list, and is exactly how the zombie reminder cron went 14 days
+unnoticed logging only `Starting Container`.
 
-- [x] Create the Railway cron service for `backend/railway.cron.json` — appointment reminders, every 10 min
-- [x] Create the Railway cron service for `backend/railway.payouts.cron.json` — `run_daily_payouts`, 20:30 IST
-- [x] Generate a permanent Meta System-User token
-- [ ] **Confirm the permanent token is actually in Railway**, not just created in Meta —
-      `WHATSAPP_ACCESS_TOKEN` must be updated on the service and the service redeployed.
-      Creating it in Meta alone changes nothing.
-- [ ] Authorize the connectors this session couldn't reach: Linear, Slack, Notion, Atlassian, Datadog, ClickUp, Monday
+- [ ] **Reminders** (`*/10 * * * *`) — checkable immediately, it fires every 10
+      minutes. Open the service log and look for real application output.
+- [ ] **Payouts** (`0 15 * * *` UTC = **20:30 IST**) — after 20:30 tonight, look for
+      `Ledgered 0 booking(s). Payouts are manual — see the admin payouts page.`
+      That line appearing **at all** is the proof.
+- [ ] Schedule is already correct. If it ever looks wrong, do **not** change it to
+      `30 20` — Railway cron is UTC and that bug was fixed once already.
 
-## Tonight — first ever `run_daily_payouts` run (20:30 IST)
+> **The dashboard cannot verify the payouts cron, and I was wrong to say it could.**
+> Checked the live card after the merge: it reads "✓ Nothing needs you", so
+> `ledger_not_running` is not firing and cannot clear. With no doctor on
+> `FULL` collection there are no ledger rows to write either. Tonight's run
+> leaves **no trace anywhere in the UI** — the service log is the only signal.
 
-`run_daily_payouts` has **no date filter**: it sweeps every COMPLETED +
-PAYOUT_PENDING booking that has ever existed. Tonight's first run therefore
-ledgers the whole backlog at once, not just today's.
+### 2. Confirm the permanent WhatsApp token reached Railway 🟠
 
-- [ ] After 20:30 IST, read the cron service log — the `Ledgered N booking(s)` line
-- [ ] Open `/Adashboard/payouts` and **eyeball the totals before wiring anyone money**.
-      A number that looks too big is expected on the first run; a number that looks
-      wrong is worth stopping for.
-- [ ] Confirm the `ledger_not_running` alert on the admin dashboard clears
+Permanent in Meta ≠ in use in production. `WHATSAPP_ACCESS_TOKEN` has to be
+updated on the Railway service *and* the service redeployed. `send_template`
+fails silently by design — it logs a warning and returns, never raises — so a
+stale token looks exactly like a working one.
 
-## The day after merge — watch it
+- [ ] `manage.py send_test_whatsapp <your mobile> --template booking_confirmation`
+      — proves it end to end with no test booking and no real money
 
-- [ ] Confirm the `ledger_not_running` alert clears once the payouts cron runs
-- [ ] `grep oversold_refund` in the Railway logs — any hit means a patient was charged and refunded
-- [ ] Check the hospital dashboard still shows Today / Tomorrow / All correctly
+### 3. Ship the mobile app 🟠
+
+`5b11bd7` is committed but changes nothing for patients until a build goes out.
+
+- [ ] EAS build + submit
+- [ ] **First, check the EAS build list for what's actually in the store.**
+      `appVersionSource: "remote"` and no git tags, so the repo can't tell you.
+      If the last production build predates 2026-08-05, patients aren't even on
+      the Razorpay checkout yet — that would outrank everything else here.
+
+### 4. Housekeeping
+
+- [ ] `grep oversold_refund` in the Railway logs — any hit means a patient was
+      charged and auto-refunded, worth knowing why
+- [ ] Confirm the hospital dashboard still shows Today / Tomorrow / All correctly
+- [ ] Authorize the connectors this session couldn't reach: Linear, Slack, Notion,
+      Atlassian, Datadog, ClickUp, Monday
+
+---
+
+## The thing the roadmap isn't tracking
+
+Live numbers, 2026-08-10: 27 users · 11 hospitals live · 8 doctors · **4 bookings
+ever** · ₹60 lifetime revenue · **last booking 2026-07-26**.
+
+The hardening shipped this week — slot capacity, queue bounds, 3×4 gunicorn, the
+Redis-ready cache — is correct work and had to happen before traffic arrives. But
+nothing is currently stressing any of it, no doctor has opted into `FULL`
+collection, and the payout machinery has never carried a rupee.
+
+- [ ] Decide whether the next session goes to demand — getting the 11 live
+      hospitals actually booking — rather than more infrastructure
+
+---
 
 ## Next up (from ROADMAP)
 
-- [ ] Verify the WhatsApp token is a permanent System-User token, not the 24h temp one — if it's temporary, every notification is already silently dead
-- [ ] Mobile app `/api/bookings/upgrade/` contract — still sends bare `payment_id`, which now returns 400. Installed apps are broken on this path
 - [ ] Pause the hospital dashboard poll on tab hide (reuse `useVisiblePolling`)
 - [ ] Raise the 6-char password floor
 - [ ] Branch cleanup — 12 local branches, several long dead
 
+---
+
 ## Done
 
-- **2026-08-10** — PR #10's CI flake diagnosed and fixed (`dcd4c16`)
-- **2026-08-09** — Slot capacity enforced on the money paths; hospital queue bounded; gunicorn 3×4; daily ops check on `/Adashboard`; OTP caps moved to the DB
+### 2026-08-10
+
+- **PR #10 shipped.** `b719378` on `main` — 23 commits, +3,985/−99. Vercel
+  production READY; Railway confirmed live via `/api/payment/daily-summary/`
+  returning 200 and the Today's check card rendering on `/Adashboard`.
+- **The CI flake, diagnosed and fixed** (`dcd4c16`). `database table is locked`
+  was a leaking notification thread — but `_dispatch_booking_notifications` was
+  only the **first of three** sources. `_notify_doctor_payout_async` (mark-paid)
+  and `_notify_doctor_unavailable` (availability toggle) were never patched, and
+  were making real outbound WhatsApp calls during the suite. Reproduced ~1 run in
+  4; 57 consecutive green runs after. The generalisation is now in `CLAUDE.md`:
+  every `threading.Thread` in a view is a test-isolation hazard, and a verbose run
+  with zero `graph.facebook.com` lines is the check that proves it.
+- **`/ship` gate run clean** — 158 backend + 13 frontend tests, 68 money-path
+  tests, no secrets, no debris. Caught that ROADMAP undercounted the migrations:
+  **three**, not one (`users/0003_ratecounter` plus two `notifications` ones). All
+  additive and safe to run ahead of the code.
+- **Mobile app audited and fixed** (`5b11bd7`). Three fixes: `create-order/` now
+  sends `date`/`slot` top-level so a full slot is refused *before* charging;
+  the error handler reads the server's message instead of axios's useless
+  `"Request failed with status code 409"`; `/verify/` no longer retries a 4xx.
+  `tsc` clean, jest 100/100.
+- **Two roadmap items deleted as non-issues.** The app is fully on Razorpay
+  (WORKLOG line 7 was stale), and `/api/bookings/upgrade/` is neither called by
+  the app nor present in `bookings/urls.py`.
+- Railway crons created; permanent Meta System-User token generated.
+
+### Earlier
+
+- **2026-08-09** — Slot capacity enforced on the money paths; hospital queue
+  bounded; gunicorn 3×4; daily ops check on `/Adashboard`; OTP caps moved to the DB

@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `feature/fee-splitting-refunds-payouts` (web/backend) · `main` (mobile app repo)
-- **Latest commit at last update:** `d79103e` (web/backend) — back to Razorpay + manual doctor payouts; mobile app still on the Cashfree SDK
-- **Last updated:** 2026-08-05
+- **Branch:** `main` (web/backend) · `payments-server-priced-checkout` (mobile app repo)
+- **Latest commit at last update:** `b719378` (web/backend, PR #10 merged) · `5b11bd7` (app)
+- **Last updated:** 2026-08-10
 
 ### How to update this log
 - Add a new `## YYYY-MM-DD — <title>` section **on top** for each working session; keep older sessions below.
@@ -13,6 +13,53 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-10 — PR #10 shipped; the CI flake was three leaks, not one
+
+**Branch:** `fix/enforce-slot-capacity` → merged as `b719378` · **App:** `5b11bd7`
+
+| Change | What it fixed | Proof | Status |
+|---|---|---|---|
+| `dcd4c16` patch `_notify_doctor_payout_async` + `_notify_doctor_unavailable` in tests | The red CI job. `database table is locked` on a random unrelated test | Reproduced ~1 run in 4; **57 consecutive green runs** after | ✅ |
+| `dcd4c16` drop the last hard-coded date literal | `tests_integration` reschedule test would have rotted past the 2h cutoff | Computed from `timezone.localdate()` | ✅ |
+| PR #10 merged + deployed | Slot capacity, queue bounds, gunicorn 3×4, daily-ops card now live | Vercel READY on `b719378`; `/api/payment/daily-summary/` 200 from Railway; card renders | ✅ |
+| App `5b11bd7` — `date`/`slot` top-level on `create-order/` | App never got the pre-payment rejection; every collision charged then refunded | `tsc` clean, jest 100/100 | 🕒 needs EAS build |
+| App `5b11bd7` — error handler reads server message before `e.message` | axios's `"Request failed with status code 409"` was masking the real explanation | same | 🕒 needs EAS build |
+| App `5b11bd7` — stop retrying 4xx on `/verify/` | 409 is final; retrying added ~4.5s before the patient heard it | same | 🕒 needs EAS build |
+
+### What the flake actually was
+
+`1aa50cc` patched `_dispatch_booking_notifications` and was not enough because
+there are **four** notification threads in views, not one, and two more were
+unpatched: the payout mark-paid path and the doctor-unavailable toggle. Both
+open their own DB connection and make a **real outbound WhatsApp call** during
+the suite. The thread's output lands on whichever test is running when it
+finishes, so the reported failing test is never the offender.
+
+**The check that actually proves it:** `manage.py test -v 2` with zero
+`graph.facebook.com` lines. Recorded in `CLAUDE.md` with the full table.
+
+### Corrections to earlier notes (all were wrong, all verified today)
+
+- The app is **fully on Razorpay**. Line 7 of this file said Cashfree — stale
+  since `cb3d29d` (2026-08-05).
+- `/api/bookings/upgrade/` does not return 400. It **does not exist** — not in
+  `bookings/urls.py`, and the app has zero references to it. Item #9 below is dead.
+- The branch carried **three** migrations, not one (`users/0003_ratecounter`
+  plus `notifications/0007` and `0008`). All additive.
+- `run_daily_payouts` will **not** ledger a backlog: every booking is ₹15
+  service-fee-only, so `doctor_fee` is 0 and nothing is owed.
+- `ledger_not_running` is **not** firing, so it cannot clear as proof the cron
+  ran. The Railway service log is the only signal.
+
+### The number that isn't in any table
+
+27 users · 11 hospitals live · 8 doctors · **4 bookings ever** · ₹60 lifetime ·
+last booking **2026-07-26**. The hardening shipped this week is correct work for
+a load that has not arrived. Whether the funnel is broken or empty is unresolved
+and is now item 5 in ROADMAP **Now**.
 
 ---
 
