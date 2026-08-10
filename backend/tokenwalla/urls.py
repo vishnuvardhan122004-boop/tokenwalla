@@ -1,13 +1,56 @@
+import logging
+
 from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
 from django.conf import settings
 from django.conf.urls.static import static
+from django.core.cache import cache
+
+logger = logging.getLogger('tokenwalla')
+
+
+def _cache_probe():
+    """Round-trip the cache so switching backends can be confirmed, not assumed.
+
+    Every request already touches the cache (DRF's throttles are global), so a
+    cache that looks configured but doesn't answer breaks the whole API. Before
+    this, the only way to tell which backend was live was to infer it from
+    Postgres write metrics.
+
+    The backend label is deliberately coarse — 'redis' or 'database', never the
+    URL — since /health/ is public.
+    """
+    backend = (
+        'redis'
+        if settings.CACHES['default']['BACKEND'].endswith('RedisCache')
+        else 'database'
+    )
+    try:
+        cache.set('health_probe', 'ok', timeout=10)
+        ok = cache.get('health_probe') == 'ok'
+    except Exception:
+        # A health endpoint must never raise: a 500 here reads as "the whole
+        # service is down" to anything watching, which is a worse signal than
+        # "the cache is unreachable".
+        logger.exception('Cache probe failed on /health/')
+        ok = False
+    return {'backend': backend, 'ok': ok}
 
 
 def health_check(request):
-    """Used by load balancers, uptime monitors, and CI pipelines."""
-    return JsonResponse({'status': 'ok', 'version': '1.0.0'})
+    """Used by load balancers, uptime monitors, and CI pipelines.
+
+    `status` stays 'ok' even when the cache probe fails, and the response stays
+    200. Railway's healthcheck restarts the service on a failure, and restarting
+    does not fix an unreachable Redis — it would turn a degraded API into a
+    restart loop with no API at all. Read `cache.ok` to judge that.
+    """
+    return JsonResponse({
+        'status':  'ok',
+        'version': '1.0.0',
+        'cache':   _cache_probe(),
+    })
 
 
 def app_version(request):
