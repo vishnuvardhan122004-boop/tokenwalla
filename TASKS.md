@@ -4,11 +4,39 @@ Working task list for TokenWalla. `ROADMAP.md` stays the source of truth for
 *what ships next*; this file tracks the day-to-day items, including the ones
 that aren't code.
 
-**Last updated:** 2026-08-10
+**Last updated:** 2026-08-11
 
 ---
 
 ## Open right now
+
+### 0. Merge the three branches — everything is blocked on this 🔴
+
+Written, pushed, CI-green, **not merged**. No PRs exist yet; the branches need
+one opened. Order matters.
+
+- [ ] `feat/app-version-gate` (backend, 3 commits) — **first**, it carries the
+      `/health/` probe needed to verify Redis and the `/api/app-version/`
+      endpoint the app build expects
+- [ ] `perf/dashboard-visible-polling` (web, 1 commit)
+- [ ] `payments-server-priced-checkout` (app, 13 commits) — then the EAS build
+- [ ] `docs/wrap-2026-08-11` (docs, 2 commits — includes the 2026-08-10 wrap
+      that was never pushed)
+
+### 0b. Turn on Redis 🔴
+
+Config only, no PR. Deferred on purpose on 2026-08-09; the promotion changes
+the premise. Every request currently writes to `tw_cache_table` on the same
+Postgres as bookings and payments.
+
+- [ ] Railway → New → Database → Add Redis
+- [ ] Backend service vars: `REDIS_URL` = `${{Redis.REDIS_PRIVATE_URL}}` (a
+      *reference*, not a pasted string) and `USE_REDIS_CACHE=True`
+- [ ] `curl .../health/` → want `{"backend": "redis", "ok": true}`
+
+Miss the `${{Redis…}}` reference and you silently stay on the database cache —
+it looks identical to success. Rollback: `USE_REDIS_CACHE=False`. Quiet hour:
+the cutover clears in-flight OTP sessions. Never set the flag locally.
 
 ### 1. Verify the two Railway crons actually ran 🟠
 
@@ -42,9 +70,10 @@ stale token looks exactly like a working one.
 - [ ] `manage.py send_test_whatsapp <your mobile> --template booking_confirmation`
       — proves it end to end with no test booking and no real money
 
-### 3. Ship the mobile app 🟠
+### 3. Ship the mobile app — now 13 commits, v1.2.0 🔴
 
-`5b11bd7` is committed but changes nothing for patients until a build goes out.
+The branch grew from 1 commit to 13. Nothing in it reaches a patient without a
+build, and the notification icon is baked in at build time.
 
 - [ ] EAS build + submit
 - [ ] **First, check the EAS build list for what's actually in the store.**
@@ -54,11 +83,15 @@ stale token looks exactly like a working one.
 
 ### 4. Housekeeping
 
+- [ ] **Check the 2Factor SMS balance** — a promotion drives OTP sends, it's real
+      money, invisible from the code, and sends just fail when it runs dry
 - [ ] `grep oversold_refund` in the Railway logs — any hit means a patient was
       charged and auto-refunded, worth knowing why
 - [ ] Confirm the hospital dashboard still shows Today / Tomorrow / All correctly
 - [ ] Authorize the connectors this session couldn't reach: Linear, Slack, Notion,
       Atlassian, Datadog, ClickUp, Monday
+- [ ] `gh` is not authenticated on this machine — `gh auth login`, or PRs have to
+      be opened by hand every time
 
 ---
 
@@ -66,6 +99,12 @@ stale token looks exactly like a working one.
 
 Live numbers, 2026-08-10: 27 users · 11 hospitals live · 8 doctors · **4 bookings
 ever** · ₹60 lifetime revenue · **last booking 2026-07-26**.
+
+**A promotion is now starting against these numbers.** That makes the
+broken-vs-empty question urgent rather than academic: if the store build
+predates 2026-08-05, the campaign spends money driving patients into a checkout
+that does not match the backend. Two sessions have now ended without checking
+the EAS build list. Check it before the campaign ramps.
 
 The hardening shipped this week — slot capacity, queue bounds, 3×4 gunicorn, the
 Redis-ready cache — is correct work and had to happen before traffic arrives. But
@@ -79,13 +118,43 @@ collection, and the payout machinery has never carried a rupee.
 
 ## Next up (from ROADMAP)
 
-- [ ] Pause the hospital dashboard poll on tab hide (reuse `useVisiblePolling`)
+- [ ] Backend observability — no error tracking on the API at all
+- [ ] Nothing consumes `GET /api/payment/receipt/<pk>/` — a finished GST receipt
+      with no caller in either the app or the website
+- [ ] App has no WhatsApp opt-in toggle (the website has one)
+- [ ] Sentry source maps disabled in production builds
+- [ ] `eas submit` unconfigured; no iOS build profile at all
+- [ ] No component/screen tests in the app — all 118 are pure logic
 - [ ] Raise the 6-char password floor
 - [ ] Branch cleanup — 12 local branches, several long dead
 
 ---
 
 ## Done
+
+### 2026-08-11
+
+> Written and pushed, **not merged and not deployed.** Nothing here has reached
+> a patient yet.
+
+- **The back button, diagnosed correctly the second time.** `doctor/[id]`,
+  `payment`, `my-qr`, `edit-profile` and `booking-token` are `Tabs.Screen`s with
+  `href: null`, so back was governed by the tab router's `firstRoute` default —
+  "return to the first defined route", which is Home. `safeBack` (`d9b0420`)
+  never fired because it only acts when `canGoBack()` is false. One line fixed
+  all of them: `backBehavior="history"` (`411c311`).
+- **Android hardware back** wired on 21 screens (`843e76a`), with `payment`
+  swallowing back while money is in flight and `booking-token` going forward to
+  my-bookings instead of back into the funnel.
+- **App update gate** — `/api/app-version/` (`0e744ff`) + the launch prompt
+  (`6a48655`). Only reaches builds that contain it, so it protects from 1.2.0 on.
+- **OTP throttle** — burst 5→20/min, new 200/day per-IP ceiling (`2fd23a7`).
+- **`/health/` cache probe** (`e204401`) so the Redis switch is verifiable.
+- **Dashboard polling paused on hidden tab** (`aa707e2`) + the hook's first tests.
+- **₹15 → ₹20** in all four languages, checked against `PLATFORM_FEE`.
+- Search typeahead, chip icons, notification icon wired, branding, dev tooling,
+  **v1.2.0**.
+- Tests: backend 158→**172**, app 100→**118**, web 13→**18**.
 
 ### 2026-08-10
 

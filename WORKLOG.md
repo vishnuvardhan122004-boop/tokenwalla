@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `main` (web/backend) · `payments-server-priced-checkout` (mobile app repo)
-- **Latest commit at last update:** `b719378` (web/backend, PR #10 merged) · `5b11bd7` (app)
-- **Last updated:** 2026-08-10
+- **Branch:** `feat/app-version-gate` + `perf/dashboard-visible-polling` (web/backend, both **unmerged**) · `payments-server-priced-checkout` (mobile app repo, **unmerged**)
+- **Latest commit at last update:** `e204401` + `aa707e2` (web/backend) · `0c8cef3` (app)
+- **Last updated:** 2026-08-11
 
 ### How to update this log
 - Add a new `## YYYY-MM-DD — <title>` section **on top** for each working session; keep older sessions below.
@@ -13,6 +13,46 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-11 — Back-nav root cause, the update gate, and pre-promotion capacity
+
+**Branches:** `feat/app-version-gate` (backend) · `perf/dashboard-visible-polling` (web) · `payments-server-priced-checkout` (app) — **all three pushed, none merged.**
+
+Context: a promotion is starting, so registration traffic is expected for the
+first time. That promoted capacity work deferred on 2026-08-09 and made the
+unshipped app build urgent.
+
+| Change | What it fixed | Proof | Status |
+|---|---|---|---|
+| `411c311` `backBehavior="history"` on the patient Tabs | **The actual back-button bug.** Hidden `Tabs.Screen`s (`href: null`) fell through to the tab router's `firstRoute` default → every back went to Home | Verified against the installed `@react-navigation/routers` source (`TabRouter.tsx:197`) | 🕒 needs EAS build |
+| `d9b0420` `safeBack` on 8 back buttons | Stranded users on deep links / notification taps where `canGoBack()` is false | 3 tests | 🕒 needs EAS build |
+| `843e76a` `hooks/useAndroidBack.ts` on 21 screens | Android hardware back ignored entirely; hospital/auth stacks exited the app | tsc + 103 jest; cross-checked hw back vs button on all 21 | 🕒 needs EAS build |
+| `0e744ff` `GET /api/app-version/` | No way to tell installed apps to update without a store release | 5 tests; blank default = no prompt | ⬜ unmerged |
+| `6a48655` launch-time update prompt | — | 14 tests on the compare/decide logic | 🕒 needs EAS build |
+| `6a48655` `/app-version/` added to `PUBLIC_ROUTES` | Caught in review: a stale token would 401 the launch check and trigger refresh-retry, **logging the patient out over a version check** | 1 test | 🕒 needs EAS build |
+| `2fd23a7` OTP per-IP burst 5→20/min + new 200/day ceiling | 5/min per IP 429s real signups behind carrier NAT — the exact lesson `OTPVerifyRateThrottle` already recorded for verify but never applied to sends | 4 tests; ~36× tighter on sustained abuse than before | ⬜ unmerged |
+| `e204401` `/health/` cache probe | Redis cutover had no confirmation step; the `USE_REDIS_CACHE and REDIS_URL` gate fails *silently* if the `${{Redis…}}` reference is missing | 5 tests, incl. "unreachable cache must not 500 or flip status" | ⬜ unmerged |
+| `aa707e2` hospital dashboard uses `useVisiblePolling` | Dashboard polled `/bookings/queue/:id/` every 10s all day behind other windows | 5 new tests (the hook had none) | ⬜ unmerged |
+| `9280e4e` ₹15 → ₹20 in 4 languages | App quoted a price the backend stopped charging | Checked against `PLATFORM_FEE = 20.00` | 🕒 needs EAS build |
+| `f1790a8` notification small icon wired into the plugin | `expo-notifications` had `color` but no `icon` | Asset verified 96×96, 82% transparent, opaque px pure white | 🕒 needs EAS build |
+| `e57245e` `622b148` `754e8ff` `4ace625` `421c6ec` `0c8cef3` | Search typeahead, chip icons, branding, dev tooling, EAS Sentry flag, **v1.2.0** | tsc clean, 118 jest | 🕒 needs EAS build |
+
+**Tests:** backend 158 → **172** · app 100 → **118** · web 13 → **18**.
+
+**The correction worth remembering:** `d9b0420` was described as fixing the
+jump-to-Home. It did not. `safeBack` only acts when `canGoBack()` is false, and
+under `backBehavior: 'firstRoute'` it is true — so `back()` ran and the tab
+router went to Home anyway. The fix was one line in the layout, found only by
+reading the router source instead of trusting the first plausible story.
+
+**Action items**
+- [ ] Open + merge the three PRs (backend → web → app)
+- [ ] Attach Redis, set the two vars, confirm via `/health/`
+- [ ] EAS build — **check the existing build list first**
+- [ ] Verify both crons and the WhatsApp token
+- [ ] Check the 2Factor SMS balance before the campaign ramps
 
 ---
 
