@@ -7,7 +7,7 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-09
+- **Last updated:** 2026-08-10
 - **Phase:** production-ready hardening (live, low traffic)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -15,29 +15,38 @@ the things that can lose money or break a live booking come first.
 
 ## Now
 
-**PR #10 is open and CI is RED.** Branch `fix/enforce-slot-capacity`, 20 commits,
-pushed. Website job passes; the backend job fails. Nothing merges until it's green.
+**PR #10's flake is fixed locally (`dcd4c16`) — push it and merge.** Branch
+`fix/enforce-slot-capacity`, 21 commits. Nothing merges until CI is green.
 
-### 1. Get PR #10's backend job green 🔴
+### ~~1. Get PR #10's backend job green~~ ✅ 2026-08-10 — fixed locally, needs a push
 
-Open the Backend tests job on the PR, search the log for `ERROR:` or `FAIL:`,
-and read the traceback under it.
+`database table is locked` was the leaking notification thread, as suspected —
+but `_dispatch_booking_notifications` was only the first of **three** sources.
+`1aa50cc` patched that one; the other two were never patched at all:
 
-**If it says `database table is locked`** — another test is leaking the
-notification background thread. See "Four traps" in `CLAUDE.md`; the fix is to
-patch `payments.views._dispatch_booking_notifications` on the offending class.
-One fix for this already landed (`1aa50cc`) and was not enough, so look for a
-second offender rather than assuming it's the same one.
+- `payments.views._notify_doctor_payout_async` — fires on `/api/payment/payouts/mark-paid/`.
+  Unpatched in `SalariedDoctorPayoutTests`, `ManualPayoutTests`, `MultiBookingPayoutTests`.
+- `doctors.views._notify_doctor_unavailable` — fires when a doctor is toggled
+  to unavailable. Unpatched in `tokenwalla.tests_security.DoctorAccessControlTests`.
 
-**If it says anything else** — it's a real failure the local suite didn't hit.
+Both open their own DB connection **and** make a real outbound WhatsApp call
+during the suite. The tell in a verbose log is a `graph.facebook.com` proxy
+error or `push_to_hospital(N) failed: database table is locked` attributed to a
+test that has nothing to do with payouts — the thread's output lands on
+whichever test happens to be running when it finishes.
 
-A single local run proves nothing here; this class of flake is roughly 1-in-7.
-Loop it:
+Reproduced at roughly 1 run in 4; 57 consecutive green runs after the patch.
+**The generalisation worth keeping: every `threading.Thread` in a view is a
+test-isolation hazard.** There are four — `payments.views` ×2, `bookings.views`
+`_whatsapp_async`, `doctors.views` ×1 — and any test that reaches one must
+patch it. A verbose run with zero `graph.facebook.com` lines is the check.
+
+Still true: a single local run proves nothing, this flake is intermittent. Loop it:
 
 ```bash
 cd backend
 export SECRET_KEY=ci DEBUG=True DATABASE_URL="sqlite:///test.db"
-for i in $(seq 1 15); do
+for i in $(seq 1 20); do
   out=$(python manage.py test 2>&1)
   echo "$out" | grep -q '^FAILED' && { echo "run $i FAILED"; echo "$out" | grep -A 25 -E '^(ERROR|FAIL): '; break; }
 done
@@ -70,19 +79,36 @@ on your schedule):
 - Invalid slot still returns **400**, unchanged — but now includes `refunded`
   and actually gives the money back.
 
-### 2. Turn on the two Railway crons 🟠
+### ~~2. Turn on the two Railway crons~~ ✅ 2026-08-10 — both created
 
-Dashboard work, not code — I cannot do this from a session. Both config files
-exist and are correct; the services were never created.
-`backend/notifications/CRON_SETUP.md` now documents both, including the two
-traps (config path is from the repo root; without its own config file the
-service inherits `railway.json` and boots gunicorn instead of the command).
+Both services now exist: `backend/railway.cron.json` (appointment reminders,
+every 10 min) and `backend/railway.payouts.cron.json` (`run_daily_payouts`,
+20:30 IST).
 
-- `backend/railway.cron.json` — appointment reminders, every 10 min
-- `backend/railway.payouts.cron.json` — `run_daily_payouts`, 20:30 IST
+**Neither is proven until it has actually run.** A cron service that boots
+gunicorn instead of the command, or fails on a config path, looks identical to
+a healthy one from the services list — that's exactly how the zombie reminder
+cron went 14 days unnoticed. Read each service's log for real application
+output, not just `Starting Container`.
 
-Until the second one runs, no doctor ever appears on the payouts page. The new
-`ledger_not_running` alert on the admin dashboard is the alarm for it.
+**The first `run_daily_payouts` run is not a normal one.** The command has **no
+date filter** — it sweeps every COMPLETED, PAYOUT_PENDING, unrefunded booking
+that has ever existed. Tonight it ledgers the entire backlog since launch in one
+go. That is correct behaviour, but it means the first payouts page will show a
+much larger figure than a day's trading. Eyeball it before wiring anyone money;
+this is precisely the human checkpoint the manual design exists to preserve.
+
+### 2b. Verify the permanent WhatsApp token reached Railway 🟠
+
+A permanent System-User token was generated in Meta on 2026-08-10. Generating it
+changes nothing on its own: `WHATSAPP_ACCESS_TOKEN` has to be updated on the
+Railway service and the service redeployed. Until then the old token is still in
+use, and if that one was the 24h temp token every notification is silently dead —
+`send_template` logs a warning and returns, it never raises.
+
+Prove it end to end rather than by inspection: trigger one real notification
+(a test booking, or mark a payout paid) and confirm a `WhatsAppLog` row lands
+with `status=success` and a `wa_message_id`.
 
 ### ~~3. Delete the zombie reminder cron~~ ✅ 2026-08-09 — deleted
 
@@ -118,8 +144,8 @@ The first day after merge, check the admin **Today's check** card and confirm:
 - **Pause the hospital dashboard poll on tab hide** — reuse the existing
   `useVisiblePolling`; patient pages already do this, the dashboard polls all
   day whether or not anyone is looking
-- **Verify the WhatsApp token is a permanent System-User token**, not the 24h
-  temp one — if it's temporary, every notification is silently dead already
+- ~~**Verify the WhatsApp token is a permanent System-User token**~~ — generated
+  2026-08-10; still needs to be confirmed live on Railway, see item 2b in Now
 - **Mobile app: `/api/bookings/upgrade/` contract** — still sends bare
   `payment_id`, which now returns 400. Installed apps are broken on this path
 - **Raise the 6-char password floor**

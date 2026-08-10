@@ -162,17 +162,32 @@ CI (`.github/workflows/deploy.yml`) runs **tests only** and runs on
 
 ### Four traps that have already cost a session
 
-**1. Booking through `/verify/` leaks a thread.** A successful verify fires
-WhatsApp + push via `_dispatch_booking_notifications` on a **background thread**
-that opens its own DB connection and outlives the test. Against Django's
-shared-cache in-memory SQLite it then collides with a LATER, UNRELATED test's
-first write and fails it with `database table is locked`. It reproduces about
-one run in seven, on a different test each time, so a single green run proves
-nothing. Any test that books through the API must patch it:
+**1. Every `threading.Thread` in a view is a test-isolation hazard.** Views fire
+WhatsApp + push on a **background thread** that opens its own DB connection and
+outlives the test. Against Django's shared-cache in-memory SQLite it then
+collides with a LATER, UNRELATED test's first write and fails it with
+`database table is locked`. It reproduces about one run in four, on a different
+test each time, so a single green run proves nothing.
+
+There are four such threads. Any test that reaches one must patch it:
+
+| Fires on | Patch |
+|---|---|
+| booking through `/verify/` | `payments.views._dispatch_booking_notifications` |
+| `/api/payment/payouts/mark-paid/` | `payments.views._notify_doctor_payout_async` |
+| doctor toggled to unavailable | `doctors.views._notify_doctor_unavailable` |
+| booking cancel / hold / no-show | `bookings.views._whatsapp_async` |
 
 ```python
 @mock.patch('payments.views._dispatch_booking_notifications', lambda b: None)
 ```
+
+The tell in a verbose log is a `graph.facebook.com` proxy error, or a
+`push_to_hospital(N) failed` line, attributed to a test that has nothing to do
+with the feature — the thread's output lands on whichever test is running when
+it finishes, so the *reported* test is never the offender. **The check that
+actually proves it: `manage.py test -v 2` with zero `graph.facebook.com` lines.**
+A live outbound call during the suite means a thread escaped.
 
 **2. Never hard-code a date in a test.** `payments/tests_integration.py` had
 `'2026-08-01'` literals that silently rotted into the past and then started

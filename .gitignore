@@ -21,3 +21,4 @@ src/.env
 .claude/worktrees/
 .claude/skills/
 .claude/launch.json
+dashboard.html
