@@ -56,6 +56,11 @@ def _auth(client, user):
     client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
 
 
+# Toggling a doctor to unavailable fires _notify_doctor_unavailable on a
+# background thread that opens its own DB connection and outlives the test —
+# the same trap as _dispatch_booking_notifications. See "Four traps" in
+# CLAUDE.md.
+@patch('doctors.views._notify_doctor_unavailable', lambda doctor_id: None)
 @override_settings(CACHES=LOCMEM_CACHE)
 class DoctorAccessControlTests(TestCase):
     """Vuln 1: only authenticated hospital/admin may write doctors."""

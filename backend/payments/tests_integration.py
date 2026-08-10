@@ -328,7 +328,10 @@ class VerifyRescheduleTests(WorldMixin, TestCase):
         mock_confirm.return_value = (True, 'rzp_rs_1', Decimal('5.00'), {'plan': 'reschedule'})
         r = self.client.post('/api/payment/verify/', {
             'order_id': 'order_rs',
-            'booking': {'booking_id': self.booking.id, 'date': '2026-08-02', 'slot': '10:00 AM'},
+            # Never hard-code a date here — see the note at the top of this file.
+            'booking': {'booking_id': self.booking.id,
+                        'date': str(timezone.localdate() + timedelta(days=3)),
+                        'slot': '10:00 AM'},
         }, format='json')
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()['success'])
@@ -338,6 +341,12 @@ class VerifyRescheduleTests(WorldMixin, TestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 # Salaried doctors — the payout goes to the HOSPITAL's account
 # ─────────────────────────────────────────────────────────────────────────────
+# mark-paid fires _notify_doctor_payout_async on a background thread that opens
+# its own DB connection and outlives the test — the same trap as
+# _dispatch_booking_notifications. Left live it makes a real WhatsApp call and
+# then collides with a LATER, UNRELATED test's first write
+# (`database table is locked`). See "Four traps" in CLAUDE.md.
+@mock.patch('payments.views._notify_doctor_payout_async', lambda b: None)
 class SalariedDoctorPayoutTests(WorldMixin, TestCase):
     """A salaried doctor doesn't collect their own fees; the hospital does.
     `Doctor.payout_to_hospital` redirects the money WITHOUT moving the ledger:
