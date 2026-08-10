@@ -129,6 +129,26 @@ else:
         }
     }
 
+# ── OTP abuse limits ──────────────────────────────────────────────────────────
+# Two different jobs, and they must not be confused:
+#
+#   per NUMBER (users.auth_views, DB-backed) — the SMS spend control. 10/day.
+#   per IP     (below)                       — stops one host enumerating many
+#                                              numbers to burn credits.
+#
+# The per-IP burst was 5/minute, which 429'd real signups: carrier-grade NAT in
+# India puts a whole neighbourhood behind one public address, and a promotion
+# drives exactly that shape of traffic. The same lesson was already learned once
+# for OTP *verify* (see OTPVerifyRateThrottle) — the send bucket was never
+# revisited.
+#
+# Raising the burst on its own would make abuse cheaper (5/min is ~7,200 sends a
+# day from one IP), so it comes with a daily ceiling that did not exist before.
+# Net: 4x the burst tolerance for real users, ~36x tighter on sustained abuse.
+# Both are env-overridable so a promotion can be widened without a deploy.
+OTP_IP_RATE                  = config('OTP_IP_RATE', default='20/minute')
+OTP_MAX_SENDS_PER_IP_PER_DAY = config('OTP_MAX_SENDS_PER_IP_PER_DAY', default=200, cast=int)
+
 # ── REST Framework ────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -146,7 +166,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '60/minute',
         'user': '300/minute',
-        'otp':  '5/minute',    # requesting an OTP (sends SMS/voice — real cost)
+        'otp':  OTP_IP_RATE,   # per-IP burst on OTP sends; see the block above
         'otp_verify': '30/minute',  # verifying / checking (cheap, several per flow)
         'admin_setup': '10/hour',   # /auth/create-admin/ — anti brute-force on the setup key
     },
