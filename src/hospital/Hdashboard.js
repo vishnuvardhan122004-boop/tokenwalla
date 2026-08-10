@@ -5,6 +5,7 @@ import { logoutUser } from "../services/api";
 import QRScanner from './QRScanner';
 import HPayments from './HPayments';
 import SPECIALIZATION_OPTIONS from '../services/specializations';
+import { useVisiblePolling } from '../services/useVisiblePolling';
 
 const DEFAULT_SLOTS = [
   "12:00 AM","12:30 AM","01:00 AM","01:30 AM","02:00 AM","02:30 AM",
@@ -132,10 +133,16 @@ const Hdashboard = () => {
     if (!hospital) return;
     loadQueue();
     loadDoctors();
-    const interval = setInterval(loadQueue, 10000);
-    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hospital]);
+
+  // Poll the queue only while the tab is actually being looked at. A reception
+  // desk leaves this dashboard open all day behind other windows; a plain
+  // setInterval kept hitting /bookings/queue/:id/ every 10s regardless, and
+  // polling — not bookings — is the dominant load (CAPACITY.md §2).
+  // The hook keeps its own ref to the callback, so passing a fresh function
+  // each render doesn't restart the timer.
+  useVisiblePolling(loadQueue, 10000, !!hospital);
 
   // ── Queue Actions ───────────────────────────────────────────────────────────
   const handleCall     = async (id) => {
