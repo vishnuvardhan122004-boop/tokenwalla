@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import API, { logoutUser } from "../services/api";
 import LocationSearch from "../componets/LocationSearch";
-import LocationPicker from "../componets/LocationPicker";
+// Leaflet is ~47kB gzipped and only a hospital editing its profile ever needs
+// it — keep it out of the bundle every patient downloads.
+const LocationPicker = lazy(() => import("../componets/LocationPicker"));
 
 // Mirrors app/(hospital)/profile.tsx — full hospital profile editor.
 // Backend: PATCH /hospitals/:id/ (details + banner/logo), POST/DELETE
@@ -501,18 +503,22 @@ const Hprofile = () => {
                 An exact pin helps patients find your entrance and get directions.
               </div>
 
-              <LocationPicker
-                open={pickerOpen}
-                initial={form.latitude != null ? { lat: form.latitude, lng: form.longitude } : null}
-                onClose={() => setPickerOpen(false)}
-                onPick={({ city, label, lat, lng }) => setForm(prev => ({
-                  ...prev,
-                  city: prev.city || city,
-                  location: prev.location || label,
-                  latitude: lat,
-                  longitude: lng,
-                }))}
-              />
+              {pickerOpen && (
+                <Suspense fallback={null}>
+                  <LocationPicker
+                    open
+                    initial={form.latitude != null ? { lat: form.latitude, lng: form.longitude } : null}
+                    onClose={() => setPickerOpen(false)}
+                    onPick={({ city, label, lat, lng }) => setForm(prev => ({
+                      ...prev,
+                      city: prev.city || city,
+                      location: prev.location || label,
+                      latitude: lat,
+                      longitude: lng,
+                    }))}
+                  />
+                </Suspense>
+              )}
 
               <label className="form-label fw-semibold small">Address</label>
               <textarea className="form-control mb-3" rows={2} value={form.address} onChange={e => setField("address", e.target.value)} placeholder="Full address" />
