@@ -26,6 +26,7 @@ export default function LocationPicker({ open, initial, onClose, onPick }) {
   const seqRef    = useRef(0);
 
   const [center,   setCenter]   = useState(null);   // { lat, lng }
+  const [zoom,     setZoom]     = useState(0);
   const [place,    setPlace]    = useState(null);   // { city, label }
   const [loading,  setLoading]  = useState(false);
   const [locating, setLocating] = useState(false);
@@ -59,10 +60,10 @@ export default function LocationPicker({ open, initial, onClose, onPick }) {
     const start = initial?.lat != null && initial?.lng != null
       ? { lat: initial.lat, lng: initial.lng }
       : { lat: 16.5, lng: 79.5 };                // same AP/Telangana bias as LocationSearch
-    const zoom = initial?.lat != null ? 16 : 6;
+    const startZoom = initial?.lat != null ? 16 : 6;
 
     const map = L.map(holderRef.current, { zoomControl: false, attributionControl: true })
-      .setView([start.lat, start.lng], zoom);
+      .setView([start.lat, start.lng], startZoom);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap',
@@ -74,11 +75,13 @@ export default function LocationPicker({ open, initial, onClose, onPick }) {
       setDragging(false);
       const c = map.getCenter();
       setCenter({ lat: c.lat, lng: c.lng });
+      setZoom(map.getZoom());
       reverse(c.lat, c.lng);
     });
 
     mapRef.current = map;
     setCenter(start);
+    setZoom(startZoom);
     reverse(start.lat, start.lng);
 
     // Leaflet measures the container once, at build time. Inside a modal that
@@ -140,6 +143,10 @@ export default function LocationPicker({ open, initial, onClose, onPick }) {
     onClose();
   };
 
+  // A pin dropped at city zoom is worse than no pin — it sends patients somewhere
+  // confidently wrong. z14 is roughly neighbourhood level; below that, no confirm.
+  const tooFar = zoom < MIN_CONFIRM_ZOOM;
+
   if (!open) return null;
 
   return (
@@ -189,14 +196,18 @@ export default function LocationPicker({ open, initial, onClose, onPick }) {
           {error && <div style={S.error}>{error}</div>}
 
           <div style={S.addrRow}>
-            <span style={{ fontSize: 18, lineHeight: '22px' }}>📍</span>
+            <span style={{ fontSize: 18, lineHeight: '22px' }}>{tooFar ? '🔍' : '📍'}</span>
             <div style={{ minWidth: 0 }}>
               <div style={S.addr}>
-                {loading ? 'Locating…' : (place?.label || 'Move the map to choose a spot')}
+                {tooFar
+                  ? 'Zoom in to your building'
+                  : (loading ? 'Locating…' : (place?.label || 'Move the map to choose a spot'))}
               </div>
               {center && (
                 <div style={S.coords}>
-                  {center.lat.toFixed(6)}, {center.lng.toFixed(6)}
+                  {tooFar
+                    ? 'A pin set this far out sends patients to the wrong place'
+                    : `${center.lat.toFixed(6)}, ${center.lng.toFixed(6)}`}
                 </div>
               )}
             </div>
@@ -204,7 +215,12 @@ export default function LocationPicker({ open, initial, onClose, onPick }) {
 
           <div style={S.actions}>
             <button type="button" className="btn btn-light" style={S.btnGhost} onClick={onClose}>Cancel</button>
-            <button type="button" style={S.btnPrimary} onClick={confirm} disabled={!center}>
+            <button
+              type="button"
+              onClick={confirm}
+              disabled={!center || tooFar}
+              style={{ ...S.btnPrimary, ...((!center || tooFar) ? S.btnDisabled : null) }}
+            >
               Confirm location
             </button>
           </div>
@@ -232,6 +248,7 @@ export function describe(feature) {
 }
 
 const BLUE = '#185FA5';
+export const MIN_CONFIRM_ZOOM = 14;
 
 const S = {
   backdrop: {
@@ -294,5 +311,8 @@ const S = {
     border: 'none', borderRadius: 10, padding: '9px 18px', fontWeight: 700, fontSize: 14,
     background: BLUE, color: '#fff', cursor: 'pointer',
     boxShadow: '0 4px 14px rgba(24,95,165,0.3)',
+  },
+  btnDisabled: {
+    background: '#CBD5E1', color: '#F8FAFC', cursor: 'not-allowed', boxShadow: 'none',
   },
 };
