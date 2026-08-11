@@ -24,21 +24,35 @@ traffic is expected for the first time, which promotes capacity work that was
 deliberately deferred on 2026-08-09 and makes the unshipped app build urgent
 rather than merely overdue.
 
-### 1. Merge the three branches — nothing else can start 🔴
+### 1. Merge the five branches — nothing else can start 🔴
 
-None of these are PRs yet; the branches are pushed, CI-green, and need a PR
-opened. Merge in this order.
+**Grew from three to five in the second 2026-08-11 session.** None are PRs yet;
+all are pushed and green and need a PR opened. Merge in this order.
 
 | Order | Branch | Repo | Deploys |
 |---|---|---|---|
 | 1 | `feat/app-version-gate` (3 commits) | backend | Railway |
 | 2 | `perf/dashboard-visible-polling` (1) | web | Vercel |
 | 3 | `payments-server-priced-checkout` (13) | app | store, via EAS |
-| — | `docs/wrap-2026-08-11` (2, this one) | docs | — |
+| 4 | `feat/hospital-location-picker` (3) | web | Vercel |
+| 5 | `feat/hospital-location-picker` (1) | app | store, via EAS |
+| — | `docs/wrap-2026-08-11` (3, this one) | docs | — |
 
 Backend first: it carries the `/health/` cache probe needed to verify the Redis
 switch in item 2, and `/api/app-version/`, which the app build expects. The app
 PR merges before the EAS build so the build comes off `main`.
+
+**4 and 5 are last on purpose.** They are hospital-facing polish and must not
+delay the overdue 1.2.0 patient release. Both were cut off `main`, not off the
+release branches, so 3 merges cleanly before 5. **Same branch name in both
+repos** — check which repo you are in before pushing.
+
+> **PRs cannot be opened from a session.** `gh` is not authenticated on this
+> machine (`gh auth status` → not logged into any host, no `GH_TOKEN`) and
+> `gh auth login` needs an interactive terminal, which a session is not. Every
+> branch above has to be turned into a PR by hand from its
+> `.../pull/new/<branch>` link. This has now cost time in two sessions —
+> running `gh auth login` once removes it permanently.
 
 `docs/wrap-2026-08-10` was **never pushed** and is now folded into
 `docs/wrap-2026-08-11`, so don't go looking for it separately.
@@ -152,6 +166,20 @@ checkout that doesn't work. Answer it before, not after, the campaign ramps.
 
 ## Next
 
+- **The app location picker has never run on a device** — new 2026-08-11
+  (session 2), and this is a **gate on merging branch 5**, not a nice-to-have.
+  `tsc`, lint and 104 unit tests are green, and the WebView page itself was
+  compiled, served and driven in a real browser (tiles render, drag emits
+  `{type:'move'}` with correct coordinates, injected `__fly()` pans to target).
+  But the React Native half — Modal presentation, the WebView wiring,
+  the `expo-location` permission flow — has not executed once. iOS has no build
+  profile in `eas.json`, so there was no cheap simulator path.
+  `npx expo start` and open the hospital profile; five minutes settles it.
+- **`placeLabel.ts` is a deliberate copy of the website's `describe()`** — new
+  2026-08-11 (session 2). Two repos, no shared package, so the address string a
+  hospital sees can silently diverge between web and app. Both files say so in a
+  header comment. Change one, change the other — or extract a shared package if
+  a third copy ever appears.
 - **Backend observability** — new 2026-08-10, and more pressing now that traffic
   is expected. There is no error tracking on the API and no way to see whether a
   WhatsApp send succeeded without reading a Railway log by hand. Every
@@ -217,8 +245,37 @@ Resolved and deliberately removed, so they don't get re-added:
 ## Done
 
 > **2026-08-11 caveat:** everything dated 2026-08-11 is **committed and pushed,
-> not merged and not deployed.** Three branches, zero patients reached. "Done"
-> here means the code is written and green, nothing more.
+> not merged and not deployed.** Five branches now, zero patients reached.
+> "Done" here means the code is written and green, nothing more.
+
+- **2026-08-11 (session 2)** — **Hospital location picker, all three surfaces.**
+  Hospitals could save a city and a free-text landmark but never an accurate
+  pin. Now a modal on the web profile editor, the web signup page and the app
+  hospital profile: drag the map under a fixed centre pin, "use my location",
+  search to jump, address reverse-geocoded live under the pin.
+  **Stayed on the free key-less rail `LocationSearch` already used** —
+  OpenStreetMap tiles + Photon — rather than a Google Maps key and a billing
+  account. On the app that mattered twice over: `react-native-maps` is a native
+  module, so it would have forced an EAS rebuild *and* an Android Maps API key;
+  Leaflet inside the WebView already shipped for Razorpay checkout, plus
+  `expo-location` (already installed, permission strings already in `app.json`),
+  meant **zero new dependencies, native or JS**.
+  Two things worth remembering: Leaflet latches container size at build time and
+  renders half a grey panel inside a modal — a `ResizeObserver` fixes it and also
+  covers rotation; and the static import put 47 kB gzip of Leaflet in the bundle
+  *every patient* downloads for a hospital-only screen, so it is `lazy()` behind
+  the button (main back to baseline, Leaflet an on-demand chunk).
+- **2026-08-11 (session 2)** — **Refused a pin set too far out.** Found while
+  testing signup: with no saved location the map opens at state zoom and Confirm
+  was enabled there. One click would have pinned the middle of Telangana and
+  routed every patient tens of km wrong — worse than no pin, because it looks
+  deliberate. Confirm is now disabled below zoom 14 on web and app, with the
+  reason shown. Existing pins open at zoom 16 and are unaffected.
+- **2026-08-11 (session 2)** — **132 orphaned `react-native-*` entries pruned
+  from the web `package-lock.json`**, left behind when `react-native-razorpay`
+  was removed. Nothing in `package.json` referenced them; the prune was a side
+  effect of installing `leaflet` and the production build passes. It makes that
+  PR's diff look far bigger than it is.
 
 - **2026-08-11** — **Back navigation fixed properly, after one wrong diagnosis.**
   The real cause was never the buttons: `doctor/[id]`, `payment`, `my-qr`,

@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `feat/app-version-gate` + `perf/dashboard-visible-polling` (web/backend, both **unmerged**) · `payments-server-priced-checkout` (mobile app repo, **unmerged**)
-- **Latest commit at last update:** `e204401` + `aa707e2` (web/backend) · `0c8cef3` (app)
-- **Last updated:** 2026-08-11
+- **Branch:** `feat/app-version-gate` + `perf/dashboard-visible-polling` + `feat/hospital-location-picker` (web/backend, all **unmerged**) · `payments-server-priced-checkout` + `feat/hospital-location-picker` (mobile app repo, both **unmerged**)
+- **Latest commit at last update:** `e204401` + `aa707e2` + `50fb1e2` (web/backend) · `0c8cef3` + `83236ad` (app)
+- **Last updated:** 2026-08-11 (session 2)
 
 ### How to update this log
 - Add a new `## YYYY-MM-DD — <title>` section **on top** for each working session; keep older sessions below.
@@ -13,6 +13,51 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-11 (session 2) — Hospital location picker on all three surfaces
+
+Hospitals could save a city and a free-text landmark, never an accurate pin.
+Added a map picker to the web profile editor, the web signup page and the app
+hospital profile. **Nothing merged; two new branches pushed, same name in both
+repos.**
+
+| Change | Repo | Commit | Status |
+|---|---|---|---|
+| `LocationPicker.js` — modal, fixed centre pin, geolocation, live reverse-geocode | web | `cae5cdc` | ✅ pushed, unmerged |
+| Lazy-load Leaflet so patients don't pay 47 kB for a hospital screen | web | `c96ab27` | ✅ pushed, unmerged |
+| Same picker on `/Husercreate` + refuse a pin below zoom 14 | web | `50fb1e2` | ✅ pushed, unmerged |
+| `LocationPickerModal.tsx` + `placeLabel.ts` + `mapHtml.ts` | app | `83236ad` | ✅ pushed, unmerged |
+
+- **No Google Maps key anywhere.** Stayed on the free key-less rail
+  `LocationSearch` already used — OSM tiles + Photon geocoding.
+- **No new app dependency, native or JS.** `react-native-maps` would have forced
+  an EAS rebuild *and* an Android Maps API key. Leaflet runs in the WebView
+  already shipped for Razorpay checkout; `expo-location` was already installed
+  with its permission strings already in `app.json`.
+- **Confirm is disabled below zoom 14** (web + app). Caught while testing signup:
+  the map opens at state zoom with no saved location, and a one-click confirm
+  would have pinned the middle of Telangana — patients routed tens of km wrong.
+- **`ResizeObserver`, not a timeout**, for Leaflet's stale container size — it
+  rendered half a grey panel inside the modal. Also covers rotation and resize.
+- **Bundle:** main back to baseline, Leaflet in a 42.9 kB on-demand chunk.
+- **`package-lock.json` shed 132 orphaned `react-native-*` entries** left by the
+  removed `react-native-razorpay`. Makes that PR's diff look bigger than it is.
+
+**Tests:** web 20 pass (7 new, Photon address mapping) + production build clean;
+app 104 pass (15 new), `tsc` 0, lint clean on new files. The web picker was
+driven end to end in a browser — drag re-geocodes, both geolocation branches,
+zoom guard blocks at z6 and releases at z15. The app's WebView page was
+compiled, served and driven with a stubbed `ReactNativeWebView`.
+
+**Not proven:** the app's React Native layer (Modal, WebView wiring,
+`expo-location` permission flow) has never run on a device or simulator.
+Gate on merging the app branch.
+
+**Also learned:** `gh` is not authenticated on this machine, so a session cannot
+open PRs at all — they have to be created by hand from the `pull/new/<branch>`
+links. Second session this has cost time.
 
 ---
 
