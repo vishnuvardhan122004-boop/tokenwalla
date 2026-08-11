@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import API, { logoutUser } from "../services/api";
 import LocationSearch from "../componets/LocationSearch";
+import LocationPicker from "../componets/LocationPicker";
 
 // Mirrors app/(hospital)/profile.tsx — full hospital profile editor.
 // Backend: PATCH /hospitals/:id/ (details + banner/logo), POST/DELETE
@@ -71,6 +72,7 @@ const Hprofile = () => {
   const [services,    setServices]    = useState([]);
   const [newService,  setNewService]  = useState("");
   const [toast,       setToast]       = useState(null);
+  const [pickerOpen,  setPickerOpen]  = useState(false);
 
   // Images
   const [bannerFile,    setBannerFile]    = useState(null);
@@ -475,10 +477,42 @@ const Hprofile = () => {
                   longitude: lng,
                 }))}
               />
-              {form.latitude != null && (
-                <div className="text-success small mt-1 mb-2">✓ Location pinned on the map</div>
+
+              {form.latitude != null ? (
+                <div className="d-flex align-items-center gap-2 mt-2 p-2 rounded"
+                     style={{ background: "#ECFDF3", border: "1px solid #ABEFC6" }}>
+                  <span>✅</span>
+                  <div className="small flex-grow-1" style={{ minWidth: 0 }}>
+                    <div className="fw-semibold" style={{ color: "#067647" }}>Pinned on the map</div>
+                    <div className="text-muted" style={{ fontSize: 11.5 }}>
+                      {form.latitude.toFixed(6)}, {form.longitude.toFixed(6)}
+                    </div>
+                  </div>
+                  <button type="button" className="btn btn-sm btn-outline-success"
+                          onClick={() => setPickerOpen(true)}>Change</button>
+                </div>
+              ) : (
+                <button type="button" className="btn btn-outline-primary btn-sm w-100 mt-2"
+                        onClick={() => setPickerOpen(true)}>
+                  🗺️ Pin exact location on map
+                </button>
               )}
-              <div className="mb-3" />
+              <div className="form-text mb-3" style={{ fontSize: 11.5 }}>
+                An exact pin helps patients find your entrance and get directions.
+              </div>
+
+              <LocationPicker
+                open={pickerOpen}
+                initial={form.latitude != null ? { lat: form.latitude, lng: form.longitude } : null}
+                onClose={() => setPickerOpen(false)}
+                onPick={({ city, label, lat, lng }) => setForm(prev => ({
+                  ...prev,
+                  city: prev.city || city,
+                  location: prev.location || label,
+                  latitude: lat,
+                  longitude: lng,
+                }))}
+              />
 
               <label className="form-label fw-semibold small">Address</label>
               <textarea className="form-control mb-3" rows={2} value={form.address} onChange={e => setField("address", e.target.value)} placeholder="Full address" />
