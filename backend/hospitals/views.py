@@ -4,11 +4,14 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password, check_password
 from django.core.cache import cache
 from django.db import transaction
+from django.utils.dateparse import parse_date
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from tokenwalla.utils import is_valid_landline
 
 from .models import (
     Hospital, HospitalPhoto, exclude_test_hospitals, show_test_hospitals_to,
@@ -278,6 +281,29 @@ class HospitalDetailView(APIView):
                       'facebook', 'description', 'announcement', 'open_time', 'close_time'):
             if field in request.data:
                 setattr(hospital, field, str(request.data[field]).strip())
+
+        # Landline: display-only, so blank is always allowed — it just has to be
+        # a real landline when present. NOT a substitute for `mobile`, which is
+        # the login identity and OTP-gated above.
+        if 'landline' in request.data:
+            landline = str(request.data['landline'] or '').strip()
+            if landline and not is_valid_landline(landline):
+                return Response(
+                    {'message': 'Enter a valid landline with the STD code, e.g. 08812-234567.'},
+                    status=400,
+                )
+            hospital.landline = landline
+
+        # Announcement expiry: blank/null clears it (show until manually removed).
+        if 'announcement_until' in request.data:
+            raw_until = str(request.data['announcement_until'] or '').strip()
+            if not raw_until:
+                hospital.announcement_until = None
+            else:
+                parsed = parse_date(raw_until)
+                if parsed is None:
+                    return Response({'message': 'Invalid announcement date.'}, status=400)
+                hospital.announcement_until = parsed
 
         # Geocoded coordinates from the location autocomplete (numeric / nullable).
         for coord in ('latitude', 'longitude'):

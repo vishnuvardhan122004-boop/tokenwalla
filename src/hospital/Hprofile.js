@@ -21,7 +21,8 @@ const EMPTY_FORM = {
   name: "", city: "", address: "", location: "", mobile: "",
   latitude: null, longitude: null,
   instagram: "", youtube: "", facebook: "",
-  description: "", announcement: "", open_time: "", close_time: "",
+  description: "", announcement: "", announcement_until: "", open_time: "", close_time: "",
+  landline: "",
 };
 
 // ── Payout / settlement account ────────────────────────────────────────────
@@ -118,9 +119,10 @@ const Hprofile = () => {
       setOrigMobile(h.mobile || "");
       setForm({
         name: h.name || "", city: h.city || "", address: h.address || "", location: h.location || "", mobile: h.mobile || "",
+        landline: h.landline || "",
         latitude: h.latitude ?? null, longitude: h.longitude ?? null,
         instagram: h.instagram || "", youtube: h.youtube || "", facebook: h.facebook || "",
-        description: h.description || "", announcement: h.announcement || "", open_time: h.open_time || "", close_time: h.close_time || "",
+        description: h.description || "", announcement: h.announcement || "", announcement_until: h.announcement_until || "", open_time: h.open_time || "", close_time: h.close_time || "",
       });
       setServices(Array.isArray(h.services) ? h.services : []);
       setBannerPreview(h.image || null);
@@ -306,7 +308,9 @@ const Hprofile = () => {
         youtube:   form.youtube.trim(),
         facebook:  form.facebook.trim(),
         description:  form.description.trim(),
-        announcement: form.announcement.trim(),
+        announcement:       form.announcement.trim(),
+        announcement_until: form.announcement_until || "",
+        landline:           form.landline.trim(),
         open_time:    form.open_time.trim(),
         close_time:   form.close_time.trim(),
         services,
@@ -363,9 +367,10 @@ const Hprofile = () => {
     setEditing(false);
     setForm({
       name: hospital.name || "", city: hospital.city || "", address: hospital.address || "", location: hospital.location || "", mobile: hospital.mobile || "",
+      landline: hospital.landline || "",
       latitude: hospital.latitude ?? null, longitude: hospital.longitude ?? null,
       instagram: hospital.instagram || "", youtube: hospital.youtube || "", facebook: hospital.facebook || "",
-      description: hospital.description || "", announcement: hospital.announcement || "", open_time: hospital.open_time || "", close_time: hospital.close_time || "",
+      description: hospital.description || "", announcement: hospital.announcement || "", announcement_until: hospital.announcement_until || "", open_time: hospital.open_time || "", close_time: hospital.close_time || "",
     });
     setServices(Array.isArray(hospital.services) ? hospital.services : []);
     setBannerFile(null); setBannerPreview(hospital.image || null);
@@ -556,11 +561,41 @@ const Hprofile = () => {
               )}
               {mobileChanged && otpVerified && <div className="text-success fw-semibold small mb-3">✓ New mobile verified</div>}
 
+              <label className="form-label fw-semibold small">☎️ Landline (optional)</label>
+              <input
+                className="form-control mb-1" type="tel" maxLength={15}
+                value={form.landline}
+                onChange={e => setField("landline", e.target.value.replace(/[^\d\-\s]/g, "").slice(0, 15))}
+                placeholder="08812-234567"
+              />
+              <div className="form-text mb-3">
+                Shown to patients as a call number. Your mobile above stays your login and is
+                where OTP and booking alerts arrive.
+              </div>
+
               <label className="form-label fw-semibold small">ℹ️ About the Hospital (shown to patients)</label>
               <textarea className="form-control mb-3" rows={3} value={form.description} onChange={e => setField("description", e.target.value)} placeholder="Describe your hospital, specialities and what you provide…" />
 
               <label className="form-label fw-semibold small">📢 Announcement / Notice (shown to patients)</label>
-              <textarea className="form-control mb-3" rows={2} maxLength={300} value={form.announcement} onChange={e => setField("announcement", e.target.value)} placeholder="e.g. Dr. Ravi on leave this Friday" />
+              <textarea className="form-control mb-2" rows={2} maxLength={300} value={form.announcement} onChange={e => setField("announcement", e.target.value)} placeholder="e.g. Closed for Sankranti 14–16 Jan · Free BP check this week" />
+              <div className="d-flex align-items-center gap-2 mb-3">
+                <label className="form-label small text-muted mb-0 flex-shrink-0">Show until</label>
+                <input
+                  className="form-control form-control-sm" type="date"
+                  value={form.announcement_until || ""}
+                  onChange={e => setField("announcement_until", e.target.value)}
+                />
+                {form.announcement_until && (
+                  <button type="button" className="btn btn-sm btn-outline-secondary flex-shrink-0"
+                          onClick={() => setField("announcement_until", "")}>
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="form-text mb-3">
+                Leave the date empty to show the notice until you remove it. A holiday notice
+                with a date disappears by itself the day after.
+              </div>
 
               <label className="form-label fw-semibold small">🕐 Working Hours (24h, e.g. 09:00 – 18:00)</label>
               <div className="d-flex gap-2 mb-3">
@@ -609,6 +644,7 @@ const Hprofile = () => {
                 { label: "Address",  value: hospital.address  || "—" },
                 { label: "Location", value: hospital.location || "—" },
                 { label: "Mobile",   value: hospital.mobile   || "—" },
+                { label: "Landline", value: hospital.landline || "—" },
                 { label: "Doctors",  value: doctorCount == null ? "…" : String(doctorCount) },
                 { label: "Hours",    value: (hospital.open_time || hospital.close_time) ? `${hospital.open_time || "—"} – ${hospital.close_time || "—"}` : "—" },
               ].map(({ label, value }) => (
@@ -628,6 +664,15 @@ const Hprofile = () => {
                 <div className="pt-3">
                   <div className="text-muted small mb-1">📢 Announcement</div>
                   <div className="small">{hospital.announcement}</div>
+                  {/* Say so explicitly — an expired notice silently vanishing from
+                      the patient page is confusing when the text is still here. */}
+                  {hospital.announcement_until && (
+                    <div className={`small ${hospital.announcement_active === false ? "text-danger" : "text-muted"}`}>
+                      {hospital.announcement_active === false
+                        ? `Expired on ${hospital.announcement_until} — patients no longer see this.`
+                        : `Shows to patients until ${hospital.announcement_until}.`}
+                    </div>
+                  )}
                 </div>
               )}
               {(hospital.instagram || hospital.youtube || hospital.facebook) && (

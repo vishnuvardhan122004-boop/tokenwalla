@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** unmerged — `feat/app-version-gate` + `perf/dashboard-visible-polling` + `fix/hide-test-hospitals` (web/backend) · `payments-server-priced-checkout` + `fix/map-load-timeout` (app). Merged 2026-08-11: web docs + web picker (PR #12), app picker (PR #1), app `.easignore` (PR #2).
-- **Latest commit at last update:** `2c4ec25` main + `3197377` (web/backend) · `d83df3e` main + `a98fa2b` (app)
-- **Last updated:** 2026-08-11 (session 3 — release gate + production fixes landed)
+- **Branch:** unmerged — `docs/wrap-2026-08-13` (web/backend; **carries `fix/hide-test-hospitals`**) + `feat/app-version-gate` + `perf/dashboard-visible-polling` (web/backend) · `payments-server-priced-checkout` + `fix/map-load-timeout` + `feat/walkin-doctors-landline` (app). Merged 2026-08-13: `feat/walkin-doctors-landline` (web/backend, PR #13).
+- **Latest commit at last update:** `fbb7c10` main + `57fb775` (web/backend) · `d83df3e` main + `a5f1788` (app)
+- **Last updated:** 2026-08-13 (walk-in doctors, landline contacts, expiring notices)
 
 ### How to update this log
 - Add a new `## YYYY-MM-DD — <title>` section **on top** for each working session; keep older sessions below.
@@ -13,6 +13,92 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-13 — Walk-in doctors, landline contacts, expiring notices
+
+A hospital visited that day could not be onboarded. One doctor runs the whole
+place and cannot promise a slot time, and the clinic answers a **landline**.
+Both were hard blocks in the upload form — not preferences, not polish. The
+hospital still wanted TokenWalla for what it *could* do: publish timings, post
+holidays and offers, and be findable.
+
+| Change | Repo | Commit | Status |
+|---|---|---|---|
+| Zero slots is a valid doctor — "select at least one time slot" removed | web/backend | `57fb775` | ✅ merged (PR #13) |
+| Zero slots is a valid doctor — app dashboard | app | `a5f1788` | 🕒 pushed, unmerged |
+| `Hospital.landline` + `Doctor.landline`, `Doctor.mobile` now optional | web/backend | `57fb775` | ✅ merged (PR #13) |
+| `Hospital.announcement_until` + server-computed `announcement_active` | web/backend | `57fb775` | ✅ merged (PR #13) |
+| Patient walk-in view (hours + days + call button, no booking CTA) | web/backend | `57fb775` | ✅ merged (PR #13) |
+| Patient walk-in view + landline fields + expiry input | app | `a5f1788` | 🕒 pushed, unmerged |
+| `walk_in_contact` string in all four languages | app | `a5f1788` | 🕒 pushed, unmerged |
+
+### 1. Zero slots — a listing, not a misconfiguration
+The rule lived only in the two dashboards' client-side validation; the backend
+never required slots. Both patient screens **already** handled an empty list
+("No slots configured"), so most of the work was turning that dead-end string
+into something useful: hospital hours, the doctor's days, and a call button.
+
+**No booking CTA in walk-in mode**, on purpose. The payment path is built around
+a slot — `create-order` validates `slot in doctor.slots` — so there is no token
+to sell, and a pay button that produced nothing would be taking money for
+nothing. `days` stays required: which days the doctor sits is real information
+even without times.
+
+### 2. Landline is a separate column, not a looser `mobile`
+The tempting one-line fix — relax the mobile regex — would have been wrong.
+`Hospital.mobile` is the **login username** and the OTP destination;
+`Doctor.mobile` is where `send_doctor_payout_paid` sends WhatsApp. A landline in
+either field breaks something silently. So `landline` is its own column on both
+models, a doctor needs **one or the other**, and the two patterns live together
+in `tokenwalla/utils.py` so the web and app validators cannot drift from the
+server.
+
+Patterns, as specified: mobile `^[6-9][0-9]{9}$`, landline
+`^0[1-9][0-9]{1,3}[- ]?[0-9]{6,8}$`.
+
+### 3. Announcements that expire
+The hospital wanted to post holidays and offers — `Hospital.announcement`
+already did that. What it lacked was an end date, so a "Closed for Sankranti"
+notice would sit there in March. One nullable `announcement_until`, plus
+`announcement_active` computed **server-side** so the website and the app cannot
+disagree, and an older app build that ignores the flag behaves exactly as
+before. A date-based holiday calendar was considered and skipped — the free-text
+notice plus an expiry covers what was actually asked for.
+
+### Contract and migration safety
+Every API change is **additive** — new optional fields on existing endpoints —
+so installed 1.1.3 apps are unaffected and the backend could merge before the
+app. Both migrations add nullable/blank columns only and are safe to run before
+the code that reads them.
+
+### Verification
+- 113 tests on `main` (14 new), 181 on the merged docs branch, `makemigrations
+  --check` clean, zero `graph.facebook.com` lines under `-v 2`.
+- Web production build clean; app `tsc --noEmit` clean.
+- **Driven in a real browser** against a local server: created a doctor through
+  the actual hospital dashboard with **no mobile, a landline and zero slots** —
+  it saved, the card showed the walk-in badge, and the patient page rendered the
+  walk-in view with a working `tel:` button. An announcement dated yesterday
+  stopped showing. A slotted doctor was unchanged.
+
+### Two things to know
+- **The branch was cut from a stale local `main`** (33 commits behind) after the
+  session had already read the code on `docs/wrap-2026-08-11-s3`. Nothing was
+  lost, but PR #13 now conflicts with `fix/hide-test-hospitals` on a two-line
+  import in `backend/hospitals/views.py`. `docs/wrap-2026-08-13` resolves it and
+  carries that fix — see ROADMAP item 1. **Fetch before branching.**
+- **The local dev sqlite was changed while testing**: migrations applied, the
+  Demo Hospital's password hash overwritten with `localdev123` (the original
+  cannot be restored — reset it whenever), and a `Walkin Landline Doc` fixture
+  left behind. Local only; production was never touched.
+
+### Action items
+- [ ] Merge the app branch `feat/walkin-doctors-landline` (after the 1.2.0 pair)
+- [ ] Merge `docs/wrap-2026-08-13`, then delete `fix/hide-test-hospitals`
+- [ ] Run the app walk-in screen on a device once (`npx expo start`)
+- [ ] Reset the local Demo Hospital password if `localdev123` bothers you
 
 ---
 

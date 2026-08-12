@@ -2,11 +2,30 @@
 tokenwalla/utils.py
 Shared helpers used across apps.
 """
+import re
 from datetime import datetime, timedelta, date as date_cls
 from django.utils import timezone
 
 SLOT_TIME_FORMAT = '%I:%M %p'   # e.g. "09:00 AM", "12:30 PM"
 BOOKING_CUTOFF_HOURS = 2        # slots within this window of "now" cannot be booked
+
+# ── Phone numbers ────────────────────────────────────────────────────────────
+# A mobile is the only thing SMS/WhatsApp can reach, so it stays strict and is
+# what OTP, patient notifications and the doctor payout message all use.
+# A landline is a display/call-me-back number ONLY — small clinics often have
+# nothing else. Kept in its own column rather than loosening `mobile`, so no
+# notification path can ever try to text a landline.
+MOBILE_RE   = re.compile(r'^[6-9][0-9]{9}$')
+LANDLINE_RE = re.compile(r'^0[1-9][0-9]{1,3}[- ]?[0-9]{6,8}$')
+
+
+def is_valid_mobile(value) -> bool:
+    return bool(MOBILE_RE.fullmatch((value or '').strip()))
+
+
+def is_valid_landline(value) -> bool:
+    """0 + STD code (1–4 more digits) + 6–8 digit number, optional - or space."""
+    return bool(LANDLINE_RE.fullmatch((value or '').strip()))
 
 
 def parse_slot_datetime(date_val, slot_str):

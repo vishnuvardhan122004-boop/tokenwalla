@@ -7,7 +7,7 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-11
+- **Last updated:** 2026-08-13
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -24,23 +24,42 @@ traffic is expected for the first time, which promotes capacity work that was
 deliberately deferred on 2026-08-09 and makes the unshipped app build urgent
 rather than merely overdue.
 
-### 1. Merge what's left — four branches 🔴
+### 1. Merge what's left — five branches 🔴
 
-**Updated end of 2026-08-11 session 3.** Three of the five merged during that
-session (web docs, web picker, app picker, plus the app `.easignore` fix).
-What remains, in merge order:
+**Updated 2026-08-13.** `feat/walkin-doctors-landline` (web/backend) merged as
+**PR #13** during the 2026-08-13 session and is live on Railway + Vercel; its
+app counterpart is pushed and waiting. What remains, in merge order:
 
 | Order | Branch | Repo | Deploys | Note |
 |---|---|---|---|---|
 | 1 | `payments-server-priced-checkout` (13) | app | store, via EAS | **the 1.2.0 version bump lives here** |
 | 2 | `fix/map-load-timeout` (1) | app | store, via EAS | map failure handling |
-| 3 | `feat/app-version-gate` (3) | backend | Railway | `/health/` probe + `/api/app-version/` |
-| 4 | `perf/dashboard-visible-polling` (1) | web | Vercel | |
-| 5 | `fix/hide-test-hospitals` (1) | backend | Railway | **was item 2b — now committed and pushed** |
+| 3 | `feat/walkin-doctors-landline` (1) | app | store, via EAS | **app half of PR #13 — backend is already live** |
+| 4 | `feat/app-version-gate` (3) | backend | Railway | `/health/` probe + `/api/app-version/` |
+| 5 | `perf/dashboard-visible-polling` (1) | web | Vercel | |
+| — | `docs/wrap-2026-08-13` (this one) | web/backend | Railway | **carries `fix/hide-test-hospitals` — see below** |
+
+> **`fix/hide-test-hospitals` is no longer a separate merge.** PR #13 was cut
+> from a `main` that predated it and touched the same two files, so the branch
+> stopped merging cleanly — the conflict is a two-line import collision in
+> `backend/hospitals/views.py` (`is_valid_landline` vs `exclude_test_hospitals`).
+> Rather than leave a patient-facing fix stuck behind a trivial conflict,
+> `docs/wrap-2026-08-13` is based on `docs/wrap-2026-08-11-s3`, merges `main`,
+> and resolves it. **So that branch is not docs-only** — it carries the
+> `[TEST]` hospital fix and the session-3 wrap with it. 181 tests pass on the
+> merged tree. Merge it and delete `fix/hide-test-hospitals`.
 
 Already merged 2026-08-11: `docs/wrap-2026-08-11`, `feat/hospital-location-picker`
 (web, PR #12), `feat/hospital-location-picker` (app, PR #1),
 `fix/eas-include-google-services` (app, PR #2).
+Already merged 2026-08-13: `feat/walkin-doctors-landline` (web/backend, PR #13).
+
+**The lesson from PR #13, worth not repeating:** the session started on
+`docs/wrap-2026-08-11-s3`, read the code there, then cut its working branch from
+a **stale local `main`** without fetching. The files changed underneath mid-edit.
+Nothing was lost, but it created the conflict above. **`git fetch origin && git
+checkout -b <branch> origin/main` at the start of every session** — the local
+`main` in this checkout was 33 commits behind.
 
 **The app pair (1 and 2) is now the release blocker — see item 5.** App `main`
 is still version **1.1.3**; the 1.2.0 bump is only on the release branch, so a
@@ -272,6 +291,18 @@ the careful edge cases were the right ones.
 
 ## Next
 
+- **The walk-in doctor page has never run on a device** — new 2026-08-13. The
+  web half was driven in a real browser (walk-in view renders, call button
+  dials, expired announcement disappears, slotted doctors unchanged). The app
+  half is `tsc`-clean and reads only additive fields, but no screen has
+  rendered. Same gap as the location picker, same five-minute fix:
+  `npx expo start`, open a slotless doctor.
+- **Nothing tells a hospital its landline is unreachable by WhatsApp** — new
+  2026-08-13. A landline-only doctor silently gets no payout WhatsApp
+  (`send_doctor_payout_paid` skips a blank `mobile`, and a landline is a
+  different column, so it never even tries). Correct behaviour, invisible
+  consequence. If landline-only clinics become common, the payouts page should
+  say who cannot be notified.
 - **The app location picker has never run on a device** — new 2026-08-11
   (session 2), and this is a **gate on merging branch 5**, not a nice-to-have.
   `tsc`, lint and 104 unit tests are green, and the WebView page itself was
@@ -356,6 +387,35 @@ Resolved and deliberately removed, so they don't get re-added:
 > assuming anything reached a patient. Nothing has reached a **patient** yet
 > regardless, because the app release branch is still unmerged and unbuilt.
 
+- **2026-08-13** — **Walk-in doctors, landline contacts, expiring notices.**
+  A one-doctor clinic signed that day could not use TokenWalla at all: the
+  doctor runs the whole hospital and cannot commit to fixed slot times, and the
+  clinic has a landline rather than a mobile. Both were **hard blocks in the
+  upload form**, not preferences. Three changes, merged as PR #13 (web/backend,
+  live) with the app half still pending.
+  **Zero slots is now a valid doctor.** The "select at least one time slot" rule
+  is gone from both dashboards. Both patient screens already handled an empty
+  slot list, so they now show the hospital's hours, the doctor's days and a call
+  button where the grid would be — and **no booking CTA at all**, because the
+  payment path needs a slot and charging without one would take money for
+  nothing. Days stay required: which days the doctor sits is still real
+  information.
+  **Landline is a new column on Hospital and Doctor, deliberately not a
+  loosening of `mobile`.** `mobile` is the hospital's login identity, the OTP
+  destination and the only number `send_doctor_payout_paid` ever texts — a
+  landline in that field would break login and send WhatsApp into the void. A
+  doctor now needs a mobile **or** a landline, each validated by its own
+  pattern in `tokenwalla/utils.py`.
+  **Announcements take an optional expiry date.** `announcement_active` is
+  computed server-side, so the website and the app cannot disagree about when a
+  holiday notice stops showing, and an app build that predates the flag behaves
+  exactly as before. This is the "communicate holidays and offers" the hospital
+  actually asked for — it did not need a new holiday calendar.
+  All API changes additive; installed 1.1.3 apps are unaffected. Both migrations
+  add nullable/blank columns only. 14 new tests (113 on `main`, 181 on the
+  merged docs branch). Verified end to end against a local server: a doctor with
+  no mobile, a landline and zero slots was created through the real dashboard,
+  and the patient page rendered the walk-in view.
 - **2026-08-11 (session 3)** — **Play Store release gate run, and it failed.**
   Asked whether the app was ready to push today; it was not, for three reasons
   now recorded in item 5. The one that mattered most was structural: no branch
