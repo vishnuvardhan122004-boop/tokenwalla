@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import API from '../services/api';
 import { authCSS } from '../componets/authStyles';
 import useAuthKeyboard from '../componets/useAuthKeyboard';
 import LocationSearch from '../componets/LocationSearch';
+
+// Leaflet is ~47kB gzipped — keep it out of the bundle until someone opens it.
+const LocationPicker = lazy(() => import('../componets/LocationPicker'));
 
 const Husercreate = () => {
   const navigate = useNavigate();
@@ -22,6 +25,7 @@ const Husercreate = () => {
   const [showPass,    setShowPass]    = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [errors,      setErrors]      = useState({});
+  const [pickerOpen,  setPickerOpen]  = useState(false);
   const [error,       setError]       = useState('');
   const [success,     setSuccess]     = useState('');
 
@@ -202,10 +206,51 @@ const Husercreate = () => {
                   setErrors(prev => ({ ...prev, city: '' }));
                 }}
               />
-              {hospital.latitude != null && (
-                <span className="otp-hint">✓ Location pinned on the map</span>
+              {hospital.latitude != null ? (
+                <div className="auth-verified" style={{ marginTop: 10, marginBottom: 0 }}>
+                  <span>✅</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600 }}>Pinned on the map</div>
+                    <div style={{ fontSize: 11.5, opacity: 0.75 }}>
+                      {hospital.latitude.toFixed(6)}, {hospital.longitude.toFixed(6)}
+                    </div>
+                  </div>
+                  <button type="button" className="auth-otp-btn" style={{ padding: '7px 12px' }}
+                          onClick={() => setPickerOpen(true)}>Change</button>
+                </div>
+              ) : (
+                <button type="button" className="auth-otp-btn"
+                        style={{ width: '100%', marginTop: 10 }}
+                        onClick={() => setPickerOpen(true)}>
+                  🗺️ Pin exact location on map
+                </button>
               )}
+              <span className="otp-hint" style={{ color: 'var(--gray-500)' }}>
+                An exact pin helps patients find your entrance and get directions.
+              </span>
               {errors.city && <span className="auth-field-error">{errors.city}</span>}
+
+              {pickerOpen && (
+                <Suspense fallback={null}>
+                  <LocationPicker
+                    open
+                    initial={hospital.latitude != null
+                      ? { lat: hospital.latitude, lng: hospital.longitude }
+                      : null}
+                    onClose={() => setPickerOpen(false)}
+                    onPick={({ city, label, lat, lng }) => {
+                      setHospital(prev => ({
+                        ...prev,
+                        city: prev.city || city,
+                        location: prev.location || label,
+                        latitude: lat,
+                        longitude: lng,
+                      }));
+                      setErrors(prev => ({ ...prev, city: '' }));
+                    }}
+                  />
+                </Suspense>
+              )}
             </div>
 
             {/* Address */}
