@@ -24,19 +24,28 @@ traffic is expected for the first time, which promotes capacity work that was
 deliberately deferred on 2026-08-09 and makes the unshipped app build urgent
 rather than merely overdue.
 
-### 1. Merge the five branches — nothing else can start 🔴
+### 1. Merge what's left — four branches 🔴
 
-**Grew from three to five in the second 2026-08-11 session.** None are PRs yet;
-all are pushed and green and need a PR opened. Merge in this order.
+**Updated end of 2026-08-11 session 3.** Three of the five merged during that
+session (web docs, web picker, app picker, plus the app `.easignore` fix).
+What remains, in merge order:
 
-| Order | Branch | Repo | Deploys |
-|---|---|---|---|
-| 1 | `feat/app-version-gate` (3 commits) | backend | Railway |
-| 2 | `perf/dashboard-visible-polling` (1) | web | Vercel |
-| 3 | `payments-server-priced-checkout` (13) | app | store, via EAS |
-| 4 | `feat/hospital-location-picker` (3) | web | Vercel |
-| 5 | `feat/hospital-location-picker` (1) | app | store, via EAS |
-| — | `docs/wrap-2026-08-11` (3, this one) | docs | — |
+| Order | Branch | Repo | Deploys | Note |
+|---|---|---|---|---|
+| 1 | `payments-server-priced-checkout` (13) | app | store, via EAS | **the 1.2.0 version bump lives here** |
+| 2 | `fix/map-load-timeout` (1) | app | store, via EAS | map failure handling |
+| 3 | `feat/app-version-gate` (3) | backend | Railway | `/health/` probe + `/api/app-version/` |
+| 4 | `perf/dashboard-visible-polling` (1) | web | Vercel | |
+| 5 | `fix/hide-test-hospitals` (1) | backend | Railway | **was item 2b — now committed and pushed** |
+
+Already merged 2026-08-11: `docs/wrap-2026-08-11`, `feat/hospital-location-picker`
+(web, PR #12), `feat/hospital-location-picker` (app, PR #1),
+`fix/eas-include-google-services` (app, PR #2).
+
+**The app pair (1 and 2) is now the release blocker — see item 5.** App `main`
+is still version **1.1.3**; the 1.2.0 bump is only on the release branch, so a
+build from `main` today is not even a new version to the Play Store.
+A dry-run merge is clean and produces 1.2.0 with the picker included.
 
 Backend first: it carries the `/health/` cache probe needed to verify the Redis
 switch in item 2, and `/api/app-version/`, which the app build expects. The app
@@ -57,54 +66,99 @@ repos** — check which repo you are in before pushing.
 `docs/wrap-2026-08-10` was **never pushed** and is now folded into
 `docs/wrap-2026-08-11`, so don't go looking for it separately.
 
-### 2. Turn on Redis — the biggest capacity lever you have 🔴
+### ~~2. Turn on Redis~~ ✅ 2026-08-11 — already done, verified serving
 
-**Moved up from Later, and the reason matters:** it was deferred on 2026-08-09
-*on purpose* because the database cache was genuinely fine at the traffic we
-had. A promotion changes that premise. It is config-only, no PR.
+**Do not do this again.** Checked the Railway dashboard directly: the Redis
+service is Online with a `redis-volume`, `REDIS_URL` and `USE_REDIS_CACHE` are
+both on the backend service, and the project canvas draws a reference edge from
+`tokenwalla` → `Redis` — so it is a `${{...}}` reference and not a pasted string.
 
-DRF's throttles are global, so every single request does a SELECT + UPDATE on
-`tw_cache_table` — a write on every read path, on the same Postgres carrying
-bookings and payments. `CAPACITY.md`'s "~1,000+ concurrent patients" figure
-assumed three fixes; gunicorn 3×4 and the bounded queue shipped, this is the
-third and last one.
+**Proof it is actually the active cache rather than silently falling back:** the
+Redis data browser holds live Django keys right now — `:1:throttle_user_…` and
+`:1:throttle_anon_…`, ttl 41. The `:1:` prefix is Django's cache key version.
+Nothing writes those unless the Redis backend is serving.
 
-1. Railway → New → Database → **Add Redis**
-2. On the backend service: `REDIS_URL` = `${{Redis.REDIS_PRIVATE_URL}}` (a
-   *reference*, not a pasted string) and `USE_REDIS_CACHE=True`
-3. `curl https://tokenwalla-production.up.railway.app/health/` → want
-   `{"backend": "redis", "ok": true}`
+`CAPACITY.md`'s third and last fix is therefore in place: gunicorn 3×4, the
+bounded queue, and the cache are all shipped.
 
-The gate is `USE_REDIS_CACHE and REDIS_URL`. Forget the `${{Redis...}}`
-reference and `REDIS_URL` stays empty, you silently stay on the database cache,
-and it looks exactly like success — that is what the probe is for. Rollback is
-`USE_REDIS_CACHE=False`, instant. Do it at a quiet hour: the cutover clears
-in-flight OTP sessions (anyone mid-login needs a fresh code). The OTP *caps* are
-in `RateCounter` in Postgres and are unaffected. **Never set the flag locally** —
-the stale `redis://localhost` in `.env` is exactly what the opt-in gate prevents.
+**One consequence nobody predicted, and it is the origin of item 2b below.** The
+throttle counters only became *accurate* with Redis. `DatabaseCache` inherits
+`BaseCache.incr`, a read-modify-write, so concurrent requests under-counted and
+every rate limit leaked. Redis counts correctly — meaning the cutover quietly
+tightened limits that had never really bitten, days before a traffic spike.
 
-### 3. Prove the two Railway crons actually ran 🟠
+### 2b. Two live production bugs — now COMMITTED, awaiting merge 🔴
 
-Both services exist as of 2026-08-10. **A cron service that exists is not a cron
-service that works.** Without its own config file a service inherits
-`railway.json` and boots gunicorn instead of the command — indistinguishable
-from a healthy one in the services list, and exactly how the zombie reminder
-cron went 14 days unnoticed logging only `Starting Container`.
+**Resolved end of session 3:** the stale `.git/index.lock` was removed (0 bytes,
+no git process running) and the work is committed and pushed as
+`fix/hide-test-hospitals` (`3197377`) — 167 tests pass, `makemigrations --check`
+clean. It is item 5 in the merge table above. It had been sitting uncommitted on
+`docs/wrap-2026-08-11`, a branch that had already been merged, so it was one
+`git checkout` away from being lost.
 
-- **Reminders** (`*/10 * * * *`) — checkable right now, fires every 10 minutes.
-  Read the service log for real application output.
-- **Payouts** (`0 15 * * *` UTC = **20:30 IST**) — look for
+Both found on 2026-08-11 by probing the live API, both patient-facing, both
+would be found within hours by a promotion.
+
+**`[TEST] Demo Hospital` was publicly visible.** `/api/doctors/` returned its
+doctor "Heyi" to anonymous callers next to the real ones; there was no
+test-hospital filter anywhere in `doctors/views.py`. That doctor is the **only**
+row in the system with `payment_collection_mode='FULL'`, so a patient could be
+charged **₹388.37** for an appointment that does not exist, and TokenWalla would
+then owe a payout against it. This was the single most dangerous thing in
+production.
+
+Fixed with `TEST_HOSPITAL_PREFIX` + `exclude_test_hospitals()` +
+`show_test_hospitals_to()` in `hospitals/models.py`, applied to the public
+doctor and hospital lists; staff and admins still see them. A name convention
+rather than an `is_test` column **on purpose** — a real flag would need
+production rows edited to set it, which a session should not do.
+
+9 tests, including the two easy misses: passing the demo hospital's id directly
+as a `?hospital=` filter still returns nothing (the id is guessable, so hiding
+it from the unfiltered list is not enough), and a real hospital merely
+*containing* the word test is not swept up, because the marker is a prefix.
+
+**`anon` throttle raised 60/min → 300/min**, env-overridable as `ANON_RATE`.
+`AnonRateThrottle` keys on client IP, and carrier-grade NAT in India puts a
+whole neighbourhood behind one address — four or five simultaneous visitors
+exhausted the bucket and everyone behind that carrier got 429s. Under a campaign
+that reads as "nobody is booking" rather than "we are turning them away", which
+is the worst failure shape available: silent and self-confirming. The same
+lesson has now been learned three times here (OTP verify, OTP send, and this).
+
+Backend suite **167 tests** (158 + 9), 10 consecutive green runs,
+`makemigrations --check` clean, no migration.
+
+**Branch off `feat/app-version-gate`, not `main`** — that branch edits the same
+`DEFAULT_THROTTLE_RATES` block.
+
+### 2c. Review the OTP daily per-IP ceiling before merging it 🟠
+
+`feat/app-version-gate` adds `OTP_MAX_SENDS_PER_IP_PER_DAY=200`. The per-minute
+burst on that branch was reasoned about correctly for CGNAT — but a **daily**
+per-IP ceiling is the harsher of the two, and it did not get the same scrutiny.
+200 OTP sends across an entire carrier NAT could stall signups across Hindupur
+mid-campaign, and it would look exactly like nobody wanting to sign up.
+
+The per-*number* cap in `RateCounter` is the real SMS spend control and is
+untouched by this. The per-IP ceiling probably wants to be several times higher
+before the promotion ramps.
+
+### ~~3. Prove the two Railway crons actually ran~~ ✅ 2026-08-11 — both confirmed
+
+Read both service logs on the Railway dashboard. Neither is a zombie.
+
+- **Payouts** — ran `2026-08-10 20:31:57`, 3s, succeeded, logging verbatim:
   `Ledgered 0 booking(s). Payouts are manual — see the admin payouts page.`
-  That line appearing **at all** is the proof.
+  Schedule reads "Runs at 03:00 pm (UTC)" = 20:30 IST. Correct — and if it ever
+  looks wrong, do **not** rewrite it as `30 20` (`cfc751e` fixed that once).
+- **Reminders** — firing every 10 minutes without a gap from 2026-08-10 13:00
+  through 2026-08-11 14:50, each logging
+  `Reminder run complete. Sent 0 reminder(s).` Real output, not bare
+  `Starting Container`.
 
-The schedule is correct. If it ever looks wrong, do **not** rewrite it as
-`30 20` — Railway cron is UTC and that bug was already fixed once (`cfc751e`).
-
-> **The admin dashboard cannot verify the payouts cron.** Checked live after the
-> merge: the Today's check card reads "Nothing needs you", so `ledger_not_running`
-> is not firing and cannot clear. With no doctor on `FULL` collection there are no
-> ledger rows to write either. The run leaves **no trace in the UI** — the Railway
-> service log is the only signal. An earlier version of this file said otherwise.
+"Sent 0" and "Ledgered 0" are both correct at 4 lifetime bookings with no doctor
+on `FULL`. The crons work; there is nothing for them to do yet.
 
 ### 4. Confirm the permanent WhatsApp token reached Railway 🟠
 
@@ -120,16 +174,65 @@ manage.py send_test_whatsapp <mobile> --template booking_confirmation
 
 Proves it end to end with no test booking and no real money.
 
-### 5. Ship the mobile app — now 13 commits deep 🔴
+### 5. Ship the mobile app — release gate run 2026-08-11 session 3 🔴
 
-The branch has grown from one commit to thirteen and is version **1.2.0**.
-Nothing in it reaches a patient without an EAS build.
+> **Verdict that session: NOT ready to push to the Play Store.** Checked against
+> the repo, not guessed. Three findings, in order of severity:
+>
+> 1. **No branch contains a shippable app.** `main` = 1.1.3 with the picker but
+>    none of the 13 release commits; `payments-server-priced-checkout` = 1.2.0
+>    with the release work but no picker and no map-timeout fix. Building either
+>    ships something incomplete, and `main` isn't even a new version number.
+>    **The checkout fix is in those 13 commits** — the thing item 7 cares about.
+>    Merge is clean and yields 1.2.0 with everything.
+> 2. **Push would have been dead in the build.** `google-services.json` is
+>    gitignored, so EAS never received it — `DONE-push-setup.md` step 6 names
+>    this exact failure. Fixed by `.easignore` (app PR #2, merged). Note
+>    `.easignore` *replaces* `.gitignore` for EAS rather than adding to it, so it
+>    is a full mirror minus the Firebase client config; a minimal one would have
+>    uploaded `node_modules` and the local `ios/` Pods tree and flipped EAS into
+>    a bare-workflow build. **Still unproven end to end** — only a real preview
+>    build with a working push confirms it.
+> 3. **No crash reporting at all.** `sentryDsn` is `""` so Sentry is disabled
+>    outright, plus `SENTRY_DISABLE_AUTO_UPLOAD: "true"` on all three profiles.
+>    Releasing into a promotion means learning about crashes from users.
+>
+> Checked and **fine**: the update gate handles a missing `/api/app-version/`
+> with `catch { return }`, so the unmerged backend branch is not a blocker;
+> `appVersionSource: "remote"` + `autoIncrement` handles versionCode;
+> `google-services.json` content is valid and the package matches. `eas submit`
+> is still unconfigured, so the AAB goes to Play Console by hand.
+>
+> **Order: merge 1 and 2 → preview build → install and actually use it → only
+> then production.** The picker and its offline path have still never run on a
+> device; there is no simulator or Android SDK on this machine (Command Line
+> Tools only, no Xcode), so that check cannot be done from a session.
 
-**First check the EAS build list for what is actually in the store** —
-`app.json` uses `appVersionSource: "remote"` and the repo has no tags, so the
-repo cannot tell you. If the last production build predates 2026-08-05,
-patients are running a checkout that no longer matches the backend, and that
-outranks everything else on this page.
+
+**The store build is NOT stale, and that settles item 7 below.** Latest
+production build is **1.1.3 (36)**, git ref `eddf5dd`, built 2026-08-08.
+`git merge-base --is-ancestor cb3d29d eddf5dd` confirms the server-priced
+Razorpay checkout **is** in it. The shipped app matches the backend's payment
+contract. The funnel is empty, not broken.
+
+**But a real price bug is live right now.** `PLATFORM_FEE` became ₹20.00 on
+**2026-07-28** (`7b2a01c`). Build 36 still ships `₹15` in its i18n strings, so a
+patient reads ₹15 and Razorpay asks for **₹25.37**. Two weeks live. The last
+booking was 26 July — two days before the fee changed. Four bookings is far too
+few to call that causation, but "advertised price does not match the charge" is
+an ordinary reason to abandon a checkout, and it costs nothing to stop assuming
+it is fine.
+
+**And a gap nobody had noticed: EAS Submissions is completely empty.** Nothing
+has ever been submitted to a store through EAS — so whatever is live on Play was
+uploaded by hand from the `.aab`, and EAS cannot tell you which version that is.
+
+- **Open Google Play Console and confirm the live versionCode.** This is now the
+  only unknown left in the funnel; EAS cannot answer it.
+- `5b11bd7` (the checkout fixes) is **not** in build 36 — it needs the next build.
+- `eas submit` is still unconfigured, so the next release is another manual
+  upload unless it gets set up.
+- Android only. No iOS build has ever run.
 
 Carries: the checkout fix, both navigation fixes, the launch-time update gate,
 the ₹15→₹20 price correction, search typeahead, and the notification icon
@@ -144,23 +247,26 @@ the ₹15→₹20 price correction, search typeahead, and the notification icon
   sends, the balance is real money, it is invisible from the code, and it can
   run dry mid-campaign. Nothing in the app will tell you; OTP sends just fail.
 
-### 7. The item this roadmap has been avoiding 🔴
+### 7. Demand is now the only real problem 🔴
 
-**27 users · 11 hospitals live · 8 doctors · 4 bookings ever · ₹60 lifetime ·
-last booking 2026-07-26.** No doctor has opted into `FULL` collection, so the
-payout machinery has never carried a rupee.
+**27 users · 11 hospitals live · 11 doctors · 4 bookings ever · ₹60 lifetime ·
+last booking 2026-07-26.** No real doctor has opted into `FULL` collection, so
+the payout machinery has never carried a rupee. (Doctor count rose 8 → 11 on
+2026-08-11 — someone is still onboarding.)
 
-A week of hardening went into a load that has not arrived. That was the right
-order — capacity, refunds and locking had to exist before patients did — but it
-cannot be the next week too. The unresolved question is whether the funnel is
-**broken** (a store build older than the backend, a checkout that fails) or
-**empty** (nobody arriving). Those need opposite responses and are currently
-indistinguishable. Item 5 settles it in an afternoon.
+**The broken-vs-empty question is answered: EMPTY.** The shipped build contains
+the current checkout (item 5), the backend is healthy, both crons run, Redis
+serves, deploys are green. Nothing technical stops a patient from booking.
 
-**Still unanswered as of 2026-08-11**, and now a second session has ended
-without answering it. Every piece of hardening since has assumed *empty*. If it
-turns out to be *broken*, the promotion spends money driving users into a
-checkout that doesn't work. Answer it before, not after, the campaign ramps.
+So the campaign is not spending money into a broken product. It is spending it
+into a working one that nobody has used since 26 July. **No further backend
+hardening moves this number.** The two bugs in item 2b and the price mismatch in
+item 5 are worth fixing because they will embarrass a campaign — not because
+they explain the silence.
+
+What would actually move it: one hospital doing ten bookings a week, and one
+real doctor on `FULL` so the payout path carries money and teaches you which of
+the careful edge cases were the right ones.
 
 ---
 
@@ -244,9 +350,40 @@ Resolved and deliberately removed, so they don't get re-added:
 
 ## Done
 
-> **2026-08-11 caveat:** everything dated 2026-08-11 is **committed and pushed,
-> not merged and not deployed.** Five branches now, zero patients reached.
-> "Done" here means the code is written and green, nothing more.
+> **2026-08-11 caveat, revised in session 3:** four of the day's branches DID
+> merge — web docs, web picker, app picker, app `.easignore`. Four remain
+> unmerged (item 1). So "Done" below is now a mix: check the merge table before
+> assuming anything reached a patient. Nothing has reached a **patient** yet
+> regardless, because the app release branch is still unmerged and unbuilt.
+
+- **2026-08-11 (session 3)** — **Play Store release gate run, and it failed.**
+  Asked whether the app was ready to push today; it was not, for three reasons
+  now recorded in item 5. The one that mattered most was structural: no branch
+  contained a shippable app, and `main` was still versioned 1.1.3 while the
+  1.2.0 bump sat on the unmerged release branch — so a build from `main` would
+  have shipped the picker *and* the broken checkout, under a version number the
+  Play Store would have rejected as not new.
+- **2026-08-11 (session 3)** — **`.easignore` so Android push survives the
+  build** (app PR #2, merged). `google-services.json` is gitignored, so EAS
+  never received it and push would have been silently dead in the shipped APK.
+  The subtlety worth keeping: `.easignore` **replaces** `.gitignore` for EAS, it
+  does not extend it — so it must be a complete mirror. Verified by diffing both
+  rule sets across the working tree: exactly one path changes state
+  (`google-services.json`), nothing becomes newly excluded, and the keystore,
+  service-account keys and `.env.local` all stay out.
+- **2026-08-11 (session 3)** — **The map picker no longer spins forever**
+  (`fix/map-load-timeout`, unmerged). Leaflet loads from a CDN inside the
+  WebView; a hard failure was already caught, but a *slow or hanging* CDN posted
+  nothing and left the spinner up indefinitely. `onError` cannot help — with
+  `source={{html}}` the page always loads, so a failed subresource is invisible
+  — so readiness is now proved by the map's own first message against a 12s
+  deadline, with a Try again that remounts the WebView. Search still works when
+  the map is down, so a hospital can still set its city.
+- **2026-08-11 (session 3)** — **Rescued the two production bug fixes from a
+  merged branch.** They were complete but uncommitted on
+  `docs/wrap-2026-08-11`, which had already been merged, and the stale
+  `.git/index.lock` had blocked the commit twice. Lock cleared, work verified
+  (167 tests, migrations clean) and pushed as `fix/hide-test-hospitals`.
 
 - **2026-08-11 (session 2)** — **Hospital location picker, all three surfaces.**
   Hospitals could save a city and a free-text landmark but never an accurate

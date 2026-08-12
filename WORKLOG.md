@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `feat/app-version-gate` + `perf/dashboard-visible-polling` + `feat/hospital-location-picker` (web/backend, all **unmerged**) · `payments-server-priced-checkout` + `feat/hospital-location-picker` (mobile app repo, both **unmerged**)
-- **Latest commit at last update:** `e204401` + `aa707e2` + `50fb1e2` (web/backend) · `0c8cef3` + `83236ad` (app)
-- **Last updated:** 2026-08-11 (session 2)
+- **Branch:** unmerged — `feat/app-version-gate` + `perf/dashboard-visible-polling` + `fix/hide-test-hospitals` (web/backend) · `payments-server-priced-checkout` + `fix/map-load-timeout` (app). Merged 2026-08-11: web docs + web picker (PR #12), app picker (PR #1), app `.easignore` (PR #2).
+- **Latest commit at last update:** `2c4ec25` main + `3197377` (web/backend) · `d83df3e` main + `a98fa2b` (app)
+- **Last updated:** 2026-08-11 (session 3 — release gate + production fixes landed)
 
 ### How to update this log
 - Add a new `## YYYY-MM-DD — <title>` section **on top** for each working session; keep older sessions below.
@@ -15,6 +15,283 @@ Newest entry on top. Update the **Status** columns as things land.
 - Keep entries short — one line per change, link the commit hash so it's traceable.
 
 ---
+
+## 2026-08-11 (session 3) — Release gate, and two production fixes rescued
+
+Asked whether the app could go to the Play Store today. **Answer: no.** Also
+found complete-but-uncommitted production bug fixes in the working tree and
+landed them before they were lost.
+
+| Change | Repo | Commit | Status |
+|---|---|---|---|
+| `.easignore` so `google-services.json` reaches EAS | app | PR #2 | ✅ **merged** |
+| Map picker: 12s deadline + Try again instead of an endless spinner | app | `a98fa2b` | ✅ pushed, unmerged |
+| Hide `[TEST]` hospitals from patients; anon throttle 60→300/min | web | `3197377` | ✅ pushed, unmerged |
+| Hospital location picker (profile + signup) | web | PR #12 | ✅ **merged** |
+
+- **Play Store verdict: not ready.** No branch contained a shippable app —
+  `main` was 1.1.3 with the picker but none of the 13 release commits, and the
+  release branch had 1.2.0 without the picker. A build from `main` would have
+  shipped the broken checkout under a non-new version number. Merge is clean and
+  yields 1.2.0 with everything.
+- **Android push would have been dead in the build.** `google-services.json` is
+  gitignored so EAS never got it. `.easignore` *replaces* `.gitignore` for EAS
+  rather than extending it, so it had to be a full mirror — a minimal one would
+  have uploaded `node_modules` and the local `ios/` Pods tree and flipped EAS
+  into a bare-workflow build. Verified by diffing both rule sets: exactly one
+  path changes state, and the keystore and service-account keys stay excluded.
+- **No crash reporting at all** — `sentryDsn` is `""`, plus
+  `SENTRY_DISABLE_AUTO_UPLOAD` on all three profiles. Flagged, not fixed.
+- **`[TEST] Demo Hospital` was patient-visible**, and its doctor is the only
+  `FULL`-collection row in the system, so a patient could have been charged for
+  an appointment that does not exist. Was sitting uncommitted on an
+  already-merged branch behind a stale `.git/index.lock`; lock cleared, verified,
+  pushed.
+- **Two verification methods that were wrong and got corrected:** an ignore-rule
+  check using `git check-ignore --no-index --exclude-from` silently ignores the
+  exclude file and reported everything as included — redone with
+  `git ls-files -o -i -X`. And `$b:app.json` in zsh is a `:a` path modifier, not
+  a git revision.
+
+**Tests:** backend 167 pass + `makemigrations --check` clean; app `tsc` clean,
+104 pass, lint clean, Android and iOS bundles both build.
+
+**Not proven:** the app's React Native layer — picker, map failure path,
+`expo-location` — has still never run. No simulator or Android SDK on this
+machine (Command Line Tools only, no Xcode), so it cannot be checked from a
+session. Needs a preview build on a real Android phone.
+
+---
+
+## 2026-08-12 (auto) — Session update @ 23:44
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:38
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:32
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:30
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:26
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:20
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:12
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:07
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:04
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:01
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+---
+
+## 2026-08-11 (session 3) — verified production, found two live bugs
+
+No merges. This session read production rather than writing to it, and four
+items that were open turned out to be already done.
+
+### Verified done — stop re-doing these
+
+| Item | Evidence |
+|---|---|
+| **Redis** | Online with `redis-volume`; `REDIS_URL` + `USE_REDIS_CACHE` set; canvas draws a `${{...}}` reference edge. **Serving**: live `:1:throttle_user_…` / `:1:throttle_anon_…` keys in the data browser |
+| **Payouts cron** | Ran `2026-08-10 20:31:57`, 3s, logged `Ledgered 0 booking(s)…`. Schedule "03:00 pm (UTC)" = 20:30 IST |
+| **Reminders cron** | Every 10 min without a gap, 08-10 13:00 → 08-11 14:50, each logging `Reminder run complete. Sent 0 reminder(s).` |
+| **EAS build** | Production **1.1.3 (36)**, `eddf5dd`, 8 Aug. `merge-base` proves `cb3d29d` (Razorpay checkout) is in it |
+
+### Two live bugs, fixed in the working tree (UNCOMMITTED — `.git/index.lock`)
+
+| Bug | Why it matters | Fix |
+|---|---|---|
+| `[TEST] Demo Hospital` publicly listed | Its doctor is the **only** `FULL`-collection row → a patient could be charged **₹388.37** for a fake appointment, and we would owe a payout on it | `TEST_HOSPITAL_PREFIX` + `exclude_test_hospitals()` + `show_test_hospitals_to()`; 9 tests |
+| `anon` throttle 60/min, keyed on IP | Indian CGNAT shares one IP across a neighbourhood; ~5 concurrent visitors → 429 for everyone behind that carrier | → `ANON_RATE`, default 300/min, env-overridable |
+
+Backend **167 tests** (158 + 9), 10 consecutive green runs, no migration.
+
+### Found, not fixed
+
+- **The app shows ₹15; the backend charges ₹25.37.** `PLATFORM_FEE` became ₹20
+  on 2026-07-28 (`7b2a01c`); build 36 still ships `₹15`. Two weeks live. Last
+  booking was 26 July, two days before the change.
+- **EAS Submissions is empty** — nothing has ever been submitted through EAS, so
+  the Play build was uploaded by hand and EAS cannot say which version is live.
+  Only Play Console can answer that.
+- **`OTP_MAX_SENDS_PER_IP_PER_DAY=200`** on `feat/app-version-gate` has the same
+  CGNAT problem as the burst it was written to fix, but daily and harsher.
+
+### The conclusion that changes the plan
+
+**The funnel is empty, not broken.** The shipped build matches the backend, the
+backend is healthy, nothing technical stops a booking. Four bookings ever is a
+demand problem, and no further hardening moves it. The bugs above are worth
+fixing because they will embarrass a campaign — not because they explain the
+silence.
+
+**Also worth naming: the throttle counters only became accurate when Redis went
+live.** `DatabaseCache.incr` is a read-modify-write, so every rate limit had been
+leaking. The cutover silently tightened limits that had never bitten, days
+before a traffic spike. Both throttle findings this session trace back to that.
+
 
 ## 2026-08-11 (session 2) — Hospital location picker on all three surfaces
 

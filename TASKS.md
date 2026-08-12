@@ -10,6 +10,44 @@ that aren't code.
 
 ## Open right now
 
+### 00. Two live production bugs, fixed in the working tree 2026-08-11 🔴
+
+Found by probing the live API. Both are patient-facing and both would be found
+within hours by a promotion. **Uncommitted** — the stale `.git/index.lock`
+blocked the commit again.
+
+**1. `[TEST] Demo Hospital` was publicly visible.** `/api/doctors/` returned its
+doctor "Heyi" to anonymous callers alongside the real ones, and there was no
+test-hospital filter anywhere in `doctors/views.py`. That doctor is the **only**
+row in the system with `payment_collection_mode='FULL'`, so a patient could be
+charged **₹388.37** for an appointment that does not exist — and TokenWalla
+would then owe a payout against it. Fixed: `hospitals/models.py` gains
+`TEST_HOSPITAL_PREFIX` + `exclude_test_hospitals()` + `show_test_hospitals_to()`;
+applied to the public doctor and hospital lists. Staff and admins still see them.
+9 new tests, including the case where the demo hospital's id is passed directly
+as a filter (hiding it from the list is not enough on its own).
+
+**2. `anon` throttle raised 60/min → 300/min**, env-overridable via `ANON_RATE`.
+AnonRateThrottle keys on client IP, and Indian carrier NAT puts a whole
+neighbourhood behind one address — four or five simultaneous visitors exhausted
+the bucket and everyone behind that carrier got 429s. Under a campaign that
+reads as "nobody is booking" rather than "we are turning them away". Note the
+sting: the counter only became *accurate* when Redis went live, because
+`DatabaseCache.incr` is a read-modify-write that under-counted. The cutover
+quietly tightened a limit that had never really bitten.
+
+- [ ] Clear `.git/index.lock`, branch off `feat/app-version-gate` (it touches the
+      same `DEFAULT_THROTTLE_RATES` block, so basing on it avoids a conflict),
+      commit, PR
+- [ ] **Review the `OTP_MAX_SENDS_PER_IP_PER_DAY=200` ceiling on
+      `feat/app-version-gate` before merging.** Same CGNAT logic applies, and a
+      *daily* per-IP cap is harsher than a per-minute one — 200 OTP sends across
+      a whole carrier could stall signups city-wide mid-campaign. The per-number
+      DB cap is the real spend control; this one may want to be much higher.
+
+Backend suite: **167 tests** (158 + 9), 10 consecutive green runs,
+`makemigrations --check` clean, no migration needed.
+
 ### 0. Merge the three branches — everything is blocked on this 🔴
 
 Written, pushed, CI-green, **not merged**. No PRs exist yet; the branches need
@@ -23,42 +61,38 @@ one opened. Order matters.
 - [ ] `docs/wrap-2026-08-11` (docs, 2 commits — includes the 2026-08-10 wrap
       that was never pushed)
 
-### 0b. Turn on Redis 🔴
+### ~~0b. Turn on Redis~~ ✅ 2026-08-11 — already done, verified live
 
-Config only, no PR. Deferred on purpose on 2026-08-09; the promotion changes
-the premise. Every request currently writes to `tw_cache_table` on the same
-Postgres as bookings and payments.
+**Do not do this again.** Checked the Railway dashboard directly: the Redis
+service exists, is Online with a `redis-volume`, `REDIS_URL` and
+`USE_REDIS_CACHE` are both on the backend service, and the canvas shows a
+reference edge from `tokenwalla` → `Redis` (so it is a `${{...}}` reference, not
+a pasted string).
 
-- [ ] Railway → New → Database → Add Redis
-- [ ] Backend service vars: `REDIS_URL` = `${{Redis.REDIS_PRIVATE_URL}}` (a
-      *reference*, not a pasted string) and `USE_REDIS_CACHE=True`
-- [ ] `curl .../health/` → want `{"backend": "redis", "ok": true}`
+**Proof it is actually serving, not silently falling back to the DB cache:** the
+Redis data browser currently holds live Django keys —
+`:1:throttle_user_…` and `:1:throttle_anon_…`, ttl 41. The `:1:` prefix is
+Django's cache key version. Nothing writes those unless the Redis backend is
+the active cache.
 
-Miss the `${{Redis…}}` reference and you silently stay on the database cache —
-it looks identical to success. Rollback: `USE_REDIS_CACHE=False`. Quiet hour:
-the cutover clears in-flight OTP sessions. Never set the flag locally.
+The `/health/` probe on `feat/app-version-gate` is still worth merging, but it
+is now a convenience rather than the only way to know.
 
-### 1. Verify the two Railway crons actually ran 🟠
+### ~~1. Verify the two Railway crons~~ ✅ 2026-08-11 — both confirmed working
 
-Both services exist as of today, but **a cron service that exists is not a cron
-service that works.** Without its own config file a service inherits
-`railway.json` and boots gunicorn instead of the command — which looks identical
-from the services list, and is exactly how the zombie reminder cron went 14 days
-unnoticed logging only `Starting Container`.
+Read both service logs on the Railway dashboard. Neither is a zombie.
 
-- [ ] **Reminders** (`*/10 * * * *`) — checkable immediately, it fires every 10
-      minutes. Open the service log and look for real application output.
-- [ ] **Payouts** (`0 15 * * *` UTC = **20:30 IST**) — after 20:30 tonight, look for
-      `Ledgered 0 booking(s). Payouts are manual — see the admin payouts page.`
-      That line appearing **at all** is the proof.
-- [ ] Schedule is already correct. If it ever looks wrong, do **not** change it to
-      `30 20` — Railway cron is UTC and that bug was fixed once already.
+- **Payouts** — ran `2026-08-10 20:31:57`, 3s, succeeded. Log line verbatim:
+  `Ledgered 0 booking(s). Payouts are manual — see the admin payouts page.`
+  Schedule shows "Runs at 03:00 pm (UTC)" = 20:30 IST. Correct.
+- **Reminders** — firing every 10 minutes without a gap, from 2026-08-10 13:00
+  through 2026-08-11 14:50, each one logging
+  `Reminder run complete. Sent 0 reminder(s).` Real application output, not
+  `Starting Container` on its own.
 
-> **The dashboard cannot verify the payouts cron, and I was wrong to say it could.**
-> Checked the live card after the merge: it reads "✓ Nothing needs you", so
-> `ledger_not_running` is not firing and cannot clear. With no doctor on
-> `FULL` collection there are no ledger rows to write either. Tonight's run
-> leaves **no trace anywhere in the UI** — the service log is the only signal.
+Both "Sent 0" and "Ledgered 0" are correct given 4 lifetime bookings and no
+doctor on `FULL` collection. The crons are fine; there is simply nothing for
+them to do yet.
 
 ### 2. Confirm the permanent WhatsApp token reached Railway 🟠
 
@@ -70,16 +104,28 @@ stale token looks exactly like a working one.
 - [ ] `manage.py send_test_whatsapp <your mobile> --template booking_confirmation`
       — proves it end to end with no test booking and no real money
 
-### 3. Ship the mobile app — now 13 commits, v1.2.0 🔴
+### 3. Ship the mobile app — EAS checked 2026-08-11, and it answers the big question 🔴
 
-The branch grew from 1 commit to 13. Nothing in it reaches a patient without a
-build, and the notification icon is baked in at build time.
+**The funnel is EMPTY, not broken.** Latest production build is **1.1.3 (36)**,
+git ref `eddf5dd`, built 2026-08-08. Confirmed by `git merge-base` that
+`cb3d29d` — the server-priced Razorpay checkout — **is an ancestor of that
+build**. So the shipped app does match the backend's payment contract. The
+three-session-old "is the checkout broken?" question is closed: it isn't.
 
-- [ ] EAS build + submit
-- [ ] **First, check the EAS build list for what's actually in the store.**
-      `appVersionSource: "remote"` and no git tags, so the repo can't tell you.
-      If the last production build predates 2026-08-05, patients aren't even on
-      the Razorpay checkout yet — that would outrank everything else here.
+That means the campaign is not walking patients into a broken checkout, and the
+reason for 4 lifetime bookings is demand, not defect.
+
+**But one real gap, found today:** EAS **Submissions is completely empty** —
+"Create your first submission." Nothing has ever been submitted to a store
+through EAS. So whatever is on Play was uploaded by hand from the `.aab`, and
+EAS cannot tell you which version that is.
+
+- [ ] **Open Google Play Console and confirm which versionCode is actually live.**
+      This is now the only unknown in the funnel. EAS cannot answer it.
+- [ ] `5b11bd7` (the checkout fixes) is **not** in build 36 — it needs the next build
+- [ ] `eas submit` is still unconfigured, so the next release is another manual
+      upload unless it gets set up
+- [ ] Android only. No iOS build has ever run.
 
 ### 4. Housekeeping
 
@@ -100,11 +146,15 @@ build, and the notification icon is baked in at build time.
 Live numbers, 2026-08-10: 27 users · 11 hospitals live · 8 doctors · **4 bookings
 ever** · ₹60 lifetime revenue · **last booking 2026-07-26**.
 
-**A promotion is now starting against these numbers.** That makes the
-broken-vs-empty question urgent rather than academic: if the store build
-predates 2026-08-05, the campaign spends money driving patients into a checkout
-that does not match the backend. Two sessions have now ended without checking
-the EAS build list. Check it before the campaign ramps.
+**Settled 2026-08-11: the funnel is empty, not broken.** The shipped build
+(1.1.3 (36), `eddf5dd`, 8 Aug) contains the Razorpay checkout. Backend is
+healthy — both crons running, Redis live, deploys green. Nothing technical is
+stopping a patient from booking.
+
+So the campaign is not spending money into a broken checkout. It is spending it
+into a product that works and that nobody has used since 26 July. **That makes
+this a demand problem, and it is now the only real problem.** No further
+backend hardening changes this number.
 
 The hardening shipped this week — slot capacity, queue bounds, 3×4 gunicorn, the
 Redis-ready cache — is correct work and had to happen before traffic arrives. But
