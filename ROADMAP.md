@@ -24,42 +24,46 @@ traffic is expected for the first time, which promotes capacity work that was
 deliberately deferred on 2026-08-09 and makes the unshipped app build urgent
 rather than merely overdue.
 
-### 1. Merge what's left — five branches 🔴
+### 1. Merge what's left — four branches, all in the app repo 🔴
 
-**Updated 2026-08-13.** `feat/walkin-doctors-landline` (web/backend) merged as
-**PR #13** during the 2026-08-13 session and is live on Railway + Vercel; its
-app counterpart is pushed and waiting. What remains, in merge order:
+**Updated 2026-08-13 after PR #14.** The web/backend queue is **empty**. What
+remains, in merge order:
 
 | Order | Branch | Repo | Deploys | Note |
 |---|---|---|---|---|
 | 1 | `payments-server-priced-checkout` (13) | app | store, via EAS | **the 1.2.0 version bump lives here** |
 | 2 | `fix/map-load-timeout` (1) | app | store, via EAS | map failure handling |
-| 3 | `feat/walkin-doctors-landline` (1) | app | store, via EAS | **app half of PR #13 — backend is already live** |
+| 3 | `feat/walkin-doctors-landline` (1) | app | store, via EAS | **app half of PR #13 — backend already live** |
 | 4 | `feat/app-version-gate` (3) | backend | Railway | `/health/` probe + `/api/app-version/` |
 | 5 | `perf/dashboard-visible-polling` (1) | web | Vercel | |
-| — | `docs/wrap-2026-08-13` (this one) | web/backend | Railway | **carries `fix/hide-test-hospitals` — see below** |
-
-> **`fix/hide-test-hospitals` is no longer a separate merge.** PR #13 was cut
-> from a `main` that predated it and touched the same two files, so the branch
-> stopped merging cleanly — the conflict is a two-line import collision in
-> `backend/hospitals/views.py` (`is_valid_landline` vs `exclude_test_hospitals`).
-> Rather than leave a patient-facing fix stuck behind a trivial conflict,
-> `docs/wrap-2026-08-13` is based on `docs/wrap-2026-08-11-s3`, merges `main`,
-> and resolves it. **So that branch is not docs-only** — it carries the
-> `[TEST]` hospital fix and the session-3 wrap with it. 181 tests pass on the
-> merged tree. Merge it and delete `fix/hide-test-hospitals`.
 
 Already merged 2026-08-11: `docs/wrap-2026-08-11`, `feat/hospital-location-picker`
 (web, PR #12), `feat/hospital-location-picker` (app, PR #1),
 `fix/eas-include-google-services` (app, PR #2).
-Already merged 2026-08-13: `feat/walkin-doctors-landline` (web/backend, PR #13).
+**Already merged 2026-08-13:** `feat/walkin-doctors-landline` (web/backend,
+PR #13) and `docs/wrap-2026-08-13` (PR #14). 181 tests pass on `main`.
 
-**The lesson from PR #13, worth not repeating:** the session started on
-`docs/wrap-2026-08-11-s3`, read the code there, then cut its working branch from
-a **stale local `main`** without fetching. The files changed underneath mid-edit.
-Nothing was lost, but it created the conflict above. **`git fetch origin && git
-checkout -b <branch> origin/main` at the start of every session** — the local
-`main` in this checkout was 33 commits behind.
+> **`fix/hide-test-hospitals` and `docs/wrap-2026-08-11-s3` are both dead
+> branches — every commit in them is on `main`.** They rode in inside PR #14 and
+> should be deleted rather than merged again. The `[TEST]` hospital fix
+> (`3197377`) is live: patients no longer see the demo hospital or the ₹388.37
+> `FULL`-collection doctor behind it.
+
+**Two process rules this day earned, both worth keeping:**
+
+1. **Fetch before branching.** The session started on `docs/wrap-2026-08-11-s3`,
+   read the code there, then cut its working branch from a **stale local `main`**
+   (33 commits behind). Files changed underneath mid-edit. Nothing was lost, but
+   PR #13 came out based on the wrong tree and collided with
+   `fix/hide-test-hospitals` — a two-line import clash in
+   `backend/hospitals/views.py` (`is_valid_landline` vs `exclude_test_hospitals`).
+   Always: `git fetch origin && git checkout -b <branch> origin/main`.
+2. **A docs branch stays docs-only.** PR #14 was meant to be ROADMAP + WORKLOG
+   and ended up carrying a patient-facing code fix, because resolving the
+   conflict from rule 1 was easiest there. It worked and it is live and green —
+   but a docs PR is reviewed like docs, and a security fix inside one does not
+   get the reading it deserves. Resolve the conflict on the **code** branch next
+   time, even when the docs branch is right there.
 
 **The app pair (1 and 2) is now the release blocker — see item 5.** App `main`
 is still version **1.1.3**; the 1.2.0 bump is only on the release branch, so a
@@ -106,14 +110,16 @@ throttle counters only became *accurate* with Redis. `DatabaseCache` inherits
 every rate limit leaked. Redis counts correctly — meaning the cutover quietly
 tightened limits that had never really bitten, days before a traffic spike.
 
-### 2b. Two live production bugs — now COMMITTED, awaiting merge 🔴
+### ~~2b. Two live production bugs~~ ✅ 2026-08-13 — MERGED AND LIVE
 
-**Resolved end of session 3:** the stale `.git/index.lock` was removed (0 bytes,
-no git process running) and the work is committed and pushed as
-`fix/hide-test-hospitals` (`3197377`) — 167 tests pass, `makemigrations --check`
-clean. It is item 5 in the merge table above. It had been sitting uncommitted on
-`docs/wrap-2026-08-11`, a branch that had already been merged, so it was one
-`git checkout` away from being lost.
+**Shipped.** `3197377` reached `main` inside PR #14 on 2026-08-13 and deployed
+to Railway. `[TEST] Demo Hospital` and its ₹388.37 `FULL`-collection doctor are
+no longer visible to patients. Nothing to do here; kept below for the record.
+
+Session-3 history: the stale `.git/index.lock` was removed (0 bytes, no git
+process running) and the work committed as `fix/hide-test-hospitals`. It had
+been sitting uncommitted on `docs/wrap-2026-08-11`, a branch already merged, so
+it was one `git checkout` away from being lost.
 
 Both found on 2026-08-11 by probing the live API, both patient-facing, both
 would be found within hours by a promotion.

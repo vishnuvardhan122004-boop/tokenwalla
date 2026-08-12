@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** unmerged — `docs/wrap-2026-08-13` (web/backend; **carries `fix/hide-test-hospitals`**) + `feat/app-version-gate` + `perf/dashboard-visible-polling` (web/backend) · `payments-server-priced-checkout` + `fix/map-load-timeout` + `feat/walkin-doctors-landline` (app). Merged 2026-08-13: `feat/walkin-doctors-landline` (web/backend, PR #13).
-- **Latest commit at last update:** `fbb7c10` main + `57fb775` (web/backend) · `d83df3e` main + `a5f1788` (app)
-- **Last updated:** 2026-08-13 (walk-in doctors, landline contacts, expiring notices)
+- **Branch:** unmerged — `feat/app-version-gate` + `perf/dashboard-visible-polling` (web/backend) · `payments-server-priced-checkout` + `fix/map-load-timeout` + `feat/walkin-doctors-landline` (app). Merged 2026-08-13: `feat/walkin-doctors-landline` (web/backend, PR #13) and `docs/wrap-2026-08-13` (PR #14, which also carried `fix/hide-test-hospitals`). **Dead branches to delete: `fix/hide-test-hospitals`, `docs/wrap-2026-08-11-s3`** — fully contained in `main`.
+- **Latest commit at last update:** `d49da2d` main (web/backend) · `d83df3e` main + `a5f1788` (app)
+- **Last updated:** 2026-08-13 (walk-in doctors, landline contacts, expiring notices — merged and live)
 
 ### How to update this log
 - Add a new `## YYYY-MM-DD — <title>` section **on top** for each working session; keep older sessions below.
@@ -86,17 +86,22 @@ the code that reads them.
 ### Two things to know
 - **The branch was cut from a stale local `main`** (33 commits behind) after the
   session had already read the code on `docs/wrap-2026-08-11-s3`. Nothing was
-  lost, but PR #13 now conflicts with `fix/hide-test-hospitals` on a two-line
-  import in `backend/hospitals/views.py`. `docs/wrap-2026-08-13` resolves it and
-  carries that fix — see ROADMAP item 1. **Fetch before branching.**
+  lost, but PR #13 collided with `fix/hide-test-hospitals` on a two-line import
+  in `backend/hospitals/views.py`. That was resolved inside PR #14, which
+  therefore shipped a **patient-facing code fix inside a docs PR** — it is live
+  and green, but it is not how it should have gone: the conflict belonged on the
+  code branch. Both rules are now in ROADMAP item 1. **Fetch before branching,
+  and keep docs branches docs-only.**
 - **The local dev sqlite was changed while testing**: migrations applied, the
   Demo Hospital's password hash overwritten with `localdev123` (the original
   cannot be restored — reset it whenever), and a `Walkin Landline Doc` fixture
   left behind. Local only; production was never touched.
 
 ### Action items
+- [x] Merge `feat/walkin-doctors-landline` (web/backend) — PR #13, live
+- [x] Merge the wrap — PR #14, live. Carried `fix/hide-test-hospitals` with it.
 - [ ] Merge the app branch `feat/walkin-doctors-landline` (after the 1.2.0 pair)
-- [ ] Merge `docs/wrap-2026-08-13`, then delete `fix/hide-test-hospitals`
+- [ ] Delete the dead branches `fix/hide-test-hospitals` and `docs/wrap-2026-08-11-s3`
 - [ ] Run the app walk-in screen on a device once (`npx expo start`)
 - [ ] Reset the local Demo Hospital password if `localdev123` bothers you
 
