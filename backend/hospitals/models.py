@@ -1,5 +1,39 @@
 from django.db import models
 
+# Hospitals whose name starts with this marker are internal fixtures for
+# demoing and manual testing. They must never appear in a patient-facing list.
+#
+# This is a name convention rather than a column on purpose: the convention
+# already exists in the data and in the mobile app's own filter, so matching it
+# needs no migration and no touch of live rows. A real `is_test` flag would be
+# better, but it would mean editing production data to set it, which is not
+# something a session should do. Revisit when there's a reason to.
+TEST_HOSPITAL_PREFIX = '[TEST]'
+
+
+def exclude_test_hospitals(qs, field='name'):
+    """Drop internal test hospitals from a queryset.
+
+    `field` is the path to the hospital's name, so this works on Hospital
+    itself ('name') and on anything related to it ('hospital__name').
+    """
+    return qs.exclude(**{f'{field}__istartswith': TEST_HOSPITAL_PREFIX})
+
+
+def show_test_hospitals_to(user) -> bool:
+    """Only signed-in hospital staff and admins see the test fixtures.
+
+    Everyone else — anonymous visitors and patients — gets the filtered list.
+    Staff keep seeing them so the demo hospital stays usable from the
+    dashboard, which is the whole reason it exists.
+    """
+    return bool(
+        user
+        and getattr(user, 'is_authenticated', False)
+        and getattr(user, 'role', None) in ('hospital', 'admin')
+    )
+
+
 class Hospital(models.Model):
     name     = models.CharField(max_length=200)
     city     = models.CharField(max_length=100)

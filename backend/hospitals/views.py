@@ -13,7 +13,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from tokenwalla.utils import is_valid_landline
 
-from .models import Hospital, HospitalPhoto
+from .models import (
+    Hospital, HospitalPhoto, exclude_test_hospitals, show_test_hospitals_to,
+)
 from .serializers import HospitalSerializer
 
 
@@ -56,6 +58,8 @@ class HospitalListView(APIView):
 
     def get(self, request):
         hospitals = Hospital.objects.filter(status='active').order_by('name')
+        if not show_test_hospitals_to(request.user):
+            hospitals = exclude_test_hospitals(hospitals)
         return Response(HospitalSerializer(hospitals, many=True).data)
 
 

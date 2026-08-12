@@ -129,6 +129,28 @@ else:
         }
     }
 
+# ── Anonymous browse rate ─────────────────────────────────────────────────────
+# AnonRateThrottle keys on the client IP. Carrier-grade NAT in India puts a
+# whole neighbourhood behind one public address, so this bucket is shared by
+# strangers — the same lesson already learned twice here, for OTP verify and
+# then OTP send.
+#
+# 60/minute was the last place it was still true. Browsing the doctor list is
+# several requests per person, so roughly four or five simultaneous visitors on
+# one carrier exhausted it and everyone behind that address got 429s. Under a
+# promotion that reads as "nobody is booking" rather than "we are turning them
+# away", which is the worst kind of failure: silent and self-confirming.
+#
+# There is a second edge to this. The counter only became accurate when Redis
+# went live — DatabaseCache inherits BaseCache.incr, a read-modify-write, so
+# concurrent requests under-counted and the limit leaked. Redis counts
+# correctly, which means the cutover quietly *tightened* a limit that had never
+# really bitten. Raising it is catching up with that, not loosening anything.
+#
+# These paths are cheap public reads. Env-overridable so a campaign can widen
+# it without a deploy.
+ANON_RATE = config('ANON_RATE', default='300/minute')
+
 # ── REST Framework ────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -144,7 +166,7 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '60/minute',
+        'anon': ANON_RATE,
         'user': '300/minute',
         'otp':  '5/minute',    # requesting an OTP (sends SMS/voice — real cost)
         'otp_verify': '30/minute',  # verifying / checking (cheap, several per flow)
