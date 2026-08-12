@@ -11,6 +11,9 @@ class Hospital(models.Model):
     latitude  = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
     mobile   = models.CharField(max_length=15, unique=True)
+    # Optional landline (e.g. "08812-234567"). Display / call-me-back only —
+    # `mobile` stays the login identity and the only number we ever text.
+    landline = models.CharField(max_length=20, blank=True, default='')
     email    = models.EmailField(blank=True)
     image    = models.ImageField(upload_to='hospitals/', blank=True)          # banner
     logo     = models.ImageField(upload_to='hospital_logos/', null=True, blank=True)
@@ -24,6 +27,10 @@ class Hospital(models.Model):
     description  = models.TextField(blank=True)
     # Short notice shown to patients (e.g. "Dr. X on leave Friday")
     announcement = models.CharField(max_length=300, blank=True)
+    # Last day the announcement is shown. Null = show until the hospital clears
+    # it. A holiday notice nobody remembers to delete is worse than none, so the
+    # hospital can set the date it stops mattering.
+    announcement_until = models.DateField(null=True, blank=True)
     # Working hours in 24h "HH:MM" (blank = not set)
     open_time    = models.CharField(max_length=5, blank=True)
     close_time   = models.CharField(max_length=5, blank=True)

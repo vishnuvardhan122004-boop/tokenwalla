@@ -1,6 +1,9 @@
 import re
 
 from rest_framework import serializers
+
+from tokenwalla.utils import is_valid_landline, is_valid_mobile
+
 from .models import Doctor
 
 
@@ -36,7 +39,7 @@ class DoctorSerializer(serializers.ModelSerializer):
         model  = Doctor
         fields = [
             "id", "name", "specialization", "keywords", "experience",
-            "mobile", "available", "fee", "slots", "days", "max_per_slot",
+            "mobile", "landline", "available", "fee", "slots", "days", "max_per_slot",
             "payment_collection_mode", "fee_breakdown",
             "image", "hospital_image",
             "image_url", "hospital_image_url",
@@ -47,6 +50,9 @@ class DoctorSerializer(serializers.ModelSerializer):
             "hospital_image": {"required": False, "allow_null": True, "write_only": False},
             "keywords":       {"required": False, "allow_blank": True},
             "city":           {"required": False, "allow_blank": True},
+            # One of mobile / landline is required — see validate() below.
+            "mobile":         {"required": False, "allow_blank": True},
+            "landline":       {"required": False, "allow_blank": True},
             "experience":     {"required": False},
             "max_per_slot":   {"required": False},
             "available":      {"required": False},
@@ -56,6 +62,31 @@ class DoctorSerializer(serializers.ModelSerializer):
             # they live in DoctorPaymentDetailsSerializer (owner/admin only).
             "payment_collection_mode": {"required": False},
         }
+
+    def validate(self, attrs):
+        # Merge over the instance so a PATCH that touches neither number still
+        # validates against the resulting state, not just what was sent.
+        inst   = self.instance
+        mobile   = (attrs.get("mobile",   getattr(inst, "mobile", "")   if inst else "") or "").strip()
+        landline = (attrs.get("landline", getattr(inst, "landline", "") if inst else "") or "").strip()
+
+        errors = {}
+        if mobile and not is_valid_mobile(mobile):
+            errors["mobile"] = "Enter a valid 10-digit Indian mobile number."
+        if landline and not is_valid_landline(landline):
+            errors["landline"] = "Enter a valid landline with the STD code, e.g. 08812-234567."
+        # A doctor patients cannot reach at all is not worth listing — but which
+        # kind of number it is, is the clinic's business.
+        if not mobile and not landline:
+            errors["mobile"] = "Enter a mobile number or a landline."
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        if "mobile" in attrs:
+            attrs["mobile"] = mobile
+        if "landline" in attrs:
+            attrs["landline"] = landline
+        return attrs
 
     def get_image_url(self, obj):
         if obj.image:

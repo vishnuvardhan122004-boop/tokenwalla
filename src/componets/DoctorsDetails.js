@@ -165,7 +165,8 @@ export default function DoctorDetails() {
       state: {
         doctorId:     doctor.id,
         doctorName:   doctor.name,
-        doctorMobile: doctor.mobile,
+        // Landline-only clinics exist — send whichever number they can be reached on.
+        doctorMobile: doctor.mobile || doctor.landline,
         hospital:     doctor.hospital_name,
         date:         selectedDate,
         slot:         selectedSlot,
@@ -225,6 +226,14 @@ export default function DoctorDetails() {
   const am       = slots.filter(s => s.includes('AM'));
   const pm       = slots.filter(s => s.includes('PM'));
   const dateLabel = DAYS.find(d => d.full === selectedDate);
+
+  // Walk-in: the hospital publishes no slot times, so there is nothing to book
+  // online. We still list the doctor — patients get the hours, the days and a
+  // number to call. Landline first: a clinic that has one usually wants calls
+  // on it rather than on a personal mobile.
+  const walkIn     = slots.length === 0;
+  const callNumber = hospitalInfo?.landline || doctor?.landline
+                  || hospitalInfo?.mobile   || doctor?.mobile || '';
 
   // Returns slot visual state: 'available' | 'partial' | 'full' | 'selected'
   const slotState = (slot) => {
@@ -656,6 +665,24 @@ export default function DoctorDetails() {
 
         .dd-no-slots { text-align: center; padding: 24px; color: var(--gray-400); font-size: 13px; }
 
+        /* ── WALK-IN (doctor publishes no slots) ── */
+        .dd-walkin { padding: 4px 0 2px; }
+        .dd-walkin-lead {
+          font-size: 14px; line-height: 1.5; color: #475569; margin-bottom: 14px;
+        }
+        .dd-walkin-row {
+          display: flex; justify-content: space-between; align-items: center; gap: 12px;
+          padding: 10px 0; border-bottom: 1px solid #EEF2F7; font-size: 14px;
+        }
+        .dd-walkin-key { color: #64748B; }
+        .dd-walkin-val { font-weight: 600; color: #1E293B; text-align: right; }
+        .dd-walkin-call {
+          display: block; margin-top: 16px; padding: 13px 16px; border-radius: 12px;
+          background: #185FA5; color: #fff; text-align: center;
+          font-size: 15px; font-weight: 700; text-decoration: none;
+        }
+        .dd-walkin-call:hover { background: #12497f; color: #fff; }
+
         /* ── BOOKING CARD ── */
         .dd-booking-card {
           background: #fff; border: 1px solid var(--blue-100);
@@ -964,8 +991,12 @@ export default function DoctorDetails() {
           <div className="dd-stats-row">
             {[
               { val: `${doctor.experience}+`, lbl: 'Years Exp'   },
-              { val: slots.length,             lbl: 'Daily Slots' },
-              { val: doctor.max_per_slot || 10, lbl: 'Per Slot'  },
+              walkIn
+                ? { val: 'Walk-in', lbl: 'Visit Type' }
+                : { val: slots.length, lbl: 'Daily Slots' },
+              walkIn
+                ? { val: (doctor.days || []).length || '—', lbl: 'Days Open' }
+                : { val: doctor.max_per_slot || 10, lbl: 'Per Slot' },
             ].map(({ val, lbl }) => (
               <div key={lbl} className="dd-stat-box">
                 <div className="dd-stat-val">{val}</div>
@@ -974,8 +1005,11 @@ export default function DoctorDetails() {
             ))}
           </div>
 
-          {/* ── HOSPITAL ANNOUNCEMENT ── */}
-          {hospitalInfo?.announcement && (
+          {/* ── HOSPITAL ANNOUNCEMENT ──
+              `announcement_active` is computed server-side (expiry date), so an
+              old notice stops showing without anyone remembering to delete it.
+              Falls back to the raw text if the API predates the flag. */}
+          {hospitalInfo?.announcement && hospitalInfo.announcement_active !== false && (
             <div style={{
               display: 'flex', gap: 10, alignItems: 'flex-start',
               background: '#FFF6E5', border: '1px solid #F0D080', color: '#8A6100',
@@ -1060,7 +1094,8 @@ export default function DoctorDetails() {
 
             {/* LEFT — Date + Slots */}
             <div>
-              {/* Date picker */}
+              {/* Date picker — pointless without slots to pick on that date. */}
+              {!walkIn && (
               <div className="dd-block">
                 <div className="dd-block-title">
                   <div className="dd-block-title-icon">📅</div>
@@ -1080,12 +1115,13 @@ export default function DoctorDetails() {
                   ))}
                 </div>
               </div>
+              )}
 
               {/* Slots */}
               <div className="dd-block">
                 <div className="dd-block-title">
                   <div className="dd-block-title-icon">🕐</div>
-                  Select Time Slot
+                  {walkIn ? 'Visiting Hours' : 'Select Time Slot'}
                   {availLoading && (
                     <span style={{ marginLeft: 8, fontSize: 11, color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 5 }}>
                       <span style={{ width: 12, height: 12, border: '2px solid #B5D4F4', borderTopColor: '#185FA5', borderRadius: '50%', display: 'inline-block', animation: 'ddSpin 0.7s linear infinite' }} />
@@ -1117,8 +1153,34 @@ export default function DoctorDetails() {
                   </div>
                 )}
 
-                {slots.length === 0 ? (
-                  <div className="dd-no-slots">No slots configured. Contact the hospital directly.</div>
+                {walkIn ? (
+                  <div className="dd-walkin">
+                    <div className="dd-walkin-lead">
+                      This doctor sees patients on a walk-in basis — there are no fixed
+                      appointment times to book online.
+                    </div>
+                    {(hospitalInfo?.open_time || hospitalInfo?.close_time) && (
+                      <div className="dd-walkin-row">
+                        <span className="dd-walkin-key">🕐 Hospital hours</span>
+                        <span className="dd-walkin-val">
+                          {hospitalInfo.open_time || '—'} – {hospitalInfo.close_time || '—'}
+                        </span>
+                      </div>
+                    )}
+                    {(doctor.days || []).length > 0 && (
+                      <div className="dd-walkin-row">
+                        <span className="dd-walkin-key">📅 Available days</span>
+                        <span className="dd-walkin-val">{doctor.days.join(', ')}</span>
+                      </div>
+                    )}
+                    {callNumber ? (
+                      <a className="dd-walkin-call" href={`tel:${callNumber}`}>
+                        📞 Call {callNumber}
+                      </a>
+                    ) : (
+                      <div className="dd-no-slots">Contact the hospital directly to visit.</div>
+                    )}
+                  </div>
                 ) : (
                   <div className={availLoading ? 'dd-slots-loading' : ''}>
                     {am.length > 0 && (
@@ -1196,8 +1258,12 @@ export default function DoctorDetails() {
             <div>
               <div className="dd-booking-card">
                 <div className="dd-booking-header">
-                  <div className="dd-booking-header-title">Book Appointment</div>
-                  <div className="dd-booking-header-sub">Instant confirmation · Secure payment</div>
+                  <div className="dd-booking-header-title">
+                    {walkIn ? 'Visit the Hospital' : 'Book Appointment'}
+                  </div>
+                  <div className="dd-booking-header-sub">
+                    {walkIn ? 'Walk in during opening hours' : 'Instant confirmation · Secure payment'}
+                  </div>
                 </div>
 
                 <div className="dd-booking-body">
@@ -1205,25 +1271,47 @@ export default function DoctorDetails() {
                     <span className="dd-summary-label">Doctor</span>
                     <span className="dd-summary-value">{doctor.name}</span>
                   </div>
-                  <div className="dd-summary-row">
-                    <span className="dd-summary-label">Date</span>
-                    <span className="dd-summary-value">
-                      {dateLabel ? `${dateLabel.label}, ${dateLabel.num} ${dateLabel.month}` : '—'}
-                    </span>
-                  </div>
-                  <div className="dd-summary-row">
-                    <span className="dd-summary-label">Slot</span>
-                    <span className={`dd-summary-value ${!selectedSlot ? 'empty' : ''}`}>
-                      {selectedSlot || 'Not selected'}
-                    </span>
-                  </div>
+                  {!walkIn && (
+                    <>
+                      <div className="dd-summary-row">
+                        <span className="dd-summary-label">Date</span>
+                        <span className="dd-summary-value">
+                          {dateLabel ? `${dateLabel.label}, ${dateLabel.num} ${dateLabel.month}` : '—'}
+                        </span>
+                      </div>
+                      <div className="dd-summary-row">
+                        <span className="dd-summary-label">Slot</span>
+                        <span className={`dd-summary-value ${!selectedSlot ? 'empty' : ''}`}>
+                          {selectedSlot || 'Not selected'}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  {walkIn && (hospitalInfo?.open_time || hospitalInfo?.close_time) && (
+                    <div className="dd-summary-row">
+                      <span className="dd-summary-label">Hours</span>
+                      <span className="dd-summary-value">
+                        {hospitalInfo.open_time || '—'} – {hospitalInfo.close_time || '—'}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="dd-total-row">
                     <span className="dd-total-label">Consultation Fee</span>
                     <span className="dd-total-amount">₹{doctor.fee}</span>
                   </div>
 
-                  {user ? (
+                  {/* No token to sell without a slot — the payment path needs one,
+                      and pretending otherwise would take money for nothing. */}
+                  {walkIn ? (
+                    callNumber ? (
+                      <a className="dd-walkin-call" style={{ marginTop: 0 }} href={`tel:${callNumber}`}>
+                        📞 Call {callNumber}
+                      </a>
+                    ) : (
+                      <div className="dd-no-slots">Contact the hospital directly to visit.</div>
+                    )
+                  ) : user ? (
                     <button
                       className="dd-book-btn"
                       onClick={handleBook}
@@ -1244,9 +1332,14 @@ export default function DoctorDetails() {
                   )}
 
                   <p className="dd-book-note">
-                    + platform fee &amp; GST shown at checkout<br />
-                    Secured by Razorpay · UPI · Cards · Wallets<br />
-                    Refundable if cancelled 2hrs before slot
+                    {walkIn ? (
+                      <>Pay the consultation fee at the hospital.<br />
+                      No online booking for this doctor.</>
+                    ) : (
+                      <>+ platform fee &amp; GST shown at checkout<br />
+                      Secured by Razorpay · UPI · Cards · Wallets<br />
+                      Refundable if cancelled 2hrs before slot</>
+                    )}
                   </p>
                 </div>
               </div>

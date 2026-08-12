@@ -27,13 +27,18 @@ const SLOT_SECTIONS = [
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+// Mirrors backend/tokenwalla/utils.py — a mobile is the only thing WhatsApp can
+// reach; a landline is a call-us number for clinics that have nothing else.
+const MOBILE_RE   = /^[6-9][0-9]{9}$/;
+const LANDLINE_RE = /^0[1-9][0-9]{1,3}[- ]?[0-9]{6,8}$/;
+
 const EMPTY_DOCTOR = {
   name: "", specialization: "", keywords: "", experience: "",
-  mobile: "", available: true, fee: "", slots: [], days: [], max_per_slot: 10,
+  mobile: "", landline: "", available: true, fee: "", slots: [], days: [], max_per_slot: 10,
 };
 
 const EMPTY_ERRORS = {
-  name: "", specialization: "", mobile: "", experience: "",
+  name: "", specialization: "", mobile: "", landline: "", experience: "",
   fee: "", max_per_slot: "", slots: "", days: "",
 };
 
@@ -43,15 +48,21 @@ const validate = (formData) => {
   if (!formData.name.trim()) { errors.name = "Doctor name is required"; valid = false; }
   else if (formData.name.trim().length < 2) { errors.name = "Name must be at least 2 characters"; valid = false; }
   if (!formData.specialization.trim()) { errors.specialization = "Specialization is required"; valid = false; }
-  if (!formData.mobile.trim()) { errors.mobile = "Mobile number is required"; valid = false; }
-  else if (!/^[6-9]\d{9}$/.test(formData.mobile.trim())) { errors.mobile = "Enter a valid 10-digit Indian mobile number"; valid = false; }
+  const mobile   = formData.mobile.trim();
+  const landline = formData.landline.trim();
+  if (mobile && !MOBILE_RE.test(mobile)) { errors.mobile = "Enter a valid 10-digit Indian mobile number"; valid = false; }
+  if (landline && !LANDLINE_RE.test(landline)) { errors.landline = "Enter a valid landline with the STD code, e.g. 08812-234567"; valid = false; }
+  if (!mobile && !landline) { errors.mobile = "Enter a mobile number or a landline"; valid = false; }
   if (formData.experience !== "" && (isNaN(formData.experience) || Number(formData.experience) < 0))
     { errors.experience = "Experience must be a positive number"; valid = false; }
   if (formData.fee !== "" && (isNaN(formData.fee) || Number(formData.fee) < 0))
     { errors.fee = "Fee must be a positive number"; valid = false; }
   if (formData.max_per_slot !== "" && (isNaN(formData.max_per_slot) || Number(formData.max_per_slot) < 1))
     { errors.max_per_slot = "Must be at least 1 patient per slot"; valid = false; }
-  if (formData.slots.length === 0) { errors.slots = "Select at least one time slot"; valid = false; }
+  // No slot requirement on purpose: a single-doctor clinic that runs on walk-ins
+  // cannot promise a time. Zero slots lists the doctor without online booking —
+  // patients see the hospital's hours and call. Days still matter (which days
+  // the doctor sits at all), so they stay required.
   if (formData.days.length === 0) { errors.days = "Select at least one available day"; valid = false; }
   return { errors, valid };
 };
@@ -216,6 +227,7 @@ const Hdashboard = () => {
       keywords:       doctor.keywords       || "",
       experience:     doctor.experience     || "",
       mobile:         doctor.mobile         || "",
+      landline:       doctor.landline       || "",
       available:      doctor.available      ?? true,
       fee:            doctor.fee            ?? "",
       slots:          doctor.slots          || [],
@@ -269,6 +281,7 @@ const Hdashboard = () => {
       fd.append("keywords",       formData.keywords.trim());
       fd.append("experience",     Number(formData.experience)  || 0);
       fd.append("mobile",         formData.mobile.trim());
+      fd.append("landline",       formData.landline.trim());
       fd.append("available",      formData.available);
       fd.append("fee",            Number(formData.fee) || 0);
       fd.append("max_per_slot",   Number(formData.max_per_slot) || 10);
@@ -792,18 +805,34 @@ const Hdashboard = () => {
 
                     <div className="col-md-4">
                       <label className="form-label fw-semibold">
-                        Mobile * <small className="text-muted">(10-digit)</small>
+                        Mobile <small className="text-muted">(10-digit)</small>
                       </label>
                       <div className="input-group">
                         <span className="input-group-text text-muted">+91</span>
                         <input
-                          className={`form-control ${errors.mobile ? "is-invalid" : formData.mobile && /^[6-9]\d{9}$/.test(formData.mobile) ? "is-valid" : ""}`}
+                          className={`form-control ${errors.mobile ? "is-invalid" : formData.mobile && MOBILE_RE.test(formData.mobile) ? "is-valid" : ""}`}
                           type="tel" placeholder="9000000000" maxLength={10}
                           value={formData.mobile}
                           onChange={e => handleChange("mobile", e.target.value.replace(/\D/, "").slice(0, 10))}
                         />
                       </div>
                       <FieldError msg={errors.mobile} />
+                    </div>
+
+                    <div className="col-md-4">
+                      <label className="form-label fw-semibold">
+                        Landline <small className="text-muted">(with STD code)</small>
+                      </label>
+                      <input
+                        className={`form-control ${errors.landline ? "is-invalid" : formData.landline && LANDLINE_RE.test(formData.landline) ? "is-valid" : ""}`}
+                        type="tel" placeholder="08812-234567" maxLength={15}
+                        value={formData.landline}
+                        onChange={e => handleChange("landline", e.target.value.replace(/[^\d\-\s]/g, "").slice(0, 15))}
+                      />
+                      <FieldError msg={errors.landline} />
+                      <div className="form-text">
+                        Mobile or landline — at least one. Only a mobile receives WhatsApp updates.
+                      </div>
                     </div>
 
                     <div className="col-md-4">
@@ -852,14 +881,22 @@ const Hdashboard = () => {
                       <FieldError msg={errors.days} />
                     </div>
 
-                    {/* Slot Selector */}
+                    {/* Slot Selector — optional. No slots = walk-in listing. */}
                     <div className="col-12">
                       <label className="form-label fw-semibold">
-                        🕐 Select Time Slots *
+                        🕐 Select Time Slots
                         <small className="text-muted ms-2">
                           ({formData.slots.length} of {DEFAULT_SLOTS.length} selected)
                         </small>
                       </label>
+
+                      {formData.slots.length === 0 && (
+                        <div className="alert alert-info py-2 px-3 small mb-3">
+                          <strong>Walk-in mode.</strong> With no slots selected, patients see
+                          this doctor as available along with your hospital timings and notice,
+                          and call you to visit — there is no online token booking.
+                        </div>
+                      )}
 
                       {SLOT_SECTIONS.map(section => (
                         <div className="mb-3" key={section.label}>
@@ -989,7 +1026,9 @@ const Hdashboard = () => {
                                 <span className="badge bg-secondary small">+{doc.slots.length - 3} more</span>
                               )}
                               {(doc.slots || []).length === 0 && (
-                                <span className="text-danger small">No slots set</span>
+                                <span className="badge bg-info-subtle text-info-emphasis border small">
+                                  Walk-in — no online booking
+                                </span>
                               )}
                             </div>
                           </div>
