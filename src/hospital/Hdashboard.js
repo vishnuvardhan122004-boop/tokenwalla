@@ -381,7 +381,7 @@ const Hdashboard = () => {
     : null;
 
   return (
-    <div className="min-vh-100 bg-light">
+    <div className="min-vh-100 bg-light tw-dash">
 
       {/* Toast */}
       {toast && (
@@ -423,6 +423,77 @@ const Hdashboard = () => {
         .tw-tab{border:0;background:transparent;color:#5b6672;font-size:14px;font-weight:600;padding:8px 16px;border-radius:9px;transition:all .15s ease;white-space:nowrap;cursor:pointer}
         .tw-tab:hover{color:#212529}
         .tw-tab--active{background:#fff;color:#0d6efd;box-shadow:0 1px 3px rgba(16,24,40,.12)}
+
+        /* Slot picker. Its own class rather than Bootstrap's .d-flex, so the
+           mobile grid below can override it without an !important fight. */
+        .tw-slotgrid{display:flex;flex-wrap:wrap;gap:.5rem}
+
+        /* ══ MOBILE ══════════════════════════════════════════════════════════
+           This screen is run one-handed at a reception desk, so the phone
+           layout is the real one, not a fallback. Measured before changing
+           anything: 90 tap targets under the 44px minimum (71 of them 31px),
+           and the doctor form was 2262px tall with Save at the very bottom. */
+        @media (max-width: 767.98px) {
+          /* 1. Tap targets. Bootstrap's own sizing is desktop-mouse sized;
+                44px is the documented finger minimum on iOS and Android. */
+          .tw-dash .btn,
+          .tw-dash .form-control,
+          .tw-dash .form-select,
+          .tw-dash .tw-nav-btn,
+          .tw-dash .tw-tab { min-height: 44px; }
+          .tw-dash .tw-back { width: 44px; height: 44px; }
+          /* The Available switch is the one control staff flip most often. */
+          .tw-dash .form-switch .form-check-input { width: 52px; height: 28px; margin-top: 0; }
+          .tw-dash .form-switch { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+          .tw-dash .btn-sm { min-height: 44px; padding-inline: 14px; }
+          .tw-dash .input-group > .form-control { min-height: 44px; }
+
+          /* 2. Tabs as a 2x2 grid rather than a ragged wrap — same height as
+                before, nothing pushed off-screen, and each is a full target. */
+          .tw-tabs { display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: 6px; }
+          .tw-tab { padding: 10px 8px; font-size: 13px; white-space: normal; }
+
+          /* 3. Header: the hospital name is which ACCOUNT you are logged into,
+                which matters more on a shared phone than the wordmark does.
+                It was hidden below 576px; show it, truncated. */
+          .tw-navbar { padding-inline: 1rem !important; }
+          .tw-hosp { display: inline-flex !important; max-width: 42vw; padding: 5px 10px; font-size: 12px; }
+          .tw-hosp span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .tw-brand { display: none; }          /* logo already says it */
+          .tw-nav-btn { padding: 7px 11px; font-size: 12px; }
+
+          /* 4. Stat cards: 2x2 already, just less air so the queue starts
+                above the fold instead of below it. */
+          .tw-stat { padding: 13px 13px 12px 17px; border-radius: 13px; }
+          .tw-stat__val { font-size: 26px; }
+          .tw-stat__label { font-size: 11px; }
+
+          /* 5. Slot picker: 48 chips at 79x31 was the worst offender on the
+                page. A fixed grid gives even, thumb-sized targets. */
+          .tw-slotgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+          .tw-slotgrid .btn { min-height: 44px; padding: 6px 4px; font-size: 13px; }
+
+          /* 5b. Day filter: three equal columns so it stays one row once the
+                 pills are finger-sized. */
+          .tw-dayfilter { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+          .tw-dayfilter .btn { padding-inline: 6px; font-size: 13px; }
+
+          /* 6. Save without scrolling 2,000px back down. */
+          .tw-formactions {
+            position: sticky; bottom: 0; z-index: 5;
+            margin: 0 -1rem -1rem; padding: 12px 1rem;
+            background: rgba(255,255,255,.96);
+            backdrop-filter: saturate(180%) blur(8px);
+            -webkit-backdrop-filter: saturate(180%) blur(8px);
+            border-top: 1px solid #eceef1;
+          }
+          .tw-formactions .btn { width: 100%; }
+
+          /* 7. Doctor cards: the banner ate a third of the screen each, so
+                barely one card fit. Half height shows two. */
+          .tw-doccard-banner { height: 64px !important; }
+          .tw-doccard-banner .tw-doccard-avatar { width: 48px !important; height: 48px !important; bottom: -24px !important; }
+        }
       `}</style>
 
       {/* Token detail popup — handy for reading the token aloud or confirming
@@ -463,7 +534,7 @@ const Hdashboard = () => {
           <span className="tw-brand">TokenWalla</span>
         </div>
         <div className="d-flex align-items-center gap-2 gap-md-3">
-          <span className="tw-hosp d-none d-sm-inline-flex">🏥 {hospital?.name}</span>
+          <span className="tw-hosp" title={hospital?.name}>🏥 <span>{hospital?.name}</span></span>
           <button className="tw-nav-btn" onClick={() => navigate("/Hprofile")}>👤 Profile</button>
           <button className="tw-nav-btn tw-nav-btn--danger" onClick={logout}>Logout</button>
         </div>
@@ -512,7 +583,7 @@ const Hdashboard = () => {
           <>
             {/* Day filter: Today / Tomorrow / All — the queue mixes dates, so
                 split them for clarity. Each pill shows its count. */}
-            <div className="d-flex flex-wrap gap-2 mb-3">
+            <div className="d-flex flex-wrap gap-2 mb-3 tw-dayfilter">
               {[
                 { key: "today",    label: "📅 Today",    cls: "primary" },
                 { key: "tomorrow", label: "⏭️ Tomorrow", cls: "info"    },
@@ -903,7 +974,7 @@ const Hdashboard = () => {
                           <small className="text-muted fw-semibold d-block mb-1">
                             {section.label}
                           </small>
-                          <div className="d-flex flex-wrap gap-2">
+                          <div className="tw-slotgrid">
                             {section.slots.map(slot => (
                               <button
                                 key={slot} type="button"
@@ -934,7 +1005,9 @@ const Hdashboard = () => {
                       <FieldError msg={errors.slots} />
                     </div>
 
-                    <div className="col-12">
+                    {/* Sticky on mobile — the form is ~2,200px tall and Save
+                        used to sit at the very bottom of all of it. */}
+                    <div className="col-12 tw-formactions">
                       <button type="submit" className="btn btn-primary px-4" disabled={submitting}>
                         {submitting
                           ? <><span className="spinner-border spinner-border-sm me-2" />Saving...</>
@@ -966,7 +1039,7 @@ const Hdashboard = () => {
                   return (
                     <div key={doc.id} className="col-md-6 col-lg-4">
                       <div className="card border-0 shadow-sm h-100">
-                        <div style={{ position: "relative", height: 100 }}>
+                        <div className="tw-doccard-banner" style={{ position: "relative", height: 100 }}>
                           {doc.hospital_image && !doc.hospital_image.includes("placehold") ? (
                             <img
                               src={doc.hospital_image} alt="Hospital"
@@ -981,12 +1054,12 @@ const Hdashboard = () => {
                           {doc.image && !doc.image.includes("placehold") ? (
                             <img
                               src={doc.image} alt={doc.name}
-                              className="rounded-circle border border-3 border-white position-absolute"
+                              className="rounded-circle border border-3 border-white position-absolute tw-doccard-avatar"
                               style={{ width: 60, height: 60, objectFit: "cover", bottom: -30, left: 16 }}
                             />
                           ) : (
                             <div
-                              className="rounded-circle border border-3 border-white position-absolute d-flex align-items-center justify-content-center bg-light"
+                              className="rounded-circle border border-3 border-white position-absolute d-flex align-items-center justify-content-center bg-light tw-doccard-avatar"
                               style={{ width: 60, height: 60, bottom: -30, left: 16, fontSize: 24 }}
                             >
                               👨‍⚕️
@@ -996,7 +1069,7 @@ const Hdashboard = () => {
                         <div className="p-3 pt-4 mt-2">
                           <div className="fw-semibold">{doc.name}</div>
                           <div className="small text-primary mb-1">{doc.specialization}</div>
-                          <div className="small text-muted mb-1">📞 {doc.mobile}</div>
+                          <div className="small text-muted mb-1">📞 {doc.mobile || doc.landline || "—"}</div>
                           <div className="small text-muted mb-1">⏳ {doc.experience} yrs exp</div>
                           <div className="small text-muted mb-2">
                             👥 Max {doc.max_per_slot || 10} patients/slot
