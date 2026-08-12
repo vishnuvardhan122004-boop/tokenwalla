@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `feature/fee-splitting-refunds-payouts` (web/backend) · `main` (mobile app repo)
-- **Latest commit at last update:** `d79103e` (web/backend) — back to Razorpay + manual doctor payouts; mobile app still on the Cashfree SDK
-- **Last updated:** 2026-08-05
+- **Branch:** `feat/app-version-gate` + `perf/dashboard-visible-polling` + `feat/hospital-location-picker` (web/backend, all **unmerged**) · `payments-server-priced-checkout` + `feat/hospital-location-picker` (mobile app repo, both **unmerged**)
+- **Latest commit at last update:** `e204401` + `aa707e2` + `50fb1e2` (web/backend) · `0c8cef3` + `83236ad` (app)
+- **Last updated:** 2026-08-11 (session 2)
 
 ### How to update this log
 - Add a new `## YYYY-MM-DD — <title>` section **on top** for each working session; keep older sessions below.
@@ -13,6 +13,138 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-11 (session 2) — Hospital location picker on all three surfaces
+
+Hospitals could save a city and a free-text landmark, never an accurate pin.
+Added a map picker to the web profile editor, the web signup page and the app
+hospital profile. **Nothing merged; two new branches pushed, same name in both
+repos.**
+
+| Change | Repo | Commit | Status |
+|---|---|---|---|
+| `LocationPicker.js` — modal, fixed centre pin, geolocation, live reverse-geocode | web | `cae5cdc` | ✅ pushed, unmerged |
+| Lazy-load Leaflet so patients don't pay 47 kB for a hospital screen | web | `c96ab27` | ✅ pushed, unmerged |
+| Same picker on `/Husercreate` + refuse a pin below zoom 14 | web | `50fb1e2` | ✅ pushed, unmerged |
+| `LocationPickerModal.tsx` + `placeLabel.ts` + `mapHtml.ts` | app | `83236ad` | ✅ pushed, unmerged |
+
+- **No Google Maps key anywhere.** Stayed on the free key-less rail
+  `LocationSearch` already used — OSM tiles + Photon geocoding.
+- **No new app dependency, native or JS.** `react-native-maps` would have forced
+  an EAS rebuild *and* an Android Maps API key. Leaflet runs in the WebView
+  already shipped for Razorpay checkout; `expo-location` was already installed
+  with its permission strings already in `app.json`.
+- **Confirm is disabled below zoom 14** (web + app). Caught while testing signup:
+  the map opens at state zoom with no saved location, and a one-click confirm
+  would have pinned the middle of Telangana — patients routed tens of km wrong.
+- **`ResizeObserver`, not a timeout**, for Leaflet's stale container size — it
+  rendered half a grey panel inside the modal. Also covers rotation and resize.
+- **Bundle:** main back to baseline, Leaflet in a 42.9 kB on-demand chunk.
+- **`package-lock.json` shed 132 orphaned `react-native-*` entries** left by the
+  removed `react-native-razorpay`. Makes that PR's diff look bigger than it is.
+
+**Tests:** web 20 pass (7 new, Photon address mapping) + production build clean;
+app 104 pass (15 new), `tsc` 0, lint clean on new files. The web picker was
+driven end to end in a browser — drag re-geocodes, both geolocation branches,
+zoom guard blocks at z6 and releases at z15. The app's WebView page was
+compiled, served and driven with a stubbed `ReactNativeWebView`.
+
+**Not proven:** the app's React Native layer (Modal, WebView wiring,
+`expo-location` permission flow) has never run on a device or simulator.
+Gate on merging the app branch.
+
+**Also learned:** `gh` is not authenticated on this machine, so a session cannot
+open PRs at all — they have to be created by hand from the `pull/new/<branch>`
+links. Second session this has cost time.
+
+---
+
+## 2026-08-11 — Back-nav root cause, the update gate, and pre-promotion capacity
+
+**Branches:** `feat/app-version-gate` (backend) · `perf/dashboard-visible-polling` (web) · `payments-server-priced-checkout` (app) — **all three pushed, none merged.**
+
+Context: a promotion is starting, so registration traffic is expected for the
+first time. That promoted capacity work deferred on 2026-08-09 and made the
+unshipped app build urgent.
+
+| Change | What it fixed | Proof | Status |
+|---|---|---|---|
+| `411c311` `backBehavior="history"` on the patient Tabs | **The actual back-button bug.** Hidden `Tabs.Screen`s (`href: null`) fell through to the tab router's `firstRoute` default → every back went to Home | Verified against the installed `@react-navigation/routers` source (`TabRouter.tsx:197`) | 🕒 needs EAS build |
+| `d9b0420` `safeBack` on 8 back buttons | Stranded users on deep links / notification taps where `canGoBack()` is false | 3 tests | 🕒 needs EAS build |
+| `843e76a` `hooks/useAndroidBack.ts` on 21 screens | Android hardware back ignored entirely; hospital/auth stacks exited the app | tsc + 103 jest; cross-checked hw back vs button on all 21 | 🕒 needs EAS build |
+| `0e744ff` `GET /api/app-version/` | No way to tell installed apps to update without a store release | 5 tests; blank default = no prompt | ⬜ unmerged |
+| `6a48655` launch-time update prompt | — | 14 tests on the compare/decide logic | 🕒 needs EAS build |
+| `6a48655` `/app-version/` added to `PUBLIC_ROUTES` | Caught in review: a stale token would 401 the launch check and trigger refresh-retry, **logging the patient out over a version check** | 1 test | 🕒 needs EAS build |
+| `2fd23a7` OTP per-IP burst 5→20/min + new 200/day ceiling | 5/min per IP 429s real signups behind carrier NAT — the exact lesson `OTPVerifyRateThrottle` already recorded for verify but never applied to sends | 4 tests; ~36× tighter on sustained abuse than before | ⬜ unmerged |
+| `e204401` `/health/` cache probe | Redis cutover had no confirmation step; the `USE_REDIS_CACHE and REDIS_URL` gate fails *silently* if the `${{Redis…}}` reference is missing | 5 tests, incl. "unreachable cache must not 500 or flip status" | ⬜ unmerged |
+| `aa707e2` hospital dashboard uses `useVisiblePolling` | Dashboard polled `/bookings/queue/:id/` every 10s all day behind other windows | 5 new tests (the hook had none) | ⬜ unmerged |
+| `9280e4e` ₹15 → ₹20 in 4 languages | App quoted a price the backend stopped charging | Checked against `PLATFORM_FEE = 20.00` | 🕒 needs EAS build |
+| `f1790a8` notification small icon wired into the plugin | `expo-notifications` had `color` but no `icon` | Asset verified 96×96, 82% transparent, opaque px pure white | 🕒 needs EAS build |
+| `e57245e` `622b148` `754e8ff` `4ace625` `421c6ec` `0c8cef3` | Search typeahead, chip icons, branding, dev tooling, EAS Sentry flag, **v1.2.0** | tsc clean, 118 jest | 🕒 needs EAS build |
+
+**Tests:** backend 158 → **172** · app 100 → **118** · web 13 → **18**.
+
+**The correction worth remembering:** `d9b0420` was described as fixing the
+jump-to-Home. It did not. `safeBack` only acts when `canGoBack()` is false, and
+under `backBehavior: 'firstRoute'` it is true — so `back()` ran and the tab
+router went to Home anyway. The fix was one line in the layout, found only by
+reading the router source instead of trusting the first plausible story.
+
+**Action items**
+- [ ] Open + merge the three PRs (backend → web → app)
+- [ ] Attach Redis, set the two vars, confirm via `/health/`
+- [ ] EAS build — **check the existing build list first**
+- [ ] Verify both crons and the WhatsApp token
+- [ ] Check the 2Factor SMS balance before the campaign ramps
+
+---
+
+## 2026-08-10 — PR #10 shipped; the CI flake was three leaks, not one
+
+**Branch:** `fix/enforce-slot-capacity` → merged as `b719378` · **App:** `5b11bd7`
+
+| Change | What it fixed | Proof | Status |
+|---|---|---|---|
+| `dcd4c16` patch `_notify_doctor_payout_async` + `_notify_doctor_unavailable` in tests | The red CI job. `database table is locked` on a random unrelated test | Reproduced ~1 run in 4; **57 consecutive green runs** after | ✅ |
+| `dcd4c16` drop the last hard-coded date literal | `tests_integration` reschedule test would have rotted past the 2h cutoff | Computed from `timezone.localdate()` | ✅ |
+| PR #10 merged + deployed | Slot capacity, queue bounds, gunicorn 3×4, daily-ops card now live | Vercel READY on `b719378`; `/api/payment/daily-summary/` 200 from Railway; card renders | ✅ |
+| App `5b11bd7` — `date`/`slot` top-level on `create-order/` | App never got the pre-payment rejection; every collision charged then refunded | `tsc` clean, jest 100/100 | 🕒 needs EAS build |
+| App `5b11bd7` — error handler reads server message before `e.message` | axios's `"Request failed with status code 409"` was masking the real explanation | same | 🕒 needs EAS build |
+| App `5b11bd7` — stop retrying 4xx on `/verify/` | 409 is final; retrying added ~4.5s before the patient heard it | same | 🕒 needs EAS build |
+
+### What the flake actually was
+
+`1aa50cc` patched `_dispatch_booking_notifications` and was not enough because
+there are **four** notification threads in views, not one, and two more were
+unpatched: the payout mark-paid path and the doctor-unavailable toggle. Both
+open their own DB connection and make a **real outbound WhatsApp call** during
+the suite. The thread's output lands on whichever test is running when it
+finishes, so the reported failing test is never the offender.
+
+**The check that actually proves it:** `manage.py test -v 2` with zero
+`graph.facebook.com` lines. Recorded in `CLAUDE.md` with the full table.
+
+### Corrections to earlier notes (all were wrong, all verified today)
+
+- The app is **fully on Razorpay**. Line 7 of this file said Cashfree — stale
+  since `cb3d29d` (2026-08-05).
+- `/api/bookings/upgrade/` does not return 400. It **does not exist** — not in
+  `bookings/urls.py`, and the app has zero references to it. Item #9 below is dead.
+- The branch carried **three** migrations, not one (`users/0003_ratecounter`
+  plus `notifications/0007` and `0008`). All additive.
+- `run_daily_payouts` will **not** ledger a backlog: every booking is ₹15
+  service-fee-only, so `doctor_fee` is 0 and nothing is owed.
+- `ledger_not_running` is **not** firing, so it cannot clear as proof the cron
+  ran. The Railway service log is the only signal.
+
+### The number that isn't in any table
+
+27 users · 11 hospitals live · 8 doctors · **4 bookings ever** · ₹60 lifetime ·
+last booking **2026-07-26**. The hardening shipped this week is correct work for
+a load that has not arrived. Whether the funnel is broken or empty is unresolved
+and is now item 5 in ROADMAP **Now**.
 
 ---
 
