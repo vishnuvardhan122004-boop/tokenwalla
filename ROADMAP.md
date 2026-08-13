@@ -349,12 +349,6 @@ the careful edge cases were the right ones.
   with the announcement read-view on web but not in the app. Neither was caught
   by tests, because both are presentation. When a feature touches web + app,
   diff the two surfaces before calling it done.
-- **The dashboard still uses emoji** — new 2026-08-13 (session 2). The profile
-  page moved to Bootstrap Icons; `Hdashboard.js` still has 🏥 👨‍⚕️ ✅ and
-  friends. The two screens sit next to each other, so it reads as mismatched.
-  Deliberately left out of PR #16 to keep that diff to the responsive work.
-  Import the icon CSS dynamically there too — a static import is the 13.82 kB
-  patient-bundle trap.
 - **The walk-in doctor page has never run on a device** — new 2026-08-13. The
   web half was driven in a real browser (walk-in view renders, call button
   dials, expired announcement disappears, slotted doctors unchanged). The app
@@ -474,6 +468,14 @@ Resolved and deliberately removed, so they don't get re-added:
   icon definitions into the bundle every patient downloads, for a staff-only
   screen. A dynamic import gives it its own chunk — main CSS back to its 33.74 kB
   baseline. `bootstrap-icons` was already a dependency; nothing new installed.
+- **2026-08-13 (session 2)** — **Dashboard icons brought in line with the
+  profile page.** All 40-odd emoji in `Hdashboard.js` replaced with Bootstrap
+  Icons, so the two hospital screens finally match each other and the app. The
+  icon stylesheet is imported dynamically here too and webpack shares the one
+  chunk between both pages — main CSS stayed at its 33.74 kB baseline, main JS
+  +434 B. Tab labels shortened to Queue / Doctors / Payments / Scanner, which
+  an icon plus a short word fits the 2×2 mobile grid far better than the old
+  full phrases did.
 - **2026-08-13 (session 2)** — **Two landline gaps closed that the original
   feature missed.** The web doctor card rendered `doc.mobile` alone, so a
   landline-only doctor showed a bare phone icon and no number at all — the app
