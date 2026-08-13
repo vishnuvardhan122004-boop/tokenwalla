@@ -93,19 +93,19 @@ const UserManagement = () => {
       `}</style>
 
       <div className="um-header">
-        <div className="um-title">👥 User Management</div>
+        <div className="um-title"><i className="bi bi-people me-1" />User Management</div>
         <div className="um-sub">Manage patient and hospital accounts across the platform</div>
       </div>
 
       {error && (
         <div style={{ background: 'var(--color-error-bg)', border: '1px solid var(--color-error-border)', borderRadius: 12, padding: '12px 16px', color: 'var(--color-error-text)', fontSize: 14, marginBottom: 20 }}>
-          ⚠️ {error}
+          <i className="bi bi-exclamation-triangle me-1" />{error}
         </div>
       )}
 
       <div className="um-filters">
         <div className="um-search-wrap">
-          <span className="um-search-icon">🔍</span>
+          <span className="um-search-icon"><i className="bi bi-search me-1" /></span>
           <input
             className="um-search"
             type="text"
@@ -176,7 +176,7 @@ const UserManagement = () => {
                           color:       isBlocked ? 'var(--color-error-text)'    : 'var(--color-success-text)',
                           borderColor: isBlocked ? 'var(--color-error-border)'  : 'var(--color-success-border)',
                         }}>
-                          {isBlocked ? '🚫 Blocked' : '✅ Active'}
+                          {isBlocked ? 'Blocked' : 'Active'}
                         </span>
                       </td>
                       <td>

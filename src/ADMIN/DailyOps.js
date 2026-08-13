@@ -57,8 +57,8 @@ export const buildCards = (summary) => {
 };
 
 const TONE = {
-  high:   { bg: '#FCEBEB', border: '#F09595', text: '#A32D2D', icon: '🔴' },
-  medium: { bg: '#FAEEDA', border: '#EF9F27', text: '#854F0B', icon: '🟡' },
+  high:   { bg: '#FCEBEB', border: '#F09595', text: '#A32D2D', icon: 'bi-circle-fill' },
+  medium: { bg: '#FAEEDA', border: '#EF9F27', text: '#854F0B', icon: 'bi-circle-fill' },
 };
 
 const DailyOps = () => {
@@ -76,7 +76,7 @@ const DailyOps = () => {
   if (loading) return null;
 
   if (error) return (
-    <div className="dops-err">⚠️ {error}</div>
+    <div className="dops-err"><i className="bi bi-exclamation-triangle me-1" />{error}</div>
   );
 
   const attention = summary?.attention || [];
@@ -129,7 +129,7 @@ const DailyOps = () => {
                   className="dops-item"
                   style={{ background: tone.bg, border: `1px solid ${tone.border}`, color: tone.text }}
                 >
-                  <span>{tone.icon}</span>
+                  <span><i className={`bi ${tone.icon}`} /></span>
                   <span>{item.message}</span>
                 </div>
               );

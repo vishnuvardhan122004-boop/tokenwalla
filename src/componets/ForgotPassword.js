@@ -24,7 +24,7 @@ export default function ForgotPassword({ type = 'patient' }) {
     setLoading(true); setError('');
     try {
       await API.post('/auth/otp/request/', { mobile, via: 'sms' });
-      setSuccess(`📞 A text message is being sent to ${mobile} with your OTP.`);
+      setSuccess(`A text message is being sent to ${mobile} with your OTP.`);
       setStep(2);
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to send OTP. Try again.');
@@ -37,7 +37,7 @@ export default function ForgotPassword({ type = 'patient' }) {
     try {
       const { data } = await API.post('/auth/otp/verify/', { mobile, otp });
       if (data.verified) {
-        setSuccess('✅ OTP verified! Set your new password.');
+        setSuccess('OTP verified! Set your new password.');
         setStep(3);
       } else {
         setError('Invalid OTP. Please try again.');
@@ -53,7 +53,7 @@ export default function ForgotPassword({ type = 'patient' }) {
     try {
       const endpoint = isHospital ? '/hospitals/reset-password/' : '/auth/reset-password/';
       await API.post(endpoint, { mobile, otp, password });
-      setSuccess('🎉 Password reset successfully!');
+      setSuccess('Password reset successfully!');
       setTimeout(() => navigate(isHospital ? '/Hlogin' : '/login'), 1500);
     } catch (err) {
       setError(err?.response?.data?.message || 'Reset failed. Try again.');
@@ -241,17 +241,17 @@ export default function ForgotPassword({ type = 'patient' }) {
             <>
               <div className="fp-title">Forgot Password?</div>
               <div className="fp-sub">Enter your registered mobile. We'll send you an OTP.</div>
-              {error && <div className="fp-error"><span>⚠️</span> {error}</div>}
+              {error && <div className="fp-error"><span><i className="bi bi-exclamation-triangle me-1" /></span> {error}</div>}
               <div className="fp-field">
                 <label>Mobile Number</label>
                 <div className="fp-wrap">
-                  <span className="fp-icon">📱</span>
+                  <span className="fp-icon"><i className="bi bi-phone me-1" /></span>
                   <input className="fp-input" type="text" placeholder="10-digit mobile number"
                     value={mobile} onChange={e => setMobile(e.target.value.replace(/\D/,'').slice(0,10))} maxLength={10} />
                 </div>
               </div>
               <div className="fp-call-info">
-                <span className="fp-call-icon">💬</span>
+                <span className="fp-call-icon"><i className="bi bi-chat-dots me-1" /></span>
                 <span>We'll send a <strong>text message</strong> Sms to your mobile. Note down the OTP sent to you.</span>
               </div>
               <button className="fp-btn" onClick={requestOTP} disabled={loading}>
@@ -265,18 +265,18 @@ export default function ForgotPassword({ type = 'patient' }) {
             <>
               <div className="fp-title">Enter OTP</div>
               <div className="fp-sub">Enter the OTP sent to <strong>{mobile}</strong>.</div>
-              {error   && <div className="fp-error"><span>⚠️</span> {error}</div>}
+              {error   && <div className="fp-error"><span><i className="bi bi-exclamation-triangle me-1" /></span> {error}</div>}
               {success && <div className="fp-success">{success}</div>}
               <div className="fp-field">
                 <label>OTP from Text Message</label>
                 <div className="fp-wrap">
-                  <span className="fp-icon">🔢</span>
+                  <span className="fp-icon"><i className="bi bi-123 me-1" /></span>
                   <input className="fp-input" type="text" placeholder="Enter 4-digit OTP"
                     value={otp} onChange={e => setOtp(e.target.value.replace(/\D/,'').slice(0,6))} maxLength={6} />
                 </div>
               </div>
               <button className="fp-btn" onClick={verifyOTP} disabled={loading}>
-                {loading ? <><div className="fp-spinner" /> Verifying…</> : '✅ Verify OTP →'}
+                {loading ? <><div className="fp-spinner" /> Verifying…</> : 'Verify OTP →'}
               </button>
               <button className="fp-btn-ghost" onClick={() => { setStep(1); setError(''); setSuccess(''); setOtp(''); }}>
                 ← Change Mobile Number
@@ -290,40 +290,40 @@ export default function ForgotPassword({ type = 'patient' }) {
             <>
               <div className="fp-title">Set New Password</div>
               <div className="fp-sub">Choose a strong password for your account.</div>
-              {error   && <div className="fp-error"><span>⚠️</span> {error}</div>}
+              {error   && <div className="fp-error"><span><i className="bi bi-exclamation-triangle me-1" /></span> {error}</div>}
               {success && <div className="fp-success">{success}</div>}
               <div className="fp-field">
                 <label>New Password</label>
                 <div className="fp-wrap">
-                  <span className="fp-icon">🔑</span>
+                  <span className="fp-icon"><i className="bi bi-key me-1" /></span>
                   <input className="fp-input has-eye" type={showPass ? 'text' : 'password'} placeholder="Minimum 6 characters"
                     value={password} onChange={e => setPassword(e.target.value)} />
                   <button type="button" className="fp-eye" onClick={() => setShowPass(p => !p)}
                     aria-label={showPass ? 'Hide password' : 'Show password'}>
-                    {showPass ? '🙈' : '👁️'}
+                    <i className={`bi ${showPass ? "bi-eye-slash" : "bi-eye"}`} />
                   </button>
                 </div>
               </div>
               <div className="fp-field">
                 <label>Confirm Password</label>
                 <div className="fp-wrap">
-                  <span className="fp-icon">🔒</span>
+                  <span className="fp-icon"><i className="bi bi-lock me-1" /></span>
                   <input className="fp-input has-eye" type={showConfirm ? 'text' : 'password'} placeholder="Re-enter your new password"
                     value={confirm} onChange={e => setConfirm(e.target.value)} />
                   <button type="button" className="fp-eye" onClick={() => setShowConfirm(p => !p)}
                     aria-label={showConfirm ? 'Hide password' : 'Show password'}>
-                    {showConfirm ? '🙈' : '👁️'}
+                    <i className={`bi ${showConfirm ? "bi-eye-slash" : "bi-eye"}`} />
                   </button>
                 </div>
               </div>
               <button className="fp-btn" onClick={resetPassword} disabled={loading}>
-                {loading ? <><div className="fp-spinner" /> Saving…</> : '🔐 Reset Password →'}
+                {loading ? <><div className="fp-spinner" /> Saving…</> : 'Reset Password →'}
               </button>
             </>
           )}
 
           <Link to={isHospital ? '/Hlogin' : '/login'} className="fp-back-link">
-            ← Back to {isHospital ? 'Hospital ' : ''}Login
+            ← Back to {isHospital ? 'Hospital' : ''}Login
           </Link>
         </div>
       </div>

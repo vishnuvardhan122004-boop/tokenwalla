@@ -5,10 +5,10 @@ import { logoutUser } from '../services/api';
 import { SUPPORTED_LANGS } from '../i18n';
 
 const NAV_LINKS = [
-  { to: '/',          key: 'nav.home',         icon: '🏠' },
-  { to: '/alldoctor', key: 'nav.findDoctors', icon: '🩺' },
-  { to: '/about',     key: 'nav.about',        icon: 'ℹ️' },
-  { to: '/contact',   key: 'nav.contact',      icon: '📬' },
+  { to: '/',          key: 'nav.home',         icon: 'bi-house' },
+  { to: '/alldoctor', key: 'nav.findDoctors', icon: 'bi-clipboard-pulse' },
+  { to: '/about',     key: 'nav.about',        icon: 'ℹ' },
+  { to: '/contact',   key: 'nav.contact',      icon: 'bi-inbox' },
 ];
 
 function LanguageSwitcher({ variant, onNavigate }) {
@@ -31,7 +31,7 @@ function LanguageSwitcher({ variant, onNavigate }) {
   if (variant === 'mobile') {
     return (
       <div className="lang-switch-mobile">
-        <div className="mobile-lang-label">🌐 {t('nav.language')}</div>
+        <div className="mobile-lang-label"><i className="bi bi-globe2 me-1" />{t('nav.language')}</div>
         <div className="mobile-lang-options">
           {SUPPORTED_LANGS.map(lng => (
             <button
@@ -50,7 +50,7 @@ function LanguageSwitcher({ variant, onNavigate }) {
   return (
     <div className="lang-switch" ref={ref}>
       <button className="lang-trigger" onClick={() => setOpen(p => !p)} aria-label={t('nav.language')}>
-        <span className="lang-globe">🌐</span>
+        <span className="lang-globe"><i className="bi bi-globe2 me-1" /></span>
         <span className="lang-code">{i18n.resolvedLanguage}</span>
         <span className={`lang-chevron ${open ? 'open' : ''}`}>▼</span>
       </button>
@@ -62,7 +62,7 @@ function LanguageSwitcher({ variant, onNavigate }) {
               className={`nav-drop-item ${i18n.resolvedLanguage === lng ? 'lang-active' : ''}`}
               onClick={() => changeLang(lng)}
             >
-              <div className="nav-drop-icon">🌐</div> {t(`languages.${lng}`)}
+              <div className="nav-drop-icon"><i className="bi bi-globe2 me-1" /></div> {t(`languages.${lng}`)}
               {i18n.resolvedLanguage === lng && <span className="lang-check">✓</span>}
             </button>
           ))}
@@ -229,7 +229,7 @@ export default function Navbar() {
             {isHospital && (
               <>
                 <div className="hosp-badge">
-                  <span className="hosp-dot" />🏥 {hospName}
+                  <span className="hosp-dot" /><i className="bi bi-hospital me-1" />{hospName}
                 </div>
                 <div style={{ position: 'relative' }} ref={hospDropRef}>
                   <div className="hosp-profile-trigger" onClick={() => setHospDrop(p => !p)}>
@@ -244,14 +244,14 @@ export default function Navbar() {
                         <div className="nav-drop-role">{t('nav.hospitalAdminRole')}</div>
                       </div>
                       <Link to="/Hdashboard" className="nav-drop-item" onClick={() => setHospDrop(false)}>
-                        <div className="nav-drop-icon">🏥</div> {t('nav.dashboard')}
+                        <div className="nav-drop-icon"><i className="bi bi-hospital me-1" /></div> {t('nav.dashboard')}
                       </Link>
                       <Link to="/Hprofile" className="nav-drop-item" onClick={() => setHospDrop(false)}>
-                        <div className="nav-drop-icon">👤</div> {t('nav.profile')}
+                        <div className="nav-drop-icon"><i className="bi bi-person-circle me-1" /></div> {t('nav.profile')}
                       </Link>
                       <div className="nav-drop-divider" />
                       <button className="nav-drop-item danger" onClick={logout}>
-                        <div className="nav-drop-icon" style={{ background: 'var(--color-error-bg)' }}>🚪</div>
+                        <div className="nav-drop-icon" style={{ background: 'var(--color-error-bg)' }}><i className="bi bi-box-arrow-right me-1" /></div>
                         {t('nav.logout')}
                       </button>
                     </div>
@@ -274,23 +274,23 @@ export default function Navbar() {
                       <div className="nav-drop-role">{user.role || t('nav.patientRole')}</div>
                     </div>
                     <Link to="/my-bookings" className="nav-drop-item" onClick={() => setDropOpen(false)}>
-                      <div className="nav-drop-icon">🎫</div> {t('nav.myBookings')}
+                      <div className="nav-drop-icon"><i className="bi bi-ticket-perforated me-1" /></div> {t('nav.myBookings')}
                     </Link>
                     <Link to="/alldoctor" className="nav-drop-item" onClick={() => setDropOpen(false)}>
-                      <div className="nav-drop-icon">🩺</div> {t('nav.findDoctors')}
+                      <div className="nav-drop-icon"><i className="bi bi-clipboard-pulse me-1" /></div> {t('nav.findDoctors')}
                     </Link>
                     {isAdmin && (
                       <Link to="/Adashboard" className="nav-drop-item" onClick={() => setDropOpen(false)}>
-                        <div className="nav-drop-icon">⚙️</div> {t('nav.adminPanel')}
+                        <div className="nav-drop-icon"><i className="bi bi-gear me-1" /></div> {t('nav.adminPanel')}
                       </Link>
                     )}
                     <div className="nav-drop-divider" />
                     <Link to="/Hlogin" className="nav-drop-item" onClick={() => setDropOpen(false)}>
-                      <div className="nav-drop-icon">🏥</div> {t('nav.hospitalLogin')}
+                      <div className="nav-drop-icon"><i className="bi bi-hospital me-1" /></div> {t('nav.hospitalLogin')}
                     </Link>
                     <div className="nav-drop-divider" />
                     <button className="nav-drop-item danger" onClick={logout}>
-                      <div className="nav-drop-icon" style={{ background: 'var(--color-error-bg)' }}>🚪</div>
+                      <div className="nav-drop-icon" style={{ background: 'var(--color-error-bg)' }}><i className="bi bi-box-arrow-right me-1" /></div>
                       {t('nav.logout')}
                     </button>
                   </div>
@@ -329,7 +329,7 @@ export default function Navbar() {
 
           {NAV_LINKS.map(l => (
             <Link key={l.to} to={l.to} className={`mobile-link ${isActive(l.to) ? 'active' : ''}`}>
-              <div className="mobile-link-icon">{l.icon}</div>{t(l.key)}
+              <div className="mobile-link-icon"><i className={`bi ${l.icon}`} /></div>{t(l.key)}
             </Link>
           ))}
 
@@ -342,16 +342,16 @@ export default function Navbar() {
           {(isPatient || isAdmin) ? (
             <>
               <Link to="/my-bookings" className="mobile-link">
-                <div className="mobile-link-icon">🎫</div> {t('nav.myBookings')}
+                <div className="mobile-link-icon"><i className="bi bi-ticket-perforated me-1" /></div> {t('nav.myBookings')}
               </Link>
               {isAdmin && (
                 <Link to="/Adashboard" className="mobile-link">
-                  <div className="mobile-link-icon">⚙️</div> {t('nav.adminPanel')}
+                  <div className="mobile-link-icon"><i className="bi bi-gear me-1" /></div> {t('nav.adminPanel')}
                 </Link>
               )}
               <div className="mobile-divider" />
               <Link to="/Hlogin" className="mobile-link">
-                <div className="mobile-link-icon">🏥</div> {t('nav.hospitalLogin')}
+                <div className="mobile-link-icon"><i className="bi bi-hospital me-1" /></div> {t('nav.hospitalLogin')}
               </Link>
               <div className="mobile-divider" />
               <button
@@ -359,7 +359,7 @@ export default function Navbar() {
                 style={{ color: 'var(--color-error-text)', background: 'var(--color-error-bg)', border: '1px solid var(--color-error-border)', cursor: 'pointer', width: '100%', textAlign: 'left' }}
                 onClick={logout}
               >
-                <div className="mobile-link-icon" style={{ background: 'var(--color-error-bg)' }}>🚪</div>
+                <div className="mobile-link-icon" style={{ background: 'var(--color-error-bg)' }}><i className="bi bi-box-arrow-right me-1" /></div>
                 {t('nav.logout')}
               </button>
             </>

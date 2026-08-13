@@ -50,18 +50,18 @@ const Support = () => {
       `}</style>
 
       <div className="sp-header">
-        <div className="sp-title">🎧 Support Team</div>
+        <div className="sp-title"><i className="bi bi-headset me-1" />Support Team</div>
         <div className="sp-sub">Contact channels and support staff management</div>
       </div>
 
       <div className="sp-contact-grid">
         {[
-          { icon: '📧', label: 'Email Support', content: <a href="mailto:support@tokenwalla.com">support@tokenwalla.com</a> },
-          { icon: '📞', label: 'Phone Support', content: <a href="tel:+919000000001">+91-9000000001</a> },
-          { icon: '🏢', label: 'Office',        content: <span style={{ color: 'var(--gray-600)' }}>Hindupur – Nimpalli Road, AP – 515201</span> },
+          { icon: 'bi-envelope', label: 'Email Support', content: <a href="mailto:support@tokenwalla.com">support@tokenwalla.com</a> },
+          { icon: 'bi-telephone', label: 'Phone Support', content: <a href="tel:+919000000001">+91-9000000001</a> },
+          { icon: 'bi-building', label: 'Office',        content: <span style={{ color: 'var(--gray-600)' }}>Hindupur – Nimpalli Road, AP – 515201</span> },
         ].map(c => (
           <div key={c.label} className="sp-contact-card">
-            <span className="sp-contact-icon">{c.icon}</span>
+            <span className="sp-contact-icon"><i className={`bi ${c.icon}`} /></span>
             <div className="sp-contact-label">{c.label}</div>
             <div className="sp-contact-value">{c.content}</div>
           </div>
@@ -95,7 +95,7 @@ const Support = () => {
                         color: m.active ? 'var(--color-success-text)' : 'var(--gray-500)',
                         borderColor: m.active ? 'var(--color-success-border)' : 'var(--gray-200)',
                       }}>
-                        {m.active ? '🟢 Available' : '⚫ Offline'}
+                        {m.active ? 'Available' : 'Offline'}
                       </span>
                     </td>
                   </tr>

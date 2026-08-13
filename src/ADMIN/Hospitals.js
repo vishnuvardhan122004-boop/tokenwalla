@@ -19,7 +19,7 @@ import SPECIALIZATION_OPTIONS from '../services/specializations';
 const STATUS_CONFIG = {
   active: {
     bg: 'var(--color-success-bg)', text: 'var(--color-success-text)',
-    border: 'var(--color-success-border)', label: '✅ Active',
+    border: 'var(--color-success-border)', label: 'Active',
   },
   pending: {
     bg: 'var(--color-warning-bg)', text: 'var(--color-warning-text)',
@@ -27,7 +27,7 @@ const STATUS_CONFIG = {
   },
   rejected: {
     bg: 'var(--color-error-bg)', text: 'var(--color-error-text)',
-    border: 'var(--color-error-border)', label: '🚫 Rejected',
+    border: 'var(--color-error-border)', label: 'Rejected',
   },
 };
 
@@ -50,7 +50,7 @@ function ConfirmDeleteModal({ target, onConfirm, onCancel, loading }) {
             background: 'var(--color-error-bg)', border: '1px solid var(--color-error-border)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0,
           }}>
-            🗑️
+            <i className="bi bi-trash me-1" />
           </div>
           <div>
             <div className="hp-modal-title" style={{ marginBottom: 3 }}>
@@ -69,7 +69,7 @@ function ConfirmDeleteModal({ target, onConfirm, onCancel, loading }) {
           {hasActive ? (
             <>
               <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--color-warning-text)', marginBottom: 6 }}>
-                ⚠️ {activeBookings} active booking{activeBookings > 1 ? 's' : ''} will be cancelled
+                <i className="bi bi-exclamation-triangle me-1" />{activeBookings} active booking{activeBookings > 1 ? 's' : ''} will be cancelled
               </div>
               <div style={{ fontSize: 13, color: 'var(--color-warning-text)', opacity: 0.85, lineHeight: 1.6 }}>
                 These patients are currently waiting or in consultation. Cancelling will affect
@@ -85,7 +85,7 @@ function ConfirmDeleteModal({ target, onConfirm, onCancel, loading }) {
           ) : totalBookings > 0 ? (
             <>
               <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--gray-700)', marginBottom: 4 }}>
-                📋 {totalBookings} historical booking record{totalBookings > 1 ? 's' : ''} will be deleted
+                <i className="bi bi-clipboard me-1" />{totalBookings} historical booking record{totalBookings > 1 ? 's' : ''} will be deleted
               </div>
               <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>
                 No active bookings. Only completed and cancelled records will be removed.
@@ -93,7 +93,7 @@ function ConfirmDeleteModal({ target, onConfirm, onCancel, loading }) {
             </>
           ) : (
             <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>
-              ✅ No bookings associated with this {type}. Safe to delete.
+              <i className="bi bi-check-circle me-1" />No bookings associated with this {type}. Safe to delete.
             </div>
           )}
         </div>
@@ -122,8 +122,8 @@ function ConfirmDeleteModal({ target, onConfirm, onCancel, loading }) {
             {loading
               ? '⏳ Deleting…'
               : hasActive
-              ? `⚠️ Cancel ${activeBookings} Booking${activeBookings > 1 ? 's' : ''} & Delete`
-              : '🗑️ Confirm Delete'
+              ? `Cancel ${activeBookings} Booking${activeBookings > 1 ? 's' : ''} & Delete`
+              : 'Confirm Delete'
             }
           </button>
         </div>
@@ -180,7 +180,7 @@ const Hospitals = () => {
     try {
       const { data } = await API.patch(`/hospitals/${hospital.id}/approve/`, { action: 'approve' });
       setHospitals(prev => prev.map(h => h.id === hospital.id ? data.hospital : h));
-      showToast(`✅ "${hospital.name}" approved and is now live.`);
+      showToast(`"${hospital.name}" approved and is now live.`);
     } catch (err) {
       showToast(err?.response?.data?.message || 'Approval failed.', 'error');
     } finally {
@@ -235,7 +235,7 @@ const Hospitals = () => {
       await API.delete(`/doctors/${deleteTarget.id}/force-delete/`);
       setDoctors(prev => prev.filter(d => d.id !== deleteTarget.id));
       setDeleteTarget(null);
-      showToast(`🗑️ Doctor deleted. ${deleteTarget.activeBookings > 0 ? `${deleteTarget.activeBookings} booking(s) were cancelled.` : ''}`);
+      showToast(`Doctor deleted. ${deleteTarget.activeBookings > 0 ? `${deleteTarget.activeBookings} booking(s) were cancelled.` : ''}`);
     } catch (err) {
       const status = err?.response?.status;
       if (status === 404) {
@@ -302,7 +302,7 @@ const Hospitals = () => {
       setDoctors(prev => prev.filter(d => d.hospital !== deleteTarget.id));
       setDeleteTarget(null);
       showToast(
-        `🗑️ "${deleteTarget.name}" deleted. ` +
+        `"${deleteTarget.name}" deleted. ` +
         (deleteTarget.activeBookings > 0 ? `${deleteTarget.activeBookings} booking(s) cancelled.` : '')
       );
     } catch (err) {
@@ -506,28 +506,28 @@ const Hospitals = () => {
 
       {/* ── Page header ── */}
       <div className="hp-header">
-        <div className="hp-title">🏥 Hospitals & Doctors</div>
+        <div className="hp-title"><i className="bi bi-hospital me-1" />Hospitals & Doctors</div>
         <div className="hp-sub">Approve registrations, manage doctors, and safely remove records</div>
       </div>
 
       {error && (
         <div style={{ background: 'var(--color-error-bg)', border: '1px solid var(--color-error-border)', borderRadius: 12, padding: '12px 16px', color: 'var(--color-error-text)', fontSize: 14, marginBottom: 20 }}>
-          ⚠️ {error}
+          <i className="bi bi-exclamation-triangle me-1" />{error}
         </div>
       )}
 
       {/* ── Stat pills ── */}
       <div className="hp-stat-row">
-        <div className="hp-stat-pill total">    <span>🏥</span><span className="hp-stat-num">{hospitals.length}</span><span>Total</span>   </div>
-        <div className="hp-stat-pill active">   <span>✅</span><span className="hp-stat-num">{activeCount}</span>  <span>Live</span>     </div>
-        <div className="hp-stat-pill pending">  <span>⏳</span><span className="hp-stat-num">{pendingCount}</span> <span>Pending</span>  </div>
-        <div className="hp-stat-pill rejected"> <span>🚫</span><span className="hp-stat-num">{rejectedCount}</span><span>Rejected</span> </div>
+        <div className="hp-stat-pill total">    <span><i className="bi bi-hospital me-1" /></span><span className="hp-stat-num">{hospitals.length}</span><span>Total</span>   </div>
+        <div className="hp-stat-pill active">   <span><i className="bi bi-check-circle me-1" /></span><span className="hp-stat-num">{activeCount}</span>  <span>Live</span>     </div>
+        <div className="hp-stat-pill pending">  <span><i className="bi bi-hourglass-split me-1" /></span><span className="hp-stat-num">{pendingCount}</span> <span>Pending</span>  </div>
+        <div className="hp-stat-pill rejected"> <span><i className="bi bi-slash-circle me-1" /></span><span className="hp-stat-num">{rejectedCount}</span><span>Rejected</span> </div>
       </div>
 
       {/* ── Pending alert ── */}
       {pendingCount > 0 && (
         <div className="hp-pending-banner">
-          <div className="hp-pending-icon">🔔</div>
+          <div className="hp-pending-icon"><i className="bi bi-bell me-1" /></div>
           <div>
             <div className="hp-pending-text">{pendingCount} hospital{pendingCount > 1 ? 's' : ''} waiting for approval</div>
             <div className="hp-pending-sub">Approved hospitals go live immediately.</div>
@@ -547,7 +547,7 @@ const Hospitals = () => {
         {pendingCount > 0 && hospFilter !== 'pending' && <span className="hp-section-badge">{pendingCount} pending</span>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           <div className="hp-search-wrap" style={{ maxWidth: 220 }}>
-            <span className="hp-search-icon">🔍</span>
+            <span className="hp-search-icon"><i className="bi bi-search me-1" /></span>
             <input className="hp-search" placeholder="Search hospitals…" value={hospSearch} onChange={e => setHospSearch(e.target.value)} />
           </div>
         </div>
@@ -558,8 +558,8 @@ const Hospitals = () => {
         {[
           { key: 'all',      label: `All (${hospitals.length})`      },
           { key: 'pending',  label: `⏳ Pending (${pendingCount})`    },
-          { key: 'active',   label: `✅ Active (${activeCount})`      },
-          { key: 'rejected', label: `🚫 Rejected (${rejectedCount})`  },
+          { key: 'active',   label: `Active (${activeCount})`      },
+          { key: 'rejected', label: `Rejected (${rejectedCount})`  },
         ].map(tab => (
           <button key={tab.key} className={`hp-filter-tab ${hospFilter === tab.key ? 'active' : ''}`} onClick={() => setHospFilter(tab.key)}>
             {tab.label}
@@ -588,7 +588,7 @@ const Hospitals = () => {
                 <div className="hp-hosp-card-top">
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="hp-hosp-name">{h.name}</div>
-                    <div className="hp-hosp-city">📍 {h.city || '—'}</div>
+                    <div className="hp-hosp-city"><i className="bi bi-geo-alt me-1" />{h.city || '—'}</div>
                     <div className="hp-hosp-mobile">{h.mobile}</div>
                   </div>
                   <span className="hp-badge" style={{ background: stCfg.bg, color: stCfg.text, borderColor: stCfg.border }}>
@@ -596,28 +596,28 @@ const Hospitals = () => {
                   </span>
                 </div>
 
-                {h.address && <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 6 }}>🏢 {h.address}</div>}
+                {h.address && <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 6 }}><i className="bi bi-building me-1" />{h.address}</div>}
 
                 {/* Doctor count */}
                 <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 4 }}>
-                  👨‍⚕️ {docCount} doctor{docCount !== 1 ? 's' : ''}
+                  <i className="bi bi-person-badge me-1" />{docCount} doctor{docCount !== 1 ? 's' : ''}
                 </div>
 
                 <div className="hp-card-actions">
                   {h.status === 'pending' && (
                     <>
                       <button className="hp-approve-btn" onClick={() => approveHospital(h)} disabled={isAct}>
-                        {isAct ? <><div className="hp-btn-spin" /> Processing…</> : '✅ Approve'}
+                        {isAct ? <><div className="hp-btn-spin" /> Processing…</> : 'Approve'}
                       </button>
                       <button className="hp-reject-btn" onClick={() => rejectHospital(h)} disabled={isAct}>
-                        {isAct ? '…' : '🚫 Reject'}
+                        {isAct ? '…' : 'Reject'}
                       </button>
                     </>
                   )}
 
                   {h.status === 'rejected' && (
                     <button className="hp-reapprove-btn" onClick={() => approveHospital(h)} disabled={isAct}>
-                      {isAct ? <><div className="hp-btn-spin" style={{ borderColor: 'rgba(59,109,17,0.3)', borderTopColor: 'var(--color-success-text)' }} />Processing…</> : '✅ Approve Now'}
+                      {isAct ? <><div className="hp-btn-spin" style={{ borderColor: 'rgba(59,109,17,0.3)', borderTopColor: 'var(--color-success-text)' }} />Processing…</> : 'Approve Now'}
                     </button>
                   )}
 
@@ -634,7 +634,7 @@ const Hospitals = () => {
                     style={{ marginLeft: 'auto' }}
                     title="Delete hospital (shows confirmation)"
                   >
-                    🗑️
+                    <i className="bi bi-trash me-1" />
                   </button>
                 </div>
               </div>
@@ -649,7 +649,7 @@ const Hospitals = () => {
           All Doctors ({doctors.length})
         </div>
         <div className="hp-search-wrap">
-          <span className="hp-search-icon">🔍</span>
+          <span className="hp-search-icon"><i className="bi bi-search me-1" /></span>
           <input className="hp-search" placeholder="Search doctors…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <span className="hp-count">{filteredDoctors.length} result{filteredDoctors.length !== 1 ? 's' : ''}</span>
@@ -684,23 +684,23 @@ const Hospitals = () => {
                         color:       doc.available ? 'var(--color-success-text)' : 'var(--gray-500)',
                         borderColor: doc.available ? 'var(--color-success-border)' : 'var(--gray-200)',
                       }}>
-                        {doc.available ? '✅ Available' : '⛔ Unavailable'}
+                        {doc.available ? 'Available' : 'Unavailable'}
                       </span>
                     </td>
                     <td>
                       {hasActiveFlag
-                        ? <span className="hp-active-badge">⚠️ Active</span>
+                        ? <span className="hp-active-badge"><i className="bi bi-exclamation-triangle me-1" />Active</span>
                         : <span style={{ color: 'var(--gray-400)', fontSize: 13 }}>—</span>
                       }
                     </td>
                     <td>
-                      <button className="hp-action-btn edit" onClick={() => openEdit(doc.id)}>✏️ Edit</button>
+                      <button className="hp-action-btn edit" onClick={() => openEdit(doc.id)}><i className="bi bi-pencil me-1" />Edit</button>
                       <button
                         className="hp-action-btn del"
                         onClick={() => initiateDocDelete(doc)}
                         title="Delete doctor (shows confirmation if active bookings exist)"
                       >
-                        🗑️ Delete
+                        <i className="bi bi-trash me-1" />Delete
                       </button>
                     </td>
                   </tr>
@@ -716,7 +716,7 @@ const Hospitals = () => {
         <div className="hp-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
           <div className="hp-modal">
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg,var(--blue-600),var(--blue-400))', borderRadius: '20px 20px 0 0' }} />
-            <div className="hp-modal-title">✏️ Edit {editDoctor.name}</div>
+            <div className="hp-modal-title"><i className="bi bi-pencil me-1" />Edit {editDoctor.name}</div>
             <form onSubmit={submitEdit}>
               <div className="hp-modal-row">
                 <div className="hp-field">
@@ -749,15 +749,15 @@ const Hospitals = () => {
                 <div className="hp-field">
                   <label>Availability</label>
                   <select value={editDoctor.available ? 'true' : 'false'} onChange={e => setEditDoctor(p => ({ ...p, available: e.target.value === 'true' }))}>
-                    <option value="true">✅ Available</option>
-                    <option value="false">⛔ Unavailable</option>
+                    <option value="true"><i className="bi bi-check-circle me-1" />Available</option>
+                    <option value="false"><i className="bi bi-x-octagon me-1" />Unavailable</option>
                   </select>
                 </div>
               </div>
               <div className="hp-modal-actions">
                 <button type="button" className="hp-modal-cancel" onClick={() => setShowModal(false)}>Cancel</button>
                 <button type="submit" className="hp-modal-save" disabled={saving}>
-                  {saving ? '⏳ Saving…' : '💾 Save Changes'}
+                  {saving ? '⏳ Saving…' : 'Save Changes'}
                 </button>
               </div>
             </form>

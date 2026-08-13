@@ -56,7 +56,7 @@
       "queueActive": "Queue Access Active",
       "doctorInfo": "Kana · City Care Hospital",
       "todaySlot": "Today · 10:30 AM slot",
-      "confirmedChip": "✅ Confirmed · TW-2847",
+      "confirmedChip": "Confirmed · TW-2847",
       "waitChip": "⏱ Est. wait: ~12 mins"
     },
     "stats": {
@@ -131,9 +131,9 @@
     "findYourDoctor": "Find Your Doctor",
     "searchPlaceholder": "Search by doctor, specialization, hospital, city, location...",
     "allCities": "All Cities",
-    "nearMe": "📍 Near Me",
+    "nearMe": "Near Me",
     "nearMeTitle": "Find doctors in your city",
-    "locating": "📍 Locating…",
+    "locating": "Locating…",
     "availableOnly": "Available Only",
     "results_one": "{{count}} result",
     "results_other": "{{count}} results",

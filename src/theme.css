@@ -1,0 +1,110 @@
+/* theme.css — the shared polish layer.
+ *
+ * The landing page already looks the way the product should: restrained type,
+ * soft shadows, generous radii, a single blue. Every other screen was built
+ * separately and drifted — five different shadow strengths, radii from 4px to
+ * 18px, three greys for the same "muted" text. That inconsistency is what
+ * reads as cheap, not any one page being ugly.
+ *
+ * So this file sets the tokens once and nudges Bootstrap's defaults onto them.
+ * It deliberately does NOT change sizes, spacing or layout — those are what
+ * break pages. Only surface treatment: radius, shadow, colour, transition.
+ *
+ * Loaded once from App.js, after Bootstrap so it wins on specificity ties.
+ */
+
+:root {
+  /* One blue, one ink, one grey ramp — taken from the landing page so the
+     rest of the site matches what already works. */
+  --tw-blue-50:  #EFF5FC;
+  --tw-blue-100: #D6E6F7;
+  --tw-blue-600: #1D5FA8;
+  --tw-blue-700: #174E8C;
+  --tw-ink:      #0F1B2A;
+  --tw-muted:    #64748B;
+  --tw-line:     #E7ECF2;
+
+  /* Two shadows, not five. Cards rest; things that lift use the second. */
+  --tw-shadow-sm: 0 1px 2px rgba(16, 27, 42, .04), 0 1px 3px rgba(16, 27, 42, .05);
+  --tw-shadow-md: 0 6px 16px rgba(16, 27, 42, .07), 0 2px 6px rgba(16, 27, 42, .04);
+
+  --tw-radius:    14px;
+  --tw-radius-sm: 10px;
+  --tw-ease: 160ms cubic-bezier(.4, 0, .2, 1);
+}
+
+/* ── Surfaces ─────────────────────────────────────────────────────────────
+   One radius and one resting shadow for every card on the site. Borders go
+   lighter: a hairline reads more expensive than a hard grey rule. */
+.card {
+  border-radius: var(--tw-radius);
+  border-color: var(--tw-line);
+  box-shadow: var(--tw-shadow-sm);
+}
+.card.shadow-sm,
+.card.shadow { box-shadow: var(--tw-shadow-sm) !important; }
+.card.shadow-lg { box-shadow: var(--tw-shadow-md) !important; }
+.border { border-color: var(--tw-line) !important; }
+.rounded, .rounded-3 { border-radius: var(--tw-radius-sm) !important; }
+
+/* ── Controls ─────────────────────────────────────────────────────────────
+   Bootstrap's default focus ring is a thick washed-out halo. A thin ring in
+   the brand blue is both tidier and easier to see. */
+.btn, .form-control, .form-select {
+  border-radius: var(--tw-radius-sm);
+  transition: background-color var(--tw-ease), border-color var(--tw-ease),
+              box-shadow var(--tw-ease), color var(--tw-ease);
+}
+.form-control, .form-select { border-color: var(--tw-line); }
+.form-control:focus, .form-select:focus {
+  border-color: var(--tw-blue-600);
+  box-shadow: 0 0 0 3px rgba(29, 95, 168, .13);
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(29, 95, 168, .28);
+}
+.btn-primary {
+  --bs-btn-bg: var(--tw-blue-600);
+  --bs-btn-border-color: var(--tw-blue-600);
+  --bs-btn-hover-bg: var(--tw-blue-700);
+  --bs-btn-hover-border-color: var(--tw-blue-700);
+  --bs-btn-active-bg: var(--tw-blue-700);
+}
+/* A button that lifts a little on hover feels responsive; one that jumps
+   feels cheap. 1px. */
+.btn-primary:hover, .btn-success:hover, .btn-danger:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--tw-shadow-sm);
+}
+.btn-primary:active, .btn-success:active, .btn-danger:active {
+  transform: translateY(0);
+}
+
+/* ── Type ─────────────────────────────────────────────────────────────────
+   Headings were pure black at default tracking. Slightly-off-black with a
+   touch of negative tracking is the single biggest "premium" tell. */
+h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
+  color: var(--tw-ink);
+  letter-spacing: -.018em;
+}
+.text-muted { color: var(--tw-muted) !important; }
+
+/* ── Icons ────────────────────────────────────────────────────────────────
+   Bootstrap Icons sit on the text baseline and look dropped next to a label.
+   Nudging them up a hair aligns them optically. `me-1` comes from the markup;
+   an icon that is alone in a button should not also carry a right margin. */
+.bi { vertical-align: -.115em; line-height: 1; }
+.btn > .bi:only-child,
+a > .bi:only-child { margin-right: 0 !important; }
+
+/* ── Badges ───────────────────────────────────────────────────────────────
+   Solid saturated badges were shouting. Tinted ones carry the same meaning
+   at a fraction of the volume. */
+.badge { font-weight: 600; letter-spacing: .01em; border-radius: 999px; padding: .4em .75em; }
+
+/* Respect the OS setting — the hover lift is decoration, not information. */
+@media (prefers-reduced-motion: reduce) {
+  .btn, .form-control, .form-select { transition: none; }
+  .btn-primary:hover, .btn-success:hover, .btn-danger:hover { transform: none; }
+}

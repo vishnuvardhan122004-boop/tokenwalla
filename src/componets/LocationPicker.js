@@ -177,7 +177,7 @@ export default function LocationPicker({ open, initial, onClose, onPick }) {
 
           {/* Centre pin — sits above the map, never intercepts drags */}
           <div style={S.pinWrap}>
-            <div style={{ ...S.pin, transform: dragging ? 'translateY(-10px)' : 'translateY(0)' }}>📍</div>
+            <div style={{ ...S.pin, transform: dragging ? 'translateY(-10px)' : 'translateY(0)' }}><i className="bi bi-geo-alt me-1" /></div>
             <div style={{ ...S.pinShadow, opacity: dragging ? 0.25 : 0.45 }} />
           </div>
 
@@ -196,7 +196,7 @@ export default function LocationPicker({ open, initial, onClose, onPick }) {
           {error && <div style={S.error}>{error}</div>}
 
           <div style={S.addrRow}>
-            <span style={{ fontSize: 18, lineHeight: '22px' }}>{tooFar ? '🔍' : '📍'}</span>
+            <span style={{ fontSize: 18, lineHeight: '22px' }}><i className={`bi ${tooFar ? "bi-search" : "bi-geo-alt"}`} /></span>
             <div style={{ minWidth: 0 }}>
               <div style={S.addr}>
                 {tooFar

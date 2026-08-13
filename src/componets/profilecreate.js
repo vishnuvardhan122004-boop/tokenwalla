@@ -88,7 +88,7 @@ export default function Profilecreate() {
 
   return (                                  
     <>
-      {/* ✅ SEO is the FIRST thing inside return() */}
+      {/* SEO is the FIRST thing inside return() */}
       <SEO
         title="Register Free — TokenWalla Patient Account"
         description="Create your free TokenWalla account to start booking doctor appointments online in AP & Telangana. OTP verification required."
@@ -118,12 +118,12 @@ export default function Profilecreate() {
 
             <div className="auth-features">
               {[
-                { icon: '1️⃣', title: 'Enter your details',    desc: 'Name, mobile number and password'           },
-                { icon: '2️⃣', title: 'Verify mobile via OTP', desc: "We'll send a 4-digit code to your number"   },
-                { icon: '3️⃣', title: 'Start booking',         desc: 'Find doctors and book your first appointment' },
+                { icon: 'bi-1-circle', title: 'Enter your details',    desc: 'Name, mobile number and password'           },
+                { icon: 'bi-2-circle', title: 'Verify mobile via OTP', desc: "We'll send a 4-digit code to your number"   },
+                { icon: 'bi-3-circle', title: 'Start booking',         desc: 'Find doctors and book your first appointment' },
               ].map((f, i) => (
                 <div className="auth-feature" key={i}>
-                  <div className="auth-feature-icon">{f.icon}</div>
+                  <div className="auth-feature-icon"><i className={`bi ${f.icon}`} /></div>
                   <div>
                     <div className="auth-feature-title">{f.title}</div>
                     <div className="auth-feature-desc">{f.desc}</div>
@@ -146,11 +146,11 @@ export default function Profilecreate() {
           <div className="auth-form-sub">
             {step === 1 && 'Fill in your details to get started'}
             {step === 2 && `Enter the OTP sent to ${user.mobile}`}
-            {step === 3 && '✓ Mobile verified — set your password'}
+            {step === 3 && 'Mobile verified — set your password'}
           </div>
 
           {globalError && (
-            <div className="auth-alert-error"><span>⚠️</span> {globalError}</div>
+            <div className="auth-alert-error"><span><i className="bi bi-exclamation-triangle me-1" /></span> {globalError}</div>
           )}
 
           <form onSubmit={submitHandler}>
@@ -158,7 +158,7 @@ export default function Profilecreate() {
             <div className="auth-field">
               <label className="auth-field-label">Full Name</label>
               <div className="auth-input-wrap">
-                <span className="auth-input-icon">👤</span>
+                <span className="auth-input-icon"><i className="bi bi-person-circle me-1" /></span>
                 <input
                   className={`auth-input ${errors.name ? 'has-error' : ''}`}
                   type="text" name="name" placeholder="Your full name"
@@ -172,7 +172,7 @@ export default function Profilecreate() {
               <label className="auth-field-label">Mobile Number</label>
               <div className="auth-otp-row">
                 <div className="auth-input-wrap">
-                  <span className="auth-input-icon">📱</span>
+                  <span className="auth-input-icon"><i className="bi bi-phone me-1" /></span>
                   <input
                     className={`auth-input ${errors.mobile ? 'has-error' : ''}`}
                     type="text" name="mobile" placeholder="10-digit mobile"
@@ -193,7 +193,7 @@ export default function Profilecreate() {
               <div className="auth-field">
                 <label className="auth-field-label">Enter OTP</label>
                 <div className="auth-input-wrap">
-                  <span className="auth-input-icon">🔢</span>
+                  <span className="auth-input-icon"><i className="bi bi-123 me-1" /></span>
                   <input
                     className="auth-input" type="text" placeholder="4-digit OTP"
                     value={otp} onChange={e => setOtp(e.target.value)} maxLength={4}
@@ -217,7 +217,7 @@ export default function Profilecreate() {
 
             {otpVerified && (
               <div className="auth-verified" style={{ marginBottom:14 }}>
-                <span style={{ fontSize:18 }}>✅</span>
+                <span style={{ fontSize:18 }}><i className="bi bi-check-circle me-1" /></span>
                 Mobile verified — {user.mobile}
               </div>
             )}
@@ -225,7 +225,7 @@ export default function Profilecreate() {
             <div className="auth-field">
               <label className="auth-field-label">Password</label>
               <div className="auth-input-wrap">
-                <span className="auth-input-icon">🔑</span>
+                <span className="auth-input-icon"><i className="bi bi-key me-1" /></span>
                 <input
                   className={`auth-input has-eye ${errors.password ? 'has-error' : ''}`}
                   type={showPass ? 'text' : 'password'} name="password"
@@ -237,7 +237,7 @@ export default function Profilecreate() {
                   onClick={() => setShowPass(p => !p)}
                   aria-label={showPass ? 'Hide password' : 'Show password'}
                 >
-                  {showPass ? '🙈' : '👁️'}
+                  <i className={`bi ${showPass ? "bi-eye-slash" : "bi-eye"}`} />
                 </button>
               </div>
               {errors.password && <span className="auth-field-error">{errors.password}</span>}
@@ -246,7 +246,7 @@ export default function Profilecreate() {
             <div className="auth-field">
               <label className="auth-field-label">Confirm Password</label>
               <div className="auth-input-wrap">
-                <span className="auth-input-icon">🔒</span>
+                <span className="auth-input-icon"><i className="bi bi-lock me-1" /></span>
                 <input
                   className={`auth-input has-eye ${errors.confirmPassword ? 'has-error' : ''}`}
                   type={showConfirm ? 'text' : 'password'} name="confirmPassword"
@@ -258,7 +258,7 @@ export default function Profilecreate() {
                   onClick={() => setShowConfirm(p => !p)}
                   aria-label={showConfirm ? 'Hide password' : 'Show password'}
                 >
-                  {showConfirm ? '🙈' : '👁️'}
+                  <i className={`bi ${showConfirm ? "bi-eye-slash" : "bi-eye"}`} />
                 </button>
               </div>
               {errors.confirmPassword && <span className="auth-field-error">{errors.confirmPassword}</span>}
