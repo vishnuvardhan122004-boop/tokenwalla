@@ -7,7 +7,7 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-13 (session 2)
+- **Last updated:** 2026-08-13 (session 3)
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -44,6 +44,8 @@ curl -s https://tokenwalla-production.up.railway.app/health/                    
 - **The whole walk-in / landline feature is inert.** The deployed serializer
   still requires `Doctor.mobile`, so the landline-only clinic that prompted the
   work still cannot be onboarded.
+- **Re-verified 2026-08-13 session 3**, ~7 hours after the first check:
+  `landline` still absent, `[TEST] Demo Hospital` still exposed. Nothing moved.
 
 **One-click mitigation that needs no deploy**, if the bill will take a while:
 in Django admin set doctor **Heyi**'s `payment_collection_mode` to
@@ -63,18 +65,30 @@ traffic is expected for the first time, which promotes capacity work that was
 deliberately deferred on 2026-08-09 and makes the unshipped app build urgent
 rather than merely overdue.
 
-### 1. Merge what's left — four branches, all in the app repo 🔴
+### 1. Merge what's left — six branches 🔴
 
-**Updated 2026-08-13 after PR #14.** The web/backend queue is **empty**. What
-remains, in merge order:
+**Updated 2026-08-13 session 3.** Three new branches joined the queue today.
+In merge order:
 
 | Order | Branch | Repo | Deploys | Note |
 |---|---|---|---|---|
 | 1 | `payments-server-priced-checkout` (13) | app | store, via EAS | **the 1.2.0 version bump lives here** |
 | 2 | `fix/map-load-timeout` (1) | app | store, via EAS | map failure handling |
-| 3 | `fix/app-profile-announcement-readview` (1) | app | store, via EAS | new 2026-08-13 s2 — app/web parity gap |
-| 4 | `feat/app-version-gate` (3) | backend | Railway | `/health/` probe + `/api/app-version/` |
-| 5 | `perf/dashboard-visible-polling` (1) | web | Vercel | |
+| 3 | `feat/app-version-gate` (3) | backend | Railway | `/health/` probe + `/api/app-version/` |
+| 4 | `fix/dashboard-icons` (1) | web | Vercel | **merge before 5** — both touch `Hdashboard.js` |
+| 5 | `feat/popular-doctors-first` (1) | backend + web | Railway + Vercel | new — most-viewed doctors rank first |
+| 6 | `feat/popular-doctors-first` (1) | app | store, via EAS | app half of 5; **same branch name, check the repo** |
+| — | `perf/dashboard-visible-polling` (1) | web | Vercel | oldest, lowest risk |
+
+> ⚠️ **Pushed is not merged, and today that cost real confusion.** All three
+> new branches were pushed and believed merged; the GitHub API showed **no PR
+> had ever been opened** for any of them (latest are #18 web, #4 app). A
+> session cannot open PRs — `gh` is unauthenticated here — so a pushed branch
+> sits there silently until someone clicks. Check with:
+> `curl -s https://api.github.com/repos/<owner>/<repo>/pulls?state=all | head`
+> or just look at the branch list. This is the twin of the "merged ≠ live"
+> rule below: **pushed ≠ merged ≠ deployed**, and all three are currently
+> different states in this project.
 
 Already merged 2026-08-11: `docs/wrap-2026-08-11`, `feat/hospital-location-picker`
 (web, PR #12), `feat/hospital-location-picker` (app, PR #1),
@@ -349,6 +363,9 @@ the careful edge cases were the right ones.
   with the announcement read-view on web but not in the app. Neither was caught
   by tests, because both are presentation. When a feature touches web + app,
   diff the two surfaces before calling it done.
+- **The dashboard still uses emoji — FIXED but unmerged.** The work is on
+  `fix/dashboard-icons` (item 1). Merge it before `feat/popular-doctors-first`;
+  both touch `Hdashboard.js`. Original note follows.
 - **The dashboard still uses emoji** — new 2026-08-13 (session 2). The profile
   page moved to Bootstrap Icons; `Hdashboard.js` still has 🏥 👨‍⚕️ ✅ and
   friends. The two screens sit next to each other, so it reads as mismatched.
@@ -451,6 +468,43 @@ Resolved and deliberately removed, so they don't get re-added:
 > assuming anything reached a patient. Nothing has reached a **patient** yet
 > regardless, because the app release branch is still unmerged and unbuilt.
 
+- **2026-08-13 (session 3)** — **Most-viewed doctors rank first.** Patients had
+  no signal about which doctor other patients actually pick, and the website
+  did not sort its list *at all* — it rendered in database id order, so whoever
+  registered first sat at the top forever. The app already ranked (available
+  +100, city +50, experience, slots×2); the website now uses the same weights,
+  with a popularity term added to both. `Doctor.view_count` plus
+  `POST /api/doctors/<id>/view/`, fired once per session from the doctor page.
+  **Popularity is capped and log-scaled on purpose** — `12·log10(1+views)`, max
+  +30. Ordering by raw clicks makes the top spot self-reinforcing (first place
+  earns clicks *because* it is first) and nobody new can climb; the log makes
+  the 10th view worth as much as the next ninety, and the cap sits below the
+  availability weight so an off-duty doctor never leads. Verified: a 120-view
+  doctor marked unavailable drops to **last**.
+  Counting is a separate POST rather than folded into `retrieve()`, because the
+  hospital dashboard and admin poll that endpoint and would rank whichever
+  doctor *staff* open most. One atomic `UPDATE … F()` — read-modify-write loses
+  counts when two patients open a page at once (`assertNumQueries(1)`).
+  Bookings would be the stronger signal, but there have been **four in the
+  product's lifetime** — too sparse to rank anything. Revisit at volume.
+  Only a counter is stored, never who viewed. 10 new tests.
+  **Pushed, no PR opened — see item 1.**
+- **2026-08-13 (session 3)** — **Bootstrap Icons site-wide + a shared polish
+  layer** (PR #18, merged). 175 emoji in JSX became icons, 74 were stripped from
+  label strings that cannot hold an `<i>`, and 25 `{ icon: '…' }` data fields
+  became icon classes. `theme.css` collapses five shadow strengths, radii from
+  4px to 18px and three greys-for-muted into one radius, two shadows, one blue,
+  one ink — surface treatment only, no spacing or layout changes, because those
+  are what break pages. Icon CSS moved from per-page dynamic imports to one
+  eager import now that every surface uses it: patient CSS 33.74 → 48.35 kB,
+  the deliberate trade.
+  **Two things this cost, worth not repeating.** The first attempt was a regex
+  sweep, which cannot tell JSX text from a string literal — it injected markup
+  into a WhatsApp share message and ate the space in `target="_blank" rel=`.
+  Reverted wholesale and redone as a babel codemod walking `JSXText` nodes only.
+  And the codemod only walked `.js`, so three UI strings kept their emoji in
+  **all four locale JSON files** — caught only by looking at the rendered page.
+  A bulk edit that looks mechanical usually is not.
 - **2026-08-13 (session 2)** — **The hospital dashboard and profile made
   usable on a phone.** Reception staff run these one-handed at a desk, so the
   phone layout is the real one. Measured at 375px before touching anything

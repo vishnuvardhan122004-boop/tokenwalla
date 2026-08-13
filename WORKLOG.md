@@ -3,12 +3,14 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** unmerged — `feat/app-version-gate` + `perf/dashboard-visible-polling` (web/backend) · `payments-server-priced-checkout` + `fix/map-load-timeout` + `fix/app-profile-announcement-readview` (app). Merged 2026-08-13: PRs #13–#16 (web/backend), PR #3 (app). Dead branches to delete: `fix/hide-test-hospitals`, `docs/wrap-2026-08-11-s3`.
-- **Latest commit at last update:** `5b2d9e2` main (web/backend) · `d4b1dc1` main + `ccd446b` (app)
-- **Last updated:** 2026-08-13 session 2 (mobile-responsive hospital screens; Railway not deploying)
+- **Branch:** unmerged — `fix/dashboard-icons` + `feat/popular-doctors-first` + `feat/app-version-gate` + `perf/dashboard-visible-polling` (web/backend) · `payments-server-priced-checkout` + `fix/map-load-timeout` + `feat/popular-doctors-first` (app). Merged 2026-08-13: PRs #13–#18 (web/backend), PRs #3–#4 (app).
+- **Latest commit at last update:** `d624e48` main (web/backend) · `7bda5b4` main (app)
+- **Last updated:** 2026-08-13 session 3 (icons site-wide; popular-doctors ranking)
 
-> ⛔ **Merged ≠ live.** Railway has not deployed since 2026-08-11 (unpaid bill).
-> Everything below marked ✅ is on `main` and green, not necessarily running.
+> ⛔ **Pushed ≠ merged ≠ live.** All three are different states here right now.
+> Three branches are pushed with **no PR opened** (a session cannot open them).
+> And Railway has not deployed since 2026-08-11 — unpaid bill — so even `main`
+> is not running. Verify against the live API, never the merge log.
 
 ### How to update this log
 - Add a new `## YYYY-MM-DD — <title>` section **on top** for each working session; keep older sessions below.
@@ -16,6 +18,60 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-13 (session 3) — Icons site-wide, and popularity ranking
+
+| Change | Repo | Commit | Status |
+|---|---|---|---|
+| Dashboard emoji → Bootstrap Icons | web | `2496501` | 🕒 pushed, **no PR** |
+| Bootstrap Icons site-wide (23 files) + `theme.css` polish layer | web | `e76a02a` | ✅ merged (PR #18) |
+| Emoji in the four locale JSON files | web | `b608d06` | ✅ merged (PR #18) |
+| `Doctor.view_count` + `POST /doctors/<id>/view/` + ranking | backend + web | `76e0192` | 🕒 pushed, **no PR** |
+| Popularity folded into the app's `rankDoctor` | app | `741d0a9` | 🕒 pushed, **no PR** |
+
+### 1. Popular doctors first
+The website did not sort its doctor list at all — database id order, so whoever
+registered first led forever. The app already ranked; the website now shares
+its weights, plus a popularity term in both:
+`available +100 · city +50 · experience +1 · slots +2 · popularity +0..30`.
+
+Popularity is `12·log10(1+views)` capped at 30, deliberately: raw click order
+is self-reinforcing, and the cap keeps it under the availability weight. A
+120-view doctor marked unavailable drops to last — checked in a browser, not
+assumed. Counting is its own POST (the dashboard polls `retrieve()` and would
+rank whichever doctor staff open most) and one atomic `F()` UPDATE.
+
+Bookings would beat clicks as a signal, but there have been four ever.
+
+### 2. Icons and polish
+175 JSX emoji → icons, 74 stripped from label strings, 25 data fields
+converted. `theme.css` unifies five shadow strengths, radii 4–18px and three
+muted greys into one set of tokens. Surface treatment only — no spacing or
+layout changes. Patient CSS 33.74 → 48.35 kB for the icon font, deliberate.
+
+**The first attempt was a regex sweep and it corrupted source** — injected JSX
+into a WhatsApp share string, ate the space in `target="_blank" rel=`. Reverted
+wholesale, redone as a babel codemod over `JSXText` nodes. It then missed the
+locale JSON files entirely, caught only by looking at the rendered page.
+
+### 3. Three branches were believed merged and were not
+No PR had ever been opened for any of them. A session cannot open PRs, so a
+pushed branch sits silently. Confirmed via the GitHub API before writing these
+docs — the alternative was recording another "merged and live" line that was
+not true, which is exactly what item 2b did this morning.
+
+### Verification
+191 backend · 20 web · 104 app tests. `makemigrations --check` clean, web build
+clean, app `tsc` clean. Ranking and view-counting driven in a real browser:
+count went 0→1 on open, stayed 1 on reload (session guard), list reordered.
+
+### Action items
+- [ ] **Open PRs for the three pushed branches** — `fix/dashboard-icons` first
+      (it and `feat/popular-doctors-first` both touch `Hdashboard.js`)
+- [ ] Pay the Railway bill; nothing merged since 2026-08-11 is running
+- [ ] Delete the dead branches `fix/hide-test-hospitals`, `docs/wrap-2026-08-11-s3`
 
 ---
 
