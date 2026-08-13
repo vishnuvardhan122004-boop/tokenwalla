@@ -344,7 +344,7 @@ export default function AllDoctor() {
           <div className="tw-container">
             <div className="filter-row">
               <div className="search-wrap">
-                <span className="search-icon">🔍</span>
+                <span className="search-icon"><i className="bi bi-search me-1" /></span>
                 <input
                   className="search-input"
                   placeholder={t('doctors.searchPlaceholder')}
@@ -363,7 +363,7 @@ export default function AllDoctor() {
                         className="suggest-item"
                         onMouseDown={() => { setSearch(kw); setShowSuggest(false); }}
                       >
-                        <span className="suggest-icon">🔎</span>
+                        <span className="suggest-icon"><i className="bi bi-search me-1" /></span>
                         <span className="suggest-text">{kw}</span>
                       </button>
                     ))}
@@ -400,7 +400,7 @@ export default function AllDoctor() {
 
             {!loading && filtered.length === 0 && (
               <div className="empty-state">
-                <span className="empty-icon">🔍</span>
+                <span className="empty-icon"><i className="bi bi-search me-1" /></span>
                 <div className="empty-title">{t('doctors.noResults')}</div>
                 <p className="empty-sub">{t('doctors.adjustFilters')}</p>
                 <button
@@ -425,13 +425,13 @@ export default function AllDoctor() {
                     <div className="card-img-wrap">
                       {doc.image && !doc.image.includes('placehold')
                         ? <img className="card-img" src={doc.image} alt={`Dr. ${doc.name}`} />
-                        : <div className="card-img-placeholder">🩺</div>
+                        : <div className="card-img-placeholder"><i className="bi bi-clipboard-pulse me-1" /></div>
                       }
                       <div className={`card-avail ${doc.available ? 'yes' : 'no'}`}>
                         <span className="avail-dot" />
                         {doc.available ? t('doctors.available') : t('doctors.unavailable')}
                       </div>
-                      <div className="hospital-tag">🏥 {doc.hospital_name || t('footer.hospital')}</div>
+                      <div className="hospital-tag"><i className="bi bi-hospital me-1" />{doc.hospital_name || t('footer.hospital')}</div>
                     </div>
 
                     <div className="card-body">
@@ -439,11 +439,11 @@ export default function AllDoctor() {
                       <div className="card-name">{doc.name}</div>
                       <div className="card-meta">
                         <div className="meta-item">
-                          <div className="meta-icon">📍</div>
+                          <div className="meta-icon"><i className="bi bi-geo-alt me-1" /></div>
                           {doc.city}
                         </div>
                         <div className="meta-item">
-                          <div className="meta-icon">⏳</div>
+                          <div className="meta-icon"><i className="bi bi-hourglass-split me-1" /></div>
                           {t('doctors.yearsExp', { count: doc.experience })}
                         </div>
                       </div>

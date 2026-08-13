@@ -106,12 +106,12 @@ export default function Login() {
 
             <div className="auth-features">
               {[
-                { icon: '🎫', title: 'Instant Token',       desc: 'Get your token immediately after booking'  },
-                { icon: '📍', title: 'Live Queue Tracking', desc: 'Know your exact position in the queue'      },
-                { icon: '🔐', title: 'Secure & Private',    desc: 'Your data is encrypted and never shared'    },
+                { icon: 'bi-ticket-perforated', title: 'Instant Token',       desc: 'Get your token immediately after booking'  },
+                { icon: 'bi-geo-alt', title: 'Live Queue Tracking', desc: 'Know your exact position in the queue'      },
+                { icon: 'bi-shield-lock', title: 'Secure & Private',    desc: 'Your data is encrypted and never shared'    },
               ].map((f, i) => (
                 <div className="auth-feature" key={i}>
-                  <div className="auth-feature-icon">{f.icon}</div>
+                  <div className="auth-feature-icon"><i className={`bi ${f.icon}`} /></div>
                   <div>
                     <div className="auth-feature-title">{f.title}</div>
                     <div className="auth-feature-desc">{f.desc}</div>
@@ -129,7 +129,7 @@ export default function Login() {
 
           {error && (
             <div className="auth-alert-error">
-              <span>⚠️</span> {error}
+              <span><i className="bi bi-exclamation-triangle me-1" /></span> {error}
             </div>
           )}
 
@@ -137,7 +137,7 @@ export default function Login() {
             <div className="auth-field">
               <label className="auth-field-label">Mobile Number</label>
               <div className="auth-input-wrap">
-                <span className="auth-input-icon">📱</span>
+                <span className="auth-input-icon"><i className="bi bi-phone me-1" /></span>
                 <input
                   className="auth-input"
                   type="text"
@@ -154,7 +154,7 @@ export default function Login() {
               <label className="auth-field-label">Password / OTP</label>
               <div className="auth-otp-row">
                 <div className="auth-input-wrap">
-                  <span className="auth-input-icon">🔑</span>
+                  <span className="auth-input-icon"><i className="bi bi-key me-1" /></span>
                   <input
                     className="auth-input has-eye"
                     type={showPass ? 'text' : 'password'}
@@ -169,7 +169,7 @@ export default function Login() {
                     onClick={() => setShowPass(p => !p)}
                     aria-label={showPass ? 'Hide password' : 'Show password'}
                   >
-                    {showPass ? '🙈' : '👁️'}
+                    <i className={`bi ${showPass ? "bi-eye-slash" : "bi-eye"}`} />
                   </button>
                 </div>
                 <button

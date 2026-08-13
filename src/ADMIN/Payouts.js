@@ -122,7 +122,7 @@ const Payouts = () => {
       `}</style>
 
       <div className="po-header">
-        <div className="po-title">💸 Doctor Payouts</div>
+        <div className="po-title"><i className="bi bi-cash-stack me-1" />Doctor Payouts</div>
         <div className="po-sub">Money TokenWalla owes each doctor for completed consultations</div>
       </div>
 
@@ -137,18 +137,18 @@ const Payouts = () => {
 
       {error && (
         <div style={{ background: 'var(--color-error-bg)', border: '1px solid var(--color-error-border)', borderRadius: 12, padding: '12px 16px', color: 'var(--color-error-text)', fontSize: 14, marginBottom: 20 }}>
-          ⚠️ {error}
+          <i className="bi bi-exclamation-triangle me-1" />{error}
         </div>
       )}
 
       <div className="po-stats">
         <div className="po-stat due">
-          <div style={{ fontSize: '1.4rem', marginBottom: 8 }}>💰</div>
+          <div style={{ fontSize: '1.4rem', marginBottom: 8 }}><i className="bi bi-cash-coin me-1" /></div>
           <div className="po-stat-val">₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           <div className="po-stat-label">Total Outstanding</div>
         </div>
         <div className="po-stat">
-          <div style={{ fontSize: '1.4rem', marginBottom: 8 }}>🩺</div>
+          <div style={{ fontSize: '1.4rem', marginBottom: 8 }}><i className="bi bi-clipboard-pulse me-1" /></div>
           <div className="po-stat-val">{rows.length}</div>
           <div className="po-stat-label">Doctors Awaiting Payment</div>
         </div>
@@ -163,7 +163,7 @@ const Payouts = () => {
         <div className="po-card">
           <div className="po-toolbar">
             <button className="po-btn ghost" onClick={downloadCsv} disabled={!payable}>
-              ⬇ Export bulk-transfer CSV
+              <i className="bi bi-download me-1" />Export bulk-transfer CSV
             </button>
             <span className="po-toolbar-note">
               {payable} of {rows.length} payable
@@ -184,7 +184,7 @@ const Payouts = () => {
               </thead>
               <tbody>
                 {rows.length === 0 && (
-                  <tr><td colSpan={6} className="po-empty">🎉 Everyone is paid up — nothing outstanding</td></tr>
+                  <tr><td colSpan={6} className="po-empty"><i className="bi bi-stars me-1" />Everyone is paid up — nothing outstanding</td></tr>
                 )}
                 {rows.map(r => (
                   <tr key={r.doctor_id}>
@@ -222,7 +222,7 @@ const Payouts = () => {
                         onClick={() => markPaid(r)}
                         disabled={paying === r.doctor_id}
                       >
-                        {paying === r.doctor_id ? 'Recording…' : '✓ Mark Paid'}
+                        {paying === r.doctor_id ? 'Recording…' : 'Mark Paid'}
                       </button>
                     </td>
                   </tr>

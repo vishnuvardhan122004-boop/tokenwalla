@@ -17,7 +17,7 @@ export default function LocationSearch({
   onPick,
   placeholder = 'Search your city or area…',
   inputClassName = '',
-  icon = '📍',
+  icon = 'bi-geo-alt',
   disabled = false,
 }) {
   const [results, setResults] = useState([]);
@@ -80,7 +80,7 @@ export default function LocationSearch({
   return (
     <div ref={boxRef} style={{ position: 'relative' }}>
       {icon && (
-        <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 15, color: '#94A3B8', pointerEvents: 'none', zIndex: 1 }}>{icon}</span>
+        <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 15, color: '#94A3B8', pointerEvents: 'none', zIndex: 1 }}><i className={`bi ${icon}`} /></span>
       )}
       <input
         className={inputClassName}
@@ -106,7 +106,7 @@ export default function LocationSearch({
               onMouseEnter={(e) => { e.currentTarget.style.background = '#EAF3FF'; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
-              📍 {labelFor(f)}
+              <i className="bi bi-geo-alt me-1" />{labelFor(f)}
             </button>
           ))}
         </div>

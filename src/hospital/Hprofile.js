@@ -6,12 +6,6 @@ import LocationSearch from "../componets/LocationSearch";
 // it — keep it out of the bundle every patient downloads.
 const LocationPicker = lazy(() => import("../componets/LocationPicker"));
 
-// Bootstrap Icons' stylesheet is ~14 kB gzip of icon definitions and only the
-// hospital screens use it. A static import would put all of it in the bundle
-// EVERY PATIENT downloads — the same trap Leaflet fell into (see ROADMAP,
-// 2026-08-11). Pulling it in dynamically gives it its own chunk, fetched only
-// when a hospital actually opens this page.
-import("bootstrap-icons/font/bootstrap-icons.css");
 
 // Mirrors app/(hospital)/profile.tsx — full hospital profile editor.
 // Backend: PATCH /hospitals/:id/ (details + banner/logo), POST/DELETE

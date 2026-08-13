@@ -5,8 +5,8 @@ import API from '../services/api';
 import { filterTestDoctors } from '../services/testHospitals';
 import SEO from './SEO';
 
-const STEP_ICONS = ['🔍', '📅', '💳', '🏥'];
-const FEATURE_ICONS = ['📍', '🔐', '🏥', '♻️', '🩺', '📱'];
+const STEP_ICONS = ['bi-search', 'bi-calendar-check', 'bi-credit-card', 'bi-hospital'];
+const FEATURE_ICONS = ['bi-geo-alt', 'bi-shield-lock', 'bi-hospital', 'bi-arrow-repeat', 'bi-clipboard-pulse', 'bi-phone'];
 
 // Inline vector logos for each specialty chip. Crisp on every device (no emoji
 // tofu), inherit the chip's text color via currentColor, and scale cleanly.
@@ -157,7 +157,7 @@ export default function Hero() {
     { num: '2,400+', label: t('hero.stats.tokensIssued') },
     { num: '18',     label: t('hero.stats.hospitals') },
     { num: '94%',    label: t('hero.stats.onTimeRate') },
-    { num: '4.8★',   label: t('hero.stats.patientRating') },
+    { num: '4.8',   label: t('hero.stats.patientRating') },
   ];
 
   const STEPS = t('hero.process.steps', { returnObjects: true }).map((s, i) => ({ ...s, icon: STEP_ICONS[i] }));
@@ -531,7 +531,7 @@ API.get('/doctors/').then(({ data }) => {
                 </p>
                 {/* Search */}
                 <form className="hero-search" onSubmit={handleHeroSearch} role="search">
-                  <span className="hero-search-icon" aria-hidden="true">🔍</span>
+                  <span className="hero-search-icon" aria-hidden="true"><i className="bi bi-search me-1" /></span>
                   <input
                     className="hero-search-input"
                     type="text"
@@ -596,7 +596,7 @@ API.get('/doctors/').then(({ data }) => {
                         width: 60, height: 60, borderRadius: 16,
                         background: 'var(--blue-50)', border: '1px solid var(--blue-200)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, flexShrink: 0
-                      }}>🏥</div>
+                      }}><i className="bi bi-hospital me-1" /></div>
                     </div>
 
                     <div style={{ borderTop: '1px solid var(--blue-50)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -636,7 +636,7 @@ API.get('/doctors/').then(({ data }) => {
               {STEPS.map((s, i) => (
                 <div className="step-card" key={i}>
                   <div className="step-num">0{i + 1}</div>
-                  <div className="step-icon-wrap">{s.icon}</div>
+                  <div className="step-icon-wrap"><i className={`bi ${s.icon}`} /></div>
                   <div className="step-title">{s.title}</div>
                   <div className="step-desc">{s.desc}</div>
                 </div>
@@ -663,13 +663,13 @@ API.get('/doctors/').then(({ data }) => {
                   <Link to={`/doctor/${doc.id}`} className="doc-card" key={doc.id}>
                     {doc.image && !doc.image.includes('placehold')
                       ? <img src={doc.image} alt={doc.name} className="doc-img" />
-                      : <div className="doc-img-placeholder">🩺</div>
+                      : <div className="doc-img-placeholder"><i className="bi bi-clipboard-pulse me-1" /></div>
                     }
                     <div className="doc-info">
                       <div className="doc-spec">{doc.specialization}</div>
                       <div className="doc-name">{doc.name}</div>
                       <div className="doc-meta">
-                        <span>📍 {doc.city}</span>
+                        <span><i className="bi bi-geo-alt me-1" />{doc.city}</span>
                         <span>{t('hero.doctorsPreview.yearsExp', { count: doc.experience })}</span>
                       </div>
                     </div>
@@ -693,7 +693,7 @@ API.get('/doctors/').then(({ data }) => {
             <div className="features-grid">
               {FEATURES.map((f, i) => (
                 <div className="feature-card" key={i}>
-                  <div className="feature-icon">{f.icon}</div>
+                  <div className="feature-icon"><i className={`bi ${f.icon}`} /></div>
                   <div className="feature-title">{f.title}</div>
                   <div className="feature-desc">{f.desc}</div>
                 </div>

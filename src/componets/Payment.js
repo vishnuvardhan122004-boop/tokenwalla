@@ -353,7 +353,7 @@ export default function Payment() {
           {/* Summary card */}
           <div className="pay-card">
             <div className="pay-card-header">
-              <div className="pay-card-header-icon">📋</div>
+              <div className="pay-card-header-icon"><i className="bi bi-clipboard me-1" /></div>
               <div className="pay-card-header-title">Appointment Summary</div>
             </div>
             <div className="pay-rows">
@@ -363,7 +363,7 @@ export default function Payment() {
               </div>
               <div className="pay-row">
                 <span className="pay-row-label">Hospital</span>
-                <span className="pay-row-value">🏥 {hospital}</span>
+                <span className="pay-row-value"><i className="bi bi-hospital me-1" />{hospital}</span>
               </div>
               <div className="pay-row">
                 <span className="pay-row-label">Date</span>
@@ -386,7 +386,7 @@ export default function Payment() {
           {/* Fee breakdown — itemised receipt */}
           <div className="pay-card">
             <div className="pay-card-header">
-              <div className="pay-card-header-icon">🧾</div>
+              <div className="pay-card-header-icon"><i className="bi bi-receipt me-1" /></div>
               <div className="pay-card-header-title">Payment Details</div>
             </div>
             {!breakdown ? (
@@ -442,7 +442,7 @@ export default function Payment() {
           <div className="pay-card pay-other-card">
             <label className="pay-other-toggle">
               <div>
-                <div className="pay-other-title">👥 Booking for someone else?</div>
+                <div className="pay-other-title"><i className="bi bi-people me-1" />Booking for someone else?</div>
                 <div className="pay-other-desc">Book this appointment for a family member or friend</div>
               </div>
               <input
@@ -487,7 +487,7 @@ export default function Payment() {
 
           {/* Secure badge */}
           <div className="pay-secure">
-            <div className="pay-secure-icon">🔐</div>
+            <div className="pay-secure-icon"><i className="bi bi-shield-lock me-1" /></div>
             <div>
               <div className="pay-secure-title">Secured by Razorpay</div>
               <div className="pay-secure-desc">256-bit SSL encrypted · PCI DSS compliant</div>
@@ -505,7 +505,7 @@ export default function Payment() {
               ? <><div className="pay-spinner" /> Opening Payment Gateway…</>
               : !breakdown
                 ? <>{feeError ? 'Fee details unavailable' : 'Loading…'}</>
-                : <>💳 Pay ₹{inr(total)} & Confirm Appointment</>
+                : <><i className="bi bi-credit-card me-1" />Pay ₹{inr(total)} & Confirm Appointment</>
             }
           </button>
 

@@ -334,13 +334,13 @@ export default function Admin() {
                 className={`al-tab ${tab === TABS.login ? 'active' : ''}`}
                 onClick={() => { setTab(TABS.login); setLoginError(''); setCreateSuccess(''); }}
               >
-                🔐 Admin Login
+                <i className="bi bi-shield-lock me-1" />Admin Login
               </button>
               <button
                 className={`al-tab ${tab === TABS.create ? 'active' : ''}`}
                 onClick={() => { setTab(TABS.create); setCreateError(''); setCreateSuccess(''); }}
               >
-                ➕ Create Admin
+                <i className="bi bi-plus-lg me-1" />Create Admin
               </button>
             </div>
 
@@ -352,11 +352,11 @@ export default function Admin() {
                 <div className="al-sub">Use your admin credentials to access the dashboard.</div>
 
                 {loginError && (
-                  <div className="al-error"><span>⚠️</span> {loginError}</div>
+                  <div className="al-error"><span><i className="bi bi-exclamation-triangle me-1" /></span> {loginError}</div>
                 )}
                 {createSuccess && (
                   <div className="al-success">
-                    ✅ {createSuccess} — Enter your credentials below.
+                    <i className="bi bi-check-circle me-1" />{createSuccess} — Enter your credentials below.
                   </div>
                 )}
 
@@ -364,7 +364,7 @@ export default function Admin() {
                   <div className="al-field">
                     <label>Mobile Number</label>
                     <div className="al-wrap">
-                      <span className="al-icon">📱</span>
+                      <span className="al-icon"><i className="bi bi-phone me-1" /></span>
                       <input
                         className="al-input" type="text"
                         placeholder="10-digit mobile"
@@ -378,7 +378,7 @@ export default function Admin() {
                   <div className="al-field">
                     <label>Password</label>
                     <div className="al-wrap">
-                      <span className="al-icon">🔑</span>
+                      <span className="al-icon"><i className="bi bi-key me-1" /></span>
                       <input
                         className="al-input" type="password"
                         placeholder="Admin password"
@@ -417,22 +417,22 @@ export default function Admin() {
                 </div>
 
                 <div className="al-hint">
-                  <span className="al-hint-icon">🛡️</span>
+                  <span className="al-hint-icon"><i className="bi bi-shield-check me-1" /></span>
                   <span>
                     Add <code>ADMIN_SETUP_KEY=your-secret-key</code> to your backend
                     <code>.env</code> file and restart the server. Then enter that key below.
                   </span>
                 </div>
 
-                {createError   && <div className="al-error"><span>⚠️</span> {createError}</div>}
-                {createSuccess && <div className="al-success">✅ {createSuccess}</div>}
+                {createError   && <div className="al-error"><span><i className="bi bi-exclamation-triangle me-1" /></span> {createError}</div>}
+                {createSuccess && <div className="al-success"><i className="bi bi-check-circle me-1" />{createSuccess}</div>}
 
                 {!createSuccess && (
                   <form onSubmit={handleCreate}>
                     <div className="al-field">
                       <label>Setup Key <span style={{ color: '#A32D2D' }}>*</span></label>
                       <div className="al-wrap">
-                        <span className="al-icon">🔒</span>
+                        <span className="al-icon"><i className="bi bi-lock me-1" /></span>
                         <input
                           className={`al-input ${showSetupKey ? '' : 'has-eye'}`}
                           type={showSetupKey ? 'text' : 'password'}
@@ -446,7 +446,7 @@ export default function Admin() {
                           className="al-eye"
                           onClick={() => setShowSetupKey(p => !p)}
                         >
-                          {showSetupKey ? '🙈' : '👁️'}
+                          <i className={`bi ${showSetupKey ? "bi-eye-slash" : "bi-eye"}`} />
                         </button>
                       </div>
                     </div>
@@ -456,7 +456,7 @@ export default function Admin() {
                     <div className="al-field">
                       <label>Full Name <span style={{ color: '#A32D2D' }}>*</span></label>
                       <div className="al-wrap">
-                        <span className="al-icon">👤</span>
+                        <span className="al-icon"><i className="bi bi-person-circle me-1" /></span>
                         <input
                           className="al-input" type="text"
                           placeholder="e.g. Site Administrator"
@@ -469,7 +469,7 @@ export default function Admin() {
                     <div className="al-field">
                       <label>Mobile Number <span style={{ color: '#A32D2D' }}>*</span></label>
                       <div className="al-wrap">
-                        <span className="al-icon">📱</span>
+                        <span className="al-icon"><i className="bi bi-phone me-1" /></span>
                         <input
                           className="al-input" type="text"
                           placeholder="10-digit mobile number"
@@ -483,7 +483,7 @@ export default function Admin() {
                     <div className="al-field">
                       <label>Password <span style={{ color: '#A32D2D' }}>*</span></label>
                       <div className="al-wrap">
-                        <span className="al-icon">🔑</span>
+                        <span className="al-icon"><i className="bi bi-key me-1" /></span>
                         <input
                           className={`al-input has-eye`}
                           type={showNewPass ? 'text' : 'password'}
@@ -496,7 +496,7 @@ export default function Admin() {
                           className="al-eye"
                           onClick={() => setShowNewPass(p => !p)}
                         >
-                          {showNewPass ? '🙈' : '👁️'}
+                          <i className={`bi ${showNewPass ? "bi-eye-slash" : "bi-eye"}`} />
                         </button>
                       </div>
                       {/* Password strength bars */}
@@ -520,7 +520,7 @@ export default function Admin() {
                     <div className="al-field">
                       <label>Confirm Password <span style={{ color: '#A32D2D' }}>*</span></label>
                       <div className="al-wrap">
-                        <span className="al-icon">🔒</span>
+                        <span className="al-icon"><i className="bi bi-lock me-1" /></span>
                         <input
                           className="al-input" type="password"
                           placeholder="Re-enter your password"
@@ -530,7 +530,7 @@ export default function Admin() {
                       </div>
                       {confirmPass && newPassword !== confirmPass && (
                         <div style={{ fontSize: 11, color: '#A32D2D', marginTop: 4 }}>
-                          ⚠️ Passwords don't match
+                          <i className="bi bi-exclamation-triangle me-1" />Passwords don't match
                         </div>
                       )}
                     </div>
@@ -538,7 +538,7 @@ export default function Admin() {
                     <button className="al-btn" type="submit" disabled={createLoading}>
                       {createLoading
                         ? <><div className="al-spinner" /> Creating account…</>
-                        : '✅ Create Admin Account'}
+                        : 'Create Admin Account'}
                     </button>
                   </form>
                 )}

@@ -2,6 +2,13 @@ import React from 'react';
 import './App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.js';
+// Icons are used on every surface now — patient, hospital and admin — so a
+// single eager import is correct. It replaced the per-page dynamic imports
+// that were right back when only the hospital screens used them.
+import 'bootstrap-icons/font/bootstrap-icons.css';
+// Shared polish layer: one radius, one shadow, one blue. Must load after
+// Bootstrap so it wins on specificity ties.
+import './theme.css';
 import { useLocation } from 'react-router';
 import Routing from './Router/Routing';
 import Navbar from './componets/Navbar';
