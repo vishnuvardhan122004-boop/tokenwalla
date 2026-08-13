@@ -3,9 +3,12 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** unmerged — `feat/app-version-gate` + `perf/dashboard-visible-polling` (web/backend) · `payments-server-priced-checkout` + `fix/map-load-timeout` + `feat/walkin-doctors-landline` (app). Merged 2026-08-13: `feat/walkin-doctors-landline` (web/backend, PR #13) and `docs/wrap-2026-08-13` (PR #14, which also carried `fix/hide-test-hospitals`). **Dead branches to delete: `fix/hide-test-hospitals`, `docs/wrap-2026-08-11-s3`** — fully contained in `main`.
-- **Latest commit at last update:** `d49da2d` main (web/backend) · `d83df3e` main + `a5f1788` (app)
-- **Last updated:** 2026-08-13 (walk-in doctors, landline contacts, expiring notices — merged and live)
+- **Branch:** unmerged — `feat/app-version-gate` + `perf/dashboard-visible-polling` (web/backend) · `payments-server-priced-checkout` + `fix/map-load-timeout` + `fix/app-profile-announcement-readview` (app). Merged 2026-08-13: PRs #13–#16 (web/backend), PR #3 (app). Dead branches to delete: `fix/hide-test-hospitals`, `docs/wrap-2026-08-11-s3`.
+- **Latest commit at last update:** `5b2d9e2` main (web/backend) · `d4b1dc1` main + `ccd446b` (app)
+- **Last updated:** 2026-08-13 session 2 (mobile-responsive hospital screens; Railway not deploying)
+
+> ⛔ **Merged ≠ live.** Railway has not deployed since 2026-08-11 (unpaid bill).
+> Everything below marked ✅ is on `main` and green, not necessarily running.
 
 ### How to update this log
 - Add a new `## YYYY-MM-DD — <title>` section **on top** for each working session; keep older sessions below.
@@ -13,6 +16,61 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-13 (session 2) — Mobile-responsive hospital screens, and a stuck deploy
+
+Two threads. The planned one was making the hospital screens work on a phone.
+The unplanned one was discovering that **nothing has deployed since 2026-08-11**.
+
+| Change | Repo | Commit | Status |
+|---|---|---|---|
+| Dashboard: 44px tap targets, sticky save, 2×2 tabs, 3-col slot grid | web | `c232fcc` | ✅ merged (PR #16) |
+| Dashboard doctor card falls back to landline | web | `c232fcc` | ✅ merged (PR #16) |
+| Profile: 44px targets, sticky save, stacked detail rows | web | `0c5a706` | ✅ merged (PR #16) |
+| Profile: emoji → Bootstrap Icons, dynamically imported | web | `0c5a706` | ✅ merged (PR #16) |
+| App profile: announcement + expiry in the read view | app | `ccd446b` | 🕒 pushed, unmerged |
+| ROADMAP/WORKLOG corrections | docs | this | 🕒 pushed |
+
+### 1. The deploy is stuck, and item 2b was wrong
+Probed the live API rather than trusting the plan: `landline`,
+`announcement_until` and `announcement_active` are all absent, `/health/` still
+returns the old body, and `[TEST] Demo Hospital` plus its **₹388.37** doctor
+are **still visible to patients**. ROADMAP item 2b said that fix was "merged
+and live" — it was merged, never deployed. Cause is an unpaid Railway bill, so
+it is Vishnu's to clear. Corrected in ROADMAP as item 0, with a no-deploy
+mitigation (flip Heyi to `SERVICE_ONLY` in admin).
+
+### 2. Measure before redesigning
+At 375px: **90 tap targets under 44px** on the dashboard, **26** on the
+profile, and Save ~2,250px down both forms. Both now 0 undersized with sticky
+save bars. Desktop and tablet verified unchanged at 1280 and 768; no horizontal
+overflow at any of the three widths — that part was already fine and did not
+need touching.
+
+### 3. Two traps worth remembering
+- **Bootstrap's `.d-flex` is `!important`**, so a `display:grid` override loses
+  silently. The slot picker got its own class instead of an `!important` fight.
+- **A static `bootstrap-icons` import cost 13.82 kB gzip** in the bundle every
+  patient downloads, for a staff-only screen — the same trap Leaflet fell into
+  on 2026-08-11. Dynamic import; main CSS back to its 33.74 kB baseline.
+
+### 4. Cross-repo features finish in one repo
+Two gaps from the walk-in work, both presentation so no test caught them: the
+web doctor card had no landline fallback (the app did), and the app profile
+never showed the announcement back (the web did). Both fixed.
+
+### Verification
+181 backend · 20 web · 104 app tests pass. Web production build clean, app
+`tsc` clean. The responsive work was measured and re-measured in a real browser
+at 375/768/1280, not eyeballed.
+
+### Action items
+- [ ] **Pay the Railway bill, then confirm the deploy** (ROADMAP item 0)
+- [ ] Merge the app branch `fix/app-profile-announcement-readview`
+- [ ] Convert `Hdashboard.js` emoji to Bootstrap Icons (dynamic import)
+- [ ] Delete the two dead branches
 
 ---
 

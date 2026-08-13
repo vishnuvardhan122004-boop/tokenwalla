@@ -7,13 +7,52 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-13
+- **Last updated:** 2026-08-13 (session 2)
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
 ---
 
 ## Now
+
+### 0. RAILWAY IS NOT DEPLOYING — UNPAID BILL 🔴🔴
+
+**Nothing merged since 2026-08-11 is running in production.** Confirmed
+2026-08-13 by probing the live API: `landline`, `announcement_until` and
+`announcement_active` are absent from `/api/hospitals/`, and `/health/` still
+returns the pre-PR-#13 body. The last code Railway actually deployed is
+`2c4ec25` (PR #12, the location picker).
+
+**Cause is known: the Railway bill is unpaid.** Vishnu said so on 2026-08-13.
+It is not a build failure, not a CI hold — CI is green on every merge — and
+not something a session can fix. **Pay the bill, then confirm the deploy.**
+
+Confirm with, in order:
+
+```bash
+curl -s https://tokenwalla-production.up.railway.app/api/hospitals/ | grep -c landline   # want >0
+curl -s https://tokenwalla-production.up.railway.app/health/                             # want the cache probe body
+```
+
+**What is stuck behind it, and this is the part that matters:**
+
+- **The `[TEST]` hospital fix is NOT live.** As of 2026-08-13 `/api/hospitals/`
+  still returns `[TEST] Demo Hospital`, and `/api/doctors/` still returns its
+  doctor **Heyi** — `payment_collection_mode='FULL'`, ₹363 fee, **₹388.37**
+  final. A patient can still be charged ₹388.37 for an appointment that does
+  not exist. Item 2b said this was shipped; it was merged, not deployed.
+- **The whole walk-in / landline feature is inert.** The deployed serializer
+  still requires `Doctor.mobile`, so the landline-only clinic that prompted the
+  work still cannot be onboarded.
+
+**One-click mitigation that needs no deploy**, if the bill will take a while:
+in Django admin set doctor **Heyi**'s `payment_collection_mode` to
+`SERVICE_ONLY`. That drops the exposure from ₹388.37 to the ~₹25 service fee.
+Deactivating the hospital does **not** work — the deployed `/api/doctors/` has
+no filter on test hospitals *or* on hospital status, so the doctor stays
+listed. Only deleting the doctor row removes the listing without a deploy.
+
+### 1. Everything below is blocked on merging.
 
 **Everything below item 2 is blocked on merging.** The 2026-08-11 session wrote a
 lot of code and merged none of it — three branches sit pushed and green, and
@@ -33,15 +72,19 @@ remains, in merge order:
 |---|---|---|---|---|
 | 1 | `payments-server-priced-checkout` (13) | app | store, via EAS | **the 1.2.0 version bump lives here** |
 | 2 | `fix/map-load-timeout` (1) | app | store, via EAS | map failure handling |
-| 3 | `feat/walkin-doctors-landline` (1) | app | store, via EAS | **app half of PR #13 — backend already live** |
+| 3 | `fix/app-profile-announcement-readview` (1) | app | store, via EAS | new 2026-08-13 s2 — app/web parity gap |
 | 4 | `feat/app-version-gate` (3) | backend | Railway | `/health/` probe + `/api/app-version/` |
 | 5 | `perf/dashboard-visible-polling` (1) | web | Vercel | |
 
 Already merged 2026-08-11: `docs/wrap-2026-08-11`, `feat/hospital-location-picker`
 (web, PR #12), `feat/hospital-location-picker` (app, PR #1),
 `fix/eas-include-google-services` (app, PR #2).
-**Already merged 2026-08-13:** `feat/walkin-doctors-landline` (web/backend,
-PR #13) and `docs/wrap-2026-08-13` (PR #14). 181 tests pass on `main`.
+**Already merged 2026-08-13:** `feat/walkin-doctors-landline` (web/backend
+PR #13, app PR #3), `docs/wrap-2026-08-13` (PR #14),
+`docs/fix-merge-state-2026-08-13` (PR #15) and `fix/hospital-dashboard-mobile`
+(PR #16). 181 backend tests, 20 web tests, 104 app tests pass.
+
+> ⛔ **NOTHING WEB OR BACKEND HAS DEPLOYED SINCE 2026-08-11.** See item 0.
 
 > **`fix/hide-test-hospitals` and `docs/wrap-2026-08-11-s3` are both dead
 > branches — every commit in them is on `main`.** They rode in inside PR #14 and
@@ -110,11 +153,14 @@ throttle counters only became *accurate* with Redis. `DatabaseCache` inherits
 every rate limit leaked. Redis counts correctly — meaning the cutover quietly
 tightened limits that had never really bitten, days before a traffic spike.
 
-### ~~2b. Two live production bugs~~ ✅ 2026-08-13 — MERGED AND LIVE
+### 2b. Two live production bugs — MERGED BUT **NOT DEPLOYED** 🔴
 
-**Shipped.** `3197377` reached `main` inside PR #14 on 2026-08-13 and deployed
-to Railway. `[TEST] Demo Hospital` and its ₹388.37 `FULL`-collection doctor are
-no longer visible to patients. Nothing to do here; kept below for the record.
+**Corrected 2026-08-13 session 2. An earlier version of this line said "merged
+and live" — that was wrong and it was the most dangerous wrong line in this
+file.** `3197377` reached `main` inside PR #14, but Railway has not deployed
+since 2026-08-11 (item 0), so the fix is not running. `[TEST] Demo Hospital`
+and its ₹388.37 doctor **are still visible to patients right now**. Verified by
+probing the live API, not assumed. This closes only when item 0 does.
 
 Session-3 history: the stale `.git/index.lock` was removed (0 bytes, no git
 process running) and the work committed as `fix/hide-test-hospitals`. It had
@@ -297,6 +343,18 @@ the careful edge cases were the right ones.
 
 ## Next
 
+- **Check both repos when a feature spans them** — new 2026-08-13 (session 2),
+  and it has now bitten twice in one day. The walk-in/landline work shipped
+  with the landline fallback in the app doctor card but not the web one, and
+  with the announcement read-view on web but not in the app. Neither was caught
+  by tests, because both are presentation. When a feature touches web + app,
+  diff the two surfaces before calling it done.
+- **The dashboard still uses emoji** — new 2026-08-13 (session 2). The profile
+  page moved to Bootstrap Icons; `Hdashboard.js` still has 🏥 👨‍⚕️ ✅ and
+  friends. The two screens sit next to each other, so it reads as mismatched.
+  Deliberately left out of PR #16 to keep that diff to the responsive work.
+  Import the icon CSS dynamically there too — a static import is the 13.82 kB
+  patient-bundle trap.
 - **The walk-in doctor page has never run on a device** — new 2026-08-13. The
   web half was driven in a real browser (walk-in view renders, call button
   dials, expired announcement disappears, slotted doctors unchanged). The app
@@ -393,6 +451,37 @@ Resolved and deliberately removed, so they don't get re-added:
 > assuming anything reached a patient. Nothing has reached a **patient** yet
 > regardless, because the app release branch is still unmerged and unbuilt.
 
+- **2026-08-13 (session 2)** — **The hospital dashboard and profile made
+  usable on a phone.** Reception staff run these one-handed at a desk, so the
+  phone layout is the real one. Measured at 375px before touching anything
+  rather than eyeballing it: **90 tap targets under the 44px finger minimum on
+  the dashboard** (71 of them 31px) and **26 on the profile**, and both long
+  forms put Save at the very bottom — 2,262px down on the dashboard, 2,258px on
+  the profile. Both are now 0 undersized, with the save bar sticky at the
+  viewport bottom. The slot picker was the worst single offender: 48 chips at
+  79×31, now a 3-column grid at 44px. Tabs became a 2×2 grid and the day filter
+  a 3-column row so neither wraps raggedly once the pills are finger-sized. The
+  header now shows the hospital name on mobile — it was hidden below 576px, but
+  on a shared phone which *account* you are in matters more than the wordmark.
+  Detail rows stack label-above-value, because a pasted Maps URL is one long
+  unbreakable token that was crushing the value column to a sliver.
+  **Desktop and tablet are untouched** — verified at 1280 and 768.
+  Two things worth remembering. Bootstrap's `.d-flex` carries `!important`, so
+  a `display:grid` override loses silently; the slot picker got its own class
+  rather than an `!important` fight. And the icon swap (emoji → Bootstrap
+  Icons, matching the Ionicons the app already uses) **nearly repeated the
+  Leaflet mistake**: a static stylesheet import put **13.82 kB gzip** of
+  icon definitions into the bundle every patient downloads, for a staff-only
+  screen. A dynamic import gives it its own chunk — main CSS back to its 33.74 kB
+  baseline. `bootstrap-icons` was already a dependency; nothing new installed.
+- **2026-08-13 (session 2)** — **Two landline gaps closed that the original
+  feature missed.** The web doctor card rendered `doc.mobile` alone, so a
+  landline-only doctor showed a bare phone icon and no number at all — the app
+  card already had the fallback, the web one did not. And the app's hospital
+  profile never showed the announcement back in its read view, so a hospital
+  could save a holiday notice and see nothing, then have it silently stop
+  reaching patients when the expiry passed. Both are the same shape of bug:
+  building a feature across two repos and finishing it in only one.
 - **2026-08-13** — **Walk-in doctors, landline contacts, expiring notices.**
   A one-doctor clinic signed that day could not use TokenWalla at all: the
   doctor runs the whole hospital and cannot commit to fixed slot times, and the
