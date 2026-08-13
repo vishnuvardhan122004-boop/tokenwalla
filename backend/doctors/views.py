@@ -1,6 +1,8 @@
 import json
 from datetime import datetime
 
+from django.db.models import F
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -82,7 +84,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
 
     # Verbs that are safe to expose to the public (patients browsing doctors).
-    _PUBLIC_ACTIONS = {'list', 'retrieve', 'slot_availability'}
+    _PUBLIC_ACTIONS = {'list', 'retrieve', 'slot_availability', 'record_view'}
 
     def get_permissions(self):
         """Public read, authenticated hospital/admin write.
@@ -104,8 +106,14 @@ class DoctorViewSet(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def get_queryset(self):
-        # Default ordering prevents UnorderedObjectListWarning with pagination
-        qs = Doctor.objects.select_related('hospital').order_by('id')
+        # Popular first, then id. The id tiebreak keeps the order total, which
+        # pagination needs — ordering by view_count alone would let rows shuffle
+        # between pages as counts change mid-browse.
+        #
+        # Clients re-rank what they receive (availability and city matter more
+        # than popularity), but ordering here too means page 1 holds the most
+        # popular doctors once there are more than PAGE_SIZE of them.
+        qs = Doctor.objects.select_related('hospital').order_by('-view_count', 'id')
         hospital_id = self.request.query_params.get('hospital')
         if hospital_id:
             qs = qs.filter(hospital_id=hospital_id)
@@ -118,6 +126,33 @@ class DoctorViewSet(viewsets.ModelViewSet):
         if not show_test_hospitals_to(getattr(self.request, 'user', None)):
             qs = exclude_test_hospitals(qs, field='hospital__name')
         return qs
+
+    # ── Popularity ────────────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['post'], url_path='view', permission_classes=[AllowAny])
+    def record_view(self, request, pk=None):
+        """Count one patient opening this doctor's page.
+
+        Public and unauthenticated on purpose — most browsing happens before
+        login, and a signal that only counted logged-in patients would rank the
+        wrong doctors.
+
+        A single atomic UPDATE via F(), not read-modify-write: two patients
+        opening the same page at once would otherwise both read N and write
+        N+1, losing a count. No row lock is needed because the database does
+        the arithmetic.
+
+        Deliberately NOT folded into retrieve(): that endpoint is also polled by
+        the hospital dashboard and the admin screens, which would inflate the
+        count with staff traffic and rank whichever doctor staff edit most.
+
+        Returns 204 with no body. The clients fire this and ignore the result,
+        so there is nothing worth serialising back.
+        """
+        updated = Doctor.objects.filter(pk=pk).update(view_count=F('view_count') + 1)
+        if not updated:
+            return Response({'message': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     # ── Slot availability ─────────────────────────────────────────────────────
 

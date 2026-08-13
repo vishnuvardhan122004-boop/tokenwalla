@@ -26,6 +26,11 @@ class Doctor(models.Model):
     # Available days of the week, e.g. ["Mon", "Tue", "Wed"]
     days           = models.JSONField(default=list, blank=True)
     max_per_slot   = models.IntegerField(default=10)
+    # How many times a patient has opened this doctor's page. Feeds the
+    # "popular first" ordering — see DoctorViewSet.record_view. Deliberately a
+    # plain counter and not per-user analytics: we only need a ranking signal,
+    # so nothing about WHO looked is stored.
+    view_count     = models.PositiveIntegerField(default=0, db_index=True)
     city           = models.CharField(max_length=100, blank=True)
 
     # ── Payment collection mode ───────────────────────────────────────────────

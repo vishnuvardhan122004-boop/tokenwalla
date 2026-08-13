@@ -123,6 +123,29 @@ export default function AllDoctor() {
       .slice(0, 6);
   })();
 
+  // ── RANKING ───────────────────────────────────────────────────────────────
+  // Mirrors rankDoctor() in the app's (patient)/doctors.tsx — same weights, so
+  // a patient sees the same order on both. Change one, change the other.
+  //
+  // Popularity is bounded and log-scaled ON PURPOSE. Sorting by raw clicks
+  // makes the top spot self-reinforcing: whoever is first gets clicked because
+  // they are first, and no new doctor can ever climb. log10 means the 10th view
+  // moves a doctor as much as the next ninety do, and the cap keeps the boost
+  // below the availability weight — so a popular doctor who is unavailable
+  // today never outranks one who can actually see you.
+  const popularityBoost = (views) =>
+    Math.min(30, Math.round(12 * Math.log10(1 + (views || 0))));
+
+  const rankDoctor = (doc) => {
+    let score = 0;
+    if (doc.available) score += 100;
+    if (city && (doc.city || '').toLowerCase() === city.toLowerCase()) score += 50;
+    score += (doc.experience || 0);
+    score += (doc.slots?.length || 0) * 2;
+    score += popularityBoost(doc.view_count);
+    return score;
+  };
+
   const filtered = doctors.filter(doc => {
     // Keyword search: every space-separated word must match somewhere in the
     // doctor's searchable text (name, specialization, hospital, city, location).
@@ -141,7 +164,10 @@ export default function AllDoctor() {
     const matchSpec  = specFilter === 'All' || (doc.specialization || '').toLowerCase().includes(specFilter.toLowerCase());
     const matchAvail = !availOnly || doc.available;
     return matchSearch && matchCity && matchSpec && matchAvail;
-  });
+  })
+    // Highest score first; ties keep the server's order, which is already
+    // popular-first, so the sort is deterministic either way.
+    .sort((a, b) => rankDoctor(b) - rankDoctor(a));
 
 
   return (
