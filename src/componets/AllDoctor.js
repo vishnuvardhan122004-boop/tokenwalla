@@ -375,6 +375,7 @@ export default function AllDoctor() {
                 {cities.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               <button className="near-me-btn" onClick={detectCity} disabled={locating} title={t('doctors.nearMeTitle')}>
+                <i className={`bi ${locating ? 'bi-arrow-repeat' : 'bi-geo-alt'} me-1`} />
                 {locating ? t('doctors.locating') : t('doctors.nearMe')}
               </button>
               <button className={`avail-toggle ${availOnly ? 'active' : ''}`} onClick={() => setAvailOnly(p => !p)}>

@@ -56,7 +56,7 @@
       "queueActive": "कतार एक्सेस सक्रिय",
       "doctorInfo": "काना · सिटी केयर हॉस्पिटल",
       "todaySlot": "आज · 10:30 AM स्लॉट",
-      "confirmedChip": "✅ कन्फर्म · TW-2847",
+      "confirmedChip": "कन्फर्म · TW-2847",
       "waitChip": "⏱ अनुमानित प्रतीक्षा: ~12 मिनट"
     },
     "stats": {
@@ -131,9 +131,9 @@
     "findYourDoctor": "अपना डॉक्टर खोजें",
     "searchPlaceholder": "डॉक्टर, विशेषज्ञता, अस्पताल, शहर, स्थान से खोजें...",
     "allCities": "सभी शहर",
-    "nearMe": "📍 मेरे पास",
+    "nearMe": "मेरे पास",
     "nearMeTitle": "अपने शहर में डॉक्टर खोजें",
-    "locating": "📍 पता लगाया जा रहा है…",
+    "locating": "पता लगाया जा रहा है…",
     "availableOnly": "केवल उपलब्ध",
     "results_one": "{{count}} परिणाम",
     "results_other": "{{count}} परिणाम",
