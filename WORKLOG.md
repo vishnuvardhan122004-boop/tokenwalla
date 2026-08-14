@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** unmerged — `fix/dashboard-icons` + `feat/popular-doctors-first` + `feat/app-version-gate` + `perf/dashboard-visible-polling` (web/backend) · `payments-server-priced-checkout` + `fix/map-load-timeout` + `feat/popular-doctors-first` (app). Merged 2026-08-13: PRs #13–#18 (web/backend), PRs #3–#4 (app).
-- **Latest commit at last update:** `d624e48` main (web/backend) · `7bda5b4` main (app)
-- **Last updated:** 2026-08-13 session 3 (icons site-wide; popular-doctors ranking)
+- **Branch:** unmerged — `feat/popular-doctors-first` (PR #20) + `perf/dashboard-visible-polling` (**no PR**) + this wrap on `docs/wrap-2026-08-13-s3` (PR #21) · `payments-server-priced-checkout` (**no PR**) + `fix/map-load-timeout` (**no PR**) + `feat/popular-doctors-first` (PR #5) in the app. Merged 2026-08-14: **PR #22**. Merged 2026-08-13: PRs #13–#19 (web/backend), PRs #3–#4 (app). Dead branches to delete: `fix/hide-test-hospitals`, `docs/wrap-2026-08-11-s3`, plus four `railway/*` bot branches from June 2026.
+- **Latest commit at last update:** `05e4d16` main (web/backend) · `7bda5b4` main (app, **still 1.1.3**)
+- **Last updated:** 2026-08-14 (OTP per-IP ceiling raised; PR #22 merged; Railway stuck — day 4)
 
 > ⛔ **Pushed ≠ merged ≠ live.** All three are different states here right now.
 > Three branches are pushed with **no PR opened** (a session cannot open them).
@@ -18,6 +18,79 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-14 — The OTP per-IP ceiling, and the app repo audited
+
+One planned slice (ROADMAP item 2c) and one asked-for audit of the app repo.
+
+| Change | Repo | Commit | Status |
+|---|---|---|---|
+| `OTP_MAX_SENDS_PER_IP_PER_DAY` 200 → 2000, reasoning recorded | backend | `1cd9734` | ✅ merged (PR #22) |
+| Test: per-number cap still binds at 10 with the IP ceiling at 2000 | backend | `1cd9734` | ✅ merged (PR #22) |
+| 429 message no longer claims "try again tomorrow" | backend | `1cd9734` | ✅ merged (PR #22) |
+| Merged `main` into the branch, resolved the `settings.py` conflict | backend | `6097d0f` | ✅ merged (PR #22) |
+| ROADMAP + WORKLOG for today | docs | this | 🕒 on PR #21 |
+
+### 1. 200/day was the CGNAT mistake again, slower
+The burst on that branch had just been fixed for carrier-grade NAT; the daily
+ceiling beside it never got the same scrutiny. One Indian public IPv4 fronts
+hundreds to low thousands of subscribers and a signup costs 1–2 sends, so 200
+served only ~100–200 real people per carrier per day.
+
+**The part that was not in the original reasoning:** `RateCounter.bump` rolls
+its window from the **first** event, so tripping the cap at 08:00 locks that
+carrier out until 08:00 tomorrow — not until midnight. One bad morning costs a
+full day of signups.
+
+Priced rather than guessed, at ~₹0.25/SMS: an abusive IP is worth ~₹50/day at
+200, ~₹500/day at 2000, ~₹7,200/day with only the 20/min burst. 2000 sits an
+order of magnitude under burst-only with ~10× headroom over any plausible real
+CGNAT population.
+
+### 2. The test that mattered was not the number
+The per-number cap (10/day) is the real SMS spend control. The new test pins
+the two apart — IP ceiling at 2000, one number still stops at the eleventh
+send — so a future bump cannot quietly promote the IP ceiling into that role.
+**196 tests, 6 consecutive green runs, zero `graph.facebook.com` lines.**
+
+### 3. The merge conflict was the predicted one
+Item 2b's `ANON_RATE` reached `main` via PR #14 while the branch was open; both
+sides add a constant beside `DEFAULT_THROTTLE_RATES`. Kept **both** verbatim —
+separate scopes, and `RequestOTPView` sets `throttle_classes =
+[OTPRateThrottle]`, which *replaces* the defaults, so the raised anon rate never
+reaches the OTP path. Git had merged the dict correctly; only comments collided.
+
+### 4. The app repo has not moved since 2026-08-11
+Audited on request. App `main` is still **1.1.3**, same as the Play Store build.
+Three branches unmerged and **the two that matter have no PR at all** —
+`payments-server-priced-checkout` (13 commits, carries the 1.2.0 bump, the
+checkout fix and the ₹15→₹20 correction) and `fix/map-load-timeout`. Only the
+least urgent one, `feat/popular-doctors-first`, has a PR (#5).
+
+Verified rather than assumed: all three merge **clean** into `main` in any order
+(`git merge-tree`), and `5b11bd7` **is** inside the release branch
+(`git merge-base --is-ancestor`). The app's popularity branch is safe to ship
+ahead of the backend — it `.catch(() => {})`s the view POST and falls back to
+`|| 0`.
+
+**Still costing money quietly:** the installed 1.1.3 app advertises **₹15**
+while Razorpay charges **₹25.37**. The correction sits in the unmerged branch.
+
+### 5. Two things found on the way
+- **A blocked OTP IP is invisible** — a `logger.warning` and nothing else. If
+  2000 ever bites a real carrier, you learn it from a user.
+- **The production guard false-positived**, blocking a feature-branch push
+  because the same compound command mentioned `origin/main` in a read-only
+  `git merge-tree`. Surfaced rather than reworded around; noted in **Next** as
+  a one-line narrowing that must be its own commit.
+
+### 6. Railway: day four
+`/api/app-version/` → **404**, `/health/` → the old body, `landline` → **0**,
+and doctor Heyi is still live on `FULL`. The one-click admin mitigation still
+has not been applied. `/api/app-version/` is now the cleanest deploy tripwire
+we have, since it did not exist before PR #22.
 
 ---
 

@@ -6,6 +6,10 @@ import QRScanner from './QRScanner';
 import HPayments from './HPayments';
 import SPECIALIZATION_OPTIONS from '../services/specializations';
 
+// Icon stylesheet, pulled in dynamically so its ~14 kB gzip stays out of the
+// bundle every patient downloads. See the longer note in Hprofile.js.
+import("bootstrap-icons/font/bootstrap-icons.css");
+
 const DEFAULT_SLOTS = [
   "12:00 AM","12:30 AM","01:00 AM","01:30 AM","02:00 AM","02:30 AM",
   "03:00 AM","03:30 AM","04:00 AM","04:30 AM","05:00 AM","05:30 AM",
@@ -17,12 +21,14 @@ const DEFAULT_SLOTS = [
   "09:00 PM","09:30 PM","10:00 PM","10:30 PM","11:00 PM","11:30 PM",
 ];
 
+// `label` is plain text and `icon` a Bootstrap Icons class, kept apart so the
+// label can still be a React key.
 const SLOT_SECTIONS = [
-  { label: "🌙 Late Night / Early Morning", slots: DEFAULT_SLOTS.slice(0, 12) },
-  { label: "🌅 Morning",                    slots: DEFAULT_SLOTS.slice(12, 24) },
-  { label: "☀️ Afternoon",                  slots: DEFAULT_SLOTS.slice(24, 32) },
-  { label: "🌆 Evening",                    slots: DEFAULT_SLOTS.slice(32, 40) },
-  { label: "🌙 Night",                      slots: DEFAULT_SLOTS.slice(40, 48) },
+  { label: "Late Night / Early Morning", icon: "bi-moon",       slots: DEFAULT_SLOTS.slice(0, 12) },
+  { label: "Morning",                    icon: "bi-sunrise",    slots: DEFAULT_SLOTS.slice(12, 24) },
+  { label: "Afternoon",                  icon: "bi-sun",        slots: DEFAULT_SLOTS.slice(24, 32) },
+  { label: "Evening",                    icon: "bi-sunset",     slots: DEFAULT_SLOTS.slice(32, 40) },
+  { label: "Night",                      icon: "bi-moon-stars", slots: DEFAULT_SLOTS.slice(40, 48) },
 ];
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -189,7 +195,7 @@ const Hdashboard = () => {
         { headers: { "Content-Type": "application/json" } }
       );
       setDoctors(prev => prev.map(d => d.id === docId ? { ...d, ...data } : d));
-      showToast(`${doctor.name} is now ${newVal ? "available ✅" : "unavailable ❌"}`);
+      showToast(`${doctor.name} is now ${newVal ? "available" : "unavailable"}`);
     } catch (err) {
       setDoctors(prev => prev.map(d => d.id === docId ? { ...d, available: !newVal } : d));
       showToast(err?.response?.data?.message || "Failed to update availability.", "error");
@@ -377,7 +383,7 @@ const Hdashboard = () => {
   const dayWord     = dayFilter === "all" ? "All" : dayFilter === "today" ? "Today" : "Tomorrow";
 
   const FieldError  = ({ msg }) => msg
-    ? <small style={{ color: '#dc3545', display: 'block', marginTop: 3 }}>⚠️ {msg}</small>
+    ? <small style={{ color: '#dc3545', display: 'block', marginTop: 3 }}><i className="bi bi-exclamation-triangle me-1" />{msg}</small>
     : null;
 
   return (
@@ -509,7 +515,7 @@ const Hdashboard = () => {
         >
           <div className="card border-0 shadow-lg p-4" style={{ width: "100%", maxWidth: 360, borderRadius: 16 }}>
             <div className="d-flex justify-content-between align-items-start mb-3">
-              <h5 className="fw-bold mb-0 text-primary">🎫 Token {tokenDetail.token ?? "—"}</h5>
+              <h5 className="fw-bold mb-0 text-primary"><i className="bi bi-ticket-perforated me-2" />Token {tokenDetail.token ?? "—"}</h5>
               <button className="btn-close" onClick={() => setTokenDetail(null)} />
             </div>
             <div className="small mb-1"><span className="text-muted">Patient:</span> <strong>{tokenDetail.user_name || "Patient"}</strong></div>
@@ -519,7 +525,7 @@ const Hdashboard = () => {
             <div className="small mb-3"><span className="text-muted">Day:</span> {dayLabelFor(tokenDetail.date)}</div>
             {tokenDetail.status !== "COMPLETED" && (
               <button className="btn btn-outline-danger btn-sm w-100" onClick={() => handleNoShow(tokenDetail.id)}>
-                🚫 Mark as No-show
+                <i className="bi bi-slash-circle me-1" />Mark as No-show
               </button>
             )}
           </div>
@@ -534,8 +540,8 @@ const Hdashboard = () => {
           <span className="tw-brand">TokenWalla</span>
         </div>
         <div className="d-flex align-items-center gap-2 gap-md-3">
-          <span className="tw-hosp" title={hospital?.name}>🏥 <span>{hospital?.name}</span></span>
-          <button className="tw-nav-btn" onClick={() => navigate("/Hprofile")}>👤 Profile</button>
+          <span className="tw-hosp" title={hospital?.name}><i className="bi bi-hospital" /> <span>{hospital?.name}</span></span>
+          <button className="tw-nav-btn" onClick={() => navigate("/Hprofile")}><i className="bi bi-person-circle me-1" />Profile</button>
           <button className="tw-nav-btn tw-nav-btn--danger" onClick={logout}>Logout</button>
         </div>
       </nav>
@@ -563,10 +569,10 @@ const Hdashboard = () => {
         {/* ── Tabs ── */}
         <div className="tw-tabs mb-4">
           {[
-            { key: "queue",    label: "🏥 Queue Management" },
-            { key: "doctors",  label: "👨‍⚕️ Doctors" },
-            { key: "payments", label: "💳 Doctor Payments" },
-            { key: "scanner",  label: "📷 QR Scanner" },
+            { key: "queue",    label: <><i className="bi bi-people me-1" />Queue</> },
+            { key: "doctors",  label: <><i className="bi bi-person-badge me-1" />Doctors</> },
+            { key: "payments", label: <><i className="bi bi-credit-card me-1" />Payments</> },
+            { key: "scanner",  label: <><i className="bi bi-qr-code-scan me-1" />Scanner</> },
           ].map(({ key, label }) => (
             <button
               key={key}
@@ -585,9 +591,9 @@ const Hdashboard = () => {
                 split them for clarity. Each pill shows its count. */}
             <div className="d-flex flex-wrap gap-2 mb-3 tw-dayfilter">
               {[
-                { key: "today",    label: "📅 Today",    cls: "primary" },
-                { key: "tomorrow", label: "⏭️ Tomorrow", cls: "info"    },
-                { key: "all",      label: "🗓️ All",      cls: "secondary" },
+                { key: "today",    label: <><i className="bi bi-calendar-day me-1" />Today</>,    cls: "primary" },
+                { key: "tomorrow", label: <><i className="bi bi-calendar-plus me-1" />Tomorrow</>, cls: "info"    },
+                { key: "all",      label: <><i className="bi bi-calendar3 me-1" />All</>,          cls: "secondary" },
               ].map(({ key, label, cls }) => {
                 const active = dayFilter === key;
                 return (
@@ -610,7 +616,7 @@ const Hdashboard = () => {
               <div className="col-md-4">
                 <div className="card border-0 shadow-sm h-100">
                   <div className="card-header bg-warning text-white fw-bold">
-                    ⏳ Waiting ({fWaiting.length})
+                    <i className="bi bi-hourglass-split me-2" />Waiting ({fWaiting.length})
                   </div>
                   <div className="card-body p-2">
                     {fWaiting.length === 0 && (
@@ -619,25 +625,25 @@ const Hdashboard = () => {
                     {fWaiting.map(p => (
                       <div key={p.id} className="border rounded p-2 mb-2 bg-light">
                         <div className="fw-semibold">{p.user_name || "Patient"}</div>
-                        <div className="small text-muted">📞 {p.user_mobile || "N/A"}</div>
-                        <div className="small text-muted">🩺 {p.doctor_name}</div>
-                        <div className="small text-muted">🕐 {p.slot}  ·  📅 {dayLabelFor(p.date)}</div>
+                        <div className="small text-muted"><i className="bi bi-telephone me-1" />{p.user_mobile || "N/A"}</div>
+                        <div className="small text-muted"><i className="bi bi-person-badge me-1" />{p.doctor_name}</div>
+                        <div className="small text-muted"><i className="bi bi-clock me-1" />{p.slot}  ·  <i className="bi bi-calendar-event me-1" />{dayLabelFor(p.date)}</div>
                         <button
                           className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
                           onClick={() => setTokenDetail(p)}
                           title="Tap for details"
                         >
-                          🎫 Token: {p.token}
+                          <i className="bi bi-ticket-perforated me-1" />Token: {p.token}
                         </button>
                         <button className="btn btn-primary btn-sm w-100 mt-2" onClick={() => handleCall(p.id)}>
                           Call Patient
                         </button>
                         <div className="d-flex gap-1 mt-1">
                           <button className="btn btn-outline-secondary btn-sm flex-grow-1" onClick={() => handleHold(p.id)} title="Skip to next patient">
-                            ⏸ Hold
+                            <i className="bi bi-pause me-1" />Hold
                           </button>
                           <button className="btn btn-outline-secondary btn-sm flex-grow-1" onClick={() => setActiveTab("scanner")} title="Open QR Scanner">
-                            📷 Scan
+                            <i className="bi bi-qr-code-scan me-1" />Scan
                           </button>
                         </div>
                       </div>
@@ -650,7 +656,7 @@ const Hdashboard = () => {
               <div className="col-md-4">
                 <div className="card border-0 shadow-sm h-100">
                   <div className="card-header bg-info text-white fw-bold">
-                    🔄 In Progress ({fInProgress.length})
+                    <i className="bi bi-arrow-repeat me-2" />In Progress ({fInProgress.length})
                   </div>
                   <div className="card-body p-2">
                     {fInProgress.length === 0 && (
@@ -659,14 +665,14 @@ const Hdashboard = () => {
                     {fInProgress.map(p => (
                       <div key={p.id} className="border rounded p-2 mb-2 bg-light">
                         <div className="fw-semibold">{p.user_name || "Patient"}</div>
-                        <div className="small text-muted">🩺 {p.doctor_name}</div>
-                        <div className="small text-muted">🕐 {p.slot}  ·  📅 {dayLabelFor(p.date)}</div>
+                        <div className="small text-muted"><i className="bi bi-person-badge me-1" />{p.doctor_name}</div>
+                        <div className="small text-muted"><i className="bi bi-clock me-1" />{p.slot}  ·  <i className="bi bi-calendar-event me-1" />{dayLabelFor(p.date)}</div>
                         <button
                           className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
                           onClick={() => setTokenDetail(p)}
                           title="Tap for details"
                         >
-                          🎫 Token: {p.token}
+                          <i className="bi bi-ticket-perforated me-1" />Token: {p.token}
                         </button>
                         <button className="btn btn-success btn-sm w-100 mt-2" onClick={() => handleComplete(p.id)}>
                           Mark Complete
@@ -681,7 +687,7 @@ const Hdashboard = () => {
               <div className="col-md-4">
                 <div className="card border-0 shadow-sm h-100">
                   <div className="card-header bg-success text-white fw-bold">
-                    ✅ Completed ({fCompleted.length})
+                    <i className="bi bi-check-circle me-2" />Completed ({fCompleted.length})
                   </div>
                   <div className="card-body p-2">
                     {fCompleted.length === 0 && (
@@ -690,14 +696,14 @@ const Hdashboard = () => {
                     {fCompleted.map(p => (
                       <div key={p.id} className="border rounded p-2 mb-2 bg-light">
                         <div className="fw-semibold">{p.user_name || "Patient"}</div>
-                        <div className="small text-muted">🩺 {p.doctor_name}</div>
-                        <div className="small text-muted">🕐 {p.slot}  ·  📅 {dayLabelFor(p.date)}</div>
+                        <div className="small text-muted"><i className="bi bi-person-badge me-1" />{p.doctor_name}</div>
+                        <div className="small text-muted"><i className="bi bi-clock me-1" />{p.slot}  ·  <i className="bi bi-calendar-event me-1" />{dayLabelFor(p.date)}</div>
                         <button
                           className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
                           onClick={() => setTokenDetail(p)}
                           title="Tap for details"
                         >
-                          🎫 Token: {p.token}
+                          <i className="bi bi-ticket-perforated me-1" />Token: {p.token}
                         </button>
                       </div>
                     ))}
@@ -710,7 +716,7 @@ const Hdashboard = () => {
                 <div className="col-12">
                   <div className="card border-0 shadow-sm">
                     <div className="card-header bg-secondary text-white fw-bold">
-                      ⏸ On Hold ({fOnHold.length})
+                      <i className="bi bi-pause-circle me-2" />On Hold ({fOnHold.length})
                     </div>
                     <div className="card-body p-2">
                       <div className="row g-2">
@@ -718,14 +724,14 @@ const Hdashboard = () => {
                           <div key={p.id} className="col-md-4">
                             <div className="border rounded p-2 bg-light h-100">
                               <div className="fw-semibold">{p.user_name || "Patient"}</div>
-                              <div className="small text-muted">🩺 {p.doctor_name}</div>
-                              <div className="small text-muted">🕐 {p.slot}  ·  📅 {dayLabelFor(p.date)}</div>
+                              <div className="small text-muted"><i className="bi bi-person-badge me-1" />{p.doctor_name}</div>
+                              <div className="small text-muted"><i className="bi bi-clock me-1" />{p.slot}  ·  <i className="bi bi-calendar-event me-1" />{dayLabelFor(p.date)}</div>
                               <button
                                 className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
                                 onClick={() => setTokenDetail(p)}
                                 title="Tap for details"
                               >
-                                🎫 Token: {p.token}
+                                <i className="bi bi-ticket-perforated me-1" />Token: {p.token}
                               </button>
                               <button className="btn btn-outline-success btn-sm w-100 mt-2" onClick={() => handleHold(p.id)}>
                                 ▶ Resume
@@ -757,7 +763,7 @@ const Hdashboard = () => {
               <div className="card shadow-sm border-0 p-4 mb-4">
                 <div className="d-flex justify-content-between align-items-center mb-4">
                   <h6 className="fw-bold mb-0">
-                    {editDoctor ? "✏️ Edit Doctor" : "➕ Add New Doctor"}
+                    {editDoctor ? <><i className="bi bi-pencil-square me-1" />Edit Doctor</> : <><i className="bi bi-plus-lg me-1" />Add New Doctor</>}
                   </h6>
                   <button
                     className="btn btn-sm btn-outline-secondary"
@@ -774,7 +780,7 @@ const Hdashboard = () => {
                     <div className="col-12">
                       <div className="row g-3">
                         <div className="col-md-6">
-                          <label className="form-label fw-semibold">👤 Doctor Profile Image</label>
+                          <label className="form-label fw-semibold"><i className="bi bi-person-square me-1" />Doctor Profile Image</label>
                           <input
                             type="file" accept="image/*" className="form-control mb-2"
                             onChange={(e) => handleImageChange(e, "doctor")}
@@ -791,7 +797,7 @@ const Hdashboard = () => {
                           )}
                         </div>
                         <div className="col-md-6">
-                          <label className="form-label fw-semibold">🏥 Hospital Banner Image</label>
+                          <label className="form-label fw-semibold"><i className="bi bi-image me-1" />Hospital Banner Image</label>
                           <input
                             type="file" accept="image/*" className="form-control mb-2"
                             onChange={(e) => handleImageChange(e, "hospital")}
@@ -925,7 +931,7 @@ const Hdashboard = () => {
                           onChange={e => handleChange("available", e.target.checked)}
                         />
                         <label className="form-check-label fw-semibold">
-                          {formData.available ? "✅ Available" : "❌ Unavailable"}
+                          {formData.available ? <><i className="bi bi-check-circle me-1" />Available</> : <><i className="bi bi-x-circle me-1" />Unavailable</>}
                         </label>
                       </div>
                     </div>
@@ -933,7 +939,7 @@ const Hdashboard = () => {
                     {/* Days Selector */}
                     <div className="col-12">
                       <label className="form-label fw-semibold">
-                        📅 Available Days *
+                        <i className="bi bi-calendar-week me-1" />Available Days *
                         <small className="text-muted ms-2">
                           ({formData.days.length} of {DAYS_OF_WEEK.length} selected)
                         </small>
@@ -955,7 +961,7 @@ const Hdashboard = () => {
                     {/* Slot Selector — optional. No slots = walk-in listing. */}
                     <div className="col-12">
                       <label className="form-label fw-semibold">
-                        🕐 Select Time Slots
+                        <i className="bi bi-clock me-1" />Select Time Slots
                         <small className="text-muted ms-2">
                           ({formData.slots.length} of {DEFAULT_SLOTS.length} selected)
                         </small>
@@ -972,7 +978,7 @@ const Hdashboard = () => {
                       {SLOT_SECTIONS.map(section => (
                         <div className="mb-3" key={section.label}>
                           <small className="text-muted fw-semibold d-block mb-1">
-                            {section.label}
+                            <i className={`bi ${section.icon} me-1`} />{section.label}
                           </small>
                           <div className="tw-slotgrid">
                             {section.slots.map(slot => (
@@ -1011,7 +1017,7 @@ const Hdashboard = () => {
                       <button type="submit" className="btn btn-primary px-4" disabled={submitting}>
                         {submitting
                           ? <><span className="spinner-border spinner-border-sm me-2" />Saving...</>
-                          : editDoctor ? "💾 Update Doctor" : "➕ Add Doctor"
+                          : editDoctor ? <><i className="bi bi-save me-1" />Update Doctor</> : <><i className="bi bi-plus-lg me-1" />Add Doctor</>
                         }
                       </button>
                     </div>
@@ -1047,8 +1053,8 @@ const Hdashboard = () => {
                               style={{ objectFit: "cover", borderRadius: "8px 8px 0 0" }}
                             />
                           ) : (
-                            <div style={{ width: "100%", height: "100%", background: "#e9ecef", borderRadius: "8px 8px 0 0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>
-                              🏥
+                            <div style={{ width: "100%", height: "100%", background: "#e9ecef", borderRadius: "8px 8px 0 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <i className="bi bi-hospital text-secondary" style={{ fontSize: 28 }} />
                             </div>
                           )}
                           {doc.image && !doc.image.includes("placehold") ? (
@@ -1060,23 +1066,23 @@ const Hdashboard = () => {
                           ) : (
                             <div
                               className="rounded-circle border border-3 border-white position-absolute d-flex align-items-center justify-content-center bg-light tw-doccard-avatar"
-                              style={{ width: 60, height: 60, bottom: -30, left: 16, fontSize: 24 }}
+                              style={{ width: 60, height: 60, bottom: -30, left: 16 }}
                             >
-                              👨‍⚕️
+                              <i className="bi bi-person-badge text-secondary" style={{ fontSize: 22 }} />
                             </div>
                           )}
                         </div>
                         <div className="p-3 pt-4 mt-2">
                           <div className="fw-semibold">{doc.name}</div>
                           <div className="small text-primary mb-1">{doc.specialization}</div>
-                          <div className="small text-muted mb-1">📞 {doc.mobile || doc.landline || "—"}</div>
-                          <div className="small text-muted mb-1">⏳ {doc.experience} yrs exp</div>
+                          <div className="small text-muted mb-1"><i className="bi bi-telephone me-1" />{doc.mobile || doc.landline || "—"}</div>
+                          <div className="small text-muted mb-1"><i className="bi bi-hourglass me-1" />{doc.experience} yrs exp</div>
                           <div className="small text-muted mb-2">
-                            👥 Max {doc.max_per_slot || 10} patients/slot
+                            <i className="bi bi-people me-1" />Max {doc.max_per_slot || 10} patients/slot
                           </div>
                           <div className="mb-2">
                             <small className="fw-semibold text-muted d-block mb-1">
-                              📅 Days ({doc.days?.length || 0})
+                              <i className="bi bi-calendar-week me-1" />Days ({doc.days?.length || 0})
                             </small>
                             <div className="d-flex flex-wrap gap-1">
                               {(doc.days || []).map(d => (
@@ -1089,7 +1095,7 @@ const Hdashboard = () => {
                           </div>
                           <div className="mb-3">
                             <small className="fw-semibold text-muted d-block mb-1">
-                              🕐 Slots ({doc.slots?.length || 0})
+                              <i className="bi bi-clock me-1" />Slots ({doc.slots?.length || 0})
                             </small>
                             <div className="d-flex flex-wrap gap-1">
                               {(doc.slots || []).slice(0, 3).map(s => (
@@ -1114,11 +1120,11 @@ const Hdashboard = () => {
                             >
                               {isToggling
                                 ? <><span className="spinner-border spinner-border-sm me-1" style={{ width: 12, height: 12, borderWidth: 2 }} />Updating…</>
-                                : doc.available ? "✅ Available" : "❌ Unavailable"
+                                : doc.available ? <><i className="bi bi-check-circle me-1" />Available</> : <><i className="bi bi-x-circle me-1" />Unavailable</>
                               }
                             </button>
-                            <button className="btn btn-sm btn-outline-primary" onClick={() => openEditForm(doc)}>✏️</button>
-                            <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(doc.id)}>🗑</button>
+                            <button className="btn btn-sm btn-outline-primary" onClick={() => openEditForm(doc)} title="Edit doctor" aria-label="Edit doctor"><i className="bi bi-pencil" /></button>
+                            <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(doc.id)} title="Delete doctor" aria-label="Delete doctor"><i className="bi bi-trash" /></button>
                           </div>
                         </div>
                       </div>

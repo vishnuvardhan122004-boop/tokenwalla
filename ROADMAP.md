@@ -7,7 +7,7 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-13 (session 3)
+- **Last updated:** 2026-08-14
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -17,22 +17,26 @@ the things that can lose money or break a live booking come first.
 
 ### 0. RAILWAY IS NOT DEPLOYING — UNPAID BILL 🔴🔴
 
-**Nothing merged since 2026-08-11 is running in production.** Confirmed
-2026-08-13 by probing the live API: `landline`, `announcement_until` and
-`announcement_active` are absent from `/api/hospitals/`, and `/health/` still
-returns the pre-PR-#13 body. The last code Railway actually deployed is
-`2c4ec25` (PR #12, the location picker).
+**Nothing merged since 2026-08-11 is running in production.** Re-probed
+**2026-08-14** — this is the **fourth consecutive day**. The last code Railway
+actually deployed is `2c4ec25` (PR #12, the location picker).
 
 **Cause is known: the Railway bill is unpaid.** Vishnu said so on 2026-08-13.
 It is not a build failure, not a CI hold — CI is green on every merge — and
 not something a session can fix. **Pay the bill, then confirm the deploy.**
 
-Confirm with, in order:
+Confirm with. The first check is **new as of 2026-08-14 and is the best one** —
+`/api/app-version/` did not exist before PR #22, so a 200 proves the running
+code is current rather than merely newer than it was:
 
 ```bash
-curl -s https://tokenwalla-production.up.railway.app/api/hospitals/ | grep -c landline   # want >0
+curl -s -o /dev/null -w "%{http_code}\n" https://tokenwalla-production.up.railway.app/api/app-version/  # want 200, not 404
 curl -s https://tokenwalla-production.up.railway.app/health/                             # want the cache probe body
+curl -s https://tokenwalla-production.up.railway.app/api/hospitals/ | grep -c landline   # want >0
 ```
+
+Measured 2026-08-14: **404**, the old `{"status": "ok", "version": "1.0.0"}`
+body, and **0**. All three still wrong.
 
 **What is stuck behind it, and this is the part that matters:**
 
@@ -46,6 +50,11 @@ curl -s https://tokenwalla-production.up.railway.app/health/                    
   work still cannot be onboarded.
 - **Re-verified 2026-08-13 session 3**, ~7 hours after the first check:
   `landline` still absent, `[TEST] Demo Hospital` still exposed. Nothing moved.
+- **Re-verified again 2026-08-14.** Doctor **Heyi** (id 10) is still returned by
+  the live `/api/doctors/` with `payment_collection_mode='FULL'`, alongside 14
+  real doctors. **The one-click mitigation below has not been applied** — four
+  days in, that is now the single cheapest risk reduction available and it does
+  not need the bill paid.
 
 **One-click mitigation that needs no deploy**, if the bill will take a while:
 in Django admin set doctor **Heyi**'s `payment_collection_mode` to
@@ -65,30 +74,39 @@ traffic is expected for the first time, which promotes capacity work that was
 deliberately deferred on 2026-08-09 and makes the unshipped app build urgent
 rather than merely overdue.
 
-### 1. Merge what's left — six branches 🔴
+### 1. Merge what's left — the app repo is now the whole queue 🔴
 
-**Updated 2026-08-13 session 3.** Three new branches joined the queue today.
-In merge order:
+**Updated 2026-08-14.** Four merged since the last wrap. What remains:
 
-| Order | Branch | Repo | Deploys | Note |
-|---|---|---|---|---|
-| 1 | `payments-server-priced-checkout` (13) | app | store, via EAS | **the 1.2.0 version bump lives here** |
-| 2 | `fix/map-load-timeout` (1) | app | store, via EAS | map failure handling |
-| 3 | `feat/app-version-gate` (3) | backend | Railway | `/health/` probe + `/api/app-version/` |
-| 4 | `fix/dashboard-icons` (1) | web | Vercel | **merge before 5** — both touch `Hdashboard.js` |
-| 5 | `feat/popular-doctors-first` (1) | backend + web | Railway + Vercel | new — most-viewed doctors rank first |
-| 6 | `feat/popular-doctors-first` (1) | app | store, via EAS | app half of 5; **same branch name, check the repo** |
-| — | `perf/dashboard-visible-polling` (1) | web | Vercel | oldest, lowest risk |
+| Order | Branch | Repo | PR | Deploys | Note |
+|---|---|---|---|---|---|
+| 1 | `payments-server-priced-checkout` (13) | app | **none opened** | store, via EAS | **the 1.2.0 version bump lives here**, plus the checkout fix |
+| 2 | `fix/map-load-timeout` (1) | app | **none opened** | store, via EAS | map failure handling |
+| 3 | `feat/popular-doctors-first` (1) | app | #5 open | store, via EAS | **same branch name as the web one — check the repo** |
+| 4 | `feat/popular-doctors-first` (1) | backend + web | #20 open | Railway + Vercel | most-viewed doctors rank first |
+| 5 | `docs/wrap-2026-08-13-s3` | docs | #21 open | — | carries this wrap too; see the note below |
+| — | `perf/dashboard-visible-polling` (1) | web | **none opened** | Vercel | oldest, lowest risk |
 
-> ⚠️ **Pushed is not merged, and today that cost real confusion.** All three
-> new branches were pushed and believed merged; the GitHub API showed **no PR
-> had ever been opened** for any of them (latest are #18 web, #4 app). A
-> session cannot open PRs — `gh` is unauthenticated here — so a pushed branch
-> sits there silently until someone clicks. Check with:
+**Merged 2026-08-14:** `feat/app-version-gate` (**PR #22**) — that closed item
+2c as well, see Done.
+**Merged 2026-08-13:** `fix/dashboard-icons` (PR #19), `feat/website-icons-polish`
+(PR #18), and PRs #13–#17 earlier the same day.
+
+> ⚠️ **Pushed ≠ merged ≠ deployed, and all three are still different states
+> here.** On 2026-08-13 three branches were pushed and believed merged with no
+> PR ever opened. That has partly corrected itself — PRs #20, #21, #22 and app
+> #5 now exist — but **the two app branches that matter most still have no PR
+> at all**, and they are the ones blocking the 1.2.0 release. A session cannot
+> open PRs (`gh` is unauthenticated here), so a pushed branch sits silently
+> until someone clicks. Check with:
 > `curl -s https://api.github.com/repos/<owner>/<repo>/pulls?state=all | head`
-> or just look at the branch list. This is the twin of the "merged ≠ live"
-> rule below: **pushed ≠ merged ≠ deployed**, and all three are currently
-> different states in this project.
+
+> 📄 **PR #21 now carries two days of docs.** Today's wrap was committed onto
+> `docs/wrap-2026-08-13-s3` rather than a fresh branch, because that branch was
+> still unmerged and `main`'s ROADMAP was a session behind. Writing today's wrap
+> off `main` would have let PR #21 later overwrite it with stale content. If a
+> wrap branch is ever still open at `/wrap` time, extend it instead of forking
+> beside it.
 
 Already merged 2026-08-11: `docs/wrap-2026-08-11`, `feat/hospital-location-picker`
 (web, PR #12), `feat/hospital-location-picker` (app, PR #1),
@@ -122,18 +140,25 @@ PR #13, app PR #3), `docs/wrap-2026-08-13` (PR #14),
    get the reading it deserves. Resolve the conflict on the **code** branch next
    time, even when the docs branch is right there.
 
-**The app pair (1 and 2) is now the release blocker — see item 5.** App `main`
-is still version **1.1.3**; the 1.2.0 bump is only on the release branch, so a
+**The app pair (1 and 2) is the release blocker — see item 5.** App `main` is
+still version **1.1.3**; the 1.2.0 bump is only on the release branch, so a
 build from `main` today is not even a new version to the Play Store.
-A dry-run merge is clean and produces 1.2.0 with the picker included.
 
-Backend first: it carries the `/health/` cache probe needed to verify the Redis
-switch in item 2, and `/api/app-version/`, which the app build expects. The app
-PR merges before the EAS build so the build comes off `main`.
+**Re-verified 2026-08-14, in the app repo, with `git merge-tree`:** all three
+app branches merge into `main` **clean**, in any order, and
+`git merge-base --is-ancestor 5b11bd7` confirms the checkout fix is inside
+`payments-server-priced-checkout`. Merging 1 yields 1.2.0 with everything.
 
-**4 and 5 are last on purpose.** They are hospital-facing polish and must not
-delay the overdue 1.2.0 patient release. Both were cut off `main`, not off the
-release branches, so 3 merges cleanly before 5. **Same branch name in both
+The backend half is no longer a gate — `feat/app-version-gate` merged as PR #22,
+so `/api/app-version/` exists in `main` and the app build has its endpoint. It
+is still not *deployed* (item 0), but that does not block the merge.
+
+**3 and 4 are last on purpose** — hospital-facing polish must not delay the
+overdue 1.2.0 patient release. **Ordering between them does not matter:** the
+app half calls `API.post('/doctors/<id>/view/').catch(() => {})` and reads
+`view_count?` with a `|| 0` fallback, so shipping the app before the backend
+deploys just scores every doctor's popularity at 0 and ranks on the existing
+weights. Verified by reading the diff on 2026-08-14. **Same branch name in both
 repos** — check which repo you are in before pushing.
 
 > **PRs cannot be opened from a session.** `gh` is not authenticated on this
@@ -214,20 +239,12 @@ lesson has now been learned three times here (OTP verify, OTP send, and this).
 Backend suite **167 tests** (158 + 9), 10 consecutive green runs,
 `makemigrations --check` clean, no migration.
 
-**Branch off `feat/app-version-gate`, not `main`** — that branch edits the same
-`DEFAULT_THROTTLE_RATES` block.
+~~**Branch off `feat/app-version-gate`, not `main`**~~ — stale as of 2026-08-14.
+Both are on `main` now; the collision was resolved inside PR #22.
 
-### 2c. Review the OTP daily per-IP ceiling before merging it 🟠
+### ~~2c. Review the OTP daily per-IP ceiling~~ ✅ 2026-08-14 — raised to 2000
 
-`feat/app-version-gate` adds `OTP_MAX_SENDS_PER_IP_PER_DAY=200`. The per-minute
-burst on that branch was reasoned about correctly for CGNAT — but a **daily**
-per-IP ceiling is the harsher of the two, and it did not get the same scrutiny.
-200 OTP sends across an entire carrier NAT could stall signups across Hindupur
-mid-campaign, and it would look exactly like nobody wanting to sign up.
-
-The per-*number* cap in `RateCounter` is the real SMS spend control and is
-untouched by this. The per-IP ceiling probably wants to be several times higher
-before the promotion ramps.
+Done, merged in PR #22. See Done for the reasoning and the number.
 
 ### ~~3. Prove the two Railway crons actually ran~~ ✅ 2026-08-11 — both confirmed
 
@@ -363,15 +380,21 @@ the careful edge cases were the right ones.
   with the announcement read-view on web but not in the app. Neither was caught
   by tests, because both are presentation. When a feature touches web + app,
   diff the two surfaces before calling it done.
-- **The dashboard still uses emoji — FIXED but unmerged.** The work is on
-  `fix/dashboard-icons` (item 1). Merge it before `feat/popular-doctors-first`;
-  both touch `Hdashboard.js`. Original note follows.
-- **The dashboard still uses emoji** — new 2026-08-13 (session 2). The profile
-  page moved to Bootstrap Icons; `Hdashboard.js` still has 🏥 👨‍⚕️ ✅ and
-  friends. The two screens sit next to each other, so it reads as mismatched.
-  Deliberately left out of PR #16 to keep that diff to the responsive work.
-  Import the icon CSS dynamically there too — a static import is the 13.82 kB
-  patient-bundle trap.
+- **A blocked OTP IP is invisible** — new 2026-08-14, and it is the concrete
+  reason the observability item below should move up. Hitting
+  `OTP_MAX_SENDS_PER_IP_PER_DAY` produces a `logger.warning` and nothing else.
+  If the raised 2000 ceiling ever *does* bite a real carrier mid-promotion, you
+  find out from a user, not a dashboard — the same silent, self-confirming
+  failure shape the ceiling was raised to avoid. A count of 429s by reason,
+  visible anywhere, would settle it in seconds.
+- **The production guard false-positives on read-only `origin/main`** — new
+  2026-08-14. `.claude/hooks/guard-production.py` blocked a
+  `git push origin feat/app-version-gate` because the *same compound command*
+  also contained a read-only `git merge-tree --write-tree origin/main HEAD`.
+  The push was to a feature branch, which is exactly what the guard's own
+  message instructs. Narrowing it to match only actual push targets is a
+  one-line change — but it must be **its own deliberate commit**, never folded
+  into a feature PR. Until then, keep pushes in their own command.
 - **The walk-in doctor page has never run on a device** — new 2026-08-13. The
   web half was driven in a real browser (walk-in view renders, call button
   dials, expired announcement disappears, slotted doctors unchanged). The app
@@ -468,6 +491,44 @@ Resolved and deliberately removed, so they don't get re-added:
 > assuming anything reached a patient. Nothing has reached a **patient** yet
 > regardless, because the app release branch is still unmerged and unbuilt.
 
+- **2026-08-14** — **The OTP per-IP daily ceiling raised 200 → 2000**, closing
+  item 2c, merged as **PR #22** along with the rest of `feat/app-version-gate`.
+  200/day was the same CGNAT mistake the *burst* on that branch had just been
+  fixed for, in a slower form: one Indian public IPv4 fronts hundreds to low
+  thousands of subscribers and a signup costs 1–2 sends, so 200 served only
+  ~100–200 real people before a whole carrier started getting 429s.
+  **The sharp edge nobody had noticed:** `RateCounter.bump` rolls its window
+  from the **first** event, so tripping the cap at 08:00 locks that carrier out
+  until 08:00 *tomorrow*, not until midnight. A single bad morning costs a full
+  day of signups.
+  The number is argued from cost, not taste — priced at ~₹0.25/SMS through
+  2Factor, one abusive IP is worth ~₹50/day at 200, ~₹500/day at 2000, and
+  ~₹7,200/day if only the 20/min burst bounded it. 2000 keeps a runaway IP an
+  order of magnitude below the burst-only cost while leaving ~10× headroom over
+  any plausible legitimate CGNAT population. The failure modes are not
+  symmetric: an abusive IP costs a few hundred rupees and shows up in the
+  2Factor balance, whereas a false 429 mid-promotion is silent, self-confirming
+  and reads as "nobody wants to sign up".
+  **The per-number cap (10/day) stays the actual SMS spend control**, and a new
+  test pins the two apart — with the IP ceiling at 2000, one number still stops
+  at the eleventh send. Without it, a future bump could quietly promote the IP
+  ceiling into that role and let one number be texted 2000 times a day.
+  Also corrected the 429 message, which said "try again tomorrow" — untrue under
+  a rolling window. **196 tests, 6 consecutive green runs, zero
+  `graph.facebook.com` lines, no migration.**
+  The burst was deliberately left at 20/min: it was already reasoned about
+  correctly for CGNAT, and widening both at once would make a bad outcome hard
+  to attribute.
+- **2026-08-14** — **PR #22 merged, emptying the web/backend queue.** It carried
+  `/api/app-version/`, the `/health/` cache probe and the OTP work. One conflict
+  in `settings.py`, the predicted one: item 2b's `ANON_RATE` had reached `main`
+  via PR #14 while this branch was open, and both sides add a constant beside
+  `DEFAULT_THROTTLE_RATES`. Resolved by keeping **both** verbatim — they are
+  separate scopes (`anon` 300/min for public reads, `otp` 20/min for sends), git
+  had already merged the dict itself correctly, and `RequestOTPView` sets
+  `throttle_classes = [OTPRateThrottle]`, which *replaces* the defaults rather
+  than adding to them, so the raised anon rate never reaches the OTP path.
+  Only the comment blocks collided, so neither author's reasoning was rewritten.
 - **2026-08-13 (session 3)** — **Most-viewed doctors rank first.** Patients had
   no signal about which doctor other patients actually pick, and the website
   did not sort its list *at all* — it rendered in database id order, so whoever
@@ -528,6 +589,14 @@ Resolved and deliberately removed, so they don't get re-added:
   icon definitions into the bundle every patient downloads, for a staff-only
   screen. A dynamic import gives it its own chunk — main CSS back to its 33.74 kB
   baseline. `bootstrap-icons` was already a dependency; nothing new installed.
+- **2026-08-13 (session 2)** — **Dashboard icons brought in line with the
+  profile page.** All 40-odd emoji in `Hdashboard.js` replaced with Bootstrap
+  Icons, so the two hospital screens finally match each other and the app. The
+  icon stylesheet is imported dynamically here too and webpack shares the one
+  chunk between both pages — main CSS stayed at its 33.74 kB baseline, main JS
+  +434 B. Tab labels shortened to Queue / Doctors / Payments / Scanner, which
+  an icon plus a short word fits the 2×2 mobile grid far better than the old
+  full phrases did.
 - **2026-08-13 (session 2)** — **Two landline gaps closed that the original
   feature missed.** The web doctor card rendered `doc.mobile` alone, so a
   landline-only doctor showed a bare phone icon and no number at all — the app
