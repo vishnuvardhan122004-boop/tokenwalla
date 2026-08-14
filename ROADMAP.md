@@ -40,28 +40,52 @@ body, and **0**. All three still wrong.
 
 **What is stuck behind it, and this is the part that matters:**
 
-- **The `[TEST]` hospital fix is NOT live.** As of 2026-08-13 `/api/hospitals/`
-  still returns `[TEST] Demo Hospital`, and `/api/doctors/` still returns its
-  doctor **Heyi** — `payment_collection_mode='FULL'`, ₹363 fee, **₹388.37**
-  final. A patient can still be charged ₹388.37 for an appointment that does
-  not exist. Item 2b said this was shipped; it was merged, not deployed.
+- **The `[TEST]` hospital fix is NOT live** — the *server-side* one. The live
+  `/api/hospitals/` still returns `[TEST] Demo Hospital` and `/api/doctors/`
+  still returns its doctor **Heyi** (id 10, `payment_collection_mode='FULL'`,
+  **₹388.37** final). Item 2b said this was shipped; it was merged, not deployed.
+  **But see the corrected exposure below — this is not patient-reachable.**
 - **The whole walk-in / landline feature is inert.** The deployed serializer
   still requires `Doctor.mobile`, so the landline-only clinic that prompted the
-  work still cannot be onboarded.
-- **Re-verified 2026-08-13 session 3**, ~7 hours after the first check:
-  `landline` still absent, `[TEST] Demo Hospital` still exposed. Nothing moved.
-- **Re-verified again 2026-08-14.** Doctor **Heyi** (id 10) is still returned by
-  the live `/api/doctors/` with `payment_collection_mode='FULL'`, alongside 14
-  real doctors. **The one-click mitigation below has not been applied** — four
-  days in, that is now the single cheapest risk reduction available and it does
-  not need the bill paid.
+  work still cannot be onboarded. This one is genuinely blocked on the deploy.
+- **Re-verified 2026-08-13 session 3** and again **2026-08-14**: `landline`
+  absent, `/api/app-version/` 404, Heyi still served by the API. Nothing moved.
 
-**One-click mitigation that needs no deploy**, if the bill will take a while:
-in Django admin set doctor **Heyi**'s `payment_collection_mode` to
-`SERVICE_ONLY`. That drops the exposure from ₹388.37 to the ~₹25 service fee.
-Deactivating the hospital does **not** work — the deployed `/api/doctors/` has
-no filter on test hospitals *or* on hospital status, so the doctor stays
-listed. Only deleting the doctor row removes the listing without a deploy.
+#### ⚠️ Exposure corrected 2026-08-14 — read this before acting on the above
+
+**Earlier versions of this item said "a patient can still be charged ₹388.37
+for an appointment that does not exist." That is overstated, and it was
+repeated across three sessions without anyone checking the clients.** Both
+patient surfaces already hide test hospitals **client-side**, independently of
+the undeployed server fix:
+
+| Surface | List | Detail page | In production today? |
+|---|---|---|---|
+| Web (`www.tokenwalla.com`) | ✅ `filterTestDoctors` | ✅ `DoctorsDetails.js:109` | yes — Vercel deploys fine |
+| App 1.1.3 (build 36) | ✅ `isTestHospital` in `doctors.tsx` | ❌ **no filter** | yes — verified in the shipped build |
+
+Verified 2026-08-14 by loading the live site (**14 doctors rendered, Heyi
+absent**, while the API returns 15) and by
+`git merge-base --is-ancestor <filter-commit> eddf5dd` in the app repo, which
+confirms the filter is inside shipped build 36 rather than only on `main`.
+
+**So the real exposure is narrower than 🔴 implies:** the API serves Heyi to
+anything calling it directly, and the app's *detail* screen has no filter — but
+the only route there is a deep link to `doctor/10`, because the list it is
+normally reached from filters it out. Nobody browsing either client can reach
+it.
+
+**Still worth closing, as defence-in-depth rather than an emergency:** in Django
+admin set Heyi's `payment_collection_mode` to `SERVICE_ONLY`, dropping the
+worst case from ₹388.37 to the ~₹25 service fee. Deactivating the hospital does
+**not** work — the deployed `/api/doctors/` filters on neither test hospitals
+nor hospital status. Only deleting the doctor row removes it from the API
+without a deploy.
+
+**The lesson worth keeping:** "the server fix isn't deployed" and "patients are
+exposed" are different claims, and this file collapsed them for three days. When
+a risk line is about money, check the surface a patient actually touches — the
+client may already be defending.
 
 ### 1. Everything below is blocked on merging.
 
@@ -198,8 +222,17 @@ tightened limits that had never really bitten, days before a traffic spike.
 and live" — that was wrong and it was the most dangerous wrong line in this
 file.** `3197377` reached `main` inside PR #14, but Railway has not deployed
 since 2026-08-11 (item 0), so the fix is not running. `[TEST] Demo Hospital`
-and its ₹388.37 doctor **are still visible to patients right now**. Verified by
-probing the live API, not assumed. This closes only when item 0 does.
+and its ₹388.37 doctor **are still served by the live API right now**. Verified
+by probing it, not assumed. This closes only when item 0 does.
+
+**Corrected again 2026-08-14 — and the correction above was itself half wrong.**
+"Still visible to patients" was the phrasing here, and it is not true: both the
+website and shipped app 1.1.3 filter `[TEST]` hospitals **client-side**, so no
+patient browsing either one can see or book Heyi. The API exposure is real; the
+patient exposure is not. See the corrected exposure table in item 0. The
+server-side fix still matters — a client-side filter is a courtesy, not a
+control, and the app's *detail* screen does not have one — but this is not the
+emergency two sessions running have described.
 
 Session-3 history: the stale `.git/index.lock` was removed (0 bytes, no git
 process running) and the work committed as `fix/hide-test-hospitals`. It had
@@ -212,10 +245,12 @@ would be found within hours by a promotion.
 **`[TEST] Demo Hospital` was publicly visible.** `/api/doctors/` returned its
 doctor "Heyi" to anonymous callers next to the real ones; there was no
 test-hospital filter anywhere in `doctors/views.py`. That doctor is the **only**
-row in the system with `payment_collection_mode='FULL'`, so a patient could be
-charged **₹388.37** for an appointment that does not exist, and TokenWalla would
-then owe a payout against it. This was the single most dangerous thing in
-production.
+row in the system with `payment_collection_mode='FULL'`, so anything booking
+straight against the API could be charged **₹388.37** for an appointment that
+does not exist, and TokenWalla would then owe a payout against it.
+(Originally written as "the single most dangerous thing in production" —
+downgraded 2026-08-14 once the client-side filters were actually checked. It is
+a real API hole, not a live patient-facing charge.)
 
 Fixed with `TEST_HOSPITAL_PREFIX` + `exclude_test_hospitals()` +
 `show_test_hospitals_to()` in `hospitals/models.py`, applied to the public
@@ -380,6 +415,14 @@ the careful edge cases were the right ones.
   with the announcement read-view on web but not in the app. Neither was caught
   by tests, because both are presentation. When a feature touches web + app,
   diff the two surfaces before calling it done.
+- **The app's doctor detail screen has no test-hospital filter** — new
+  2026-08-14, found while correcting item 0. `app/(patient)/doctors.tsx` filters
+  the list with `isTestHospital`, but `app/(patient)/doctor/[id].tsx` does not,
+  so a deep link to `doctor/10` renders Heyi and offers to book at ₹388.37. The
+  web has this covered on both surfaces (`DoctorsDetails.js:109`); the app has
+  it on one. Two lines, same helper, already imported in the sibling file — but
+  it needs an app release to reach anyone, so it rides along with the next
+  build rather than justifying one.
 - **A blocked OTP IP is invisible** — new 2026-08-14, and it is the concrete
   reason the observability item below should move up. Hitting
   `OTP_MAX_SENDS_PER_IP_PER_DAY` produces a `logger.warning` and nothing else.
