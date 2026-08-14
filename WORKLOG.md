@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** unmerged — `perf/dashboard-visible-polling` (**no PR**) + this wrap (web/backend) · `feat/popular-doctors-first` (PR #5) in the app. **The backlog is cleared:** merged 2026-08-14 — web/backend PRs #20, #21, #22, #23; app PRs #6, #7, #8. Merged 2026-08-13: PRs #13–#19 (web/backend), #3–#4 (app). Dead branches to delete: `fix/hide-test-hospitals`, `docs/wrap-2026-08-11-s3`, `harden-password-validators`, `website-cleanup-eslint-deadDep`, plus four `railway/*` bot branches from June 2026.
-- **Latest commit at last update:** `92d8be1` main (web/backend) · `79f22ee` main (app, **now 1.2.0**)
-- **Last updated:** 2026-08-14 session 2 (merge backlog cleared; app at 1.2.0; exposure claim corrected; Railway stuck — day 4)
+- **Branch:** unmerged — `perf/dashboard-visible-polling` (**no PR**) + this wrap (web/backend) · `feat/popular-doctors-first` (PR #5) in the app. **The backlog is cleared and the branch list is swept** — 34 remote / 37 local merged branches deleted 2026-08-14. Merged 2026-08-14: web/backend PRs #20–#24, app PRs #6–#9. **Do NOT delete** `develop` (deploys to staging), `harden-password-validators` or `website-cleanup-eslint-deadDep` — the last two look dead but hold unmerged work.
+- **Latest commit at last update:** `4844e16` main (web/backend) · `fc8da3a` main (app, **1.2.0 + Sentry**)
+- **Last updated:** 2026-08-14 session 3 (push verified on device; Sentry enabled; production build deliberately not run; Railway stuck — day 4, bill being paid)
 
 > ⛔ **Merged ≠ live, and that is now the *only* gap.** Pushed-vs-merged is
 > resolved — one low-risk branch remains per repo. But Railway has not deployed
@@ -25,6 +25,78 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-14 (session 3) — The app leaves the test runner
+
+First session where the app was proven on real hardware rather than in CI.
+
+| Change | Repo | PR | Status |
+|---|---|---|---|
+| Sentry DSN — crash reporting switched on | app | #9 | ✅ merged, **not built** |
+| Preview build 1.2.0 (36) installed on a device | app | — | ✅ **push confirmed working** |
+| Full release-gate audit | app | — | ✅ verdict recorded in ROADMAP item 5 |
+| Branch sweep: 34 remote + 37 local deleted | both | — | ✅ |
+| Production build | app | — | ⛔ **deliberately not run** |
+
+### 1. Push works — and that one result closed three unknowns
+A test push reached the device. That simultaneously proves the `.easignore`
+mirror delivered `google-services.json` to the EAS builder (the exact failure
+`DONE-push-setup.md` step 6 warns about), that the FCM credentials match the
+shipped config, and that the `appointments` channel and the build-time
+notification icon are correct.
+
+**Getting the token was the hard part**, and it is worth writing down: the app
+logs the Expo token only under `__DEV__`, so a preview build never shows it.
+The route that worked — log in (registration fires from `HomeScreen`, only
+after login), then read `expo_token` from Django admin at
+`/admin/notifications/devicetoken/`.
+
+### 2. The compatibility check nobody had run
+App 1.2.0 was written against `main`; production runs `2c4ec25`, four days
+stale. Diffed the real contract instead of assuming:
+
+- **one route added** since the deployed commit (`/api/app-version/`), and the
+  update gate `catch { return }`s a 404
+- **`payments/views.py`, `fees.py`, `razorpay_utils.py` are byte-identical** —
+  the money path has not drifted at all
+- new fields the app reads (`landline`, `announcement_active`) are optional with
+  fallbacks
+
+**The app is compatible with the backend actually running.** That was the
+biggest unknown in the release and it came back clean.
+
+### 3. Sentry, and why not Crashlytics
+The Sentry wiring had existed since 2026-08-08 and was inert — `initSentry()`
+returns early on an empty DSN, so every crash in every build went unreported.
+One line fixed it. Crashlytics was the obvious question given push already uses
+Google, and the answer is that **the app has no Firebase SDK at all** — push
+runs through Expo's service using `google-services.json` purely for
+credentials. Crashlytics would have meant a first native-module integration, a
+config plugin, a rebuild and deleting 69 lines of working code, to land in the
+same place.
+
+### 4. The branch labelled "long dead" that was not
+Swept 34 remote and 37 local merged branches. Kept `develop` (it deploys to
+staging and appeared in the merged list — deleting it would have been bad), and
+kept two this file had called long dead: **`harden-password-validators` holds an
+unmerged commit enabling Django's password validators** — the open "6-char
+password floor" item — and `website-cleanup-eslint-deadDep` still carries an
+un-landed eslint re-enable. Reading them beat trusting the label.
+
+### 5. Why the production build did not run
+Two things should land first: **app PR #5** (without it the app and website rank
+doctors differently), and the **remaining device checks** — the location picker,
+a walk-in doctor's missing Book button, Android back, and a real ₹25.37 booking.
+Push was the only one completed. A production build auto-increments to
+versionCode 37 permanently, and if the picker is broken it costs build 38 plus
+another manual Play upload.
+
+### 6. Railway: day four
+`/api/app-version/` still 404. The bill is being settled; **verify the deploy
+rather than assume it** — this item has survived three sessions of being assumed
+fixed.
 
 ---
 
