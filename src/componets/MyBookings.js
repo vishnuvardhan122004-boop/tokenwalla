@@ -264,7 +264,7 @@ export default function MyBookings() {
 
   const queueMsg = (pos) => {
     if (pos === null || pos === undefined) return 'Loading queue position…';
-    if (pos === 0)  return '✅ Your turn — please go in now!';
+    if (pos === 0)  return 'Your turn — please go in now!';
     if (pos === 1)  return "You're next! Head to the clinic.";
     return `${pos - 1} patient${pos > 2 ? 's' : ''} ahead of you`;
   };
@@ -397,7 +397,7 @@ export default function MyBookings() {
 
           {!loading && visible.length === 0 && (
             <div className="mb-empty">
-              <span className="mb-empty-icon">🎫</span>
+              <span className="mb-empty-icon"><i className="bi bi-ticket-perforated me-1" /></span>
               <div className="mb-empty-title">{tab === 'active' ? 'No active bookings' : 'No bookings yet'}</div>
               <p style={{ color: 'var(--gray-400)', marginBottom: 24 }}>
                 {tab === 'active' ? 'Your active appointments will appear here' : 'Book your first appointment and get a token instantly'}
@@ -428,13 +428,13 @@ export default function MyBookings() {
                           </span>
                         </div>
                         <div className="mb-doctor-name">{booking.doctor_name || '—'}</div>
-                        <div className="mb-hospital-name">🏥 {booking.hospital_name || '—'}</div>
+                        <div className="mb-hospital-name"><i className="bi bi-hospital me-1" />{booking.hospital_name || '—'}</div>
                         {booking.is_for_other && (
-                          <div className="mb-for-other">👥 For {booking.patient_name}</div>
+                          <div className="mb-for-other"><i className="bi bi-people me-1" />For {booking.patient_name}</div>
                         )}
                         <div className="mb-meta">
-                          <div className="mb-meta-chip"><div className="mb-meta-icon">📅</div>{booking.date || '—'}</div>
-                          <div className="mb-meta-chip"><div className="mb-meta-icon">🕐</div>{booking.slot || '—'}</div>
+                          <div className="mb-meta-chip"><div className="mb-meta-icon"><i className="bi bi-calendar-event me-1" /></div>{booking.date || '—'}</div>
+                          <div className="mb-meta-chip"><div className="mb-meta-icon"><i className="bi bi-clock me-1" /></div>{booking.slot || '—'}</div>
                           <span className="mb-amount">₹{booking.amount || 0}</span>
                         </div>
                       </div>
@@ -444,12 +444,12 @@ export default function MyBookings() {
                     {isActive && booking.queue_access && (
                       <div className="mb-queue-panel">
                         <div className="mb-queue-circle">
-                          {booking.status === 'IN_PROGRESS' ? '🔔' : (qPos ?? '…')}
+                          {booking.status === 'IN_PROGRESS' ? <i className="bi bi-bell-fill" /> : (qPos ?? '…')}
                         </div>
                         <div style={{ flex: 1 }}>
                           <div className="mb-queue-label">Your position in queue</div>
                           <div className="mb-queue-desc">
-                            {booking.status === 'IN_PROGRESS' ? '✅ Your turn — please go in now!' : queueMsg(qPos)}
+                            {booking.status === 'IN_PROGRESS' ? 'Your turn — please go in now!' : queueMsg(qPos)}
                           </div>
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>Auto-refreshes every 15s</div>
@@ -460,7 +460,7 @@ export default function MyBookings() {
                     {(booking.status === 'CONFIRMED' || booking.status === 'IN_PROGRESS') && (
                       <div className="mb-action-panel">
                         <div>
-                          <div className="mb-action-title">⬛ Show / Download Token</div>
+                          <div className="mb-action-title"><i className="bi bi-square-fill me-1" />Show / Download Token</div>
                           <div className="mb-action-desc">Scan at reception, or download your ticket to keep it offline</div>
                         </div>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -478,7 +478,7 @@ export default function MyBookings() {
                             onClick={() => handleDownload(booking)}
                             disabled={downloadingId === booking.id}
                           >
-                            {downloadingId === booking.id ? '⏳ Preparing…' : '⬇ Download'}
+                            {downloadingId === booking.id ? '⏳ Preparing…' : 'Download'}
                           </button>
                         </div>
                       </div>
@@ -487,7 +487,7 @@ export default function MyBookings() {
                     {/* ── DOCTOR-UNAVAILABLE BANNER ── */}
                     {booking.status === 'CONFIRMED' && booking.free_reschedule && (
                       <div className="mb-unavail-banner">
-                        ⚠️ {booking.doctor_name} is unavailable. Reschedule below at no charge.
+                        <i className="bi bi-exclamation-triangle me-1" />{booking.doctor_name} is unavailable. Reschedule below at no charge.
                       </div>
                     )}
 
@@ -495,7 +495,7 @@ export default function MyBookings() {
                     {booking.status === 'CONFIRMED' && (
                       <div className="mb-action-panel">
                         <div>
-                          <div className="mb-action-title">📅 Reschedule Appointment</div>
+                          <div className="mb-action-title"><i className="bi bi-calendar-event me-1" />Reschedule Appointment</div>
                           <div className="mb-action-desc">
                             {booking.free_reschedule
                               ? 'Change your date or time slot — no charge'
@@ -515,7 +515,7 @@ export default function MyBookings() {
                     {booking.status === 'CONFIRMED' && (
                       <div className="mb-action-panel">
                         <div>
-                          <div className="mb-action-title">❌ Cancel Appointment</div>
+                          <div className="mb-action-title"><i className="bi bi-x-circle me-1" />Cancel Appointment</div>
                           <div className="mb-action-desc">Cancel before your turn · Refund in 5–7 days</div>
                         </div>
                         <button
@@ -540,7 +540,7 @@ export default function MyBookings() {
       {rescheduleBooking && (
         <div className="mb-modal-overlay" onClick={e => { if (e.target === e.currentTarget && !rescheduling) setRescheduleBooking(null); }}>
           <div className="mb-modal">
-            <div className="mb-modal-title">📅 Reschedule Appointment</div>
+            <div className="mb-modal-title"><i className="bi bi-calendar-event me-1" />Reschedule Appointment</div>
             <div className="mb-modal-sub">{rescheduleBooking.doctor_name} · {rescheduleBooking.hospital_name}</div>
             <label className="mb-modal-label">Select New Date</label>
             <input
@@ -557,7 +557,7 @@ export default function MyBookings() {
             ) : (
               <div className="mb-slots-grid">
                 {amSlots.length > 0 && <>
-                  <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 600, color: 'var(--gray-400)', letterSpacing: 1 }}>🌅 Morning</div>
+                  <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 600, color: 'var(--gray-400)', letterSpacing: 1 }}><i className="bi bi-sunrise me-1" />Morning</div>
                   {amSlots.map(s => (
                     <button
                       key={s}
@@ -570,7 +570,7 @@ export default function MyBookings() {
                   ))}
                 </>}
                 {pmSlots.length > 0 && <>
-                  <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 600, color: 'var(--gray-400)', letterSpacing: 1, marginTop: 8 }}>🌇 Afternoon / Evening</div>
+                  <div style={{ gridColumn: '1/-1', fontSize: 11, fontWeight: 600, color: 'var(--gray-400)', letterSpacing: 1, marginTop: 8 }}><i className="bi bi-sunset me-1" />Afternoon / Evening</div>
                   {pmSlots.map(s => (
                     <button
                       key={s}
@@ -587,8 +587,8 @@ export default function MyBookings() {
 
             <div className="mb-fee-note">
               {rescheduleBooking.free_reschedule
-                ? '✅ Free reschedule — your doctor was marked unavailable, so there is no charge.'
-                : `💡 A ₹${RESCHEDULE_FEE} reschedule fee applies. Razorpay will open after you confirm.`}
+                ? 'Free reschedule — your doctor was marked unavailable, so there is no charge.'
+                : `A ₹${RESCHEDULE_FEE} reschedule fee applies. Razorpay will open after you confirm.`}
             </div>
 
             <div className="mb-modal-actions">
@@ -605,8 +605,8 @@ export default function MyBookings() {
                   : rescheduling
                     ? '⏳ Processing…'
                     : rescheduleBooking.free_reschedule
-                      ? '✅ Confirm Reschedule (FREE)'
-                      : `💳 Pay ₹${RESCHEDULE_FEE} & Reschedule`}
+                      ? 'Confirm Reschedule (FREE)'
+                      : `Pay ₹${RESCHEDULE_FEE} & Reschedule`}
               </button>
             </div>
           </div>

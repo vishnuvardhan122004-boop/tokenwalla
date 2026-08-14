@@ -13,7 +13,12 @@ class Doctor(models.Model):
     # e.g. "child fever vaccination" for a pediatrician.
     keywords       = models.CharField(max_length=500, blank=True, default="")
     experience     = models.IntegerField(default=0)
-    mobile         = models.CharField(max_length=15)
+    # Optional now: a small clinic may only have a landline. Exactly one of
+    # `mobile` / `landline` is required, enforced in DoctorSerializer.validate.
+    # Keep them apart — `mobile` is the only number WhatsApp is ever sent to
+    # (notifications.whatsapp.send_doctor_payout_paid).
+    mobile         = models.CharField(max_length=15, blank=True, default="")
+    landline       = models.CharField(max_length=20, blank=True, default="")
     available      = models.BooleanField(default=True)
     fee            = models.IntegerField(default=0)          # consultation fee in ₹
     # Must be JSONField — stores ["09:00 AM", "09:30 AM", ...]

@@ -1,6 +1,7 @@
 # hospitals/serializers.py
 import re
 
+from django.utils import timezone
 from rest_framework import serializers
 from .models import Hospital
 
@@ -9,16 +10,28 @@ class HospitalSerializer(serializers.ModelSerializer):
     image   = serializers.SerializerMethodField()   # banner URL
     logo    = serializers.SerializerMethodField()
     gallery = serializers.SerializerMethodField()
+    # Whether the announcement is still worth showing a patient. Computed here
+    # so the website and the app can't disagree about when a notice expires —
+    # and so an old app build that ignores the flag simply behaves as before.
+    announcement_active = serializers.SerializerMethodField()
 
     class Meta:
         model  = Hospital
         fields = [
             'id', 'name', 'city', 'address', 'location', 'latitude', 'longitude',
-            'mobile', 'status',
+            'mobile', 'landline', 'status',
             'instagram', 'youtube', 'facebook', 'services',
-            'description', 'announcement', 'open_time', 'close_time',
+            'description', 'announcement', 'announcement_until',
+            'announcement_active', 'open_time', 'close_time',
             'image', 'logo', 'gallery',
         ]
+
+    def get_announcement_active(self, obj):
+        if not (obj.announcement or '').strip():
+            return False
+        if obj.announcement_until is None:
+            return True
+        return obj.announcement_until >= timezone.localdate()
 
     def _url(self, f):
         try:

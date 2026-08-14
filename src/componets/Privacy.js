@@ -272,7 +272,7 @@ const Privacy = () => {
             <h1 className="pp-hero-title">Privacy Policy</h1>
             <div className="pp-hero-meta">
               <span className="pp-hero-date">
-                📅 Last updated: May 2026
+                <i className="bi bi-calendar-event me-1" />Last updated: May 2026
               </span>
             </div>
           </div>
@@ -322,7 +322,7 @@ const Privacy = () => {
           {/* 1. What We Collect */}
           <div className="pp-section" id="section-1">
             <div className="pp-section-header">
-              <div className="pp-section-icon">📋</div>
+              <div className="pp-section-icon"><i className="bi bi-clipboard me-1" /></div>
               <div>
                 <div className="pp-section-num">Section 1</div>
                 <div className="pp-section-title">What We Collect</div>
@@ -343,7 +343,7 @@ const Privacy = () => {
           {/* 2. How We Use Your Data */}
           <div className="pp-section" id="section-2">
             <div className="pp-section-header">
-              <div className="pp-section-icon">⚙️</div>
+              <div className="pp-section-icon"><i className="bi bi-gear me-1" /></div>
               <div>
                 <div className="pp-section-num">Section 2</div>
                 <div className="pp-section-title">How We Use Your Data</div>
@@ -365,7 +365,7 @@ const Privacy = () => {
           {/* 3. Data Sharing */}
           <div className="pp-section" id="section-3">
             <div className="pp-section-header">
-              <div className="pp-section-icon">🤝</div>
+              <div className="pp-section-icon"><i className="bi bi-people me-1" /></div>
               <div>
                 <div className="pp-section-num">Section 3</div>
                 <div className="pp-section-title">Data Sharing</div>
@@ -384,7 +384,7 @@ const Privacy = () => {
           {/* 4. Data Retention */}
           <div className="pp-section" id="section-4">
             <div className="pp-section-header">
-              <div className="pp-section-icon">🗓️</div>
+              <div className="pp-section-icon"><i className="bi bi-calendar3 me-1" /></div>
               <div>
                 <div className="pp-section-num">Section 4</div>
                 <div className="pp-section-title">Data Retention</div>
@@ -405,14 +405,14 @@ const Privacy = () => {
           {/* 5. Account & Data Deletion */}
           <div className="pp-section" id="section-5">
             <div className="pp-section-header">
-              <div className="pp-section-icon">🗑️</div>
+              <div className="pp-section-icon"><i className="bi bi-trash me-1" /></div>
               <div>
                 <div className="pp-section-num">Section 5</div>
                 <div className="pp-section-title">Account &amp; Data Deletion</div>
               </div>
             </div>
             <div className="pp-warn">
-              <span className="pp-warn-icon">✅</span>
+              <span className="pp-warn-icon"><i className="bi bi-check-circle me-1" /></span>
               <span>You have the right to delete your account and all associated personal data at any time. This is a Google Play Store requirement and we fully honour it.</span>
             </div>
             <p>To delete your account and personal data, follow any of these steps:</p>
@@ -449,7 +449,7 @@ const Privacy = () => {
           {/* 6. Third-Party Services */}
           <div className="pp-section" id="section-6">
             <div className="pp-section-header">
-              <div className="pp-section-icon">🔗</div>
+              <div className="pp-section-icon"><i className="bi bi-link-45deg me-1" /></div>
               <div>
                 <div className="pp-section-num">Section 6</div>
                 <div className="pp-section-title">Third-Party Services</div>
@@ -506,14 +506,14 @@ const Privacy = () => {
           {/* 7. Children's Privacy */}
           <div className="pp-section" id="section-7">
             <div className="pp-section-header">
-              <div className="pp-section-icon">🧒</div>
+              <div className="pp-section-icon"><i className="bi bi-person me-1" /></div>
               <div>
                 <div className="pp-section-num">Section 7</div>
                 <div className="pp-section-title">Children's Privacy</div>
               </div>
             </div>
             <div className="pp-warn">
-              <span className="pp-warn-icon">⚠️</span>
+              <span className="pp-warn-icon"><i className="bi bi-exclamation-triangle me-1" /></span>
               <span><strong>TokenWalla is not intended for users under the age of 18.</strong> Our service involves medical appointments and financial transactions, which require adult legal capacity under Indian law.</span>
             </div>
             <p>We do not knowingly collect personal information from anyone under 18 years of age. If you are a parent or guardian and believe your child has provided us with personal information, please contact us immediately at <a href="mailto:support@tokenwalla.com" style={{ color: '#185FA5' }}>support@tokenwalla.com</a>. We will promptly delete any such data upon verification.</p>
@@ -523,7 +523,7 @@ const Privacy = () => {
           {/* 8. Data Security */}
           <div className="pp-section" id="section-8">
             <div className="pp-section-header">
-              <div className="pp-section-icon">🔐</div>
+              <div className="pp-section-icon"><i className="bi bi-shield-lock me-1" /></div>
               <div>
                 <div className="pp-section-num">Section 8</div>
                 <div className="pp-section-title">Data Security</div>
@@ -543,7 +543,7 @@ const Privacy = () => {
           {/* 9. Cookies */}
           <div className="pp-section" id="section-9">
             <div className="pp-section-header">
-              <div className="pp-section-icon">🍪</div>
+              <div className="pp-section-icon"><i className="bi bi-cookie me-1" /></div>
               <div>
                 <div className="pp-section-num">Section 9</div>
                 <div className="pp-section-title">Cookies &amp; Local Storage</div>
@@ -560,7 +560,7 @@ const Privacy = () => {
           {/* 10. Your Rights */}
           <div className="pp-section" id="section-10">
             <div className="pp-section-header">
-              <div className="pp-section-icon">⚖️</div>
+              <div className="pp-section-icon"><i className="bi bi-bank me-1" /></div>
               <div>
                 <div className="pp-section-num">Section 10</div>
                 <div className="pp-section-title">Your Rights</div>
@@ -580,7 +580,7 @@ const Privacy = () => {
           {/* 11. Policy Updates */}
           <div className="pp-section" id="section-11">
             <div className="pp-section-header">
-              <div className="pp-section-icon">🔄</div>
+              <div className="pp-section-icon"><i className="bi bi-arrow-repeat me-1" /></div>
               <div>
                 <div className="pp-section-num">Section 11</div>
                 <div className="pp-section-title">Changes to This Policy</div>
@@ -601,13 +601,13 @@ const Privacy = () => {
           {/* 12. Contact */}
           <div className="pp-section" id="section-12">
             <div className="pp-contact">
-              <div className="pp-contact-title">📬 Contact &amp; Data Grievance Officer</div>
+              <div className="pp-contact-title"><i className="bi bi-inbox me-1" />Contact &amp; Data Grievance Officer</div>
               <p>
                 For any privacy concerns, data requests, or account deletion, contact us at:
               </p>
               <div className="pp-contact-grid">
                 <div className="pp-contact-item">
-                  <span className="pp-contact-item-icon">📧</span>
+                  <span className="pp-contact-item-icon"><i className="bi bi-envelope me-1" /></span>
                   <div>
                     <div className="pp-contact-item-label">Email</div>
                     <div className="pp-contact-item-val">
@@ -616,21 +616,21 @@ const Privacy = () => {
                   </div>
                 </div>
                 <div className="pp-contact-item">
-                  <span className="pp-contact-item-icon">🏢</span>
+                  <span className="pp-contact-item-icon"><i className="bi bi-building me-1" /></span>
                   <div>
                     <div className="pp-contact-item-label">Address</div>
                     <div className="pp-contact-item-val">Hindupur–Nimpalli Road, AP – 515201</div>
                   </div>
                 </div>
                 <div className="pp-contact-item">
-                  <span className="pp-contact-item-icon">⏱️</span>
+                  <span className="pp-contact-item-icon"><i className="bi bi-stopwatch me-1" />️</span>
                   <div>
                     <div className="pp-contact-item-label">Response Time</div>
                     <div className="pp-contact-item-val">Within 30 calendar days</div>
                   </div>
                 </div>
                 <div className="pp-contact-item">
-                  <span className="pp-contact-item-icon">⚖️</span>
+                  <span className="pp-contact-item-icon"><i className="bi bi-bank me-1" /></span>
                   <div>
                     <div className="pp-contact-item-label">Governing Law</div>
                     <div className="pp-contact-item-val">Andhra Pradesh, India</div>

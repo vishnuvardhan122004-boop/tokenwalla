@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from .models import Doctor
 from .serializers import DoctorSerializer
+from hospitals.models import exclude_test_hospitals, show_test_hospitals_to
 from payments.payout_utils import payout_target
 from tokenwalla.permissions import IsHospitalStaff, IsDoctorOwnerHospitalOrAdmin
 from tokenwalla.utils import is_slot_bookable
@@ -108,6 +109,14 @@ class DoctorViewSet(viewsets.ModelViewSet):
         hospital_id = self.request.query_params.get('hospital')
         if hospital_id:
             qs = qs.filter(hospital_id=hospital_id)
+        # Internal demo/test hospitals are not patient-facing. Left visible,
+        # their doctors show up in the public browse list next to real ones —
+        # and the demo doctor is the only row in the system set to collect the
+        # FULL consultation fee, so a patient could be charged hundreds of
+        # rupees for an appointment that does not exist, and we would then owe
+        # a payout against it. Staff and admins still see them.
+        if not show_test_hospitals_to(getattr(self.request, 'user', None)):
+            qs = exclude_test_hospitals(qs, field='hospital__name')
         return qs
 
     # ── Slot availability ─────────────────────────────────────────────────────

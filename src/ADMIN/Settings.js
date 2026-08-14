@@ -45,15 +45,15 @@ const Settings = () => {
       `}</style>
 
       <div className="st-header">
-        <div className="st-title">⚙️ Settings</div>
+        <div className="st-title"><i className="bi bi-gear me-1" />Settings</div>
         <div className="st-sub">Manage your admin profile and system configuration</div>
       </div>
 
       <div className="st-grid">
         {/* Profile */}
         <div className="st-card">
-          <div className="st-card-title">👤 Admin Profile</div>
-          {saved && <div className="st-success">✅ Settings saved successfully!</div>}
+          <div className="st-card-title"><i className="bi bi-person-circle me-1" />Admin Profile</div>
+          {saved && <div className="st-success"><i className="bi bi-check-circle me-1" />Settings saved successfully!</div>}
           <form onSubmit={handleSave}>
             <div className="st-field">
               <label>Full Name</label>
@@ -73,7 +73,7 @@ const Settings = () => {
 
         {/* System Info */}
         <div className="st-card">
-          <div className="st-card-title">🖥️ System Information</div>
+          <div className="st-card-title"><i className="bi bi-display me-1" />System Information</div>
           {[
             { label: 'Platform',        value: 'TokenWalla'            },
             { label: 'Version',         value: 'v1.0.0'                },
@@ -91,7 +91,7 @@ const Settings = () => {
 
         {/* Password */}
         <div className="st-card">
-          <div className="st-card-title">🔐 Change Password</div>
+          <div className="st-card-title"><i className="bi bi-shield-lock me-1" />Change Password</div>
           <div className="st-field">
             <label>Current Password</label>
             <input type="password" placeholder="Enter current password" />
@@ -112,7 +112,7 @@ const Settings = () => {
         {/* Danger Zone */}
         <div>
           <div className="st-danger-zone">
-            <div className="st-danger-title">⚠️ Danger Zone</div>
+            <div className="st-danger-title"><i className="bi bi-exclamation-triangle me-1" />Danger Zone</div>
             <div className="st-danger-sub">These actions are irreversible. Proceed with extreme caution.</div>
             <button className="st-warn-btn" onClick={() => alert('Feature coming soon')}>Clear Cache</button>
             <button className="st-warn-btn" onClick={() => alert('Feature coming soon')}>Export Data</button>

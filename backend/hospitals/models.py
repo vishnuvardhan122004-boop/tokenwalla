@@ -1,5 +1,39 @@
 from django.db import models
 
+# Hospitals whose name starts with this marker are internal fixtures for
+# demoing and manual testing. They must never appear in a patient-facing list.
+#
+# This is a name convention rather than a column on purpose: the convention
+# already exists in the data and in the mobile app's own filter, so matching it
+# needs no migration and no touch of live rows. A real `is_test` flag would be
+# better, but it would mean editing production data to set it, which is not
+# something a session should do. Revisit when there's a reason to.
+TEST_HOSPITAL_PREFIX = '[TEST]'
+
+
+def exclude_test_hospitals(qs, field='name'):
+    """Drop internal test hospitals from a queryset.
+
+    `field` is the path to the hospital's name, so this works on Hospital
+    itself ('name') and on anything related to it ('hospital__name').
+    """
+    return qs.exclude(**{f'{field}__istartswith': TEST_HOSPITAL_PREFIX})
+
+
+def show_test_hospitals_to(user) -> bool:
+    """Only signed-in hospital staff and admins see the test fixtures.
+
+    Everyone else — anonymous visitors and patients — gets the filtered list.
+    Staff keep seeing them so the demo hospital stays usable from the
+    dashboard, which is the whole reason it exists.
+    """
+    return bool(
+        user
+        and getattr(user, 'is_authenticated', False)
+        and getattr(user, 'role', None) in ('hospital', 'admin')
+    )
+
+
 class Hospital(models.Model):
     name     = models.CharField(max_length=200)
     city     = models.CharField(max_length=100)
@@ -11,6 +45,9 @@ class Hospital(models.Model):
     latitude  = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
     mobile   = models.CharField(max_length=15, unique=True)
+    # Optional landline (e.g. "08812-234567"). Display / call-me-back only —
+    # `mobile` stays the login identity and the only number we ever text.
+    landline = models.CharField(max_length=20, blank=True, default='')
     email    = models.EmailField(blank=True)
     image    = models.ImageField(upload_to='hospitals/', blank=True)          # banner
     logo     = models.ImageField(upload_to='hospital_logos/', null=True, blank=True)
@@ -24,6 +61,10 @@ class Hospital(models.Model):
     description  = models.TextField(blank=True)
     # Short notice shown to patients (e.g. "Dr. X on leave Friday")
     announcement = models.CharField(max_length=300, blank=True)
+    # Last day the announcement is shown. Null = show until the hospital clears
+    # it. A holiday notice nobody remembers to delete is worse than none, so the
+    # hospital can set the date it stops mattering.
+    announcement_until = models.DateField(null=True, blank=True)
     # Working hours in 24h "HH:MM" (blank = not set)
     open_time    = models.CharField(max_length=5, blank=True)
     close_time   = models.CharField(max_length=5, blank=True)

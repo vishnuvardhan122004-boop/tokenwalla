@@ -45,7 +45,7 @@ const Overview = ({ pendingCount }) => {
 
   if (error) return (
     <div style={{ background: '#FCEBEB', border: '1px solid #F09595', borderRadius: 12, padding: '14px 18px', color: '#A32D2D', fontSize: 14 }}>
-      ⚠️ {error}
+      <i className="bi bi-exclamation-triangle me-1" />{error}
     </div>
   );
 
@@ -56,14 +56,14 @@ const Overview = ({ pendingCount }) => {
   const revenue      = bookingsArr.reduce((a, b) => a + (b.amount || 0), 0);
 
   const statCards = [
-    { icon: '👥', label: 'Total Users',    val: users.length,         accent: '#185FA5' },
-    { icon: '🏥', label: 'Total Bookings', val: stats.total || 0,     accent: '#0EA5E9' },
-    { icon: '✅', label: 'Completed',      val: stats.completed || 0,  accent: '#3B6D11' },
-    { icon: '⏳', label: 'Waiting',        val: stats.waiting || 0,   accent: '#854F0B' },
-    { icon: '🔄', label: 'In Progress',    val: inProgress,           accent: '#0EA5E9' },
-    { icon: '🩺', label: 'Patients',       val: patientCount,         accent: '#7C3AED' },
-    { icon: '🏨', label: 'Hospitals',      val: hospCount,            accent: '#0D9488' },
-    { icon: '💰', label: 'Revenue',        val: `₹${revenue.toLocaleString('en-IN')}`, accent: '#185FA5' },
+    { icon: 'bi-people', label: 'Total Users',    val: users.length,         accent: '#185FA5' },
+    { icon: 'bi-hospital', label: 'Total Bookings', val: stats.total || 0,     accent: '#0EA5E9' },
+    { icon: 'bi-check-circle', label: 'Completed',      val: stats.completed || 0,  accent: '#3B6D11' },
+    { icon: 'bi-hourglass-split', label: 'Waiting',        val: stats.waiting || 0,   accent: '#854F0B' },
+    { icon: 'bi-arrow-repeat', label: 'In Progress',    val: inProgress,           accent: '#0EA5E9' },
+    { icon: 'bi-clipboard-pulse', label: 'Patients',       val: patientCount,         accent: '#7C3AED' },
+    { icon: 'bi-buildings', label: 'Hospitals',      val: hospCount,            accent: '#0D9488' },
+    { icon: 'bi-cash-coin', label: 'Revenue',        val: `₹${revenue.toLocaleString('en-IN')}`, accent: '#185FA5' },
   ];
 
   return (
@@ -113,7 +113,7 @@ const Overview = ({ pendingCount }) => {
       {/* Pending hospitals alert on overview */}
       {pendingCount > 0 && (
         <div className="ov-alert">
-          <div className="ov-alert-icon">🔔</div>
+          <div className="ov-alert-icon"><i className="bi bi-bell me-1" /></div>
           <div>
             <div className="ov-alert-text">
               {pendingCount} hospital{pendingCount > 1 ? 's' : ''} awaiting approval
@@ -132,7 +132,7 @@ const Overview = ({ pendingCount }) => {
         {statCards.map(({ icon, label, val, accent }) => (
           <div className="ov-card" key={label}>
             <div className="ov-card-bar" style={{ background: accent }} />
-            <span className="ov-card-icon">{icon}</span>
+            <span className="ov-card-icon"><i className={`bi ${icon}`} /></span>
             <div className="ov-card-val">{val}</div>
             <div className="ov-card-label">{label}</div>
           </div>
@@ -142,7 +142,7 @@ const Overview = ({ pendingCount }) => {
       <div className="ov-table-wrap">
         <div className="ov-table-head">
           <div>
-            <div className="ov-table-title">🕐 Recent Bookings</div>
+            <div className="ov-table-title"><i className="bi bi-clock me-1" />Recent Bookings</div>
             <div className="ov-table-sub">
               Last {Math.min(bookingsArr.length, 10)} · Revenue ₹{revenue.toLocaleString('en-IN')}
             </div>
@@ -237,12 +237,12 @@ const Adashboard = () => {
   const pageLabel = PAGE_LABELS[location.pathname] || 'Overview';
 
   const NAV_ITEMS = [
-    { to: 'user-management', icon: '👥', label: 'User Management',     badge: null         },
-    { to: 'hospitals',       icon: '🏥', label: 'Hospitals / Doctors',  badge: pendingCount },
-    { to: 'reports',         icon: '📋', label: 'Reports',              badge: null         },
-    { to: 'payouts',         icon: '💸', label: 'Doctor Payouts',       badge: null         },
-    { to: 'support',         icon: '🎧', label: 'Support',              badge: null         },
-    { to: 'settings',        icon: '⚙️', label: 'Settings',             badge: null         },
+    { to: 'user-management', icon: 'bi-people', label: 'User Management',     badge: null         },
+    { to: 'hospitals',       icon: 'bi-hospital', label: 'Hospitals / Doctors',  badge: pendingCount },
+    { to: 'reports',         icon: 'bi-clipboard', label: 'Reports',              badge: null         },
+    { to: 'payouts',         icon: 'bi-cash-stack', label: 'Doctor Payouts',       badge: null         },
+    { to: 'support',         icon: 'bi-headset', label: 'Support',              badge: null         },
+    { to: 'settings',        icon: 'bi-gear', label: 'Settings',             badge: null         },
   ];
 
   return (
@@ -313,7 +313,7 @@ const Adashboard = () => {
                 to={item.to}
                 className={({ isActive }) => `adb-nav-link${isActive ? ' active' : ''}`}
               >
-                <span className="adb-nav-icon">{item.icon}</span>
+                <span className="adb-nav-icon"><i className={`bi ${item.icon}`} /></span>
                 {item.label}
                 {item.badge > 0 && (
                   <span className="adb-nav-badge">{item.badge}</span>
@@ -332,7 +332,7 @@ const Adashboard = () => {
                 </div>
               </div>
             )}
-            <button className="adb-logout" onClick={logout}>🚪 Sign Out</button>
+            <button className="adb-logout" onClick={logout}><i className="bi bi-box-arrow-right me-1" />Sign Out</button>
           </div>
         </aside>
 
@@ -341,7 +341,7 @@ const Adashboard = () => {
             <div className="adb-page-title">
               Admin Dashboard — {pageLabel}
               {pageLabel === 'Hospitals & Doctors' && pendingCount > 0 && (
-                <span className="adb-topbar-pending">⏳ {pendingCount} pending</span>
+                <span className="adb-topbar-pending"><i className="bi bi-hourglass-split me-1" />{pendingCount} pending</span>
               )}
             </div>
             <div className="adb-badge"><span className="adb-dot" /> Admin</div>

@@ -3,9 +3,12 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `feature/fee-splitting-refunds-payouts` (web/backend) · `main` (mobile app repo)
-- **Latest commit at last update:** `d79103e` (web/backend) — back to Razorpay + manual doctor payouts; mobile app still on the Cashfree SDK
-- **Last updated:** 2026-08-05
+- **Branch:** unmerged — `feat/app-version-gate` + `perf/dashboard-visible-polling` (web/backend) · `payments-server-priced-checkout` + `fix/map-load-timeout` + `fix/app-profile-announcement-readview` (app). Merged 2026-08-13: PRs #13–#16 (web/backend), PR #3 (app). Dead branches to delete: `fix/hide-test-hospitals`, `docs/wrap-2026-08-11-s3`.
+- **Latest commit at last update:** `5b2d9e2` main (web/backend) · `d4b1dc1` main + `ccd446b` (app)
+- **Last updated:** 2026-08-13 session 2 (mobile-responsive hospital screens; Railway not deploying)
+
+> ⛔ **Merged ≠ live.** Railway has not deployed since 2026-08-11 (unpaid bill).
+> Everything below marked ✅ is on `main` and green, not necessarily running.
 
 ### How to update this log
 - Add a new `## YYYY-MM-DD — <title>` section **on top** for each working session; keep older sessions below.
@@ -13,6 +16,561 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-13 (session 2) — Mobile-responsive hospital screens, and a stuck deploy
+
+Two threads. The planned one was making the hospital screens work on a phone.
+The unplanned one was discovering that **nothing has deployed since 2026-08-11**.
+
+| Change | Repo | Commit | Status |
+|---|---|---|---|
+| Dashboard: 44px tap targets, sticky save, 2×2 tabs, 3-col slot grid | web | `c232fcc` | ✅ merged (PR #16) |
+| Dashboard doctor card falls back to landline | web | `c232fcc` | ✅ merged (PR #16) |
+| Profile: 44px targets, sticky save, stacked detail rows | web | `0c5a706` | ✅ merged (PR #16) |
+| Profile: emoji → Bootstrap Icons, dynamically imported | web | `0c5a706` | ✅ merged (PR #16) |
+| App profile: announcement + expiry in the read view | app | `ccd446b` | 🕒 pushed, unmerged |
+| ROADMAP/WORKLOG corrections | docs | this | 🕒 pushed |
+
+### 1. The deploy is stuck, and item 2b was wrong
+Probed the live API rather than trusting the plan: `landline`,
+`announcement_until` and `announcement_active` are all absent, `/health/` still
+returns the old body, and `[TEST] Demo Hospital` plus its **₹388.37** doctor
+are **still visible to patients**. ROADMAP item 2b said that fix was "merged
+and live" — it was merged, never deployed. Cause is an unpaid Railway bill, so
+it is Vishnu's to clear. Corrected in ROADMAP as item 0, with a no-deploy
+mitigation (flip Heyi to `SERVICE_ONLY` in admin).
+
+### 2. Measure before redesigning
+At 375px: **90 tap targets under 44px** on the dashboard, **26** on the
+profile, and Save ~2,250px down both forms. Both now 0 undersized with sticky
+save bars. Desktop and tablet verified unchanged at 1280 and 768; no horizontal
+overflow at any of the three widths — that part was already fine and did not
+need touching.
+
+### 3. Two traps worth remembering
+- **Bootstrap's `.d-flex` is `!important`**, so a `display:grid` override loses
+  silently. The slot picker got its own class instead of an `!important` fight.
+- **A static `bootstrap-icons` import cost 13.82 kB gzip** in the bundle every
+  patient downloads, for a staff-only screen — the same trap Leaflet fell into
+  on 2026-08-11. Dynamic import; main CSS back to its 33.74 kB baseline.
+
+### 4. Cross-repo features finish in one repo
+Two gaps from the walk-in work, both presentation so no test caught them: the
+web doctor card had no landline fallback (the app did), and the app profile
+never showed the announcement back (the web did). Both fixed.
+
+### Verification
+181 backend · 20 web · 104 app tests pass. Web production build clean, app
+`tsc` clean. The responsive work was measured and re-measured in a real browser
+at 375/768/1280, not eyeballed.
+
+### Action items
+- [ ] **Pay the Railway bill, then confirm the deploy** (ROADMAP item 0)
+- [ ] Merge the app branch `fix/app-profile-announcement-readview`
+- [ ] Convert `Hdashboard.js` emoji to Bootstrap Icons (dynamic import)
+- [ ] Delete the two dead branches
+
+---
+
+## 2026-08-13 — Walk-in doctors, landline contacts, expiring notices
+
+A hospital visited that day could not be onboarded. One doctor runs the whole
+place and cannot promise a slot time, and the clinic answers a **landline**.
+Both were hard blocks in the upload form — not preferences, not polish. The
+hospital still wanted TokenWalla for what it *could* do: publish timings, post
+holidays and offers, and be findable.
+
+| Change | Repo | Commit | Status |
+|---|---|---|---|
+| Zero slots is a valid doctor — "select at least one time slot" removed | web/backend | `57fb775` | ✅ merged (PR #13) |
+| Zero slots is a valid doctor — app dashboard | app | `a5f1788` | 🕒 pushed, unmerged |
+| `Hospital.landline` + `Doctor.landline`, `Doctor.mobile` now optional | web/backend | `57fb775` | ✅ merged (PR #13) |
+| `Hospital.announcement_until` + server-computed `announcement_active` | web/backend | `57fb775` | ✅ merged (PR #13) |
+| Patient walk-in view (hours + days + call button, no booking CTA) | web/backend | `57fb775` | ✅ merged (PR #13) |
+| Patient walk-in view + landline fields + expiry input | app | `a5f1788` | 🕒 pushed, unmerged |
+| `walk_in_contact` string in all four languages | app | `a5f1788` | 🕒 pushed, unmerged |
+
+### 1. Zero slots — a listing, not a misconfiguration
+The rule lived only in the two dashboards' client-side validation; the backend
+never required slots. Both patient screens **already** handled an empty list
+("No slots configured"), so most of the work was turning that dead-end string
+into something useful: hospital hours, the doctor's days, and a call button.
+
+**No booking CTA in walk-in mode**, on purpose. The payment path is built around
+a slot — `create-order` validates `slot in doctor.slots` — so there is no token
+to sell, and a pay button that produced nothing would be taking money for
+nothing. `days` stays required: which days the doctor sits is real information
+even without times.
+
+### 2. Landline is a separate column, not a looser `mobile`
+The tempting one-line fix — relax the mobile regex — would have been wrong.
+`Hospital.mobile` is the **login username** and the OTP destination;
+`Doctor.mobile` is where `send_doctor_payout_paid` sends WhatsApp. A landline in
+either field breaks something silently. So `landline` is its own column on both
+models, a doctor needs **one or the other**, and the two patterns live together
+in `tokenwalla/utils.py` so the web and app validators cannot drift from the
+server.
+
+Patterns, as specified: mobile `^[6-9][0-9]{9}$`, landline
+`^0[1-9][0-9]{1,3}[- ]?[0-9]{6,8}$`.
+
+### 3. Announcements that expire
+The hospital wanted to post holidays and offers — `Hospital.announcement`
+already did that. What it lacked was an end date, so a "Closed for Sankranti"
+notice would sit there in March. One nullable `announcement_until`, plus
+`announcement_active` computed **server-side** so the website and the app cannot
+disagree, and an older app build that ignores the flag behaves exactly as
+before. A date-based holiday calendar was considered and skipped — the free-text
+notice plus an expiry covers what was actually asked for.
+
+### Contract and migration safety
+Every API change is **additive** — new optional fields on existing endpoints —
+so installed 1.1.3 apps are unaffected and the backend could merge before the
+app. Both migrations add nullable/blank columns only and are safe to run before
+the code that reads them.
+
+### Verification
+- 113 tests on `main` (14 new), 181 on the merged docs branch, `makemigrations
+  --check` clean, zero `graph.facebook.com` lines under `-v 2`.
+- Web production build clean; app `tsc --noEmit` clean.
+- **Driven in a real browser** against a local server: created a doctor through
+  the actual hospital dashboard with **no mobile, a landline and zero slots** —
+  it saved, the card showed the walk-in badge, and the patient page rendered the
+  walk-in view with a working `tel:` button. An announcement dated yesterday
+  stopped showing. A slotted doctor was unchanged.
+
+### Two things to know
+- **The branch was cut from a stale local `main`** (33 commits behind) after the
+  session had already read the code on `docs/wrap-2026-08-11-s3`. Nothing was
+  lost, but PR #13 collided with `fix/hide-test-hospitals` on a two-line import
+  in `backend/hospitals/views.py`. That was resolved inside PR #14, which
+  therefore shipped a **patient-facing code fix inside a docs PR** — it is live
+  and green, but it is not how it should have gone: the conflict belonged on the
+  code branch. Both rules are now in ROADMAP item 1. **Fetch before branching,
+  and keep docs branches docs-only.**
+- **The local dev sqlite was changed while testing**: migrations applied, the
+  Demo Hospital's password hash overwritten with `localdev123` (the original
+  cannot be restored — reset it whenever), and a `Walkin Landline Doc` fixture
+  left behind. Local only; production was never touched.
+
+### Action items
+- [x] Merge `feat/walkin-doctors-landline` (web/backend) — PR #13, live
+- [x] Merge the wrap — PR #14, live. Carried `fix/hide-test-hospitals` with it.
+- [ ] Merge the app branch `feat/walkin-doctors-landline` (after the 1.2.0 pair)
+- [ ] Delete the dead branches `fix/hide-test-hospitals` and `docs/wrap-2026-08-11-s3`
+- [ ] Run the app walk-in screen on a device once (`npx expo start`)
+- [ ] Reset the local Demo Hospital password if `localdev123` bothers you
+
+---
+
+## 2026-08-11 (session 3) — Release gate, and two production fixes rescued
+
+Asked whether the app could go to the Play Store today. **Answer: no.** Also
+found complete-but-uncommitted production bug fixes in the working tree and
+landed them before they were lost.
+
+| Change | Repo | Commit | Status |
+|---|---|---|---|
+| `.easignore` so `google-services.json` reaches EAS | app | PR #2 | ✅ **merged** |
+| Map picker: 12s deadline + Try again instead of an endless spinner | app | `a98fa2b` | ✅ pushed, unmerged |
+| Hide `[TEST]` hospitals from patients; anon throttle 60→300/min | web | `3197377` | ✅ pushed, unmerged |
+| Hospital location picker (profile + signup) | web | PR #12 | ✅ **merged** |
+
+- **Play Store verdict: not ready.** No branch contained a shippable app —
+  `main` was 1.1.3 with the picker but none of the 13 release commits, and the
+  release branch had 1.2.0 without the picker. A build from `main` would have
+  shipped the broken checkout under a non-new version number. Merge is clean and
+  yields 1.2.0 with everything.
+- **Android push would have been dead in the build.** `google-services.json` is
+  gitignored so EAS never got it. `.easignore` *replaces* `.gitignore` for EAS
+  rather than extending it, so it had to be a full mirror — a minimal one would
+  have uploaded `node_modules` and the local `ios/` Pods tree and flipped EAS
+  into a bare-workflow build. Verified by diffing both rule sets: exactly one
+  path changes state, and the keystore and service-account keys stay excluded.
+- **No crash reporting at all** — `sentryDsn` is `""`, plus
+  `SENTRY_DISABLE_AUTO_UPLOAD` on all three profiles. Flagged, not fixed.
+- **`[TEST] Demo Hospital` was patient-visible**, and its doctor is the only
+  `FULL`-collection row in the system, so a patient could have been charged for
+  an appointment that does not exist. Was sitting uncommitted on an
+  already-merged branch behind a stale `.git/index.lock`; lock cleared, verified,
+  pushed.
+- **Two verification methods that were wrong and got corrected:** an ignore-rule
+  check using `git check-ignore --no-index --exclude-from` silently ignores the
+  exclude file and reported everything as included — redone with
+  `git ls-files -o -i -X`. And `$b:app.json` in zsh is a `:a` path modifier, not
+  a git revision.
+
+**Tests:** backend 167 pass + `makemigrations --check` clean; app `tsc` clean,
+104 pass, lint clean, Android and iOS bundles both build.
+
+**Not proven:** the app's React Native layer — picker, map failure path,
+`expo-location` — has still never run. No simulator or Android SDK on this
+machine (Command Line Tools only, no Xcode), so it cannot be checked from a
+session. Needs a preview build on a real Android phone.
+
+---
+
+## 2026-08-12 (auto) — Session update @ 23:44
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:38
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:32
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:30
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:26
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:20
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:12
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:07
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:04
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+## 2026-08-12 (auto) — Session update @ 12:01
+
+Auto-generated snapshot (branch `docs/wrap-2026-08-11`, 8 changed files).
+
+```
+M ROADMAP.md
+ M TASKS.md
+ M WORKLOG.md
+ M backend/doctors/views.py
+ M backend/hospitals/models.py
+ M backend/hospitals/views.py
+ M backend/tokenwalla/settings.py
+?? backend/hospitals/tests_test_hospital_visibility.py
+```
+
+---
+
+
+---
+
+## 2026-08-11 (session 3) — verified production, found two live bugs
+
+No merges. This session read production rather than writing to it, and four
+items that were open turned out to be already done.
+
+### Verified done — stop re-doing these
+
+| Item | Evidence |
+|---|---|
+| **Redis** | Online with `redis-volume`; `REDIS_URL` + `USE_REDIS_CACHE` set; canvas draws a `${{...}}` reference edge. **Serving**: live `:1:throttle_user_…` / `:1:throttle_anon_…` keys in the data browser |
+| **Payouts cron** | Ran `2026-08-10 20:31:57`, 3s, logged `Ledgered 0 booking(s)…`. Schedule "03:00 pm (UTC)" = 20:30 IST |
+| **Reminders cron** | Every 10 min without a gap, 08-10 13:00 → 08-11 14:50, each logging `Reminder run complete. Sent 0 reminder(s).` |
+| **EAS build** | Production **1.1.3 (36)**, `eddf5dd`, 8 Aug. `merge-base` proves `cb3d29d` (Razorpay checkout) is in it |
+
+### Two live bugs, fixed in the working tree (UNCOMMITTED — `.git/index.lock`)
+
+| Bug | Why it matters | Fix |
+|---|---|---|
+| `[TEST] Demo Hospital` publicly listed | Its doctor is the **only** `FULL`-collection row → a patient could be charged **₹388.37** for a fake appointment, and we would owe a payout on it | `TEST_HOSPITAL_PREFIX` + `exclude_test_hospitals()` + `show_test_hospitals_to()`; 9 tests |
+| `anon` throttle 60/min, keyed on IP | Indian CGNAT shares one IP across a neighbourhood; ~5 concurrent visitors → 429 for everyone behind that carrier | → `ANON_RATE`, default 300/min, env-overridable |
+
+Backend **167 tests** (158 + 9), 10 consecutive green runs, no migration.
+
+### Found, not fixed
+
+- **The app shows ₹15; the backend charges ₹25.37.** `PLATFORM_FEE` became ₹20
+  on 2026-07-28 (`7b2a01c`); build 36 still ships `₹15`. Two weeks live. Last
+  booking was 26 July, two days before the change.
+- **EAS Submissions is empty** — nothing has ever been submitted through EAS, so
+  the Play build was uploaded by hand and EAS cannot say which version is live.
+  Only Play Console can answer that.
+- **`OTP_MAX_SENDS_PER_IP_PER_DAY=200`** on `feat/app-version-gate` has the same
+  CGNAT problem as the burst it was written to fix, but daily and harsher.
+
+### The conclusion that changes the plan
+
+**The funnel is empty, not broken.** The shipped build matches the backend, the
+backend is healthy, nothing technical stops a booking. Four bookings ever is a
+demand problem, and no further hardening moves it. The bugs above are worth
+fixing because they will embarrass a campaign — not because they explain the
+silence.
+
+**Also worth naming: the throttle counters only became accurate when Redis went
+live.** `DatabaseCache.incr` is a read-modify-write, so every rate limit had been
+leaking. The cutover silently tightened limits that had never bitten, days
+before a traffic spike. Both throttle findings this session trace back to that.
+
+
+## 2026-08-11 (session 2) — Hospital location picker on all three surfaces
+
+Hospitals could save a city and a free-text landmark, never an accurate pin.
+Added a map picker to the web profile editor, the web signup page and the app
+hospital profile. **Nothing merged; two new branches pushed, same name in both
+repos.**
+
+| Change | Repo | Commit | Status |
+|---|---|---|---|
+| `LocationPicker.js` — modal, fixed centre pin, geolocation, live reverse-geocode | web | `cae5cdc` | ✅ pushed, unmerged |
+| Lazy-load Leaflet so patients don't pay 47 kB for a hospital screen | web | `c96ab27` | ✅ pushed, unmerged |
+| Same picker on `/Husercreate` + refuse a pin below zoom 14 | web | `50fb1e2` | ✅ pushed, unmerged |
+| `LocationPickerModal.tsx` + `placeLabel.ts` + `mapHtml.ts` | app | `83236ad` | ✅ pushed, unmerged |
+
+- **No Google Maps key anywhere.** Stayed on the free key-less rail
+  `LocationSearch` already used — OSM tiles + Photon geocoding.
+- **No new app dependency, native or JS.** `react-native-maps` would have forced
+  an EAS rebuild *and* an Android Maps API key. Leaflet runs in the WebView
+  already shipped for Razorpay checkout; `expo-location` was already installed
+  with its permission strings already in `app.json`.
+- **Confirm is disabled below zoom 14** (web + app). Caught while testing signup:
+  the map opens at state zoom with no saved location, and a one-click confirm
+  would have pinned the middle of Telangana — patients routed tens of km wrong.
+- **`ResizeObserver`, not a timeout**, for Leaflet's stale container size — it
+  rendered half a grey panel inside the modal. Also covers rotation and resize.
+- **Bundle:** main back to baseline, Leaflet in a 42.9 kB on-demand chunk.
+- **`package-lock.json` shed 132 orphaned `react-native-*` entries** left by the
+  removed `react-native-razorpay`. Makes that PR's diff look bigger than it is.
+
+**Tests:** web 20 pass (7 new, Photon address mapping) + production build clean;
+app 104 pass (15 new), `tsc` 0, lint clean on new files. The web picker was
+driven end to end in a browser — drag re-geocodes, both geolocation branches,
+zoom guard blocks at z6 and releases at z15. The app's WebView page was
+compiled, served and driven with a stubbed `ReactNativeWebView`.
+
+**Not proven:** the app's React Native layer (Modal, WebView wiring,
+`expo-location` permission flow) has never run on a device or simulator.
+Gate on merging the app branch.
+
+**Also learned:** `gh` is not authenticated on this machine, so a session cannot
+open PRs at all — they have to be created by hand from the `pull/new/<branch>`
+links. Second session this has cost time.
+
+---
+
+## 2026-08-11 — Back-nav root cause, the update gate, and pre-promotion capacity
+
+**Branches:** `feat/app-version-gate` (backend) · `perf/dashboard-visible-polling` (web) · `payments-server-priced-checkout` (app) — **all three pushed, none merged.**
+
+Context: a promotion is starting, so registration traffic is expected for the
+first time. That promoted capacity work deferred on 2026-08-09 and made the
+unshipped app build urgent.
+
+| Change | What it fixed | Proof | Status |
+|---|---|---|---|
+| `411c311` `backBehavior="history"` on the patient Tabs | **The actual back-button bug.** Hidden `Tabs.Screen`s (`href: null`) fell through to the tab router's `firstRoute` default → every back went to Home | Verified against the installed `@react-navigation/routers` source (`TabRouter.tsx:197`) | 🕒 needs EAS build |
+| `d9b0420` `safeBack` on 8 back buttons | Stranded users on deep links / notification taps where `canGoBack()` is false | 3 tests | 🕒 needs EAS build |
+| `843e76a` `hooks/useAndroidBack.ts` on 21 screens | Android hardware back ignored entirely; hospital/auth stacks exited the app | tsc + 103 jest; cross-checked hw back vs button on all 21 | 🕒 needs EAS build |
+| `0e744ff` `GET /api/app-version/` | No way to tell installed apps to update without a store release | 5 tests; blank default = no prompt | ⬜ unmerged |
+| `6a48655` launch-time update prompt | — | 14 tests on the compare/decide logic | 🕒 needs EAS build |
+| `6a48655` `/app-version/` added to `PUBLIC_ROUTES` | Caught in review: a stale token would 401 the launch check and trigger refresh-retry, **logging the patient out over a version check** | 1 test | 🕒 needs EAS build |
+| `2fd23a7` OTP per-IP burst 5→20/min + new 200/day ceiling | 5/min per IP 429s real signups behind carrier NAT — the exact lesson `OTPVerifyRateThrottle` already recorded for verify but never applied to sends | 4 tests; ~36× tighter on sustained abuse than before | ⬜ unmerged |
+| `e204401` `/health/` cache probe | Redis cutover had no confirmation step; the `USE_REDIS_CACHE and REDIS_URL` gate fails *silently* if the `${{Redis…}}` reference is missing | 5 tests, incl. "unreachable cache must not 500 or flip status" | ⬜ unmerged |
+| `aa707e2` hospital dashboard uses `useVisiblePolling` | Dashboard polled `/bookings/queue/:id/` every 10s all day behind other windows | 5 new tests (the hook had none) | ⬜ unmerged |
+| `9280e4e` ₹15 → ₹20 in 4 languages | App quoted a price the backend stopped charging | Checked against `PLATFORM_FEE = 20.00` | 🕒 needs EAS build |
+| `f1790a8` notification small icon wired into the plugin | `expo-notifications` had `color` but no `icon` | Asset verified 96×96, 82% transparent, opaque px pure white | 🕒 needs EAS build |
+| `e57245e` `622b148` `754e8ff` `4ace625` `421c6ec` `0c8cef3` | Search typeahead, chip icons, branding, dev tooling, EAS Sentry flag, **v1.2.0** | tsc clean, 118 jest | 🕒 needs EAS build |
+
+**Tests:** backend 158 → **172** · app 100 → **118** · web 13 → **18**.
+
+**The correction worth remembering:** `d9b0420` was described as fixing the
+jump-to-Home. It did not. `safeBack` only acts when `canGoBack()` is false, and
+under `backBehavior: 'firstRoute'` it is true — so `back()` ran and the tab
+router went to Home anyway. The fix was one line in the layout, found only by
+reading the router source instead of trusting the first plausible story.
+
+**Action items**
+- [ ] Open + merge the three PRs (backend → web → app)
+- [ ] Attach Redis, set the two vars, confirm via `/health/`
+- [ ] EAS build — **check the existing build list first**
+- [ ] Verify both crons and the WhatsApp token
+- [ ] Check the 2Factor SMS balance before the campaign ramps
+
+---
+
+## 2026-08-10 — PR #10 shipped; the CI flake was three leaks, not one
+
+**Branch:** `fix/enforce-slot-capacity` → merged as `b719378` · **App:** `5b11bd7`
+
+| Change | What it fixed | Proof | Status |
+|---|---|---|---|
+| `dcd4c16` patch `_notify_doctor_payout_async` + `_notify_doctor_unavailable` in tests | The red CI job. `database table is locked` on a random unrelated test | Reproduced ~1 run in 4; **57 consecutive green runs** after | ✅ |
+| `dcd4c16` drop the last hard-coded date literal | `tests_integration` reschedule test would have rotted past the 2h cutoff | Computed from `timezone.localdate()` | ✅ |
+| PR #10 merged + deployed | Slot capacity, queue bounds, gunicorn 3×4, daily-ops card now live | Vercel READY on `b719378`; `/api/payment/daily-summary/` 200 from Railway; card renders | ✅ |
+| App `5b11bd7` — `date`/`slot` top-level on `create-order/` | App never got the pre-payment rejection; every collision charged then refunded | `tsc` clean, jest 100/100 | 🕒 needs EAS build |
+| App `5b11bd7` — error handler reads server message before `e.message` | axios's `"Request failed with status code 409"` was masking the real explanation | same | 🕒 needs EAS build |
+| App `5b11bd7` — stop retrying 4xx on `/verify/` | 409 is final; retrying added ~4.5s before the patient heard it | same | 🕒 needs EAS build |
+
+### What the flake actually was
+
+`1aa50cc` patched `_dispatch_booking_notifications` and was not enough because
+there are **four** notification threads in views, not one, and two more were
+unpatched: the payout mark-paid path and the doctor-unavailable toggle. Both
+open their own DB connection and make a **real outbound WhatsApp call** during
+the suite. The thread's output lands on whichever test is running when it
+finishes, so the reported failing test is never the offender.
+
+**The check that actually proves it:** `manage.py test -v 2` with zero
+`graph.facebook.com` lines. Recorded in `CLAUDE.md` with the full table.
+
+### Corrections to earlier notes (all were wrong, all verified today)
+
+- The app is **fully on Razorpay**. Line 7 of this file said Cashfree — stale
+  since `cb3d29d` (2026-08-05).
+- `/api/bookings/upgrade/` does not return 400. It **does not exist** — not in
+  `bookings/urls.py`, and the app has zero references to it. Item #9 below is dead.
+- The branch carried **three** migrations, not one (`users/0003_ratecounter`
+  plus `notifications/0007` and `0008`). All additive.
+- `run_daily_payouts` will **not** ledger a backlog: every booking is ₹15
+  service-fee-only, so `doctor_fee` is 0 and nothing is owed.
+- `ledger_not_running` is **not** firing, so it cannot clear as proof the cron
+  ran. The Railway service log is the only signal.
+
+### The number that isn't in any table
+
+27 users · 11 hospitals live · 8 doctors · **4 bookings ever** · ₹60 lifetime ·
+last booking **2026-07-26**. The hardening shipped this week is correct work for
+a load that has not arrived. Whether the funnel is broken or empty is unresolved
+and is now item 5 in ROADMAP **Now**.
 
 ---
 

@@ -85,34 +85,34 @@ const Reports = () => {
       `}</style>
 
       <div className="rp-header">
-        <div className="rp-title">📋 Booking Reports</div>
+        <div className="rp-title"><i className="bi bi-clipboard me-1" />Booking Reports</div>
         <div className="rp-sub">Detailed view of all platform bookings and revenue</div>
       </div>
 
       {error && (
         <div style={{ background: 'var(--color-error-bg)', border: '1px solid var(--color-error-border)', borderRadius: 12, padding: '12px 16px', color: 'var(--color-error-text)', fontSize: 14, marginBottom: 20 }}>
-          ⚠️ {error}
+          <i className="bi bi-exclamation-triangle me-1" />{error}
         </div>
       )}
 
       <div className="rp-stats">
         <div className="rp-stat p">
-          <div style={{ fontSize: '1.4rem', marginBottom: 8 }}>📊</div>
+          <div style={{ fontSize: '1.4rem', marginBottom: 8 }}><i className="bi bi-bar-chart me-1" /></div>
           <div className="rp-stat-val">{data.total}</div>
           <div className="rp-stat-label">Total Bookings</div>
         </div>
         <div className="rp-stat s">
-          <div style={{ fontSize: '1.4rem', marginBottom: 8 }}>✅</div>
+          <div style={{ fontSize: '1.4rem', marginBottom: 8 }}><i className="bi bi-check-circle me-1" /></div>
           <div className="rp-stat-val">{data.completed}</div>
           <div className="rp-stat-label">Completed</div>
         </div>
         <div className="rp-stat w">
-          <div style={{ fontSize: '1.4rem', marginBottom: 8 }}>⏳</div>
+          <div style={{ fontSize: '1.4rem', marginBottom: 8 }}><i className="bi bi-hourglass-split me-1" /></div>
           <div className="rp-stat-val">{data.waiting}</div>
           <div className="rp-stat-label">Waiting</div>
         </div>
         <div className="rp-stat i">
-          <div style={{ fontSize: '1.4rem', marginBottom: 8 }}>💰</div>
+          <div style={{ fontSize: '1.4rem', marginBottom: 8 }}><i className="bi bi-cash-coin me-1" /></div>
           <div className="rp-revenue">₹{revenue.toLocaleString('en-IN')}</div>
           <div className="rp-stat-label">Total Revenue</div>
         </div>
@@ -120,7 +120,7 @@ const Reports = () => {
 
       <div className="rp-toolbar">
         <div className="rp-search-wrap">
-          <span className="rp-search-icon">🔍</span>
+          <span className="rp-search-icon"><i className="bi bi-search me-1" /></span>
           <input
             className="rp-search"
             placeholder="Search token, patient…"

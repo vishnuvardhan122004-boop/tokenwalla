@@ -70,7 +70,7 @@ export default function BookingToken() {
 
   const queueMsg = () => {
     if (queuePos === null)  return 'Loading queue position...';
-    if (queuePos === 0)     return '✅ Your turn — please go in now!';
+    if (queuePos === 0)     return 'Your turn — please go in now!';
     if (queuePos === 1)     return "You're next! Head to the clinic";
     return `${queuePos - 1} patient${queuePos > 2 ? 's' : ''} ahead of you`;
   };
@@ -196,7 +196,7 @@ export default function BookingToken() {
       <div className="bt-root">
         <div className="bt-grid" />
         <div className="bt-inner">
-          <div className="bt-success-icon">✅</div>
+          <div className="bt-success-icon"><i className="bi bi-check-circle me-1" /></div>
           <div className="bt-title">Booking Confirmed!</div>
           <p className="bt-sub">Your appointment is booked. Show this token at the hospital.</p>
 
@@ -240,12 +240,12 @@ export default function BookingToken() {
               </div>
               <div className="bt-info-item full">
                 <div className="bt-info-label">Hospital</div>
-                <div className="bt-info-value">🏥 {hospital || '—'}</div>
+                <div className="bt-info-value"><i className="bi bi-hospital me-1" />{hospital || '—'}</div>
               </div>
               <div className="bt-info-item full">
                 <div className="bt-info-label">Doctor Contact</div>
                 <div className="bt-info-value">
-                  📞{' '}
+                  <i className="bi bi-telephone me-1" />{' '}
                   <a href={`tel:${location.state?.doctorMobile}`} style={{ color: 'var(--blue-600)', textDecoration: 'none', fontWeight: 500 }}>
                     {location.state?.doctorMobile || '—'}
                   </a>
@@ -277,7 +277,7 @@ export default function BookingToken() {
 
             <div className={`bt-queue-row ${queue_access ? 'has-access' : 'no-access'}`}>
               <div className="bt-queue-icon" style={{ background: queue_access ? 'var(--blue-100)' : 'var(--gray-100)' }}>
-                {queue_access ? '📍' : '🎫'}
+                <i className={`bi ${queue_access ? "bi-geo-alt" : "bi-ticket-perforated"}`} />
               </div>
               <div>
                 <div className="bt-queue-title">{queue_access ? 'Queue View Active' : 'Basic Token'}</div>
@@ -310,7 +310,7 @@ export default function BookingToken() {
               className="btn-outline"
               style={{ justifyContent: 'center', padding: 14, borderRadius: 12, fontSize: 15, cursor: downloading ? 'wait' : 'pointer' }}
             >
-              {downloading ? 'Preparing ticket…' : '⬇ Download Ticket'}
+              {downloading ? 'Preparing ticket…' : 'Download Ticket'}
             </button>
             <Link to="/my-bookings" className="btn-primary" style={{ justifyContent: 'center', padding: 15, borderRadius: 12, fontSize: 15 }}>
               View My Bookings →

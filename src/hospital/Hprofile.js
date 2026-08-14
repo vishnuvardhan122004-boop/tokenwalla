@@ -1,24 +1,29 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import API, { logoutUser } from "../services/api";
 import LocationSearch from "../componets/LocationSearch";
+// Leaflet is ~47kB gzipped and only a hospital editing its profile ever needs
+// it — keep it out of the bundle every patient downloads.
+const LocationPicker = lazy(() => import("../componets/LocationPicker"));
+
 
 // Mirrors app/(hospital)/profile.tsx — full hospital profile editor.
 // Backend: PATCH /hospitals/:id/ (details + banner/logo), POST/DELETE
 // /hospitals/:id/photos/ (gallery), /auth/otp/request|verify (mobile change).
 
 const STATUS_STYLE = {
-  approved: { cls: "success", label: "✅ Approved" },
-  active:   { cls: "success", label: "✅ Active"   },
-  pending:  { cls: "warning", label: "⏳ Pending Approval" },
-  rejected: { cls: "danger",  label: "⛔ Rejected" },
+  approved: { cls: "success", label: <><i className="bi bi-check-circle-fill me-1" />Approved</> },
+  active:   { cls: "success", label: <><i className="bi bi-check-circle-fill me-1" />Active</> },
+  pending:  { cls: "warning", label: <><i className="bi bi-hourglass-split me-1" />Pending Approval</> },
+  rejected: { cls: "danger",  label: <><i className="bi bi-x-circle-fill me-1" />Rejected</> },
 };
 
 const EMPTY_FORM = {
   name: "", city: "", address: "", location: "", mobile: "",
   latitude: null, longitude: null,
   instagram: "", youtube: "", facebook: "",
-  description: "", announcement: "", open_time: "", close_time: "",
+  description: "", announcement: "", announcement_until: "", open_time: "", close_time: "",
+  landline: "",
 };
 
 // ── Payout / settlement account ────────────────────────────────────────────
@@ -71,6 +76,7 @@ const Hprofile = () => {
   const [services,    setServices]    = useState([]);
   const [newService,  setNewService]  = useState("");
   const [toast,       setToast]       = useState(null);
+  const [pickerOpen,  setPickerOpen]  = useState(false);
 
   // Images
   const [bannerFile,    setBannerFile]    = useState(null);
@@ -114,9 +120,10 @@ const Hprofile = () => {
       setOrigMobile(h.mobile || "");
       setForm({
         name: h.name || "", city: h.city || "", address: h.address || "", location: h.location || "", mobile: h.mobile || "",
+        landline: h.landline || "",
         latitude: h.latitude ?? null, longitude: h.longitude ?? null,
         instagram: h.instagram || "", youtube: h.youtube || "", facebook: h.facebook || "",
-        description: h.description || "", announcement: h.announcement || "", open_time: h.open_time || "", close_time: h.close_time || "",
+        description: h.description || "", announcement: h.announcement || "", announcement_until: h.announcement_until || "", open_time: h.open_time || "", close_time: h.close_time || "",
       });
       setServices(Array.isArray(h.services) ? h.services : []);
       setBannerPreview(h.image || null);
@@ -187,7 +194,7 @@ const Hprofile = () => {
       });
       setPayDetails(data);
       setPayEditing(false);
-      showToast("✅ Payout details saved.");
+      showToast("Payout details saved.");
     } catch (err) {
       const apiErrs = err?.response?.data?.errors;
       if (apiErrs && typeof apiErrs === "object") {
@@ -224,7 +231,7 @@ const Hprofile = () => {
     setOtpLoading(true);
     try {
       const { data } = await API.post("/auth/otp/verify/", { mobile: form.mobile.trim(), otp: otp.trim() });
-      if (data?.verified) { setOtpVerified(true); showToast("✅ New mobile verified."); }
+      if (data?.verified) { setOtpVerified(true); showToast("New mobile verified."); }
       else showToast("Invalid OTP. Please check and try again.", "error");
     } catch (err) {
       showToast(err?.response?.data?.message || "Invalid OTP. Please try again.", "error");
@@ -302,7 +309,9 @@ const Hprofile = () => {
         youtube:   form.youtube.trim(),
         facebook:  form.facebook.trim(),
         description:  form.description.trim(),
-        announcement: form.announcement.trim(),
+        announcement:       form.announcement.trim(),
+        announcement_until: form.announcement_until || "",
+        landline:           form.landline.trim(),
         open_time:    form.open_time.trim(),
         close_time:   form.close_time.trim(),
         services,
@@ -341,7 +350,7 @@ const Hprofile = () => {
       } catch { /* ignore */ }
 
       setEditing(false);
-      showToast("✅ Hospital details updated.");
+      showToast("Hospital details updated.");
     } catch (err) {
       const status = err?.response?.status;
       if (status === 404 || status === 405 || status === 403) {
@@ -359,9 +368,10 @@ const Hprofile = () => {
     setEditing(false);
     setForm({
       name: hospital.name || "", city: hospital.city || "", address: hospital.address || "", location: hospital.location || "", mobile: hospital.mobile || "",
+      landline: hospital.landline || "",
       latitude: hospital.latitude ?? null, longitude: hospital.longitude ?? null,
       instagram: hospital.instagram || "", youtube: hospital.youtube || "", facebook: hospital.facebook || "",
-      description: hospital.description || "", announcement: hospital.announcement || "", open_time: hospital.open_time || "", close_time: hospital.close_time || "",
+      description: hospital.description || "", announcement: hospital.announcement || "", announcement_until: hospital.announcement_until || "", open_time: hospital.open_time || "", close_time: hospital.close_time || "",
     });
     setServices(Array.isArray(hospital.services) ? hospital.services : []);
     setBannerFile(null); setBannerPreview(hospital.image || null);
@@ -387,7 +397,36 @@ const Hprofile = () => {
   const validImg = (u) => u && !String(u).includes("placehold");
 
   return (
-    <div className="min-vh-100 bg-light">
+    <div className="min-vh-100 bg-light tw-prof">
+      <style>{`
+        /* ══ MOBILE ══════════════════════════════════════════════════════════
+           Same treatment as the dashboard (see Hdashboard.js): hospital staff
+           edit this on a phone. Measured at 375px first — 26 tap targets under
+           the 44px minimum in edit mode, and Save sat 2,258px down the page. */
+        @media (max-width: 767.98px) {
+          .tw-prof .btn,
+          .tw-prof .form-control,
+          .tw-prof .form-select { min-height: 44px; }
+          .tw-prof .btn-sm { min-height: 44px; padding-inline: 14px; }
+          .tw-prof .input-group > .form-control { min-height: 44px; }
+
+          /* Save/Cancel pinned so a long form does not have to be scrolled
+             back through to commit it. */
+          .tw-prof .tw-prof-actions {
+            position: sticky; bottom: 0; z-index: 5;
+            margin: 8px -1rem -1rem; padding: 12px 1rem;
+            background: rgba(255,255,255,.96);
+            backdrop-filter: saturate(180%) blur(8px);
+            -webkit-backdrop-filter: saturate(180%) blur(8px);
+            border-top: 1px solid #eceef1;
+          }
+
+          /* A pasted Maps URL is one long unbreakable token — without this it
+             squeezes the value column to a sliver. */
+          .tw-prof .tw-prof-row { flex-direction: column; align-items: flex-start !important; gap: 2px; }
+          .tw-prof .tw-prof-row > :last-child { max-width: 100% !important; text-align: left !important; overflow-wrap: anywhere; }
+        }
+      `}</style>
 
       {/* Toast */}
       {toast && (
@@ -421,7 +460,7 @@ const Hprofile = () => {
             {initials}
           </div>
           <h4 className="fw-bold mb-1">{hospital.name}</h4>
-          <div className="text-muted mb-2">📱 {hospital.mobile || "—"}</div>
+          <div className="text-muted mb-2"><i className="bi bi-phone me-1" />{hospital.mobile || "—"}</div>
           <div>
             <span className={`badge bg-${st.cls}-subtle text-${st.cls} border border-${st.cls}-subtle px-3 py-2`}>{st.label}</span>
           </div>
@@ -432,18 +471,18 @@ const Hprofile = () => {
           <div className="d-flex justify-content-between align-items-center mb-3">
             <h6 className="fw-bold mb-0">Hospital Details</h6>
             {!editing && (
-              <button className="btn btn-sm btn-outline-primary" onClick={() => setEditing(true)}>✏️ Edit</button>
+              <button className="btn btn-sm btn-outline-primary" onClick={() => setEditing(true)}><i className="bi bi-pencil-square me-1" />Edit</button>
             )}
           </div>
 
           {editing ? (
             <>
               {/* Banner + logo */}
-              <label className="form-label fw-semibold small">🖼️ Banner Image (16:9)</label>
+              <label className="form-label fw-semibold small"><i className="bi bi-image me-1" />Banner Image (16:9)</label>
               {validImg(bannerPreview) ? (
                 <img src={bannerPreview} alt="Banner" className="w-100 rounded mb-2" style={{ height: 140, objectFit: "cover" }} />
               ) : (
-                <div className="rounded mb-2 d-flex align-items-center justify-content-center bg-light" style={{ height: 110, fontSize: 30 }}>🏥</div>
+                <div className="rounded mb-2 d-flex align-items-center justify-content-center bg-light" style={{ height: 110 }}><i className="bi bi-hospital text-secondary" style={{ fontSize: 30 }} /></div>
               )}
               <input type="file" accept="image/*" className="form-control mb-3" onChange={(e) => pickImage(e, "banner")} />
 
@@ -452,7 +491,7 @@ const Hprofile = () => {
                 {validImg(logoPreview) ? (
                   <img src={logoPreview} alt="Logo" className="rounded" style={{ width: 60, height: 60, objectFit: "cover", border: "2px solid #cfe2f3" }} />
                 ) : (
-                  <div className="rounded d-flex align-items-center justify-content-center bg-light" style={{ width: 60, height: 60, fontSize: 22 }}>🏥</div>
+                  <div className="rounded d-flex align-items-center justify-content-center bg-light" style={{ width: 60, height: 60 }}><i className="bi bi-hospital text-secondary" style={{ fontSize: 22 }} /></div>
                 )}
                 <input type="file" accept="image/*" className="form-control" onChange={(e) => pickImage(e, "logo")} />
               </div>
@@ -475,15 +514,51 @@ const Hprofile = () => {
                   longitude: lng,
                 }))}
               />
-              {form.latitude != null && (
-                <div className="text-success small mt-1 mb-2">✓ Location pinned on the map</div>
+
+              {form.latitude != null ? (
+                <div className="d-flex align-items-center gap-2 mt-2 p-2 rounded"
+                     style={{ background: "#ECFDF3", border: "1px solid #ABEFC6" }}>
+                  <i className="bi bi-check-circle-fill" style={{ color: "#067647" }} />
+                  <div className="small flex-grow-1" style={{ minWidth: 0 }}>
+                    <div className="fw-semibold" style={{ color: "#067647" }}>Pinned on the map</div>
+                    <div className="text-muted" style={{ fontSize: 11.5 }}>
+                      {form.latitude.toFixed(6)}, {form.longitude.toFixed(6)}
+                    </div>
+                  </div>
+                  <button type="button" className="btn btn-sm btn-outline-success"
+                          onClick={() => setPickerOpen(true)}>Change</button>
+                </div>
+              ) : (
+                <button type="button" className="btn btn-outline-primary btn-sm w-100 mt-2"
+                        onClick={() => setPickerOpen(true)}>
+                  <i className="bi bi-map me-1" />Pin exact location on map
+                </button>
               )}
-              <div className="mb-3" />
+              <div className="form-text mb-3" style={{ fontSize: 11.5 }}>
+                An exact pin helps patients find your entrance and get directions.
+              </div>
+
+              {pickerOpen && (
+                <Suspense fallback={null}>
+                  <LocationPicker
+                    open
+                    initial={form.latitude != null ? { lat: form.latitude, lng: form.longitude } : null}
+                    onClose={() => setPickerOpen(false)}
+                    onPick={({ city, label, lat, lng }) => setForm(prev => ({
+                      ...prev,
+                      city: prev.city || city,
+                      location: prev.location || label,
+                      latitude: lat,
+                      longitude: lng,
+                    }))}
+                  />
+                </Suspense>
+              )}
 
               <label className="form-label fw-semibold small">Address</label>
               <textarea className="form-control mb-3" rows={2} value={form.address} onChange={e => setField("address", e.target.value)} placeholder="Full address" />
 
-              <label className="form-label fw-semibold small">📍 Maps Location (Google Maps link or landmark)</label>
+              <label className="form-label fw-semibold small"><i className="bi bi-geo-alt me-1" />Maps Location (Google Maps link or landmark)</label>
               <input className="form-control mb-3" value={form.location} onChange={e => setField("location", e.target.value)} placeholder="https://maps.google.com/… or landmark" />
 
               <label className="form-label fw-semibold small">Mobile Number</label>
@@ -516,26 +591,56 @@ const Hprofile = () => {
               )}
               {mobileChanged && otpVerified && <div className="text-success fw-semibold small mb-3">✓ New mobile verified</div>}
 
-              <label className="form-label fw-semibold small">ℹ️ About the Hospital (shown to patients)</label>
+              <label className="form-label fw-semibold small"><i className="bi bi-telephone me-1" />Landline (optional)</label>
+              <input
+                className="form-control mb-1" type="tel" maxLength={15}
+                value={form.landline}
+                onChange={e => setField("landline", e.target.value.replace(/[^\d\-\s]/g, "").slice(0, 15))}
+                placeholder="08812-234567"
+              />
+              <div className="form-text mb-3">
+                Shown to patients as a call number. Your mobile above stays your login and is
+                where OTP and booking alerts arrive.
+              </div>
+
+              <label className="form-label fw-semibold small"><i className="bi bi-info-circle me-1" />About the Hospital (shown to patients)</label>
               <textarea className="form-control mb-3" rows={3} value={form.description} onChange={e => setField("description", e.target.value)} placeholder="Describe your hospital, specialities and what you provide…" />
 
-              <label className="form-label fw-semibold small">📢 Announcement / Notice (shown to patients)</label>
-              <textarea className="form-control mb-3" rows={2} maxLength={300} value={form.announcement} onChange={e => setField("announcement", e.target.value)} placeholder="e.g. Dr. Ravi on leave this Friday" />
+              <label className="form-label fw-semibold small"><i className="bi bi-megaphone me-1" />Announcement / Notice (shown to patients)</label>
+              <textarea className="form-control mb-2" rows={2} maxLength={300} value={form.announcement} onChange={e => setField("announcement", e.target.value)} placeholder="e.g. Closed for Sankranti 14–16 Jan · Free BP check this week" />
+              <div className="d-flex align-items-center gap-2 mb-3">
+                <label className="form-label small text-muted mb-0 flex-shrink-0">Show until</label>
+                <input
+                  className="form-control form-control-sm" type="date"
+                  value={form.announcement_until || ""}
+                  onChange={e => setField("announcement_until", e.target.value)}
+                />
+                {form.announcement_until && (
+                  <button type="button" className="btn btn-sm btn-outline-secondary flex-shrink-0"
+                          onClick={() => setField("announcement_until", "")}>
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="form-text mb-3">
+                Leave the date empty to show the notice until you remove it. A holiday notice
+                with a date disappears by itself the day after.
+              </div>
 
-              <label className="form-label fw-semibold small">🕐 Working Hours (24h, e.g. 09:00 – 18:00)</label>
+              <label className="form-label fw-semibold small"><i className="bi bi-clock me-1" />Working Hours (24h, e.g. 09:00 – 18:00)</label>
               <div className="d-flex gap-2 mb-3">
                 <input className="form-control" maxLength={5} value={form.open_time} onChange={e => setField("open_time", e.target.value)} placeholder="Open 09:00" />
                 <input className="form-control" maxLength={5} value={form.close_time} onChange={e => setField("close_time", e.target.value)} placeholder="Close 18:00" />
               </div>
 
-              <label className="form-label fw-semibold small">📸 Instagram Link</label>
+              <label className="form-label fw-semibold small"><i className="bi bi-instagram me-1" />Instagram Link</label>
               <input className="form-control mb-3" value={form.instagram} onChange={e => setField("instagram", e.target.value)} placeholder="https://instagram.com/yourhospital" />
-              <label className="form-label fw-semibold small">▶️ YouTube Link</label>
+              <label className="form-label fw-semibold small"><i className="bi bi-youtube me-1" />YouTube Link</label>
               <input className="form-control mb-3" value={form.youtube} onChange={e => setField("youtube", e.target.value)} placeholder="https://youtube.com/@yourhospital" />
-              <label className="form-label fw-semibold small">👍 Facebook Link</label>
+              <label className="form-label fw-semibold small"><i className="bi bi-facebook me-1" />Facebook Link</label>
               <input className="form-control mb-3" value={form.facebook} onChange={e => setField("facebook", e.target.value)} placeholder="https://facebook.com/yourhospital" />
 
-              <label className="form-label fw-semibold small">🏥 Services Offered</label>
+              <label className="form-label fw-semibold small"><i className="bi bi-hospital me-1" />Services Offered</label>
               <div className="d-flex gap-2 mb-2">
                 <input
                   className="form-control" value={newService}
@@ -555,7 +660,7 @@ const Hprofile = () => {
                 </div>
               )}
 
-              <div className="d-flex gap-2 mt-2">
+              <div className="d-flex gap-2 mt-2 tw-prof-actions">
                 <button className="btn btn-outline-secondary flex-fill" onClick={cancelEdit} disabled={saving}>Cancel</button>
                 <button className="btn btn-primary flex-fill" onClick={handleSave} disabled={saving}>
                   {saving ? <span className="spinner-border spinner-border-sm" /> : "Save"}
@@ -569,10 +674,11 @@ const Hprofile = () => {
                 { label: "Address",  value: hospital.address  || "—" },
                 { label: "Location", value: hospital.location || "—" },
                 { label: "Mobile",   value: hospital.mobile   || "—" },
+                { label: "Landline", value: hospital.landline || "—" },
                 { label: "Doctors",  value: doctorCount == null ? "…" : String(doctorCount) },
                 { label: "Hours",    value: (hospital.open_time || hospital.close_time) ? `${hospital.open_time || "—"} – ${hospital.close_time || "—"}` : "—" },
               ].map(({ label, value }) => (
-                <div key={label} className="d-flex justify-content-between py-2 border-bottom">
+                <div key={label} className="d-flex justify-content-between py-2 border-bottom tw-prof-row">
                   <span className="text-muted small">{label}</span>
                   <span className="fw-semibold small text-end" style={{ maxWidth: "65%" }}>{value}</span>
                 </div>
@@ -586,17 +692,26 @@ const Hprofile = () => {
               )}
               {hospital.announcement && (
                 <div className="pt-3">
-                  <div className="text-muted small mb-1">📢 Announcement</div>
+                  <div className="text-muted small mb-1"><i className="bi bi-megaphone me-1" />Announcement</div>
                   <div className="small">{hospital.announcement}</div>
+                  {/* Say so explicitly — an expired notice silently vanishing from
+                      the patient page is confusing when the text is still here. */}
+                  {hospital.announcement_until && (
+                    <div className={`small ${hospital.announcement_active === false ? "text-danger" : "text-muted"}`}>
+                      {hospital.announcement_active === false
+                        ? `Expired on ${hospital.announcement_until} — patients no longer see this.`
+                        : `Shows to patients until ${hospital.announcement_until}.`}
+                    </div>
+                  )}
                 </div>
               )}
               {(hospital.instagram || hospital.youtube || hospital.facebook) && (
-                <div className="d-flex justify-content-between py-2 border-bottom">
+                <div className="d-flex justify-content-between py-2 border-bottom tw-prof-row">
                   <span className="text-muted small">Social</span>
                   <span className="small d-flex gap-2">
-                    {hospital.instagram && <a href={hospital.instagram} target="_blank" rel="noreferrer">📸</a>}
-                    {hospital.youtube   && <a href={hospital.youtube}   target="_blank" rel="noreferrer">▶️</a>}
-                    {hospital.facebook  && <a href={hospital.facebook}  target="_blank" rel="noreferrer">👍</a>}
+                    {hospital.instagram && <a href={hospital.instagram} target="_blank" rel="noreferrer"><i className="bi bi-instagram" /></a>}
+                    {hospital.youtube   && <a href={hospital.youtube}   target="_blank" rel="noreferrer"><i className="bi bi-youtube" /></a>}
+                    {hospital.facebook  && <a href={hospital.facebook}  target="_blank" rel="noreferrer"><i className="bi bi-facebook" /></a>}
                   </span>
                 </div>
               )}
@@ -617,10 +732,10 @@ const Hprofile = () => {
         {/* Payout / settlement account */}
         <div className="card shadow-sm border-0 p-4 mb-4">
           <div className="d-flex justify-content-between align-items-center mb-1">
-            <h6 className="fw-bold mb-0">💳 Payout Details</h6>
+            <h6 className="fw-bold mb-0"><i className="bi bi-credit-card me-2" />Payout Details</h6>
             {!payEditing && (
               <button className="btn btn-sm btn-outline-primary" onClick={startPayEdit}>
-                ✏️ {payDetails && (payDetails.upi_id || payDetails.account_number) ? "Edit" : "Add Payment"}
+                <i className="bi bi-pencil-square me-1" />{payDetails && (payDetails.upi_id || payDetails.account_number) ? "Edit" : "Add Payment"}
               </button>
             )}
           </div>
@@ -710,7 +825,7 @@ const Hprofile = () => {
                 ...(d.payout_notes ? [{ label: "Notes", value: d.payout_notes }] : []),
               ];
               return rows.map(({ label, value }) => (
-                <div key={label} className="d-flex justify-content-between py-2 border-bottom">
+                <div key={label} className="d-flex justify-content-between py-2 border-bottom tw-prof-row">
                   <span className="text-muted small">{label}</span>
                   <span className="fw-semibold small text-end" style={{ maxWidth: "65%" }}>{value}</span>
                 </div>
@@ -750,19 +865,21 @@ const Hprofile = () => {
         <div className="card shadow-sm border-0 p-4 mb-4">
           <h6 className="fw-bold mb-3">Operations</h6>
           {[
-            { icon: "🏥", label: "Queue & Doctors Dashboard", onClick: () => navigate("/Hdashboard") },
-            { icon: "🔑", label: "Change Password",           onClick: () => navigate("/Hforgot-password") },
-            { icon: "📞", label: "Contact Support",           onClick: () => { window.location.href = "mailto:support@tokenwalla.com"; } },
+            { icon: "bi-grid-1x2", label: "Queue & Doctors Dashboard", onClick: () => navigate("/Hdashboard") },
+            { icon: "bi-key", label: "Change Password",           onClick: () => navigate("/Hforgot-password") },
+            { icon: "bi-headset", label: "Contact Support",           onClick: () => { window.location.href = "mailto:support@tokenwalla.com"; } },
           ].map(({ icon, label, onClick }) => (
             <button key={label} className="btn btn-light w-100 d-flex align-items-center gap-3 py-2 border-bottom text-start" onClick={onClick}>
-              <span style={{ fontSize: 18 }}>{icon}</span>
+              <i className={`bi ${icon} fs-5 text-primary`} />
               <span className="flex-grow-1">{label}</span>
-              <span className="text-muted">›</span>
+              <i className="bi bi-chevron-right text-muted small" />
             </button>
           ))}
         </div>
 
-        <button className="btn btn-outline-danger w-100 py-2" onClick={confirmLogout}>🚪 Logout</button>
+        <button className="btn btn-outline-danger w-100 py-2" onClick={confirmLogout}>
+          <i className="bi bi-box-arrow-right me-2" />Logout
+        </button>
       </div>
     </div>
   );
