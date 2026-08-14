@@ -3,14 +3,21 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** unmerged — `feat/popular-doctors-first` (PR #20) + `perf/dashboard-visible-polling` (**no PR**) + this wrap on `docs/wrap-2026-08-13-s3` (PR #21) · `payments-server-priced-checkout` (**no PR**) + `fix/map-load-timeout` (**no PR**) + `feat/popular-doctors-first` (PR #5) in the app. Merged 2026-08-14: **PR #22**. Merged 2026-08-13: PRs #13–#19 (web/backend), PRs #3–#4 (app). Dead branches to delete: `fix/hide-test-hospitals`, `docs/wrap-2026-08-11-s3`, plus four `railway/*` bot branches from June 2026.
-- **Latest commit at last update:** `05e4d16` main (web/backend) · `7bda5b4` main (app, **still 1.1.3**)
-- **Last updated:** 2026-08-14 (OTP per-IP ceiling raised; PR #22 merged; Railway stuck — day 4)
+- **Branch:** unmerged — `perf/dashboard-visible-polling` (**no PR**) + this wrap (web/backend) · `feat/popular-doctors-first` (PR #5) in the app. **The backlog is cleared:** merged 2026-08-14 — web/backend PRs #20, #21, #22, #23; app PRs #6, #7, #8. Merged 2026-08-13: PRs #13–#19 (web/backend), #3–#4 (app). Dead branches to delete: `fix/hide-test-hospitals`, `docs/wrap-2026-08-11-s3`, `harden-password-validators`, `website-cleanup-eslint-deadDep`, plus four `railway/*` bot branches from June 2026.
+- **Latest commit at last update:** `92d8be1` main (web/backend) · `79f22ee` main (app, **now 1.2.0**)
+- **Last updated:** 2026-08-14 session 2 (merge backlog cleared; app at 1.2.0; exposure claim corrected; Railway stuck — day 4)
 
-> ⛔ **Pushed ≠ merged ≠ live.** All three are different states here right now.
-> Three branches are pushed with **no PR opened** (a session cannot open them).
-> And Railway has not deployed since 2026-08-11 — unpaid bill — so even `main`
-> is not running. Verify against the live API, never the merge log.
+> ⛔ **Merged ≠ live, and that is now the *only* gap.** Pushed-vs-merged is
+> resolved — one low-risk branch remains per repo. But Railway has not deployed
+> since 2026-08-11 (unpaid bill), so no backend entry below is running, and the
+> app has not been built since 1.1.3 (36) on 2026-08-08, so **no app entry has
+> reached a patient**. Only the web is actually live. Verify against the live
+> API, never the merge log.
+
+> 🧹 **46 `(auto) — Session update` entries** are sitting in this file from a
+> hook that snapshots `git status`. They are noise and they push the real
+> entries down. Two more were generated mid-session on 2026-08-14 and removed by
+> hand. Worth either deleting them in one pass or turning the hook off.
 
 ### How to update this log
 - Add a new `## YYYY-MM-DD — <title>` section **on top** for each working session; keep older sessions below.
@@ -18,6 +25,62 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-14 (session 2) — The backlog cleared, and a wrong risk line corrected
+
+Nine PRs merged across both repos. The three-day merge backlog that dominated
+this plan is gone, and app `main` finally carries a shippable 1.2.0.
+
+| Change | Repo | PR | Status |
+|---|---|---|---|
+| Popularity ranking (backend + web) | web/backend | #20 | ✅ merged, **live on Vercel** |
+| Wrap docs for 08-13 s3 + 08-14 | docs | #21 | ✅ merged |
+| Item 0 exposure claim corrected | docs | #23 | ✅ merged |
+| Release branch (1.2.0, checkout fix, ₹15→₹20) | app | #6 | ✅ merged, **not built** |
+| Map load timeout | app | #7 | ✅ merged, **not built** |
+| Detail screen hides test-hospital doctors | app | #8 | ✅ merged, **not built** |
+| Popularity ranking (app half) | app | #5 | 🕒 open |
+
+### 1. The ranking is live, and verified in a browser
+`www.tokenwalla.com` serves the new bundle. Checked the rendered page rather
+than the merge log: 13 available doctors sort above the unavailable one, and
+scores descend cleanly (69, 67, 60, 53, 52, 49, 46, 45, 43, 37, 30, 30, 20).
+Popularity contributes 0 to everyone, exactly as predicted — the backend half
+is merged but undeployed, and both clients fall back to `|| 0`. No console
+errors.
+
+### 2. A risk line this file had carried for three sessions was wrong
+Item 0 said "a patient can still be charged ₹388.37 for an appointment that
+does not exist." It collapsed two claims — *the server fix isn't deployed*
+(true) and *patients are exposed* (false).
+
+| Surface | List | Detail | Live? |
+|---|---|---|---|
+| Web | ✅ `filterTestDoctors` | ✅ `DoctorsDetails.js:109` | yes |
+| App 1.1.3 | ✅ `isTestHospital` | ❌ none | yes, in build 36 |
+
+Verified, not reasoned: the live site renders **14 doctors with Heyi absent
+while the API returns 15**, and `git merge-base --is-ancestor <filter> eddf5dd`
+puts the app's filter inside the shipped build. Real exposure is API-direct plus
+an app deep link.
+
+**The rule earned:** when a risk line is about money, check the surface a
+patient actually touches. A server-side gap is not automatically a
+patient-facing one — the client may already be defending.
+
+### 3. The gap that correction found, closed the same session
+`doctor/[id].tsx` had no test-hospital guard, so a deep link rendered the full
+bookable screen for the one `FULL`-collection row in the system. Fixed with the
+helper the sibling list already imports and the same
+`safeBack(router, '/(patient)/doctors')` the missing-doctor path uses. 12 lines,
+`tsc` clean, 133 tests. **The guard itself has no test** — the app has no
+screen-test harness; `isTestHospital` is unit-tested, the wiring is not.
+
+### 4. Railway: day four, unchanged
+`/api/app-version/` → 404, `/health/` → old body. Nine merges today; none of the
+backend ones are running.
 
 ---
 
