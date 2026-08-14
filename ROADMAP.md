@@ -7,7 +7,7 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-14
+- **Last updated:** 2026-08-14 (session 2)
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -87,42 +87,35 @@ exposed" are different claims, and this file collapsed them for three days. When
 a risk line is about money, check the surface a patient actually touches — the
 client may already be defending.
 
-### 1. Everything below is blocked on merging.
+### ~~1. Merge what's left~~ ✅ 2026-08-14 — the queue is essentially empty
 
-**Everything below item 2 is blocked on merging.** The 2026-08-11 session wrote a
-lot of code and merged none of it — three branches sit pushed and green, and
-nothing in them has reached a patient. That is the top of the list now.
+**This item dominated the plan for three days and is now done.** Nine PRs merged
+on 2026-08-14 across both repos. What is left is one branch per repo, neither
+urgent:
 
-Context that changed the order: **a promotion is starting.** Registration
-traffic is expected for the first time, which promotes capacity work that was
-deliberately deferred on 2026-08-09 and makes the unshipped app build urgent
-rather than merely overdue.
+| Branch | Repo | PR | Deploys | Note |
+|---|---|---|---|---|
+| `feat/popular-doctors-first` (1) | app | #5 open | store, via EAS | app half of the ranking; safe to ship before the backend deploys |
+| `perf/dashboard-visible-polling` (1) | web | **none opened** | Vercel | oldest, lowest risk, hospital-facing only |
 
-### 1. Merge what's left — the app repo is now the whole queue 🔴
+**Merged 2026-08-14 — web/backend:** `feat/app-version-gate` (**#22**, closing
+item 2c), `feat/popular-doctors-first` (**#20**), `docs/wrap-2026-08-13-s3`
+(**#21**), `docs/fix-item0-exposure` (**#23**).
+**Merged 2026-08-14 — app:** `payments-server-priced-checkout` (**#6**),
+`fix/map-load-timeout` (**#7**), `fix/app-detail-test-hospital` (**#8**).
+**Merged 2026-08-13:** PRs #13–#19 (web/backend), #3–#4 (app).
 
-**Updated 2026-08-14.** Four merged since the last wrap. What remains:
+> 🎉 **App `main` is 1.2.0 and finally shippable.** The structural blocker from
+> item 5 — "no branch contains a shippable app" — is gone: `main` now carries the
+> 1.2.0 bump, the checkout fix (`5b11bd7`), the location picker, the map-load
+> timeout and the ₹15→₹20 price correction, all in one tree. **The next step is
+> an EAS *preview* build, not production** — see item 5 for what still has never
+> run on a device.
 
-| Order | Branch | Repo | PR | Deploys | Note |
-|---|---|---|---|---|---|
-| 1 | `payments-server-priced-checkout` (13) | app | **none opened** | store, via EAS | **the 1.2.0 version bump lives here**, plus the checkout fix |
-| 2 | `fix/map-load-timeout` (1) | app | **none opened** | store, via EAS | map failure handling |
-| 3 | `feat/popular-doctors-first` (1) | app | #5 open | store, via EAS | **same branch name as the web one — check the repo** |
-| 4 | `feat/popular-doctors-first` (1) | backend + web | #20 open | Railway + Vercel | most-viewed doctors rank first |
-| 5 | `docs/wrap-2026-08-13-s3` | docs | #21 open | — | carries this wrap too; see the note below |
-| — | `perf/dashboard-visible-polling` (1) | web | **none opened** | Vercel | oldest, lowest risk |
-
-**Merged 2026-08-14:** `feat/app-version-gate` (**PR #22**) — that closed item
-2c as well, see Done.
-**Merged 2026-08-13:** `fix/dashboard-icons` (PR #19), `feat/website-icons-polish`
-(PR #18), and PRs #13–#17 earlier the same day.
-
-> ⚠️ **Pushed ≠ merged ≠ deployed, and all three are still different states
-> here.** On 2026-08-13 three branches were pushed and believed merged with no
-> PR ever opened. That has partly corrected itself — PRs #20, #21, #22 and app
-> #5 now exist — but **the two app branches that matter most still have no PR
-> at all**, and they are the ones blocking the 1.2.0 release. A session cannot
-> open PRs (`gh` is unauthenticated here), so a pushed branch sits silently
-> until someone clicks. Check with:
+> ⚠️ **Pushed ≠ merged ≠ deployed.** Still true, and still worth checking: a
+> session cannot open PRs (`gh` is unauthenticated here), so a pushed branch
+> sits silently until someone clicks. Both remaining branches above are pushed;
+> only one has a PR. Check with:
 > `curl -s https://api.github.com/repos/<owner>/<repo>/pulls?state=all | head`
 
 > 📄 **PR #21 now carries two days of docs.** Today's wrap was committed onto
@@ -144,9 +137,11 @@ PR #13, app PR #3), `docs/wrap-2026-08-13` (PR #14),
 
 > **`fix/hide-test-hospitals` and `docs/wrap-2026-08-11-s3` are both dead
 > branches — every commit in them is on `main`.** They rode in inside PR #14 and
-> should be deleted rather than merged again. The `[TEST]` hospital fix
-> (`3197377`) is live: patients no longer see the demo hospital or the ₹388.37
-> `FULL`-collection doctor behind it.
+> should be deleted rather than merged again. ~~The `[TEST]` hospital fix
+> (`3197377`) is live~~ — **wrong, corrected 2026-08-14.** It is merged, not
+> deployed (item 0), and separately the patient-exposure claim it implied was
+> overstated: both clients filter test hospitals themselves. See the exposure
+> table in item 0.
 
 **Two process rules this day earned, both worth keeping:**
 
@@ -164,26 +159,23 @@ PR #13, app PR #3), `docs/wrap-2026-08-13` (PR #14),
    get the reading it deserves. Resolve the conflict on the **code** branch next
    time, even when the docs branch is right there.
 
-**The app pair (1 and 2) is the release blocker — see item 5.** App `main` is
-still version **1.1.3**; the 1.2.0 bump is only on the release branch, so a
-build from `main` today is not even a new version to the Play Store.
+~~**The app pair (1 and 2) is the release blocker**~~ — **resolved 2026-08-14.**
+App `main` is now **1.2.0**, with the checkout fix, the picker, the map-load
+timeout and the ₹15→₹20 correction all in one tree. The structural problem
+("no branch contains a shippable app") is gone. What remains is the *device*
+gate in item 5, which merging cannot satisfy.
 
-**Re-verified 2026-08-14, in the app repo, with `git merge-tree`:** all three
-app branches merge into `main` **clean**, in any order, and
-`git merge-base --is-ancestor 5b11bd7` confirms the checkout fix is inside
-`payments-server-priced-checkout`. Merging 1 yields 1.2.0 with everything.
+The backend half was never a gate either — `feat/app-version-gate` merged as
+PR #22, so `/api/app-version/` exists in `main`. It is still not *deployed*
+(item 0), and the app's update check handles a missing endpoint with
+`catch { return }`, so this does not block a build.
 
-The backend half is no longer a gate — `feat/app-version-gate` merged as PR #22,
-so `/api/app-version/` exists in `main` and the app build has its endpoint. It
-is still not *deployed* (item 0), but that does not block the merge.
-
-**3 and 4 are last on purpose** — hospital-facing polish must not delay the
-overdue 1.2.0 patient release. **Ordering between them does not matter:** the
-app half calls `API.post('/doctors/<id>/view/').catch(() => {})` and reads
-`view_count?` with a `|| 0` fallback, so shipping the app before the backend
-deploys just scores every doctor's popularity at 0 and ranks on the existing
-weights. Verified by reading the diff on 2026-08-14. **Same branch name in both
-repos** — check which repo you are in before pushing.
+**On the one app branch still open (#5):** ordering against the backend does not
+matter. It calls `API.post('/doctors/<id>/view/').catch(() => {})` and reads
+`view_count?` with a `|| 0` fallback, so shipping it before Railway deploys just
+scores every doctor's popularity at 0 and ranks on the existing weights.
+Verified by reading the diff on 2026-08-14. **Same branch name in both repos** —
+check which repo you are in before pushing.
 
 > **PRs cannot be opened from a session.** `gh` is not authenticated on this
 > machine (`gh auth status` → not logged into any host, no `GH_TOKEN`) and
@@ -311,17 +303,31 @@ manage.py send_test_whatsapp <mobile> --template booking_confirmation
 
 Proves it end to end with no test booking and no real money.
 
-### 5. Ship the mobile app — release gate run 2026-08-11 session 3 🔴
+### 5. Ship the mobile app — ONE gate left, and it needs a device 🔴
 
-> **Verdict that session: NOT ready to push to the Play Store.** Checked against
-> the repo, not guessed. Three findings, in order of severity:
+**Status 2026-08-14: finding 1 is closed, findings 2 and 3 are not.** App `main`
+is 1.2.0 and contains everything. **The next action is an EAS *preview* build —
+not production.**
+
+```bash
+cd "/Users/kvishnuvardhan/Desktop/app /Tokenwalla"   # note the space in "app /"
+eas build --profile preview --platform android
+```
+
+Then install it and actually open: a doctor page, the hospital location picker,
+and a slotless walk-in doctor. **None of those three has ever rendered on a real
+device.** No session can do this — there is no simulator and no Android SDK on
+this machine (Command Line Tools only, no Xcode).
+
+The original gate run follows, with finding 1 struck.
+
+> **Verdict on 2026-08-11 session 3: NOT ready to push to the Play Store.**
+> Checked against the repo, not guessed. Three findings, in order of severity:
 >
-> 1. **No branch contains a shippable app.** `main` = 1.1.3 with the picker but
->    none of the 13 release commits; `payments-server-priced-checkout` = 1.2.0
->    with the release work but no picker and no map-timeout fix. Building either
->    ships something incomplete, and `main` isn't even a new version number.
->    **The checkout fix is in those 13 commits** — the thing item 7 cares about.
->    Merge is clean and yields 1.2.0 with everything.
+> 1. ~~**No branch contains a shippable app.**~~ **CLOSED 2026-08-14** — app PRs
+>    #6, #7 and #8 merged, so `main` is 1.2.0 and carries the 13 release commits,
+>    the picker, the map-timeout fix, the checkout fix (`5b11bd7`) and the
+>    ₹15→₹20 correction together.
 > 2. **Push would have been dead in the build.** `google-services.json` is
 >    gitignored, so EAS never received it — `DONE-push-setup.md` step 6 names
 >    this exact failure. Fixed by `.easignore` (app PR #2, merged). Note
@@ -341,9 +347,10 @@ Proves it end to end with no test booking and no real money.
 > is still unconfigured, so the AAB goes to Play Console by hand.
 >
 > **Order: merge 1 and 2 → preview build → install and actually use it → only
-> then production.** The picker and its offline path have still never run on a
-> device; there is no simulator or Android SDK on this machine (Command Line
-> Tools only, no Xcode), so that check cannot be done from a session.
+> then production.** The merges are done as of 2026-08-14; the preview build and
+> the device check are not. The picker and its offline path have still never run
+> on a device; there is no simulator or Android SDK on this machine (Command
+> Line Tools only, no Xcode), so that check cannot be done from a session.
 
 
 **The store build is NOT stale, and that settles item 7 below.** Latest
@@ -415,14 +422,6 @@ the careful edge cases were the right ones.
   with the announcement read-view on web but not in the app. Neither was caught
   by tests, because both are presentation. When a feature touches web + app,
   diff the two surfaces before calling it done.
-- **The app's doctor detail screen has no test-hospital filter** — new
-  2026-08-14, found while correcting item 0. `app/(patient)/doctors.tsx` filters
-  the list with `isTestHospital`, but `app/(patient)/doctor/[id].tsx` does not,
-  so a deep link to `doctor/10` renders Heyi and offers to book at ₹388.37. The
-  web has this covered on both surfaces (`DoctorsDetails.js:109`); the app has
-  it on one. Two lines, same helper, already imported in the sibling file — but
-  it needs an app release to reach anyone, so it rides along with the next
-  build rather than justifying one.
 - **A blocked OTP IP is invisible** — new 2026-08-14, and it is the concrete
   reason the observability item below should move up. Hitting
   `OTP_MAX_SENDS_PER_IP_PER_DAY` produces a `logger.warning` and nothing else.
@@ -528,12 +527,43 @@ Resolved and deliberately removed, so they don't get re-added:
 
 ## Done
 
-> **2026-08-11 caveat, revised in session 3:** four of the day's branches DID
-> merge — web docs, web picker, app picker, app `.easignore`. Four remain
-> unmerged (item 1). So "Done" below is now a mix: check the merge table before
-> assuming anything reached a patient. Nothing has reached a **patient** yet
-> regardless, because the app release branch is still unmerged and unbuilt.
+> **Caveat, rewritten 2026-08-14:** the merge backlog that made this section
+> unreliable is gone — everything below is on `main` in its repo. But **merged
+> is still not live**: Railway has not deployed since 2026-08-11 (item 0), and
+> the app has not been built since 1.1.3 (36) on 2026-08-08. So the web entries
+> are running, the **backend entries are not**, and **nothing in the app
+> entries has reached a patient**. Check item 0 and item 5 before assuming.
 
+- **2026-08-14 (session 2)** — **Nine PRs merged, and the three-day merge
+  backlog is gone.** Web/backend #20, #21, #22, #23; app #6, #7, #8 (plus #19
+  earlier). App `main` went 1.1.3 → **1.2.0** with the checkout fix, picker,
+  map-timeout fix and ₹15→₹20 correction in one tree, closing the structural
+  half of item 5. The web/backend queue is empty; one low-risk branch remains
+  per repo.
+- **2026-08-14 (session 2)** — **The `[TEST]` doctor exposure claim corrected**
+  (PR #23). This file had said for three sessions that "a patient can still be
+  charged ₹388.37 for an appointment that does not exist". It collapsed two
+  different claims — *the server fix isn't deployed* (true) and *patients are
+  exposed* (not true). **Both clients filter `[TEST]` hospitals themselves**,
+  and the app's filter is inside shipped build 36, not just on `main`.
+  Verified rather than reasoned: the live site renders **14 doctors with Heyi
+  absent while the API returns 15**, and `git merge-base --is-ancestor` places
+  the app filter inside `eddf5dd`. The real exposure is API-direct plus a deep
+  link — worth closing, not an emergency. **The rule this earned:** when a risk
+  line is about money, check the surface a patient actually touches. The client
+  may already be defending, and a server-side gap is not automatically a
+  patient-facing one.
+- **2026-08-14 (session 2)** — **The app's doctor detail screen now hides
+  test-hospital doctors** (app PR #8). Found while correcting the above: the
+  list had filtered `[TEST]` since build 36 but `doctor/[id].tsx` never did, so
+  a deep link rendered the full bookable screen for the one row in the system
+  with `payment_collection_mode='FULL'`. Uses the helper the sibling list
+  already imports and the same `safeBack(router, '/(patient)/doctors')` the
+  missing-doctor path uses, so a cold deep link with no back stack lands on the
+  list instead of no-oping. 12 lines, `tsc` clean, 133 tests.
+  **Untested wiring, stated plainly:** `isTestHospital` is unit-tested, the
+  guard is not — the app has no screen-test harness at all, which is the
+  standing item in Next rather than something this change introduced.
 - **2026-08-14** — **The OTP per-IP daily ceiling raised 200 → 2000**, closing
   item 2c, merged as **PR #22** along with the rest of `feat/app-version-gate`.
   200/day was the same CGNAT mistake the *burst* on that branch had just been
