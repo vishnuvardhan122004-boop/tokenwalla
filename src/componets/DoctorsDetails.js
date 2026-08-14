@@ -111,6 +111,18 @@ export default function DoctorDetails() {
           return;
         }
         setDoctor(data);
+        // Count this as a view, once per browser session per doctor. Without
+        // the guard a refresh or a back-and-forth inflates the count, and the
+        // ranking would reward whoever reloads most rather than what patients
+        // actually pick. Fire-and-forget: a failed count must never affect the
+        // page, so no await, no error surface.
+        try {
+          const seen = `tw_viewed_${id}`;
+          if (!sessionStorage.getItem(seen)) {
+            sessionStorage.setItem(seen, '1');
+            API.post(`/doctors/${id}/view/`).catch(() => {});
+          }
+        } catch { /* private mode: no sessionStorage, skip the count */ }
         // Fetch the hospital for announcement, about, hours, socials,
         // services & gallery — the doctor payload doesn't include them.
         if (data?.hospital) {

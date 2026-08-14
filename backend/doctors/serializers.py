@@ -40,6 +40,7 @@ class DoctorSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "specialization", "keywords", "experience",
             "mobile", "landline", "available", "fee", "slots", "days", "max_per_slot",
+            "view_count",
             "payment_collection_mode", "fee_breakdown",
             "image", "hospital_image",
             "image_url", "hospital_image_url",
@@ -55,6 +56,8 @@ class DoctorSerializer(serializers.ModelSerializer):
             "landline":       {"required": False, "allow_blank": True},
             "experience":     {"required": False},
             "max_per_slot":   {"required": False},
+            # Ranking signal only — a client must never be able to set it.
+            "view_count":     {"read_only": True},
             "available":      {"required": False},
             "fee":            {"required": False},
             # Non-sensitive: tells patients/checkout whether the consultation fee
