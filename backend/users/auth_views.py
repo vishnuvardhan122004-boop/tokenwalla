@@ -86,6 +86,34 @@ def _reserve_otp_send(mobile):
     return allowed
 
 
+def _reserve_otp_send_for_ip(request):
+    """Count an OTP send against the per-IP daily ceiling.
+
+    The per-number cap can't see this attack: one host walking a list of a
+    thousand different numbers spends one send on each and never trips it. The
+    per-minute throttle only bounds the rate, not the day's total.
+
+    Residual risk, stated plainly: a distributed attacker with many IPs still
+    gets OTP_MAX_SENDS_PER_DAY per number. That's inherent — the per-number cap
+    is the backstop there.
+
+    Uses DRF's own ident so this counts the same client the throttle does
+    (X-Forwarded-For behind Railway's proxy, not the proxy's own address).
+    """
+    ident = OTPRateThrottle().get_ident(request)
+    if not ident:
+        return True  # can't identify the caller — the per-number cap still applies
+
+    allowed, sends = RateCounter.bump(
+        f'otp_sends_ip:{ident}',
+        limit=settings.OTP_MAX_SENDS_PER_IP_PER_DAY,
+        window_seconds=OTP_SEND_CAP_WINDOW,
+    )
+    if not allowed:
+        logger.warning('OTP daily send cap reached for ident %s (%s sends)', ident, sends)
+    return allowed
+
+
 def _register_otp_failure(mobile):
     """Count a wrong OTP guess; burn the code once the cap is hit."""
     _, attempts = RateCounter.bump(
@@ -373,6 +401,16 @@ class RequestOTPView(APIView):
 
         if cache.get(f'otp_limit:{mobile}'):
             return Response({'message': 'Wait 60 seconds before requesting again.'}, status=429)
+
+        # Per-IP daily ceiling — checked before the per-number budget so a host
+        # that's already over its limit can't burn a real number's allowance.
+        if not _reserve_otp_send_for_ip(request):
+            return Response(
+                # Not "tomorrow" — the window rolls 24h from the first send in
+                # it (RateCounter.bump), so it can clear at any hour.
+                {'message': 'Too many OTP requests from this network. Please try again later.'},
+                status=429,
+            )
 
         # Per-number daily ceiling — protects against SMS-flood abuse (real cost)
         # that paces itself just under the 60s cooldown.

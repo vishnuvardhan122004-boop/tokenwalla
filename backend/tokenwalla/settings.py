@@ -129,6 +129,48 @@ else:
         }
     }
 
+# ── OTP abuse limits ──────────────────────────────────────────────────────────
+# Two different jobs, and they must not be confused:
+#
+#   per NUMBER (users.auth_views, DB-backed) — the SMS spend control. 10/day.
+#   per IP     (below)                       — stops one host enumerating many
+#                                              numbers to burn credits.
+#
+# The per-IP burst was 5/minute, which 429'd real signups: carrier-grade NAT in
+# India puts a whole neighbourhood behind one public address, and a promotion
+# drives exactly that shape of traffic. The same lesson was already learned once
+# for OTP *verify* (see OTPVerifyRateThrottle) — the send bucket was never
+# revisited.
+#
+# Raising the burst on its own would make abuse cheaper (20/min is ~28,800 sends
+# a day from one IP), so it comes with a daily ceiling that did not exist before.
+# Both are env-overridable so a promotion can be widened without a deploy.
+#
+# The ceiling was 200/day and that was too low — CGNAT again, the same mistake
+# in a slower form. One public IPv4 in India can front hundreds to low thousands
+# of subscribers, and a signup costs 1-2 sends, so 200 serves only ~100-200 real
+# people before the whole carrier starts getting 429s. Worse, RateCounter's
+# window rolls from the FIRST event, so tripping it at 08:00 locks that carrier
+# out until 08:00 tomorrow, not until midnight.
+#
+# What the ceiling actually buys, priced at ~Rs 0.25/SMS through 2Factor:
+#
+#     200/day    ~Rs 50/day from one abusive IP     serves ~100-200 users
+#     2000/day   ~Rs 500/day                        serves ~1000-2000 users
+#     burst only ~Rs 7,200/day                      (28,800 sends — the thing
+#                                                    this ceiling exists to stop)
+#
+# 2000 keeps a runaway IP an order of magnitude away from the burst-only cost
+# while leaving ~10x headroom over any plausible legitimate CGNAT population.
+# The failure modes are not symmetric: an abusive IP costs a few hundred rupees
+# and shows up in the 2Factor balance, whereas a false 429 during a paid
+# promotion is silent, self-confirming and reads as "nobody wants to sign up".
+#
+# This is NOT the SMS spend control — the per-number cap above is, and it stays
+# at 10/day no matter how high this goes (users.tests_otp_ip_cap pins that).
+OTP_IP_RATE                  = config('OTP_IP_RATE', default='20/minute')
+OTP_MAX_SENDS_PER_IP_PER_DAY = config('OTP_MAX_SENDS_PER_IP_PER_DAY', default=2000, cast=int)
+
 # ── Anonymous browse rate ─────────────────────────────────────────────────────
 # AnonRateThrottle keys on the client IP. Carrier-grade NAT in India puts a
 # whole neighbourhood behind one public address, so this bucket is shared by
@@ -168,7 +210,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': ANON_RATE,
         'user': '300/minute',
-        'otp':  '5/minute',    # requesting an OTP (sends SMS/voice — real cost)
+        'otp':  OTP_IP_RATE,   # per-IP burst on OTP sends; see the block above
         'otp_verify': '30/minute',  # verifying / checking (cheap, several per flow)
         'admin_setup': '10/hour',   # /auth/create-admin/ — anti brute-force on the setup key
     },
@@ -270,6 +312,27 @@ WHATSAPP_TEMPLATE_BOOKING_CANCELLED = config('WHATSAPP_TEMPLATE_BOOKING_CANCELLE
 WHATSAPP_TEMPLATE_NO_SHOW        = config('WHATSAPP_TEMPLATE_NO_SHOW', default='booking_no_show')
 WHATSAPP_TEMPLATE_LANG           = config('WHATSAPP_TEMPLATE_LANG', default='en')
 ADMIN_SETUP_KEY = config('ADMIN_SETUP_KEY', default='')
+
+# ── Mobile app version gate ───────────────────────────────────────────────────
+# Read by GET /api/app-version/ and used by the app to decide whether to nag or
+# block on launch. Set on Railway; changing a variable there redeploys the
+# service, and every installed app picks the new values up on its next launch —
+# no store release needed to start or stop prompting.
+#
+#   APP_MIN_VERSION    below this, the app blocks (its API calls no longer match
+#                      this backend). Leave EMPTY to never block — that is the
+#                      default on purpose, so a typo can't brick every install.
+#   APP_LATEST_VERSION below this, the app shows a dismissible "update available".
+#
+# Both are dotted numeric strings ('1.2.0'). An empty value disables that tier.
+APP_MIN_VERSION    = config('APP_MIN_VERSION',    default='')
+APP_LATEST_VERSION = config('APP_LATEST_VERSION', default='')
+APP_STORE_URL      = config(
+    'APP_STORE_URL',
+    default='https://play.google.com/store/apps/details?id=com.vishnu2004.Tokenwalla',
+)
+APP_UPDATE_MESSAGE = config('APP_UPDATE_MESSAGE', default='')
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 LOGGING = {
     'version':                  1,
