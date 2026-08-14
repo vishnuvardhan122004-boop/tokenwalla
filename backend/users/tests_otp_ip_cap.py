@@ -20,7 +20,7 @@ from unittest import mock
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 
-from users.auth_views import OTPRateThrottle
+from users.auth_views import OTP_MAX_SENDS_PER_DAY, OTPRateThrottle
 from users.models import RateCounter
 
 
@@ -84,3 +84,28 @@ class OTPPerIPDailyCapTests(TestCase):
         with override_settings(OTP_MAX_SENDS_PER_IP_PER_DAY=1):
             self.assertEqual(self._request('9812345670').status_code, 200)
             self.assertEqual(self._request('9812345671').status_code, 429)
+
+    @override_settings(OTP_MAX_SENDS_PER_IP_PER_DAY=2000)
+    def test_a_generous_ip_ceiling_does_not_relax_the_per_number_cap(self):
+        """The per-number cap stays the SMS spend control, whatever the IP one is.
+
+        The IP ceiling was raised 200 -> 2000 because 200 was 429'ing real users
+        behind carrier-grade NAT. That is only safe while the per-number cap is
+        the thing actually bounding spend — so this pins the two apart. If a
+        future change lets the IP ceiling become the binding limit, one number
+        could be texted 2000 times in a day and this test is what says so.
+
+        The 60s cooldown is cleared between sends because it is a separate
+        control: a patient waiting out the minute is normal, and it must not be
+        what stops the eleventh text.
+        """
+        mobile = '9876500001'
+        for i in range(OTP_MAX_SENDS_PER_DAY):
+            res = self._request(mobile)
+            self.assertEqual(res.status_code, 200, f'send {i + 1}: {res.content}')
+            cache.delete(f'otp_limit:{mobile}')
+
+        blocked = self._request(mobile)
+        self.assertEqual(blocked.status_code, 429)
+        self.assertIn('number', blocked.json()['message'].lower())
+        self.assertEqual(self.send_otp.call_count, OTP_MAX_SENDS_PER_DAY)

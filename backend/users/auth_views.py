@@ -406,7 +406,9 @@ class RequestOTPView(APIView):
         # that's already over its limit can't burn a real number's allowance.
         if not _reserve_otp_send_for_ip(request):
             return Response(
-                {'message': 'Too many OTP requests from this network today. Try again tomorrow.'},
+                # Not "tomorrow" — the window rolls 24h from the first send in
+                # it (RateCounter.bump), so it can clear at any hour.
+                {'message': 'Too many OTP requests from this network. Please try again later.'},
                 status=429,
             )
 

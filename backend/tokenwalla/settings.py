@@ -142,12 +142,34 @@ else:
 # for OTP *verify* (see OTPVerifyRateThrottle) — the send bucket was never
 # revisited.
 #
-# Raising the burst on its own would make abuse cheaper (5/min is ~7,200 sends a
-# day from one IP), so it comes with a daily ceiling that did not exist before.
-# Net: 4x the burst tolerance for real users, ~36x tighter on sustained abuse.
+# Raising the burst on its own would make abuse cheaper (20/min is ~28,800 sends
+# a day from one IP), so it comes with a daily ceiling that did not exist before.
 # Both are env-overridable so a promotion can be widened without a deploy.
+#
+# The ceiling was 200/day and that was too low — CGNAT again, the same mistake
+# in a slower form. One public IPv4 in India can front hundreds to low thousands
+# of subscribers, and a signup costs 1-2 sends, so 200 serves only ~100-200 real
+# people before the whole carrier starts getting 429s. Worse, RateCounter's
+# window rolls from the FIRST event, so tripping it at 08:00 locks that carrier
+# out until 08:00 tomorrow, not until midnight.
+#
+# What the ceiling actually buys, priced at ~Rs 0.25/SMS through 2Factor:
+#
+#     200/day    ~Rs 50/day from one abusive IP     serves ~100-200 users
+#     2000/day   ~Rs 500/day                        serves ~1000-2000 users
+#     burst only ~Rs 7,200/day                      (28,800 sends — the thing
+#                                                    this ceiling exists to stop)
+#
+# 2000 keeps a runaway IP an order of magnitude away from the burst-only cost
+# while leaving ~10x headroom over any plausible legitimate CGNAT population.
+# The failure modes are not symmetric: an abusive IP costs a few hundred rupees
+# and shows up in the 2Factor balance, whereas a false 429 during a paid
+# promotion is silent, self-confirming and reads as "nobody wants to sign up".
+#
+# This is NOT the SMS spend control — the per-number cap above is, and it stays
+# at 10/day no matter how high this goes (users.tests_otp_ip_cap pins that).
 OTP_IP_RATE                  = config('OTP_IP_RATE', default='20/minute')
-OTP_MAX_SENDS_PER_IP_PER_DAY = config('OTP_MAX_SENDS_PER_IP_PER_DAY', default=200, cast=int)
+OTP_MAX_SENDS_PER_IP_PER_DAY = config('OTP_MAX_SENDS_PER_IP_PER_DAY', default=2000, cast=int)
 
 # ── REST Framework ────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
