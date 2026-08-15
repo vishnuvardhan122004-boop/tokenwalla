@@ -38,6 +38,8 @@ triggered by a push to main.
 | Verified Railway resumed deploying the 4-day backlog | backend | #25 (trigger) | ✅ live |
 | Item 0 (unpaid bill) + item 2b (`[TEST]`/Heyi API hole) closed | — | — | ✅ |
 | WhatsApp token confirmed live on Railway (item 4) | backend | — | ✅ delivered to handset |
+| All **7** WhatsApp templates verified delivering | backend | — | ✅ approval + param counts confirmed |
+| `WHATSAPP_TEMPLATES.md` "← submit this" markers corrected | backend | — | ✅ doc was stale |
 
 - **Paying the bill did not redeploy.** Main hadn't changed, so Railway's GitHub
   integration had no new event. Merging PR #25 (session-3 wrap, docs-only) was
@@ -52,6 +54,18 @@ triggered by a push to main.
   message arrived**. A `message_id` alone is not proof (`send_template` never
   raises); delivery is. Path traps: `/app` **is** the backend root, and a local
   run uses the local `.env` token, not Railway's.
+- **All seven templates then verified**, not just the one: `booking_confirmation`,
+  `doctor_unavailable`, `hospital_new_booking`, `appointment_reminder`,
+  `doctor_payout`, `booking_cancelled`, `booking_no_show` — each sent, each
+  received. Confirms approval *and* param counts (4–7, differing per template).
+- **Two stale docs corrected.** `WHATSAPP_TEMPLATES.md` marked four templates
+  "← submit this" and ROADMAP said "all 4 templates approved" (2026-07-27) —
+  written before cancel/no-show/payout shipped on 2026-08-06/07. Following
+  either would have meant submitting duplicates.
+- **No new template needed** (asked: one for registration?). A template only
+  fires if a `send_*` function names it — there are exactly seven senders — and
+  registration/OTP runs on **2Factor SMS**, not WhatsApp. Payouts already have
+  `doctor_payout`.
 
 ---
 

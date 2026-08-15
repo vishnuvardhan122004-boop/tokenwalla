@@ -276,9 +276,25 @@ exist (the Railway service root is already `backend/`), and running it **locally
 proves nothing** — it reads the local `.env` token, a different value from
 Railway's. `railway run` needs `railway login` first.
 
-The other three templates (`doctor_unavailable`, `appointment_reminder`,
-`hospital_new_booking`) share the same token, so the credential is settled; only
-their param counts are untested.
+**All seven templates verified the same day — the notification surface is fully
+proven.** `booking_confirmation`, `doctor_unavailable`, `hospital_new_booking`,
+`appointment_reminder`, `doctor_payout`, `booking_cancelled` and
+`booking_no_show` were each sent against live Railway and **each arrived**. That
+confirms approval state *and* param counts (4 to 7, differing per template)
+match what `notifications/whatsapp.py` sends.
+
+**Two stale claims corrected by this:** `WHATSAPP_TEMPLATES.md` still marked
+four of them "← submit this", and the 2026-07-27 Done entry said "all 4
+templates approved" — there are **seven**, because cancel/no-show/payout were
+added 2026-08-06/07, after that date. The doc now records all seven as approved
+so nobody submits a duplicate.
+
+**No new template is needed, and this is the answer to "do we need one for
+registration".** A template only ever fires if a `send_*` function names it, and
+there are exactly seven senders. Registration/OTP goes over **2Factor SMS, not
+WhatsApp** — there is no registration sender at all, so adding a template would
+be a new feature (code + template + consent), not a gap. Payouts are already
+covered by `doctor_payout`.
 
 ### 5. Ship the mobile app — two of three gates cleared 🟠
 
@@ -550,6 +566,15 @@ Resolved and deliberately removed, so they don't get re-added:
 > since 1.1.3 (36) on 2026-08-08, so **nothing in the app entries has reached a
 > patient** until an EAS build ships. Check item 5 before assuming an app change
 > is live.
+
+- **2026-08-16** — **All seven WhatsApp templates verified delivering.** Beyond
+  the token (below), every template was sent against live Railway and **each
+  arrived on a handset** — confirming approval state and the per-template param
+  counts (4–7) match `notifications/whatsapp.py`. This corrected two stale
+  claims: `WHATSAPP_TEMPLATES.md` marked four as "← submit this", and the
+  2026-07-27 entry said "all 4 templates", written before cancel/no-show/payout
+  existed. **No new template is needed** — one only fires if a `send_*` function
+  names it, and registration/OTP runs on 2Factor **SMS**, not WhatsApp.
 
 - **2026-08-16** — **The permanent WhatsApp token is confirmed live on Railway**
   (item 4). `send_test_whatsapp --template booking_confirmation`, run in the
@@ -945,5 +970,8 @@ Resolved and deliberately removed, so they don't get re-added:
 - **2026-08-06** — WhatsApp the doctor when a payout is marked paid
 - **2026-08-05** — reverted Cashfree → Razorpay; manual doctor payout flow
 - **2026-08-05** — service-fee-only default; checkout repriced server-side
-- **2026-07-27** — all 4 Meta WhatsApp templates approved and delivering
+- **2026-07-27** — the first 4 Meta WhatsApp templates approved and delivering.
+  (**There are seven now** — cancel/no-show/payout were added 2026-08-06/07 and
+  all seven were verified delivering on 2026-08-16. This line used to read "all
+  4", which quietly became wrong the moment the later three shipped.)
 - **2026-07-26** — security review: 15 findings + 2 hardening items closed
