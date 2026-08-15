@@ -282,6 +282,87 @@ Env var: `WHATSAPP_TEMPLATE_NO_SHOW` (default `booking_no_show`).
 
 ---
 
+## 8. `queue_advance`  ⏳ SUBMIT THIS (added 2026-08-16)
+
+Sent when hospital staff call the patient in (`CONFIRMED/WAITING → IN_PROGRESS`),
+from both the dashboard Call button and the QR scanner. Push already covers this;
+WhatsApp reaches the patient who booked from the **website** or never installed
+the app.
+
+**Time-critical** — the patient has to walk in now, so keep the body short.
+
+```
+Hi {{1}}, you're next! {{2}} at {{3}} is ready to see you now.
+
+Please head to the reception desk with your token {{4}}.
+```
+
+| Placeholder | Meaning | Sample value for review |
+|-------------|---------|-------------------------|
+| `{{1}}` | Patient name | Rahul |
+| `{{2}}` | Doctor name | Anita Rao |
+| `{{3}}` | Hospital name | City Care Clinic |
+| `{{4}}` | Booking reference (token) | TW-024607-E90BC0 |
+
+Env var: `WHATSAPP_TEMPLATE_QUEUE_ADVANCE` (default `queue_advance`).
+
+---
+
+## 9. `booking_on_hold`  ⏳ SUBMIT THIS (added 2026-08-16)
+
+Sent when staff put a waiting patient on hold, so the queue visibly moves past
+them. Must say they are **still in the queue** — a patient who thinks they were
+dropped walks out.
+
+```
+Hi {{1}}, your place in the queue for {{2}} at {{3}} is on hold — the doctor has been called away briefly.
+
+You have NOT lost your turn. Token {{4}} is still active and staff will call you shortly.
+```
+
+| Placeholder | Meaning | Sample value for review |
+|-------------|---------|-------------------------|
+| `{{1}}` | Patient name | Rahul |
+| `{{2}}` | Doctor name | Anita Rao |
+| `{{3}}` | Hospital name | City Care Clinic |
+| `{{4}}` | Booking reference (token) | TW-024607-E90BC0 |
+
+Env var: `WHATSAPP_TEMPLATE_ON_HOLD` (default `booking_on_hold`).
+
+---
+
+## 10. `hospital_cancellation`  ⏳ SUBMIT THIS (added 2026-08-16)
+
+Goes to the **hospital**, not the patient — the other half of
+`hospital_new_booking`. The hospital is told when a booking arrives, so it should
+be told when one goes away and the slot can be reused. Never gated on the
+patient's `whatsapp_opt_in`.
+
+```
+{{1}}: a booking has been cancelled.
+
+Patient {{2}} with {{3}} on {{4}} at {{5}} (token {{6}}) is cancelled. The slot is free again.
+```
+
+| Placeholder | Meaning | Sample value for review |
+|-------------|---------|-------------------------|
+| `{{1}}` | Hospital name | City Care Clinic |
+| `{{2}}` | Patient name | Rahul |
+| `{{3}}` | Doctor name | Anita Rao |
+| `{{4}}` | Appointment date | 2026-08-12 |
+| `{{5}}` | Slot | 10:30 AM |
+| `{{6}}` | Booking reference (token) | TW-024607-E90BC0 |
+
+Env var: `WHATSAPP_TEMPLATE_HOSPITAL_CANCELLED` (default `hospital_cancellation`).
+
+> **Until these three are approved, the code is inert, not broken.**
+> `send_template` logs a warning and returns on an unknown template, so the push
+> half still fires and nothing fails. Verify each after approval with
+> `send_test_whatsapp <mobile> --template queue_advance` (sample params for all
+> three are built into the command).
+
+---
+
 ## Submission checklist
 
 1. WhatsApp Manager → **Message templates** → **Create template**.

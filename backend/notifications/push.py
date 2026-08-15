@@ -146,6 +146,64 @@ def push_doctor_unavailable(booking):
         logger.warning('[push] doctor_unavailable push failed for booking %s: %s', booking.id, exc)
 
 
+def push_booking_confirmed(booking):
+    """Patient alert the moment payment is verified and the token is issued.
+
+    The patient already gets `send_booking_confirmation` on WhatsApp; this is the
+    in-app half of the same event, so a patient who has the app and has opted out
+    of WhatsApp (or simply reads notifications first) still gets the token.
+    Paired deliberately — the confirmation is the one message that must land.
+    """
+    try:
+        push_to_user(
+            booking.user,
+            title='✅ Booking confirmed',
+            body=(
+                f'Token {booking.token} with {booking.doctor.name} at '
+                f'{booking.hospital.name} on {booking.date}, {booking.slot}.'
+            ),
+            data={
+                'screen': 'my-bookings',
+                'type': 'booking_confirmed',
+                'appId': f'confirm-{booking.id}',
+                'audience': 'patient',
+                'token': booking.token,
+            },
+            role='patient',
+        )
+    except Exception as exc:
+        logger.warning('[push] confirmed push failed for booking %s: %s', booking.id, exc)
+
+
+def push_appointment_reminder(booking):
+    """Patient reminder before the slot — the in-app half of the WhatsApp one.
+
+    Fired from the `send_appointment_reminders` cron beside
+    `send_appointment_reminder`, so both channels are driven by the same
+    `reminder_sent` flag and a patient cannot be reminded twice on one channel
+    and never on the other.
+    """
+    try:
+        push_to_user(
+            booking.user,
+            title='⏰ Appointment reminder',
+            body=(
+                f'Token {booking.token} with {booking.doctor.name} at '
+                f'{booking.hospital.name} — {booking.slot} today.'
+            ),
+            data={
+                'screen': 'my-bookings',
+                'type': 'appointment_reminder',
+                'appId': f'remind-{booking.id}',
+                'audience': 'patient',
+                'token': booking.token,
+            },
+            role='patient',
+        )
+    except Exception as exc:
+        logger.warning('[push] reminder push failed for booking %s: %s', booking.id, exc)
+
+
 def push_booking_in_progress(booking):
     """Patient 'your turn' alert when a booking moves waiting → in_progress."""
     try:

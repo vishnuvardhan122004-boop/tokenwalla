@@ -345,3 +345,113 @@ def send_doctor_payout_paid(batch):
         wa_message_id=result.get('message_id') or '',
         error=result.get('error') or '',
     )
+
+
+def send_queue_advance(booking):
+    """Tell the patient on WhatsApp that they are next in the queue.
+
+    The one notification where lateness makes it worthless: the patient has to
+    physically walk in now. Push already covers this, but a push is only seen if
+    the app is installed and its token is live — WhatsApp reaches the patient who
+    booked from the website or never installed the app at all.
+
+    Template body (see notifications/WHATSAPP_TEMPLATES.md) params:
+      {{1}} patient name  {{2}} doctor  {{3}} hospital  {{4}} token
+    """
+    from .models import WhatsAppLog
+
+    user = booking.user
+    if not getattr(user, 'whatsapp_opt_in', True):
+        return
+
+    result = send_template(
+        to_mobile=user.mobile,
+        template_name=settings.WHATSAPP_TEMPLATE_QUEUE_ADVANCE,
+        params=[
+            user.first_name or user.username,
+            booking.doctor.name,
+            booking.hospital.name,
+            booking.token,
+        ],
+    )
+    WhatsAppLog.objects.create(
+        booking=booking,
+        event_type='queue_advance',
+        status='sent' if result['success'] else 'failed',
+        wa_message_id=result.get('message_id') or '',
+        error=result.get('error') or '',
+    )
+
+
+def send_booking_on_hold(booking):
+    """Tell the patient the queue moved past them and they were put on hold.
+
+    Without this the queue visibly advances past the patient with no explanation
+    — the most common reason someone walks out believing they were forgotten.
+    The message therefore has to say they are still in the queue, not dropped.
+
+    Template body (see notifications/WHATSAPP_TEMPLATES.md) params:
+      {{1}} patient name  {{2}} doctor  {{3}} hospital  {{4}} token
+    """
+    from .models import WhatsAppLog
+
+    user = booking.user
+    if not getattr(user, 'whatsapp_opt_in', True):
+        return
+
+    result = send_template(
+        to_mobile=user.mobile,
+        template_name=settings.WHATSAPP_TEMPLATE_ON_HOLD,
+        params=[
+            user.first_name or user.username,
+            booking.doctor.name,
+            booking.hospital.name,
+            booking.token,
+        ],
+    )
+    WhatsAppLog.objects.create(
+        booking=booking,
+        event_type='booking_on_hold',
+        status='sent' if result['success'] else 'failed',
+        wa_message_id=result.get('message_id') or '',
+        error=result.get('error') or '',
+    )
+
+
+def send_hospital_cancellation(booking):
+    """Tell the hospital a patient cancelled, so the slot can be reused.
+
+    Goes to the hospital's own number, NOT the patient, so it is never gated on
+    the patient's whatsapp_opt_in — mirroring send_hospital_new_booking. This is
+    the other half of that message: the hospital is told when a booking arrives,
+    so it should be told when one goes away.
+
+    Template body (see notifications/WHATSAPP_TEMPLATES.md) params:
+      {{1}} hospital name  {{2}} patient name  {{3}} doctor
+      {{4}} date           {{5}} slot          {{6}} token
+    """
+    from .models import WhatsAppLog
+
+    hospital = booking.hospital
+    if not hospital.mobile:
+        return
+
+    result = send_template(
+        to_mobile=hospital.mobile,
+        template_name=settings.WHATSAPP_TEMPLATE_HOSPITAL_CANCELLED,
+        params=[
+            hospital.name,
+            booking.patient_display_name,
+            booking.doctor.name,
+            str(booking.date),
+            booking.slot,
+            booking.token,
+        ],
+    )
+    WhatsAppLog.objects.create(
+        booking=booking,
+        event_type='hospital_cancellation',
+        status='sent' if result['success'] else 'failed',
+        wa_message_id=result.get('message_id') or '',
+        error=result.get('error') or '',
+    )

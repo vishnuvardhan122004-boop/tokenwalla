@@ -169,14 +169,18 @@ collides with a LATER, UNRELATED test's first write and fails it with
 `database table is locked`. It reproduces about one run in four, on a different
 test each time, so a single green run proves nothing.
 
-There are four such threads. Any test that reaches one must patch it:
+There are four such threads. Any test that reaches one must patch it — and note
+the `_whatsapp_async` row grew on 2026-08-16: the **call** and **QR scan**
+endpoints now fire one too (queue-advance WhatsApp), so a test of either that
+previously needed no patch does now. The sender writes a `WhatsAppLog` row, so
+the thread does a **DB write**, which is the flake, with or without a token:
 
 | Fires on | Patch |
 |---|---|
 | booking through `/verify/` | `payments.views._dispatch_booking_notifications` |
 | `/api/payment/payouts/mark-paid/` | `payments.views._notify_doctor_payout_async` |
 | doctor toggled to unavailable | `doctors.views._notify_doctor_unavailable` |
-| booking cancel / hold / no-show | `bookings.views._whatsapp_async` |
+| booking cancel / hold / no-show / **call** / **QR scan** | `bookings.views._whatsapp_async` |
 
 ```python
 @mock.patch('payments.views._dispatch_booking_notifications', lambda b: None)
