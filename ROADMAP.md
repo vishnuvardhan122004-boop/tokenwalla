@@ -7,7 +7,7 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-14 (session 2)
+- **Last updated:** 2026-08-14 (session 3)
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -24,6 +24,16 @@ actually deployed is `2c4ec25` (PR #12, the location picker).
 **Cause is known: the Railway bill is unpaid.** Vishnu said so on 2026-08-13.
 It is not a build failure, not a CI hold — CI is green on every merge — and
 not something a session can fix. **Pay the bill, then confirm the deploy.**
+
+> **2026-08-14, end of session 3:** Vishnu is settling the bill, after which
+> Railway is expected to resume deploying on its own. **First move next session
+> is to verify that actually happened** — a resumed billing account does not
+> guarantee a completed deploy, and this item has now survived three sessions of
+> being assumed fixed. Run the three probes below before doing anything else.
+> When they go green, five things land at once: the `[TEST]` hospital filter,
+> walk-in/landline, the popularity endpoint, `/api/app-version/`, and the OTP
+> ceiling. Watch `/health/` and the Railway logs for a few minutes afterwards —
+> that is four days of migrations and code arriving in one deploy.
 
 Confirm with. The first check is **new as of 2026-08-14 and is the best one** —
 `/api/app-version/` did not exist before PR #22, so a 200 proves the running
@@ -303,23 +313,51 @@ manage.py send_test_whatsapp <mobile> --template booking_confirmation
 
 Proves it end to end with no test booking and no real money.
 
-### 5. Ship the mobile app — ONE gate left, and it needs a device 🔴
+### 5. Ship the mobile app — two of three gates cleared 🟠
 
-**Status 2026-08-14: finding 1 is closed, findings 2 and 3 are not.** App `main`
-is 1.2.0 and contains everything. **The next action is an EAS *preview* build —
-not production.**
+**Status end of 2026-08-14: findings 1 and 2 are CLOSED, 3 is half closed.**
+A preview build was made, installed on a real device, and **push notifications
+were confirmed arriving.** That is the first time any of this has been proven
+outside a test runner.
+
+**The production build was deliberately NOT run.** Two things should land first:
+
+1. **Merge app PR #5** (`feat/popular-doctors-first`). The website ranks doctors
+   by popularity as of today; without this the app orders them differently.
+   Safe against the stale backend — it catches the view POST and falls back to
+   `|| 0`.
+2. **Finish the device checks.** Push passed. These never ran:
+   - the **hospital location picker** — highest risk: Leaflet in a WebView modal
+     (the half-grey-panel trap) plus the `expo-location` permission flow
+   - a **walk-in (slotless) doctor** — must show hours, days and a call button
+     and **no Book button**; a booking CTA there would take money for a slot
+     that does not exist
+   - **Android back** from doctor detail and payment
+   - a real **₹25.37 booking** — the APK carries `rzp_live_`, so this charges a
+     real card
+
+Then:
 
 ```bash
 cd "/Users/kvishnuvardhan/Desktop/app /Tokenwalla"   # note the space in "app /"
-eas build --profile preview --platform android
+eas build --profile production --platform android
 ```
 
-Then install it and actually open: a doctor page, the hospital location picker,
-and a slotless walk-in doctor. **None of those three has ever rendered on a real
-device.** No session can do this — there is no simulator and no Android SDK on
-this machine (Command Line Tools only, no Xcode).
+**Build facts, read from EAS on 2026-08-14** (`eas build:list`):
 
-The original gate run follows, with finding 1 struck.
+| Profile | Version | Code | Commit |
+|---|---|---|---|
+| preview | 1.2.0 | 36 | `79f22ee` — the APK that was installed and tested |
+| production | 1.1.3 | 36 | `eddf5dd` — what is live on Play right now |
+
+Production auto-increments to **37**, so Play will accept it as new. Note the
+tested APK predates the Sentry merge (`fc8da3a`), so **Sentry has never actually
+run on a device** — worth forcing one crash on a preview build before trusting
+it in production.
+
+`eas submit` is still unconfigured, so the AAB goes to Play Console **by hand**.
+
+The original gate run follows, with findings 1 and 2 struck.
 
 > **Verdict on 2026-08-11 session 3: NOT ready to push to the Play Store.**
 > Checked against the repo, not guessed. Three findings, in order of severity:
@@ -328,29 +366,33 @@ The original gate run follows, with finding 1 struck.
 >    #6, #7 and #8 merged, so `main` is 1.2.0 and carries the 13 release commits,
 >    the picker, the map-timeout fix, the checkout fix (`5b11bd7`) and the
 >    ₹15→₹20 correction together.
-> 2. **Push would have been dead in the build.** `google-services.json` is
->    gitignored, so EAS never received it — `DONE-push-setup.md` step 6 names
->    this exact failure. Fixed by `.easignore` (app PR #2, merged). Note
->    `.easignore` *replaces* `.gitignore` for EAS rather than adding to it, so it
->    is a full mirror minus the Firebase client config; a minimal one would have
->    uploaded `node_modules` and the local `ios/` Pods tree and flipped EAS into
->    a bare-workflow build. **Still unproven end to end** — only a real preview
->    build with a working push confirms it.
-> 3. **No crash reporting at all.** `sentryDsn` is `""` so Sentry is disabled
->    outright, plus `SENTRY_DISABLE_AUTO_UPLOAD: "true"` on all three profiles.
->    Releasing into a promotion means learning about crashes from users.
+> 2. ~~**Push would have been dead in the build.**~~ **CLOSED 2026-08-14 —
+>    proven on a real device.** A test push was sent through the Expo push API
+>    and **arrived**. That single result confirms three things at once: the
+>    `.easignore` mirror actually delivered `google-services.json` to the
+>    builder (the failure `DONE-push-setup.md` step 6 warned about), the EAS FCM
+>    credentials match the shipped config (no `MismatchSenderId`), and the
+>    `appointments` channel and notification icon are correct — the icon is
+>    baked in at build time and cannot be added later without another release.
+> 3. **No crash reporting at all** — **half closed 2026-08-14.** `sentryDsn` is
+>    now set (app PR #9), so crashes, counts, devices and screens will report.
+>    **Sourcemaps still do not upload**: `SENTRY_DISABLE_AUTO_UPLOAD` stays
+>    `"true"` on all three profiles because there is no `SENTRY_AUTH_TOKEN` in
+>    EAS, so production stack traces arrive **minified**. Deliberate — visibility
+>    now, symbolication when the token is set up.
 >
 > Checked and **fine**: the update gate handles a missing `/api/app-version/`
-> with `catch { return }`, so the unmerged backend branch is not a blocker;
-> `appVersionSource: "remote"` + `autoIncrement` handles versionCode;
-> `google-services.json` content is valid and the package matches. `eas submit`
-> is still unconfigured, so the AAB goes to Play Console by hand.
+> with `catch { return }`; `appVersionSource: "remote"` + `autoIncrement`
+> handles versionCode; `google-services.json` content is valid and the package
+> matches. `eas submit` is still unconfigured, so the AAB goes to Play Console
+> by hand.
 >
-> **Order: merge 1 and 2 → preview build → install and actually use it → only
-> then production.** The merges are done as of 2026-08-14; the preview build and
-> the device check are not. The picker and its offline path have still never run
-> on a device; there is no simulator or Android SDK on this machine (Command
-> Line Tools only, no Xcode), so that check cannot be done from a session.
+> **Order: merge → preview build → install and actually use it → only then
+> production.** The merges and the preview build are done as of 2026-08-14, and
+> push is verified. The picker, the walk-in screen and the money path are still
+> unchecked on a device; there is no simulator or Android SDK on this machine
+> (Command Line Tools only, no Xcode), so that check cannot be done from a
+> session.
 
 
 **The store build is NOT stale, and that settles item 7 below.** Latest
@@ -422,6 +464,14 @@ the careful edge cases were the right ones.
   with the announcement read-view on web but not in the app. Neither was caught
   by tests, because both are presentation. When a feature touches web + app,
   diff the two surfaces before calling it done.
+- **The Expo push token is only logged under `__DEV__`** — new 2026-08-14, and
+  it cost time during the first real push test. `registerPushToken` logs the
+  token to the Metro console only when `__DEV__`, so on a **preview or
+  production build — exactly the builds you must test push with — there is no
+  way to see it.** The workaround that worked: log into the app (registration
+  only fires after login, from `HomeScreen`), then read `expo_token` out of
+  Django admin at `/admin/notifications/devicetoken/`. Worth either logging it
+  unconditionally or surfacing it on a debug screen.
 - **A blocked OTP IP is invisible** — new 2026-08-14, and it is the concrete
   reason the observability item below should move up. Hitting
   `OTP_MAX_SENDS_PER_IP_PER_DAY` produces a `logger.warning` and nothing else.
@@ -534,6 +584,51 @@ Resolved and deliberately removed, so they don't get re-added:
 > are running, the **backend entries are not**, and **nothing in the app
 > entries has reached a patient**. Check item 0 and item 5 before assuming.
 
+- **2026-08-14 (session 3)** — **Push notifications proven on a real device.**
+  A preview build (1.2.0, code 36, commit `79f22ee`) was built, installed, and a
+  test push arrived. This had been listed as "unproven end to end" since
+  2026-08-11 and is the first time any of this app has been verified outside a
+  test runner. It confirms the `.easignore` mirror delivered
+  `google-services.json` to the builder, the EAS FCM credentials match, and the
+  notification channel and build-time icon are right.
+- **2026-08-14 (session 3)** — **Crash reporting switched on** (app PR #9).
+  `services/sentry.ts`, the `ErrorBoundary` hook and the `wrapWithSentry` root
+  had been written since 2026-08-08 but **inert** — `initSentry()` returns early
+  on an empty DSN, so every crash in every build so far went unreported. One
+  line: the DSN into `app.json` beside `apiBaseUrl`, because it is a publishable
+  ingest key rather than a secret. Verified with `expo config --type public`
+  that the value survives the `app.config.js` merge — a value in `app.json` is
+  worthless if the dynamic config overwrites it.
+  **Firebase Crashlytics was considered and rejected**, and the reasoning is
+  worth keeping: the app has **no Firebase SDK at all** (push runs through
+  Expo's service using `google-services.json` purely for credentials), so
+  Crashlytics would have been a first native-module integration plus a config
+  plugin, a rebuild, and deleting 69 lines of working code — to land in the same
+  place. Sentry won only because it was already built.
+- **2026-08-14 (session 3)** — **Full release-gate audit of the app, and the
+  check nobody had run.** App 1.2.0 was written against `main`, but production
+  runs `2c4ec25` — four days stale. Diffed the actual contract rather than
+  assuming: **exactly one route added since the deployed commit**
+  (`/api/app-version/`, whose gate `catch { return }`s a 404), and
+  `payments/views.py`, `fees.py` and `razorpay_utils.py` are **byte-identical**
+  between deployed and `main`. The app's checkout fix sends `date`/`slot`
+  top-level, which the deployed backend has expected since the 2026-08-09
+  capacity work — the app was the wrong side and now is not. New serializer
+  fields the app reads (`landline`, `announcement_active`) are all optional with
+  fallbacks; `announcement_active !== false` deliberately shows announcements
+  when the field is absent. **So the app is compatible with the backend actually
+  running.** Also green: `tsc`, `eslint` (0 errors), 133 tests, `expo-doctor`
+  17/18 (the miss is `@types/jest`, dev-only), keystore untracked, no secrets
+  committed, permissions limited to location.
+- **2026-08-14 (session 3)** — **Branch cleanup: 34 remote and 37 local branches
+  deleted**, all fully merged. Deliberately kept: `develop` (it deploys to
+  staging and showed up in the merged list), `perf/dashboard-visible-polling`
+  and app `feat/popular-doctors-first` (both live work), and — the one that
+  mattered — **`harden-password-validators`, which this file had called "long
+  dead" but actually holds an unmerged commit enabling Django's
+  common/numeric/similarity password validators**, i.e. the open "raise the
+  6-char password floor" item. `website-cleanup-eslint-deadDep` likewise still
+  carries an un-landed eslint re-enable. Checking beat trusting the label.
 - **2026-08-14 (session 2)** — **Nine PRs merged, and the three-day merge
   backlog is gone.** Web/backend #20, #21, #22, #23; app #6, #7, #8 (plus #19
   earlier). App `main` went 1.1.3 → **1.2.0** with the checkout fix, picker,
