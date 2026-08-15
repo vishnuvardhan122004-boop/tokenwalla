@@ -40,6 +40,7 @@ triggered by a push to main.
 | WhatsApp token confirmed live on Railway (item 4) | backend | — | ✅ delivered to handset |
 | All **7** WhatsApp templates verified delivering | backend | — | ✅ approval + param counts confirmed |
 | `WHATSAPP_TEMPLATES.md` "← submit this" markers corrected | backend | — | ✅ doc was stale |
+| Push paired with WhatsApp on 2 patient gaps + 3 push-only events | backend | `feat/pair-push-with-whatsapp` | 🕒 open, templates §8–10 pending Meta |
 
 - **Paying the bill did not redeploy.** Main hadn't changed, so Railway's GitHub
   integration had no new event. Merging PR #25 (session-3 wrap, docs-only) was

@@ -289,12 +289,20 @@ templates approved" — there are **seven**, because cancel/no-show/payout were
 added 2026-08-06/07, after that date. The doc now records all seven as approved
 so nobody submits a duplicate.
 
-**No new template is needed, and this is the answer to "do we need one for
-registration".** A template only ever fires if a `send_*` function names it, and
-there are exactly seven senders. Registration/OTP goes over **2Factor SMS, not
-WhatsApp** — there is no registration sender at all, so adding a template would
-be a new feature (code + template + consent), not a gap. Payouts are already
-covered by `doctor_payout`.
+**No template was needed for registration, and that is the answer to "do we need
+one".** A template only ever fires if a `send_*` function names it. Registration/
+OTP goes over **2Factor SMS, not WhatsApp** — there is no registration sender at
+all, so adding a template there would be a new feature (code + template +
+consent), not a gap. Payouts are already covered by `doctor_payout`.
+
+> **Superseded in part, same day.** "There are exactly seven senders" was true
+> when written and stopped being true hours later: `feat/pair-push-with-whatsapp`
+> adds **three more** (`queue_advance`, `booking_on_hold`,
+> `hospital_cancellation`) to give the three push-only events a WhatsApp half.
+> Those **do** need submitting in Meta — see `WHATSAPP_TEMPLATES.md` §8–10, which
+> carries the body text and sample values. The rule above is unchanged: they were
+> needed because new *senders* were written, not because a template was missing.
+> The registration answer still stands.
 
 ### 5. Ship the mobile app — two of three gates cleared 🟠
 
@@ -567,14 +575,45 @@ Resolved and deliberately removed, so they don't get re-added:
 > patient** until an EAS build ships. Check item 5 before assuming an app change
 > is live.
 
+- **2026-08-16** — **Every patient event now notifies on BOTH channels**
+  (`feat/pair-push-with-whatsapp`). The goal was "notify in the app *and* on
+  WhatsApp"; the finding was that most of it already existed — `push.py` had 9
+  senders and 5 of 7 events were already paired. Two genuine gaps, both
+  patient-facing: **booking confirmed** sent WhatsApp to the patient while the
+  only push went to the *hospital* (the single most important event, silent in
+  the app), and the **appointment reminder** cron was WhatsApp-only. Then the
+  three push-only events — **queue advance, on-hold, hospital cancellation** —
+  got WhatsApp halves.
+  **The hospital cancellation is deliberately not gated on the patient's
+  `whatsapp_opt_in`**, mirroring `send_hospital_new_booking`: that flag governs
+  messages *to the patient*, and a test pins it so it is not "fixed" wrongly.
+  Migration `0009` is **choices-only** on `WhatsAppLog.event_type` (max_length
+  unchanged, no column touched), so it is safe to run before the code that writes
+  the new values.
+  **§8–10 of `WHATSAPP_TEMPLATES.md` are written but NOT approved in Meta yet** —
+  until they are, `send_template` warns and returns, so the code is inert rather
+  than broken and the push half still fires. **Nothing here reaches a patient
+  until an EAS build** either (item 5): push needs the app, and the store still
+  runs 1.1.3 (36).
+  **CLAUDE.md trap 1 was updated, and this is the part worth keeping:** the
+  **call** and **QR-scan** endpoints now fire `_whatsapp_async`, which they never
+  did before, and the sender writes a `WhatsAppLog` row — so that thread does a
+  **DB write with or without a token**. No test currently exercises those two
+  paths, which is the only reason nothing broke; the next person to write one
+  would have hit the 1-in-4 lock flake with no idea why.
+  218 tests, 5 consecutive green runs, zero `graph.facebook.com` lines.
+
 - **2026-08-16** — **All seven WhatsApp templates verified delivering.** Beyond
   the token (below), every template was sent against live Railway and **each
   arrived on a handset** — confirming approval state and the per-template param
   counts (4–7) match `notifications/whatsapp.py`. This corrected two stale
   claims: `WHATSAPP_TEMPLATES.md` marked four as "← submit this", and the
   2026-07-27 entry said "all 4 templates", written before cancel/no-show/payout
-  existed. **No new template is needed** — one only fires if a `send_*` function
-  names it, and registration/OTP runs on 2Factor **SMS**, not WhatsApp.
+  existed. **No template was needed for registration** — one only fires if a
+  `send_*` function names it, and registration/OTP runs on 2Factor **SMS**, not
+  WhatsApp. (Three *were* added later the same day, for the three push-only
+  events — see the pairing entry above and `WHATSAPP_TEMPLATES.md` §8–10, which
+  are pending approval.)
 
 - **2026-08-16** — **The permanent WhatsApp token is confirmed live on Railway**
   (item 4). `send_test_whatsapp --template booking_confirmation`, run in the

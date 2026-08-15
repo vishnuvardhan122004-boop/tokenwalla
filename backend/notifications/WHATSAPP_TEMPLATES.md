@@ -14,24 +14,31 @@ order** by the `params` list in `notifications/whatsapp.py`.
 > references it by name. If you submit under a different name, set the matching
 > `WHATSAPP_TEMPLATE_*` env var to that name.
 
-> ## ✅ Status 2026-08-16: all seven are approved and delivering.
-> Every template below was sent through `send_test_whatsapp` against the **live
-> Railway service** and **arrived on a real handset** — so the names, the
-> language, the approval state and the param counts are all confirmed to match
-> what `notifications/whatsapp.py` sends. **Nothing here needs submitting.**
-> Treat the sections below as the record of what was approved, not a to-do list.
+> ## Status: read the marker on each section, not this block.
+> **Sections 1–7 were verified on 2026-08-16** — each was sent through
+> `send_test_whatsapp` against the **live Railway service** and **arrived on a
+> real handset**, so their names, language, approval state and param counts are
+> all confirmed to match what `notifications/whatsapp.py` sends. Those seven need
+> **no** submitting; treat them as a record of what was approved.
 >
-> Re-verify any one of them with (inside the Railway container, where `/app`
-> *is* the backend root — a local run reads the local `.env` token and proves
-> nothing about production):
+> **Any section marked ⏳ SUBMIT THIS is NOT approved yet** and does need
+> submitting. Templates get added whenever a new sender is written, so this block
+> deliberately does not name a total — check the per-section marker, which is the
+> only thing that stays true.
+>
+> **An unapproved template is inert, not broken:** `send_template` logs a warning
+> and returns, so the paired push still fires and nothing fails.
+>
+> Verify any one of them with (inside the Railway container, where `/app` *is*
+> the backend root — a local run reads the local `.env` token and proves nothing
+> about production):
 >
 > ```bash
 > python manage.py send_test_whatsapp <mobile> --template booking_confirmation
 > ```
 >
-> The four newest have no built-in sample params, so they need `--params` in the
-> order documented in each section: `booking_cancelled` 6, `booking_no_show` 5,
-> `doctor_payout` 4, `hospital_new_booking` 7.
+> If the command errors with `No built-in sample params`, pass them explicitly
+> with `--params` in the order documented in that section.
 
 ---
 
