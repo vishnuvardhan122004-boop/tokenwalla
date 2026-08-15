@@ -282,7 +282,7 @@ Env var: `WHATSAPP_TEMPLATE_NO_SHOW` (default `booking_no_show`).
 
 ---
 
-## 8. `queue_advance`  ⏳ SUBMIT THIS (added 2026-08-16)
+## 8. `queue_advance`  ⏳ IN REVIEW (submitted 2026-08-16)
 
 Sent when hospital staff call the patient in (`CONFIRMED/WAITING → IN_PROGRESS`),
 from both the dashboard Call button and the QR scanner. Push already covers this;
@@ -294,7 +294,7 @@ the app.
 ```
 Hi {{1}}, you're next! {{2}} at {{3}} is ready to see you now.
 
-Please head to the reception desk with your token {{4}}.
+Booking reference {{4}}. Please head to the reception desk.
 ```
 
 | Placeholder | Meaning | Sample value for review |
@@ -308,7 +308,7 @@ Env var: `WHATSAPP_TEMPLATE_QUEUE_ADVANCE` (default `queue_advance`).
 
 ---
 
-## 9. `booking_on_hold`  ⏳ SUBMIT THIS (added 2026-08-16)
+## 9. `booking_on_hold`  ⏳ IN REVIEW (submitted 2026-08-16)
 
 Sent when staff put a waiting patient on hold, so the queue visibly moves past
 them. Must say they are **still in the queue** — a patient who thinks they were
@@ -317,7 +317,7 @@ dropped walks out.
 ```
 Hi {{1}}, your place in the queue for {{2}} at {{3}} is on hold — the doctor has been called away briefly.
 
-You have NOT lost your turn. Token {{4}} is still active and staff will call you shortly.
+You have NOT lost your turn. Booking reference {{4}} is still active and staff will call you shortly.
 ```
 
 | Placeholder | Meaning | Sample value for review |
@@ -331,7 +331,7 @@ Env var: `WHATSAPP_TEMPLATE_ON_HOLD` (default `booking_on_hold`).
 
 ---
 
-## 10. `hospital_cancellation`  ⏳ SUBMIT THIS (added 2026-08-16)
+## 10. `hospital_cancellation`  ⏳ IN REVIEW (submitted 2026-08-16)
 
 Goes to the **hospital**, not the patient — the other half of
 `hospital_new_booking`. The hospital is told when a booking arrives, so it should
@@ -339,9 +339,9 @@ be told when one goes away and the slot can be reused. Never gated on the
 patient's `whatsapp_opt_in`.
 
 ```
-{{1}}: a booking has been cancelled.
+A booking at {{1}} has been cancelled.
 
-Patient {{2}} with {{3}} on {{4}} at {{5}} (token {{6}}) is cancelled. The slot is free again.
+Patient {{2}} with {{3}} on {{4}} at {{5}} is cancelled. Booking reference {{6}}. The slot is free again.
 ```
 
 | Placeholder | Meaning | Sample value for review |
@@ -354,6 +354,31 @@ Patient {{2}} with {{3}} on {{4}} at {{5}} (token {{6}}) is cancelled. The slot 
 | `{{6}}` | Booking reference (token) | TW-024607-E90BC0 |
 
 Env var: `WHATSAPP_TEMPLATE_HOSPITAL_CANCELLED` (default `hospital_cancellation`).
+
+> **Meta's two hard content rules, learned by being rejected on 2026-08-16.**
+> These are enforced at submission — not review — so a body that breaks them
+> never even reaches a reviewer:
+>
+> 1. **A body may not start OR end with a variable.** `queue_advance` was
+>    rejected with *"Leading or trailing params not allowed"* because it ended
+>    `Booking reference {{4}}.` — the trailing full stop does **not** count as
+>    text. Fixed by moving the reference earlier so the message ends on a real
+>    sentence. `hospital_cancellation` had the mirror-image problem: it opened
+>    with `{{1}}:` and now opens `A booking at {{1}} …`.
+> 2. **Pick Utility, not the default.** The wizard defaults to **Marketing**,
+>    which costs more and needs marketing opt-in. Confirm the category shown
+>    under the template name before submitting.
+>
+> The bodies below are the ones **actually submitted**, so they can be pasted
+> as-is. Param order is unchanged throughout — no code change was needed.
+
+> **Wording note, 2026-08-16:** all three bodies originally said "token {{n}}"
+> and were reworded to **"Booking reference {{n}}"** before submission. §2 of
+> this file already records why — the word *token* beside a code-like value trips
+> Meta's **Authentication/OTP** classifier and gets the template rejected — and
+> the two templates that sailed through review (§4, §7) both use "Booking
+> reference". Only the copy changed; the param order is untouched, so no code
+> change was needed.
 
 > **Until these three are approved, the code is inert, not broken.**
 > `send_template` logs a warning and returns on an unknown template, so the push
