@@ -294,7 +294,7 @@ the app.
 ```
 Hi {{1}}, you're next! {{2}} at {{3}} is ready to see you now.
 
-Please head to the reception desk with your token {{4}}.
+Please head to the reception desk. Booking reference {{4}}.
 ```
 
 | Placeholder | Meaning | Sample value for review |
@@ -317,7 +317,7 @@ dropped walks out.
 ```
 Hi {{1}}, your place in the queue for {{2}} at {{3}} is on hold — the doctor has been called away briefly.
 
-You have NOT lost your turn. Token {{4}} is still active and staff will call you shortly.
+You have NOT lost your turn. Booking reference {{4}} is still active and staff will call you shortly.
 ```
 
 | Placeholder | Meaning | Sample value for review |
@@ -341,7 +341,7 @@ patient's `whatsapp_opt_in`.
 ```
 {{1}}: a booking has been cancelled.
 
-Patient {{2}} with {{3}} on {{4}} at {{5}} (token {{6}}) is cancelled. The slot is free again.
+Patient {{2}} with {{3}} on {{4}} at {{5}} is cancelled. Booking reference {{6}}. The slot is free again.
 ```
 
 | Placeholder | Meaning | Sample value for review |
@@ -354,6 +354,14 @@ Patient {{2}} with {{3}} on {{4}} at {{5}} (token {{6}}) is cancelled. The slot 
 | `{{6}}` | Booking reference (token) | TW-024607-E90BC0 |
 
 Env var: `WHATSAPP_TEMPLATE_HOSPITAL_CANCELLED` (default `hospital_cancellation`).
+
+> **Wording note, 2026-08-16:** all three bodies originally said "token {{n}}"
+> and were reworded to **"Booking reference {{n}}"** before submission. §2 of
+> this file already records why — the word *token* beside a code-like value trips
+> Meta's **Authentication/OTP** classifier and gets the template rejected — and
+> the two templates that sailed through review (§4, §7) both use "Booking
+> reference". Only the copy changed; the param order is untouched, so no code
+> change was needed.
 
 > **Until these three are approved, the code is inert, not broken.**
 > `send_template` logs a warning and returns on an unknown template, so the push
