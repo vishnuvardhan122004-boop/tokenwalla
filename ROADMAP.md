@@ -251,19 +251,34 @@ Read both service logs on the Railway dashboard. Neither is a zombie.
 "Sent 0" and "Ledgered 0" are both correct at 4 lifetime bookings with no doctor
 on `FULL`. The crons work; there is nothing for them to do yet.
 
-### 4. Confirm the permanent WhatsApp token reached Railway 🟠
+### ~~4. Confirm the permanent WhatsApp token reached Railway~~ ✅ 2026-08-16
 
-A permanent System-User token was generated in Meta on 2026-08-10. That changes
-nothing on its own: `WHATSAPP_ACCESS_TOKEN` has to be updated on the Railway
-service **and** the service redeployed. `send_template` fails silently by design
-— it logs a warning and returns, never raises — so a stale token is
-indistinguishable from a working one without testing.
+**Proven end to end on the live service.** `send_test_whatsapp … --template
+booking_confirmation` run inside the Railway container returned a real Meta
+`wamid` **and the message arrived on the handset**. The permanent System-User
+token generated 2026-08-10 is live on Railway, and `booking_confirmation`
+renders correctly with its 6 params.
+
+Both halves mattered: `send_template` fails silently by design — it logs a
+warning and returns, never raises — so a `message_id` alone is not proof of a
+working token, and delivery to the phone is what closes it.
+
+**How to re-run it** (no test booking, no money, touches no models — it only
+calls the Meta Graph API, so it is safe against production):
 
 ```bash
-manage.py send_test_whatsapp <mobile> --template booking_confirmation
+# in the Railway container shell — service root is backend/, so /app IS backend/
+python manage.py send_test_whatsapp <10-digit-mobile> --template booking_confirmation
 ```
 
-Proves it end to end with no test booking and no real money.
+Two path traps that cost time on 2026-08-16: `/app/backend/manage.py` does not
+exist (the Railway service root is already `backend/`), and running it **locally
+proves nothing** — it reads the local `.env` token, a different value from
+Railway's. `railway run` needs `railway login` first.
+
+The other three templates (`doctor_unavailable`, `appointment_reminder`,
+`hospital_new_booking`) share the same token, so the credential is settled; only
+their param counts are untested.
 
 ### 5. Ship the mobile app — two of three gates cleared 🟠
 
@@ -535,6 +550,16 @@ Resolved and deliberately removed, so they don't get re-added:
 > since 1.1.3 (36) on 2026-08-08, so **nothing in the app entries has reached a
 > patient** until an EAS build ships. Check item 5 before assuming an app change
 > is live.
+
+- **2026-08-16** — **The permanent WhatsApp token is confirmed live on Railway**
+  (item 4). `send_test_whatsapp --template booking_confirmation`, run in the
+  Railway container, returned a real Meta `wamid` **and the message arrived on
+  the handset**. Both halves were needed: `send_template` never raises, so a
+  `message_id` is not proof on its own. The permanent System-User token from
+  2026-08-10 is in place and `booking_confirmation` renders with 6 params.
+  Two traps recorded in the item: `/app` **is** the backend root in the
+  container (no `backend/` prefix), and a local run reads the local `.env`
+  token, proving nothing about Railway.
 
 - **2026-08-16** — **Railway deploy unstuck — the 4-day backlog is live.**
   The unpaid Railway bill (item 0, four sessions on the top line) was paid.

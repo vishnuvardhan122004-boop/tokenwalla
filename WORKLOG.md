@@ -5,7 +5,7 @@ Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** unmerged — `perf/dashboard-visible-polling` (**no PR**) + this wrap (web/backend) · `feat/popular-doctors-first` (PR #5) in the app. **The backlog is cleared and the branch list is swept** — 34 remote / 37 local merged branches deleted 2026-08-14. Merged 2026-08-14: web/backend PRs #20–#24, app PRs #6–#9; 2026-08-16: PR #25 (session-3 wrap, which triggered the deploy). **Do NOT delete** `develop` (deploys to staging), `harden-password-validators` or `website-cleanup-eslint-deadDep` — the last two look dead but hold unmerged work.
 - **Latest commit at last update:** `b2afa81` main (web/backend, **deployed & live**) · `fc8da3a` main (app, **1.2.0 + Sentry, not built**)
-- **Last updated:** 2026-08-16 (Railway deploy unstuck — 4-day backlog is live; item 0 closed)
+- **Last updated:** 2026-08-16 (Railway deploy unstuck — 4-day backlog live; items 0, 2b and 4 closed)
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -37,6 +37,7 @@ triggered by a push to main.
 |---|---|---|---|
 | Verified Railway resumed deploying the 4-day backlog | backend | #25 (trigger) | ✅ live |
 | Item 0 (unpaid bill) + item 2b (`[TEST]`/Heyi API hole) closed | — | — | ✅ |
+| WhatsApp token confirmed live on Railway (item 4) | backend | — | ✅ delivered to handset |
 
 - **Paying the bill did not redeploy.** Main hadn't changed, so Railway's GitHub
   integration had no new event. Merging PR #25 (session-3 wrap, docs-only) was
@@ -46,6 +47,11 @@ triggered by a push to main.
   `/api/doctors/` → 0 `[TEST]`, Heyi absent. Migrations applied cleanly.
 - **Not verifiable from a session:** the Railway build/migration logs (dashboard
   only). API behaviour covers it.
+- **WhatsApp token proven (item 4).** `send_test_whatsapp … --template
+  booking_confirmation` in the Railway container → real Meta `wamid` **and the
+  message arrived**. A `message_id` alone is not proof (`send_template` never
+  raises); delivery is. Path traps: `/app` **is** the backend root, and a local
+  run uses the local `.env` token, not Railway's.
 
 ---
 
