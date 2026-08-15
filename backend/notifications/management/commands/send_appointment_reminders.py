@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from bookings.models import Booking
 from bookings.utils import parse_slot_datetime
+from notifications.push import push_appointment_reminder
 from notifications.whatsapp import send_appointment_reminder
 
 logger = logging.getLogger('tokenwalla')
@@ -55,6 +56,10 @@ class Command(BaseCommand):
             if window_start <= slot_dt <= window_end:
                 try:
                     send_appointment_reminder(booking)
+                    # In-app half of the same reminder. Swallows its own errors,
+                    # so a dead push token can never cost the WhatsApp send or
+                    # the reminder_sent flag.
+                    push_appointment_reminder(booking)
                     sent_count += 1
                 except Exception as exc:
                     logger.exception('[reminders] Failed sending reminder for booking %s: %s', booking.id, exc)

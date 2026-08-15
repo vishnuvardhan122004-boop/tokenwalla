@@ -21,7 +21,7 @@ import threading
 
 from datetime import datetime
 from notifications.whatsapp import send_booking_confirmation, send_hospital_new_booking
-from notifications.push import push_new_booking_to_hospital
+from notifications.push import push_booking_confirmed, push_new_booking_to_hospital
 from django.conf import settings
 from django.db import transaction, IntegrityError, connection
 from rest_framework.views import APIView
@@ -177,6 +177,10 @@ def _dispatch_booking_notifications(booking):
                 send_booking_confirmation(booking)
             except Exception as exc:
                 logger.warning('WhatsApp confirmation send failed for booking %s: %s', booking.id, exc)
+            try:
+                push_booking_confirmed(booking)
+            except Exception as exc:
+                logger.warning('Push confirmation failed for booking %s: %s', booking.id, exc)
             try:
                 send_hospital_new_booking(booking)
             except Exception as exc:
