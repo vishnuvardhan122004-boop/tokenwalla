@@ -251,6 +251,61 @@ Read both service logs on the Railway dashboard. Neither is a zombie.
 "Sent 0" and "Ledgered 0" are both correct at 4 lifetime bookings with no doctor
 on `FULL`. The crons work; there is nothing for them to do yet.
 
+### 4a. ROTATE THE WHATSAPP TOKEN — it was pasted into a chat 🔴
+
+**Do this first tomorrow if it is not already done.** During the 2026-08-16
+session the live `WHATSAPP_ACCESS_TOKEN` was pasted into the chat transcript
+twice while debugging a failed `curl`. It was **never used** from there — the
+submissions went through the browser instead — but a permanent System-User token
+does not expire on its own, and anyone holding it can send WhatsApp messages **as
+TokenWalla, to real patients**, until it is revoked.
+
+1. Meta Business Settings → Users → **System Users** → generate a new token
+   (same app, same permissions). Generating is what invalidates the old one.
+2. Update `WHATSAPP_ACCESS_TOKEN` on the Railway backend service, redeploy.
+3. Re-prove it, because item 4's evidence was against the *old* token:
+
+```bash
+python manage.py send_test_whatsapp <mobile> --template booking_confirmation
+```
+
+**Sends fail silently between steps 1 and 2** (`send_template` logs a warning and
+returns), so do them close together and treat step 3 as the proof. Push is
+unaffected throughout.
+
+**The rule this earned:** a secret never needs to travel to be used — it is
+already in the environment that needs it. Run the command where the credential
+already lives (the Railway container) instead of moving the credential to the
+command.
+
+### 4b. Verify templates 8–10 once Meta approves them 🟠
+
+`queue_advance`, `booking_on_hold` and `hospital_cancellation` were submitted
+2026-08-16 and are **In review** (Utility). Approval is usually minutes to hours.
+They are the WhatsApp half of the three push-only events, so **until they are
+approved those events still send push only** — which is exactly today's
+behaviour, so nothing is regressing while you wait.
+
+When approved, prove each actually delivers — a status of Approved is not proof
+the params line up:
+
+```bash
+python manage.py send_test_whatsapp <mobile> --template queue_advance
+python manage.py send_test_whatsapp <mobile> --template booking_on_hold
+python manage.py send_test_whatsapp <mobile> --template hospital_cancellation
+```
+
+Sample params for all three are built into the command. **This is what finally
+closes the "notify on both channels" goal.** If one comes back rejected, the
+reason is almost certainly in the two rules recorded in
+`WHATSAPP_TEMPLATES.md` §8–10 (no leading/trailing variable; Utility not
+Marketing).
+
+**Correct WABA id: `973395062366160`.** Confirmed by finding the seven existing
+approved templates on it. The id `1239349842587448` used earlier in the session
+is **wrong** and returns "object does not exist" — worth pinning here because it
+cost a debugging round.
+
 ### ~~4. Confirm the permanent WhatsApp token reached Railway~~ ✅ 2026-08-16
 
 **Proven end to end on the live service.** `send_test_whatsapp … --template
@@ -574,6 +629,25 @@ Resolved and deliberately removed, so they don't get re-added:
 > since 1.1.3 (36) on 2026-08-08, so **nothing in the app entries has reached a
 > patient** until an EAS build ships. Check item 5 before assuming an app change
 > is live.
+
+- **2026-08-16** — **The three new templates submitted to Meta, via the browser.**
+  `queue_advance`, `booking_on_hold` and `hospital_cancellation` are **In review**
+  (Utility) on WABA **`973395062366160`**. Two things were found only because the
+  submission was done interactively rather than by API, and both would have
+  failed silently otherwise:
+  **(1) The WABA id was wrong.** `1239349842587448` is not reachable by this
+  login; the real id was confirmed by finding the seven existing approved
+  templates on it. The earlier `curl` therefore had *two* independent faults — a
+  `$` prefix that expanded the token to empty, **and** a bad object id — so
+  fixing only the visible one would still have failed.
+  **(2) Meta enforces content rules at submission, not review.** `queue_advance`
+  was rejected with *"Leading or trailing params not allowed"* because it ended
+  `Booking reference {{4}}.` — **a trailing full stop does not count as text**.
+  `hospital_cancellation` had the mirror problem, opening `{{1}}:`. Both
+  reworded; **param order untouched, so no code change and nothing to redeploy**.
+  Also caught the create wizard silently defaulting to **Marketing** (costlier,
+  needs marketing opt-in) on one attempt — all three went in as Utility.
+  The accepted bodies and both rules are now in `WHATSAPP_TEMPLATES.md` §8–10.
 
 - **2026-08-16** — **Every patient event now notifies on BOTH channels**
   (`feat/pair-push-with-whatsapp`). The goal was "notify in the app *and* on

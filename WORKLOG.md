@@ -4,8 +4,8 @@ A running record of changes so we can cross-check what's done and what's pending
 Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** unmerged — `perf/dashboard-visible-polling` (**no PR**) + this wrap (web/backend) · `feat/popular-doctors-first` (PR #5) in the app. **The backlog is cleared and the branch list is swept** — 34 remote / 37 local merged branches deleted 2026-08-14. Merged 2026-08-14: web/backend PRs #20–#24, app PRs #6–#9; 2026-08-16: PR #25 (session-3 wrap, which triggered the deploy). **Do NOT delete** `develop` (deploys to staging), `harden-password-validators` or `website-cleanup-eslint-deadDep` — the last two look dead but hold unmerged work.
-- **Latest commit at last update:** `b2afa81` main (web/backend, **deployed & live**) · `fc8da3a` main (app, **1.2.0 + Sentry, not built**)
-- **Last updated:** 2026-08-16 (Railway deploy unstuck — 4-day backlog live; items 0, 2b and 4 closed)
+- **Latest commit at last update:** `8427628` main (web/backend, **deployed & live** — PR #27 pairing) · `fc8da3a` main (app, **1.2.0 + Sentry, not built**)
+- **Last updated:** 2026-08-16 (deploy unstuck, items 0/2b/4 closed, both channels paired, templates 8–10 in review; **token needs rotating — item 4a**)
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -28,6 +28,17 @@ Newest entry on top. Update the **Status** columns as things land.
 
 ---
 
+## 2026-08-16 (auto) — Session update @ 03:30
+
+Auto-generated snapshot (branch `docs/close-item4-whatsapp`, 1 changed file).
+
+```
+M ROADMAP.md
+```
+
+---
+
+
 ## 2026-08-16 — Railway deploy unstuck
 
 Four sessions on the top line, closed. Bill paid; the deploy still had to be
@@ -40,7 +51,9 @@ triggered by a push to main.
 | WhatsApp token confirmed live on Railway (item 4) | backend | — | ✅ delivered to handset |
 | All **7** WhatsApp templates verified delivering | backend | — | ✅ approval + param counts confirmed |
 | `WHATSAPP_TEMPLATES.md` "← submit this" markers corrected | backend | — | ✅ doc was stale |
-| Push paired with WhatsApp on 2 patient gaps + 3 push-only events | backend | `feat/pair-push-with-whatsapp` | 🕒 open, templates §8–10 pending Meta |
+| Push paired with WhatsApp on 2 patient gaps + 3 push-only events | backend | **#27 merged** | ✅ 218 tests, 5 green runs |
+| Templates 8–10 submitted to Meta (browser) | — | — | ⏳ **In review**, Utility |
+| Live WhatsApp token pasted into chat | — | — | 🔴 **needs rotating** — item 4a |
 
 - **Paying the bill did not redeploy.** Main hadn't changed, so Railway's GitHub
   integration had no new event. Merging PR #25 (session-3 wrap, docs-only) was
@@ -63,10 +76,25 @@ triggered by a push to main.
   "← submit this" and ROADMAP said "all 4 templates approved" (2026-07-27) —
   written before cancel/no-show/payout shipped on 2026-08-06/07. Following
   either would have meant submitting duplicates.
-- **No new template needed** (asked: one for registration?). A template only
-  fires if a `send_*` function names it — there are exactly seven senders — and
-  registration/OTP runs on **2Factor SMS**, not WhatsApp. Payouts already have
-  `doctor_payout`.
+- **No new template needed for registration** (the question asked). A template
+  only fires if a `send_*` function names it, and registration/OTP runs on
+  **2Factor SMS**, not WhatsApp. Payouts already have `doctor_payout`.
+- **Both channels paired** (PR #27). Push already had 9 senders and 5 of 7 events
+  were paired; the real gaps were **booking confirmed** (patient got WhatsApp
+  while the only push went to the *hospital*) and the **reminder** cron. Then the
+  three push-only events got WhatsApp halves. 218 tests, 5 green runs, migration
+  0009 is choices-only. **CLAUDE.md trap 1 updated**: the call and QR-scan
+  endpoints now spawn a `_whatsapp_async` thread that does a **DB write**, and no
+  test covers those paths yet.
+- **Templates 8–10 submitted via the browser, not the API** — and the API route
+  would have failed twice over. The WABA id supplied was wrong (real one:
+  **`973395062366160`**), *and* Meta rejects at submission time: a body may not
+  start or end with a variable, and **a trailing full stop does not count as
+  text**. Two bodies reworded; param order untouched, so no code change.
+- **A live WhatsApp token was pasted into the chat** while debugging a `curl`
+  whose real bug was a `$` prefix expanding it to empty. It was never used from
+  there, but it **must be rotated** — see ROADMAP item 4a. The lesson: run the
+  command where the credential already lives rather than moving the credential.
 
 ---
 
