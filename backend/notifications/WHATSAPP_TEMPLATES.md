@@ -14,9 +14,35 @@ order** by the `params` list in `notifications/whatsapp.py`.
 > references it by name. If you submit under a different name, set the matching
 > `WHATSAPP_TEMPLATE_*` env var to that name.
 
+> ## Status: read the marker on each section, not this block.
+> **Sections 1–7 were verified on 2026-08-16** — each was sent through
+> `send_test_whatsapp` against the **live Railway service** and **arrived on a
+> real handset**, so their names, language, approval state and param counts are
+> all confirmed to match what `notifications/whatsapp.py` sends. Those seven need
+> **no** submitting; treat them as a record of what was approved.
+>
+> **Any section marked ⏳ SUBMIT THIS is NOT approved yet** and does need
+> submitting. Templates get added whenever a new sender is written, so this block
+> deliberately does not name a total — check the per-section marker, which is the
+> only thing that stays true.
+>
+> **An unapproved template is inert, not broken:** `send_template` logs a warning
+> and returns, so the paired push still fires and nothing fails.
+>
+> Verify any one of them with (inside the Railway container, where `/app` *is*
+> the backend root — a local run reads the local `.env` token and proves nothing
+> about production):
+>
+> ```bash
+> python manage.py send_test_whatsapp <mobile> --template booking_confirmation
+> ```
+>
+> If the command errors with `No built-in sample params`, pass them explicitly
+> with `--params` in the order documented in that section.
+
 ---
 
-## 1. `doctor_unavailable`  ← NEW
+## 1. `doctor_unavailable`  ✅ approved & delivering (verified 2026-08-16)
 
 Sent when a hospital marks a doctor **unavailable** and the patient has an active
 booking for that day. Offers a **free** reschedule.
@@ -57,7 +83,7 @@ Thank you for your patience.
 
 ---
 
-## 2. `hospital_new_booking`  ← NEW
+## 2. `hospital_new_booking`  ✅ approved & delivering (verified 2026-08-16)
 
 Sent to the **hospital team** (the hospital's own WhatsApp number,
 `hospital.mobile`) the moment a patient's booking is paid and confirmed. This
@@ -112,13 +138,13 @@ Open the TokenWalla hospital app to view the queue.
 
 ---
 
-## 3. `booking_confirmation` (existing — for reference)
+## 3. `booking_confirmation`  ✅ approved & delivering (verified 2026-08-16)
 
 Sender: `send_booking_confirmation(booking)`. Category: **Utility**, lang `en`.
 Params, in order: `{{1}}` patient, `{{2}}` doctor, `{{3}}` hospital,
 `{{4}}` date, `{{5}}` slot, `{{6}}` token.
 
-## 4. `appointment_reminder`  ← submit this
+## 4. `appointment_reminder`  ✅ approved & delivering (verified 2026-08-16)
 
 Sent ~2 hours before the slot by the cron command `send_appointment_reminders`
 (see `notifications/CRON_SETUP.md`). Sender: `send_appointment_reminder(booking)`.
@@ -153,7 +179,7 @@ Please arrive a few minutes early. Booking reference {{6}}. Track your live queu
 
 ---
 
-## 5. `doctor_payout`  ← submit this
+## 5. `doctor_payout`  ✅ approved & delivering (verified 2026-08-16)
 
 Sent when an admin marks a doctor's pending balance as paid on
 `/Adashboard/payouts` (`payments.views.MarkPayoutPaidView`). Sender:
@@ -197,7 +223,7 @@ Env var: `WHATSAPP_TEMPLATE_DOCTOR_PAYOUT` (default `doctor_payout`).
 
 ---
 
-## 6. `booking_cancelled`  ← submit this
+## 6. `booking_cancelled`  ✅ approved & delivering (verified 2026-08-16)
 
 Sent when a patient cancels their own booking (`bookings.views.CancelBookingView`).
 Sender: `send_booking_cancelled(booking, refund_info)`.
@@ -242,7 +268,7 @@ Env var: `WHATSAPP_TEMPLATE_BOOKING_CANCELLED` (default `booking_cancelled`).
 
 ---
 
-## 7. `booking_no_show`  ← submit this
+## 7. `booking_no_show`  ✅ approved & delivering (verified 2026-08-16)
 
 Sent when hospital staff mark a patient as a no-show (`bookings.views.NoShowView`).
 Sender: `send_booking_no_show(booking)`.

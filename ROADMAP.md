@@ -251,19 +251,113 @@ Read both service logs on the Railway dashboard. Neither is a zombie.
 "Sent 0" and "Ledgered 0" are both correct at 4 lifetime bookings with no doctor
 on `FULL`. The crons work; there is nothing for them to do yet.
 
-### 4. Confirm the permanent WhatsApp token reached Railway 🟠
+### 4a. ROTATE THE WHATSAPP TOKEN — it was pasted into a chat 🔴
 
-A permanent System-User token was generated in Meta on 2026-08-10. That changes
-nothing on its own: `WHATSAPP_ACCESS_TOKEN` has to be updated on the Railway
-service **and** the service redeployed. `send_template` fails silently by design
-— it logs a warning and returns, never raises — so a stale token is
-indistinguishable from a working one without testing.
+**Do this first tomorrow if it is not already done.** During the 2026-08-16
+session the live `WHATSAPP_ACCESS_TOKEN` was pasted into the chat transcript
+twice while debugging a failed `curl`. It was **never used** from there — the
+submissions went through the browser instead — but a permanent System-User token
+does not expire on its own, and anyone holding it can send WhatsApp messages **as
+TokenWalla, to real patients**, until it is revoked.
+
+1. Meta Business Settings → Users → **System Users** → generate a new token
+   (same app, same permissions). Generating is what invalidates the old one.
+2. Update `WHATSAPP_ACCESS_TOKEN` on the Railway backend service, redeploy.
+3. Re-prove it, because item 4's evidence was against the *old* token:
 
 ```bash
-manage.py send_test_whatsapp <mobile> --template booking_confirmation
+python manage.py send_test_whatsapp <mobile> --template booking_confirmation
 ```
 
-Proves it end to end with no test booking and no real money.
+**Sends fail silently between steps 1 and 2** (`send_template` logs a warning and
+returns), so do them close together and treat step 3 as the proof. Push is
+unaffected throughout.
+
+**The rule this earned:** a secret never needs to travel to be used — it is
+already in the environment that needs it. Run the command where the credential
+already lives (the Railway container) instead of moving the credential to the
+command.
+
+### 4b. Verify templates 8–10 once Meta approves them 🟠
+
+`queue_advance`, `booking_on_hold` and `hospital_cancellation` were submitted
+2026-08-16 and are **In review** (Utility). Approval is usually minutes to hours.
+They are the WhatsApp half of the three push-only events, so **until they are
+approved those events still send push only** — which is exactly today's
+behaviour, so nothing is regressing while you wait.
+
+When approved, prove each actually delivers — a status of Approved is not proof
+the params line up:
+
+```bash
+python manage.py send_test_whatsapp <mobile> --template queue_advance
+python manage.py send_test_whatsapp <mobile> --template booking_on_hold
+python manage.py send_test_whatsapp <mobile> --template hospital_cancellation
+```
+
+Sample params for all three are built into the command. **This is what finally
+closes the "notify on both channels" goal.** If one comes back rejected, the
+reason is almost certainly in the two rules recorded in
+`WHATSAPP_TEMPLATES.md` §8–10 (no leading/trailing variable; Utility not
+Marketing).
+
+**Correct WABA id: `973395062366160`.** Confirmed by finding the seven existing
+approved templates on it. The id `1239349842587448` used earlier in the session
+is **wrong** and returns "object does not exist" — worth pinning here because it
+cost a debugging round.
+
+### ~~4. Confirm the permanent WhatsApp token reached Railway~~ ✅ 2026-08-16
+
+**Proven end to end on the live service.** `send_test_whatsapp … --template
+booking_confirmation` run inside the Railway container returned a real Meta
+`wamid` **and the message arrived on the handset**. The permanent System-User
+token generated 2026-08-10 is live on Railway, and `booking_confirmation`
+renders correctly with its 6 params.
+
+Both halves mattered: `send_template` fails silently by design — it logs a
+warning and returns, never raises — so a `message_id` alone is not proof of a
+working token, and delivery to the phone is what closes it.
+
+**How to re-run it** (no test booking, no money, touches no models — it only
+calls the Meta Graph API, so it is safe against production):
+
+```bash
+# in the Railway container shell — service root is backend/, so /app IS backend/
+python manage.py send_test_whatsapp <10-digit-mobile> --template booking_confirmation
+```
+
+Two path traps that cost time on 2026-08-16: `/app/backend/manage.py` does not
+exist (the Railway service root is already `backend/`), and running it **locally
+proves nothing** — it reads the local `.env` token, a different value from
+Railway's. `railway run` needs `railway login` first.
+
+**All seven templates verified the same day — the notification surface is fully
+proven.** `booking_confirmation`, `doctor_unavailable`, `hospital_new_booking`,
+`appointment_reminder`, `doctor_payout`, `booking_cancelled` and
+`booking_no_show` were each sent against live Railway and **each arrived**. That
+confirms approval state *and* param counts (4 to 7, differing per template)
+match what `notifications/whatsapp.py` sends.
+
+**Two stale claims corrected by this:** `WHATSAPP_TEMPLATES.md` still marked
+four of them "← submit this", and the 2026-07-27 Done entry said "all 4
+templates approved" — there are **seven**, because cancel/no-show/payout were
+added 2026-08-06/07, after that date. The doc now records all seven as approved
+so nobody submits a duplicate.
+
+**No template was needed for registration, and that is the answer to "do we need
+one".** A template only ever fires if a `send_*` function names it. Registration/
+OTP goes over **2Factor SMS, not WhatsApp** — there is no registration sender at
+all, so adding a template there would be a new feature (code + template +
+consent), not a gap. Payouts are already covered by `doctor_payout`.
+
+> **Superseded in part, same day.** "There are exactly seven senders" was true
+> when written and stopped being true hours later: `feat/pair-push-with-whatsapp`
+> adds **three more** (`queue_advance`, `booking_on_hold`,
+> `hospital_cancellation`) to give the three push-only events a WhatsApp half.
+> Those **do** need submitting in Meta — see `WHATSAPP_TEMPLATES.md` §8–10, which
+> carries the body text and sample values. The rule above is unchanged: they were
+> needed because new *senders* were written, not because a template was missing.
+> The registration answer still stands.
 
 ### 5. Ship the mobile app — two of three gates cleared 🟠
 
@@ -535,6 +629,75 @@ Resolved and deliberately removed, so they don't get re-added:
 > since 1.1.3 (36) on 2026-08-08, so **nothing in the app entries has reached a
 > patient** until an EAS build ships. Check item 5 before assuming an app change
 > is live.
+
+- **2026-08-16** — **The three new templates submitted to Meta, via the browser.**
+  `queue_advance`, `booking_on_hold` and `hospital_cancellation` are **In review**
+  (Utility) on WABA **`973395062366160`**. Two things were found only because the
+  submission was done interactively rather than by API, and both would have
+  failed silently otherwise:
+  **(1) The WABA id was wrong.** `1239349842587448` is not reachable by this
+  login; the real id was confirmed by finding the seven existing approved
+  templates on it. The earlier `curl` therefore had *two* independent faults — a
+  `$` prefix that expanded the token to empty, **and** a bad object id — so
+  fixing only the visible one would still have failed.
+  **(2) Meta enforces content rules at submission, not review.** `queue_advance`
+  was rejected with *"Leading or trailing params not allowed"* because it ended
+  `Booking reference {{4}}.` — **a trailing full stop does not count as text**.
+  `hospital_cancellation` had the mirror problem, opening `{{1}}:`. Both
+  reworded; **param order untouched, so no code change and nothing to redeploy**.
+  Also caught the create wizard silently defaulting to **Marketing** (costlier,
+  needs marketing opt-in) on one attempt — all three went in as Utility.
+  The accepted bodies and both rules are now in `WHATSAPP_TEMPLATES.md` §8–10.
+
+- **2026-08-16** — **Every patient event now notifies on BOTH channels**
+  (`feat/pair-push-with-whatsapp`). The goal was "notify in the app *and* on
+  WhatsApp"; the finding was that most of it already existed — `push.py` had 9
+  senders and 5 of 7 events were already paired. Two genuine gaps, both
+  patient-facing: **booking confirmed** sent WhatsApp to the patient while the
+  only push went to the *hospital* (the single most important event, silent in
+  the app), and the **appointment reminder** cron was WhatsApp-only. Then the
+  three push-only events — **queue advance, on-hold, hospital cancellation** —
+  got WhatsApp halves.
+  **The hospital cancellation is deliberately not gated on the patient's
+  `whatsapp_opt_in`**, mirroring `send_hospital_new_booking`: that flag governs
+  messages *to the patient*, and a test pins it so it is not "fixed" wrongly.
+  Migration `0009` is **choices-only** on `WhatsAppLog.event_type` (max_length
+  unchanged, no column touched), so it is safe to run before the code that writes
+  the new values.
+  **§8–10 of `WHATSAPP_TEMPLATES.md` are written but NOT approved in Meta yet** —
+  until they are, `send_template` warns and returns, so the code is inert rather
+  than broken and the push half still fires. **Nothing here reaches a patient
+  until an EAS build** either (item 5): push needs the app, and the store still
+  runs 1.1.3 (36).
+  **CLAUDE.md trap 1 was updated, and this is the part worth keeping:** the
+  **call** and **QR-scan** endpoints now fire `_whatsapp_async`, which they never
+  did before, and the sender writes a `WhatsAppLog` row — so that thread does a
+  **DB write with or without a token**. No test currently exercises those two
+  paths, which is the only reason nothing broke; the next person to write one
+  would have hit the 1-in-4 lock flake with no idea why.
+  218 tests, 5 consecutive green runs, zero `graph.facebook.com` lines.
+
+- **2026-08-16** — **All seven WhatsApp templates verified delivering.** Beyond
+  the token (below), every template was sent against live Railway and **each
+  arrived on a handset** — confirming approval state and the per-template param
+  counts (4–7) match `notifications/whatsapp.py`. This corrected two stale
+  claims: `WHATSAPP_TEMPLATES.md` marked four as "← submit this", and the
+  2026-07-27 entry said "all 4 templates", written before cancel/no-show/payout
+  existed. **No template was needed for registration** — one only fires if a
+  `send_*` function names it, and registration/OTP runs on 2Factor **SMS**, not
+  WhatsApp. (Three *were* added later the same day, for the three push-only
+  events — see the pairing entry above and `WHATSAPP_TEMPLATES.md` §8–10, which
+  are pending approval.)
+
+- **2026-08-16** — **The permanent WhatsApp token is confirmed live on Railway**
+  (item 4). `send_test_whatsapp --template booking_confirmation`, run in the
+  Railway container, returned a real Meta `wamid` **and the message arrived on
+  the handset**. Both halves were needed: `send_template` never raises, so a
+  `message_id` is not proof on its own. The permanent System-User token from
+  2026-08-10 is in place and `booking_confirmation` renders with 6 params.
+  Two traps recorded in the item: `/app` **is** the backend root in the
+  container (no `backend/` prefix), and a local run reads the local `.env`
+  token, proving nothing about Railway.
 
 - **2026-08-16** — **Railway deploy unstuck — the 4-day backlog is live.**
   The unpaid Railway bill (item 0, four sessions on the top line) was paid.
@@ -920,5 +1083,8 @@ Resolved and deliberately removed, so they don't get re-added:
 - **2026-08-06** — WhatsApp the doctor when a payout is marked paid
 - **2026-08-05** — reverted Cashfree → Razorpay; manual doctor payout flow
 - **2026-08-05** — service-fee-only default; checkout repriced server-side
-- **2026-07-27** — all 4 Meta WhatsApp templates approved and delivering
+- **2026-07-27** — the first 4 Meta WhatsApp templates approved and delivering.
+  (**There are seven now** — cancel/no-show/payout were added 2026-08-06/07 and
+  all seven were verified delivering on 2026-08-16. This line used to read "all
+  4", which quietly became wrong the moment the later three shipped.)
 - **2026-07-26** — security review: 15 findings + 2 hardening items closed
