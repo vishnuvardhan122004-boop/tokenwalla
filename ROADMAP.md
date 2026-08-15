@@ -7,7 +7,7 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-14 (session 3)
+- **Last updated:** 2026-08-16
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -15,87 +15,35 @@ the things that can lose money or break a live booking come first.
 
 ## Now
 
-### 0. RAILWAY IS NOT DEPLOYING — UNPAID BILL 🔴🔴
+### ~~0. RAILWAY IS NOT DEPLOYING — UNPAID BILL~~ ✅ 2026-08-16 — RESOLVED
 
-**Nothing merged since 2026-08-11 is running in production.** Re-probed
-**2026-08-14** — this is the **fourth consecutive day**. The last code Railway
-actually deployed is `2c4ec25` (PR #12, the location picker).
+**Deployed. Four sessions on the top line, closed today.** Vishnu paid the
+Railway bill; paying alone did **not** redeploy (main hadn't changed, so
+Railway's GitHub integration had no new event). Merging PR #25 (the session-3
+wrap, docs-only) was the push-to-main that triggered the deploy of the whole
+4-day backlog. Confirmed live by re-running the three probes:
 
-**Cause is known: the Railway bill is unpaid.** Vishnu said so on 2026-08-13.
-It is not a build failure, not a CI hold — CI is green on every merge — and
-not something a session can fix. **Pay the bill, then confirm the deploy.**
+| Probe | Before | After |
+|---|---|---|
+| `/api/app-version/` | 404 | **200** + real body |
+| `/health/` cache | absent | **`"cache": {"backend": "redis", "ok": true}`** |
+| `landline` in `/api/hospitals/` | 0 | **1** |
+| `[TEST]` in `/api/doctors/` | present | **0** |
+| Heyi (id 10, ₹388.37 `FULL`) | served | **absent** |
 
-> **2026-08-14, end of session 3:** Vishnu is settling the bill, after which
-> Railway is expected to resume deploying on its own. **First move next session
-> is to verify that actually happened** — a resumed billing account does not
-> guarantee a completed deploy, and this item has now survived three sessions of
-> being assumed fixed. Run the three probes below before doing anything else.
-> When they go green, five things land at once: the `[TEST]` hospital filter,
-> walk-in/landline, the popularity endpoint, `/api/app-version/`, and the OTP
-> ceiling. Watch `/health/` and the Railway logs for a few minutes afterwards —
-> that is four days of migrations and code arriving in one deploy.
+All five things this item predicted would land at once are live: `[TEST]`
+filter, walk-in/landline, popularity endpoint, `/api/app-version/`, OTP ceiling.
+Migrations applied cleanly (the `landline` column is present and serving).
+**This also closes the server-side half of item 2b** — the API no longer serves
+Heyi, so the defence-in-depth admin step is moot.
 
-Confirm with. The first check is **new as of 2026-08-14 and is the best one** —
-`/api/app-version/` did not exist before PR #22, so a 200 proves the running
-code is current rather than merely newer than it was:
+**The lesson worth keeping:** a restored billing account un-suspends the service
+but does not re-run the last deploy — Railway deploys on a *push to main*. If
+this recurs, the session-safe trigger is to land any pending PR to main, then
+re-probe `/api/app-version/`.
 
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" https://tokenwalla-production.up.railway.app/api/app-version/  # want 200, not 404
-curl -s https://tokenwalla-production.up.railway.app/health/                             # want the cache probe body
-curl -s https://tokenwalla-production.up.railway.app/api/hospitals/ | grep -c landline   # want >0
-```
-
-Measured 2026-08-14: **404**, the old `{"status": "ok", "version": "1.0.0"}`
-body, and **0**. All three still wrong.
-
-**What is stuck behind it, and this is the part that matters:**
-
-- **The `[TEST]` hospital fix is NOT live** — the *server-side* one. The live
-  `/api/hospitals/` still returns `[TEST] Demo Hospital` and `/api/doctors/`
-  still returns its doctor **Heyi** (id 10, `payment_collection_mode='FULL'`,
-  **₹388.37** final). Item 2b said this was shipped; it was merged, not deployed.
-  **But see the corrected exposure below — this is not patient-reachable.**
-- **The whole walk-in / landline feature is inert.** The deployed serializer
-  still requires `Doctor.mobile`, so the landline-only clinic that prompted the
-  work still cannot be onboarded. This one is genuinely blocked on the deploy.
-- **Re-verified 2026-08-13 session 3** and again **2026-08-14**: `landline`
-  absent, `/api/app-version/` 404, Heyi still served by the API. Nothing moved.
-
-#### ⚠️ Exposure corrected 2026-08-14 — read this before acting on the above
-
-**Earlier versions of this item said "a patient can still be charged ₹388.37
-for an appointment that does not exist." That is overstated, and it was
-repeated across three sessions without anyone checking the clients.** Both
-patient surfaces already hide test hospitals **client-side**, independently of
-the undeployed server fix:
-
-| Surface | List | Detail page | In production today? |
-|---|---|---|---|
-| Web (`www.tokenwalla.com`) | ✅ `filterTestDoctors` | ✅ `DoctorsDetails.js:109` | yes — Vercel deploys fine |
-| App 1.1.3 (build 36) | ✅ `isTestHospital` in `doctors.tsx` | ❌ **no filter** | yes — verified in the shipped build |
-
-Verified 2026-08-14 by loading the live site (**14 doctors rendered, Heyi
-absent**, while the API returns 15) and by
-`git merge-base --is-ancestor <filter-commit> eddf5dd` in the app repo, which
-confirms the filter is inside shipped build 36 rather than only on `main`.
-
-**So the real exposure is narrower than 🔴 implies:** the API serves Heyi to
-anything calling it directly, and the app's *detail* screen has no filter — but
-the only route there is a deep link to `doctor/10`, because the list it is
-normally reached from filters it out. Nobody browsing either client can reach
-it.
-
-**Still worth closing, as defence-in-depth rather than an emergency:** in Django
-admin set Heyi's `payment_collection_mode` to `SERVICE_ONLY`, dropping the
-worst case from ₹388.37 to the ~₹25 service fee. Deactivating the hospital does
-**not** work — the deployed `/api/doctors/` filters on neither test hospitals
-nor hospital status. Only deleting the doctor row removes it from the API
-without a deploy.
-
-**The lesson worth keeping:** "the server fix isn't deployed" and "patients are
-exposed" are different claims, and this file collapsed them for three days. When
-a risk line is about money, check the surface a patient actually touches — the
-client may already be defending.
+**Not verifiable from a session:** the Railway build/migration *logs* themselves
+(dashboard-only, no CLI). The API serving correctly covers it.
 
 ### ~~1. Merge what's left~~ ✅ 2026-08-14 — the queue is essentially empty
 
@@ -218,14 +166,18 @@ throttle counters only became *accurate* with Redis. `DatabaseCache` inherits
 every rate limit leaked. Redis counts correctly — meaning the cutover quietly
 tightened limits that had never really bitten, days before a traffic spike.
 
-### 2b. Two live production bugs — MERGED BUT **NOT DEPLOYED** 🔴
+### ~~2b. Two live production bugs~~ ✅ 2026-08-16 — DEPLOYED, both closed
+
+**Closed when item 0 deployed.** Re-probed 2026-08-16: `/api/doctors/` returns
+**0** `[TEST]` doctors and Heyi (id 10) is **absent**, and the raised `anon`
+rate (300/min) is in the same deploy. The kept history below is why they
+mattered.
 
 **Corrected 2026-08-13 session 2. An earlier version of this line said "merged
 and live" — that was wrong and it was the most dangerous wrong line in this
-file.** `3197377` reached `main` inside PR #14, but Railway has not deployed
-since 2026-08-11 (item 0), so the fix is not running. `[TEST] Demo Hospital`
-and its ₹388.37 doctor **are still served by the live API right now**. Verified
-by probing it, not assumed. This closes only when item 0 does.
+file.** `3197377` reached `main` inside PR #14, but Railway had not deployed
+since 2026-08-11 (item 0), so the fix was not running — it closed only when
+item 0 deployed on 2026-08-16.
 
 **Corrected again 2026-08-14 — and the correction above was itself half wrong.**
 "Still visible to patients" was the phrasing here, and it is not true: both the
@@ -577,12 +529,26 @@ Resolved and deliberately removed, so they don't get re-added:
 
 ## Done
 
-> **Caveat, rewritten 2026-08-14:** the merge backlog that made this section
-> unreliable is gone — everything below is on `main` in its repo. But **merged
-> is still not live**: Railway has not deployed since 2026-08-11 (item 0), and
-> the app has not been built since 1.1.3 (36) on 2026-08-08. So the web entries
-> are running, the **backend entries are not**, and **nothing in the app
-> entries has reached a patient**. Check item 0 and item 5 before assuming.
+> **Caveat, rewritten 2026-08-16:** the merge backlog is gone and **the backend
+> is now live** — Railway deployed the 4-day backlog on 2026-08-16 (item 0), so
+> the backend entries below are running. The **app** has still not been built
+> since 1.1.3 (36) on 2026-08-08, so **nothing in the app entries has reached a
+> patient** until an EAS build ships. Check item 5 before assuming an app change
+> is live.
+
+- **2026-08-16** — **Railway deploy unstuck — the 4-day backlog is live.**
+  The unpaid Railway bill (item 0, four sessions on the top line) was paid.
+  Paying alone did not redeploy; merging PR #25 (session-3 wrap, docs-only) was
+  the push-to-main that triggered Railway's GitHub-integration deploy. Confirmed
+  by re-probing: `/api/app-version/` **200**, `/health/` reports
+  `cache.backend=redis, ok=true`, `/api/hospitals/` has `landline`,
+  `/api/doctors/` returns **0** `[TEST]` doctors and **no Heyi**. That single
+  deploy landed the `[TEST]` server-side filter (closing item 2b), walk-in/
+  landline, the popularity endpoint, `/api/app-version/` and the OTP ceiling —
+  and migrations applied cleanly (the `landline` column serves). **The lesson:**
+  a restored billing account un-suspends the service but does not re-run the last
+  deploy — Railway deploys on a push to main, so land any pending PR to trigger
+  it, then re-probe.
 
 - **2026-08-14 (session 3)** — **Push notifications proven on a real device.**
   A preview build (1.2.0, code 36, commit `79f22ee`) was built, installed, and a

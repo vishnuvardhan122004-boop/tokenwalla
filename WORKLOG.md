@@ -3,16 +3,16 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** unmerged — `perf/dashboard-visible-polling` (**no PR**) + this wrap (web/backend) · `feat/popular-doctors-first` (PR #5) in the app. **The backlog is cleared and the branch list is swept** — 34 remote / 37 local merged branches deleted 2026-08-14. Merged 2026-08-14: web/backend PRs #20–#24, app PRs #6–#9. **Do NOT delete** `develop` (deploys to staging), `harden-password-validators` or `website-cleanup-eslint-deadDep` — the last two look dead but hold unmerged work.
-- **Latest commit at last update:** `4844e16` main (web/backend) · `fc8da3a` main (app, **1.2.0 + Sentry**)
-- **Last updated:** 2026-08-14 session 3 (push verified on device; Sentry enabled; production build deliberately not run; Railway stuck — day 4, bill being paid)
+- **Branch:** unmerged — `perf/dashboard-visible-polling` (**no PR**) + this wrap (web/backend) · `feat/popular-doctors-first` (PR #5) in the app. **The backlog is cleared and the branch list is swept** — 34 remote / 37 local merged branches deleted 2026-08-14. Merged 2026-08-14: web/backend PRs #20–#24, app PRs #6–#9; 2026-08-16: PR #25 (session-3 wrap, which triggered the deploy). **Do NOT delete** `develop` (deploys to staging), `harden-password-validators` or `website-cleanup-eslint-deadDep` — the last two look dead but hold unmerged work.
+- **Latest commit at last update:** `b2afa81` main (web/backend, **deployed & live**) · `fc8da3a` main (app, **1.2.0 + Sentry, not built**)
+- **Last updated:** 2026-08-16 (Railway deploy unstuck — 4-day backlog is live; item 0 closed)
 
-> ⛔ **Merged ≠ live, and that is now the *only* gap.** Pushed-vs-merged is
-> resolved — one low-risk branch remains per repo. But Railway has not deployed
-> since 2026-08-11 (unpaid bill), so no backend entry below is running, and the
-> app has not been built since 1.1.3 (36) on 2026-08-08, so **no app entry has
-> reached a patient**. Only the web is actually live. Verify against the live
-> API, never the merge log.
+> ✅ **The backend is live again.** Railway deployed the 4-day backlog on
+> 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
+> are now running — verified against the live API. The remaining gap is the
+> **app**: not built since 1.1.3 (36) on 2026-08-08, so no app entry has reached
+> a patient until an EAS build ships. Verify app changes against a build, never
+> the merge log.
 
 > 🧹 **46 `(auto) — Session update` entries** are sitting in this file from a
 > hook that snapshots `git status`. They are noise and they push the real
@@ -25,6 +25,27 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-16 — Railway deploy unstuck
+
+Four sessions on the top line, closed. Bill paid; the deploy still had to be
+triggered by a push to main.
+
+| Change | Repo | PR | Status |
+|---|---|---|---|
+| Verified Railway resumed deploying the 4-day backlog | backend | #25 (trigger) | ✅ live |
+| Item 0 (unpaid bill) + item 2b (`[TEST]`/Heyi API hole) closed | — | — | ✅ |
+
+- **Paying the bill did not redeploy.** Main hadn't changed, so Railway's GitHub
+  integration had no new event. Merging PR #25 (session-3 wrap, docs-only) was
+  the push-to-main that triggered it.
+- **Proven live by re-probing:** `/api/app-version/` → 200, `/health/` →
+  `cache.backend=redis, ok=true`, `/api/hospitals/` has `landline`,
+  `/api/doctors/` → 0 `[TEST]`, Heyi absent. Migrations applied cleanly.
+- **Not verifiable from a session:** the Railway build/migration logs (dashboard
+  only). API behaviour covers it.
 
 ---
 
