@@ -351,6 +351,55 @@ def push_cancellation_to_hospital(booking):
         logger.warning('[push] hospital cancellation push failed for booking %s: %s', booking.id, exc)
 
 
+def push_app_update(version, message='', role=None):
+    """Broadcast "update the app" to every registered device.
+
+    This is the NUDGE. The FORCE is `APP_MIN_VERSION` on the backend, which the
+    app re-reads on every launch (`services/appUpdate.ts`) and which shows a
+    non-dismissible "Update Required" alert. The two are deliberately separate:
+    the gate still stops an unsupported build for a patient who never taps a
+    notification, and a patient who taps this one lands on a cold launch, where
+    the gate runs and blocks. Sending this without raising APP_MIN_VERSION is a
+    plain "please update"; raising it is what makes updating mandatory.
+
+    `data` carries NO `screen` key on purpose. Installed builds route a tap on
+    `data.screen` alone, and their handler is fixed — an unknown value would
+    have to be shipped to them first, which is exactly what an old build can't
+    do. With the key absent, both branches fall through and the tap just opens
+    the app, which is all this needs: the launch gate does the rest.
+
+    `version` is the build being pushed out; it only keys the notification
+    centre's dedup (`appId`), so re-running the command doesn't stack duplicates
+    in the panel.
+    """
+    try:
+        body = message or (
+            'A new version of TokenWalla is available. '
+            'Please update to keep booking appointments.'
+        )
+        # Sent one role at a time so `audience` matches the recipient: the app's
+        # notification centre files an entry by that key, and a hospital staffer
+        # would otherwise find the notice in their patient tab.
+        for target in ([role] if role else ['patient', 'hospital']):
+            tokens = (
+                DeviceToken.objects
+                .filter(role=target)
+                .values_list('expo_token', flat=True)
+            )
+            _send(
+                list(tokens),
+                title='Update TokenWalla',
+                body=body,
+                data={
+                    'type': 'app_update',
+                    'appId': f'appupdate-{version}',
+                    'audience': target,
+                },
+            )
+    except Exception as exc:
+        logger.warning('[push] app-update broadcast failed: %s', exc)
+
+
 def push_payout_to_hospital(batch):
     """Tell the hospital a payout batch was settled.
 
