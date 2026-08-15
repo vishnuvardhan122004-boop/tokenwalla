@@ -24,7 +24,13 @@ from notifications.push import (
     push_booking_on_hold,
     push_cancellation_to_hospital,
 )
-from notifications.whatsapp import send_booking_cancelled, send_booking_no_show
+from notifications.whatsapp import (
+    send_booking_cancelled,
+    send_booking_no_show,
+    send_booking_on_hold,
+    send_hospital_cancellation,
+    send_queue_advance,
+)
 
 logger = logging.getLogger('tokenwalla')
 
@@ -171,6 +177,7 @@ class CallNextView(APIView):
         booking.save(update_fields=['status'])
         logger.info('Booking %s called by hospital %s', pk, user_hospital_id)
         push_booking_in_progress(booking)  # patient "you're next" alert
+        _whatsapp_async(send_queue_advance, booking, 'queue-advance')
         return Response(BookingSerializer(booking, context={'request': request}).data)
 
 
@@ -266,6 +273,7 @@ class HoldBookingView(APIView):
         # existing "you're next" push when staff actually call them.
         if booking.status == 'ON_HOLD':
             push_booking_on_hold(booking)
+            _whatsapp_async(send_booking_on_hold, booking, 'on-hold')
         return Response(BookingSerializer(booking, context={'request': request}).data)
 
 
@@ -324,6 +332,7 @@ class CancelBookingView(APIView):
         push_cancellation_to_hospital(booking)         # hospital: slot is free again
         _whatsapp_async(
             lambda b: send_booking_cancelled(b, refund_info), booking, 'cancellation')
+        _whatsapp_async(send_hospital_cancellation, booking, 'hospital-cancellation')
         return Response({
             'message': 'Booking cancelled successfully.',
             'refund':  refund_info,
@@ -617,7 +626,8 @@ class ScanQRView(APIView):
             booking.id, request.user.id, self._get_hospital_id(request.user),
         )
         push_booking_in_progress(booking)  # patient "you're next" alert
- 
+        _whatsapp_async(send_queue_advance, booking, 'queue-advance')
+
         patient = booking.patient_display_name
         return Response({
             'success': True,

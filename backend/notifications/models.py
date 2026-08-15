@@ -47,6 +47,9 @@ class WhatsAppLog(models.Model):
         ('doctor_payout',        'Doctor Payout Paid'),
         ('booking_cancelled',    'Booking Cancelled'),
         ('booking_no_show',      'Booking No-show'),
+        ('queue_advance',        'Queue Advance (you are next)'),
+        ('booking_on_hold',      'Booking On Hold'),
+        ('hospital_cancellation', 'Hospital Cancellation Alert'),
     ]
     STATUS_CHOICES = [
         ('sent',   'Sent'),

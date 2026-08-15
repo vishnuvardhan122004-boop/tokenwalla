@@ -27,6 +27,21 @@ SAMPLE_PARAMS = {
     # {{1}} hospital {{2}} patient {{3}} mobile {{4}} doctor {{5}} date {{6}} slot {{7}} ref
     'hospital_new_booking': ['City Care Clinic', 'Rahul', '9876543210', 'Anita Rao',
                              '2026-07-26', '10:30 AM', 'TW-TEST-0001'],
+    # {{1}} patient {{2}} doctor {{3}} hospital {{4}} token
+    'queue_advance':        ['Rahul', 'Anita Rao', 'City Care Clinic', 'TW-TEST-0001'],
+    'booking_on_hold':      ['Rahul', 'Anita Rao', 'City Care Clinic', 'TW-TEST-0001'],
+    # {{1}} hospital {{2}} patient {{3}} doctor {{4}} date {{5}} slot {{6}} token
+    'hospital_cancellation': ['City Care Clinic', 'Rahul', 'Anita Rao',
+                              '2026-07-26', '10:30 AM', 'TW-TEST-0001'],
+    # {{1}} patient {{2}} doctor {{3}} hospital {{4}} date {{5}} token {{6}} refund line
+    'booking_cancelled':    ['Rahul', 'Anita Rao', 'City Care Clinic', '2026-07-26',
+                             'TW-TEST-0001',
+                             'A refund of ₹25.37 will reach you in 5-7 working days'],
+    # {{1}} patient {{2}} doctor {{3}} hospital {{4}} date {{5}} token
+    'booking_no_show':      ['Rahul', 'Anita Rao', 'City Care Clinic',
+                             '2026-07-26', 'TW-TEST-0001'],
+    # {{1}} doctor {{2}} amount {{3}} hospital {{4}} reference
+    'doctor_payout':        ['Anita Rao', '500.00', 'City Care Clinic', 'NA'],
 }
 
 

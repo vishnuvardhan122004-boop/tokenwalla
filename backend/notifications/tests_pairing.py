@@ -153,3 +153,113 @@ class PushPayloadTests(TestCase):
 
         push_booking_confirmed(self.booking)      # must not raise
         push_appointment_reminder(self.booking)   # must not raise
+
+
+class NewWhatsAppSenderTests(TestCase):
+    """The three senders added to pair WhatsApp with the push-only events.
+
+    These write a WhatsAppLog row, so they are exercised directly rather than
+    through their views — the views dispatch them on a background thread, and a
+    threaded DB write is the ~1-in-4 `database table is locked` flake.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create(
+            username='pat', mobile='9000000001', role='patient',
+            first_name='Rahul')
+        self.hospital = Hospital.objects.create(
+            name='Apollo', city='Hyd', mobile='9000000002', password='x')
+        self.doctor = Doctor.objects.create(
+            hospital=self.hospital, name='Dr Rao', specialization='GP',
+            mobile='9000000003', fee=200, slots=['09:00 AM'])
+        self.booking = Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate() + timedelta(days=1), slot='09:00 AM',
+            token='TW-TEST-1', status=Booking.CONFIRMED, amount=200)
+
+    def _sent(self):
+        """send_template stub reporting success, so the log row is written."""
+        return mock.patch(
+            'notifications.whatsapp.send_template',
+            return_value={'success': True, 'message_id': 'wamid.TEST', 'error': None},
+        )
+
+    def test_queue_advance_goes_to_the_patient_and_is_logged(self):
+        from notifications.models import WhatsAppLog
+        from notifications.whatsapp import send_queue_advance
+
+        with self._sent() as st:
+            send_queue_advance(self.booking)
+
+        self.assertEqual(st.call_args.kwargs['to_mobile'], self.user.mobile)
+        self.assertIn('TW-TEST-1', st.call_args.kwargs['params'])
+        self.assertTrue(WhatsAppLog.objects.filter(
+            booking=self.booking, event_type='queue_advance', status='sent').exists())
+
+    def test_on_hold_goes_to_the_patient_and_is_logged(self):
+        from notifications.models import WhatsAppLog
+        from notifications.whatsapp import send_booking_on_hold
+
+        with self._sent() as st:
+            send_booking_on_hold(self.booking)
+
+        self.assertEqual(st.call_args.kwargs['to_mobile'], self.user.mobile)
+        self.assertTrue(WhatsAppLog.objects.filter(
+            booking=self.booking, event_type='booking_on_hold').exists())
+
+    def test_patient_senders_respect_the_whatsapp_opt_out(self):
+        # Consent control: a patient who opted out must get neither message.
+        from notifications.whatsapp import send_booking_on_hold, send_queue_advance
+
+        self.user.whatsapp_opt_in = False
+        self.user.save(update_fields=['whatsapp_opt_in'])
+
+        with self._sent() as st:
+            send_queue_advance(self.booking)
+            send_booking_on_hold(self.booking)
+
+        st.assert_not_called()
+
+    def test_hospital_cancellation_goes_to_the_hospital_not_the_patient(self):
+        from notifications.models import WhatsAppLog
+        from notifications.whatsapp import send_hospital_cancellation
+
+        # Even with the PATIENT opted out — this message is addressed to the
+        # hospital, so the patient's consent flag must not suppress it.
+        self.user.whatsapp_opt_in = False
+        self.user.save(update_fields=['whatsapp_opt_in'])
+
+        with self._sent() as st:
+            send_hospital_cancellation(self.booking)
+
+        self.assertEqual(st.call_args.kwargs['to_mobile'], self.hospital.mobile)
+        self.assertNotEqual(st.call_args.kwargs['to_mobile'], self.user.mobile)
+        self.assertTrue(WhatsAppLog.objects.filter(
+            booking=self.booking, event_type='hospital_cancellation').exists())
+
+    def test_hospital_without_a_mobile_is_skipped(self):
+        # Landline-only clinics exist (2026-08-13 walk-in work); a blank mobile
+        # must be a silent skip, not a send to an empty number.
+        from notifications.whatsapp import send_hospital_cancellation
+
+        self.hospital.mobile = ''
+        self.hospital.save(update_fields=['mobile'])
+
+        with self._sent() as st:
+            send_hospital_cancellation(self.booking)
+
+        st.assert_not_called()
+
+    def test_a_failed_send_is_logged_as_failed(self):
+        # An unapproved template comes back success=False; the row must record
+        # that rather than silently claiming the patient was told.
+        from notifications.models import WhatsAppLog
+        from notifications.whatsapp import send_queue_advance
+
+        with mock.patch('notifications.whatsapp.send_template', return_value={
+                'success': False, 'message_id': None, 'error': 'template not found'}):
+            send_queue_advance(self.booking)
+
+        log = WhatsAppLog.objects.get(booking=self.booking, event_type='queue_advance')
+        self.assertEqual(log.status, 'failed')
+        self.assertIn('template not found', log.error)
