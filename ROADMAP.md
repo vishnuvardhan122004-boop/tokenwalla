@@ -7,9 +7,10 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-16 (session 2 — readiness audit; **the release
-  runbook is item 5a**, and everything left on it needs a login, a deploy, or a
-  public release, so none of it can come from a session)
+- **Last updated:** 2026-08-17 — **all code is merged and deployed.** What's
+  left is item **5b**: a store release plus two credential-gated tasks. Start
+  with **5b step 0** — `APP_LATEST_VERSION` is set to `1.2.1` from a test and
+  is nagging every user toward a version that isn't in the store.
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -479,67 +480,78 @@ the `edit-profile` OTP carry-over, and two stuck download spinners. All four are
 the same root cause — **hidden patient screens are `Tabs.Screen`s, so one
 instance serves the whole session.** See the 2026-08-16 session-2 WORKLOG entry.
 
-### 5a. The release runbook — everything left is behind a credential 🔴
+### ~~5a. The release runbook~~ → **5b below.** Steps 1–3 closed 2026-08-17
 
-**Written 2026-08-16 session 2, after a readiness audit scored the backend ready
-and the app undelivered.** None of the steps below can be done from a session:
-each needs a login, or is a deploy, or is a public release. They are ordered so
-that no step depends on a later one.
+**Everything that was code is done and merged.** Eight PRs landed across both
+repos (web/backend #30–#34, app #10–#12), both mains are green, and the backend
+deploy is **verified by SHA** rather than inferred. The remaining work is a
+store release plus two credential-gated tasks — see 5b.
 
-**1. Rotate the WhatsApp token — do this first, it is a live exposure.**
-See item 4a. Independent of everything else; do not let the app work delay it.
+What closed here: the five open PRs (all merged), the preview-build gate (three
+builds run, five bugs found and fixed on a real device), and the deploy
+verification gap (`/health/` now reports `RAILWAY_GIT_COMMIT_SHA`).
 
-**2. Merge the five open PRs.** ~~Open them~~ — **all opened 2026-08-16 session
-2 through the browser**, since `gh` is still unauthenticated on this machine.
-Opening PRs via Chrome works and is now the fallback; `gh auth login` would
-still be faster.
+### 5b. What is actually left 🔴
 
-| PR | Repo | Branch | CI |
-|---|---|---|---|
-| **#30** | web/backend | `feat/app-update-push` | ✅ ready to merge |
-| **#31** | web/backend | `docs/wrap-2026-08-16-s2` (this wrap) | ✅ ready to merge |
-| **#32** | web/backend | `perf/dashboard-visible-polling` | ✅ ready to merge |
-| **#10** | app | `fix/doctor-detail-stale-flash` | — |
-| **#5** | app | `feat/popular-doctors-first` | — (open since 2026-08-14) |
+**Ordered so no step depends on a later one. None of it can come from a
+session: each needs a login, is a deploy, or is a public release.**
 
-Merge order does not matter — none of them touch the same files. **Merging the
-web/backend three deploys them** (Railway + Vercel on push to `main`); the app
-two only reach patients through the build in step 4.
+**0. 🔴 BLANK `APP_LATEST_VERSION` — it is set to `1.2.1` right now.**
+Set on 2026-08-17 to prove the update prompt works. It worked. While it stays
+set, every install on 1.1.3 is nagged toward a version **that is not in the Play
+Store** — a prompt they cannot satisfy. This is the only thing currently wrong
+in production.
 
-**3. Finish the device checks on the preview APK** (item 5). Push is the only
-one proven. A production build permanently burns versionCode 37, so a broken
-picker costs build 38.
+```bash
+curl -s https://tokenwalla-production.up.railway.app/api/app-version/
+```
 
-**4. `eas build --profile production --platform android`, then upload the
-`.aab` to Play Console by hand.** EAS Submissions is empty — nothing has ever
-been submitted through EAS, so this step is manual and EAS cannot tell you what
-is live. Worth setting up `eas submit` while in there.
+**1. Verify patient WhatsApp — the last unproven path.**
+`/secure-admin-tw/users/user/` → user 4 → tick **Whatsapp opt in** (the field
+renders now that #34 deployed), then book once and confirm the message arrives.
 
-**5. Confirm 1.2.0 shows as live in Play Console.** This gates step 6 — it is
-not optional and it is not the same as "the build succeeded".
+Hospital-side WhatsApp is proven working (a real `wamid` on 2026-08-17), so the
+token and templates are healthy — but **no patient-side send has ever been
+observed succeeding**, because every attempt so far returned early at the
+opt-out gate. Do not assume it works.
 
-**6. Only then set `APP_LATEST_VERSION=1.2.0` on Railway.** Everyone on 1.1.3
-gets the dismissible nag with a real download behind it.
+**2. Rotate the WhatsApp token.** See item 4a. Still the only live security
+exposure, still independent of everything else.
 
-> **Why this is step 6 and not step 1.** Setting it was requested in session 2
-> and deliberately refused. Play is on **1.1.3**; 1.2.0 has only ever been a
-> *preview* build. `APP_LATEST_VERSION=1.2.0` today nags every install toward
-> something that is not downloadable — a nag with no exit, on real patients —
-> and `1.1.3` is a no-op (`compare(1.1.3, 1.1.3) = 0`, not `< 0`). There is no
-> value that helps until the store release lands.
+**3. Finish the two device checks that have never run.** Confirmed on-device
+2026-08-17: push, booking, cancel, the doctor page, the update prompt. Still
+untested:
+  - the **hospital location picker** — highest risk: Leaflet in a WebView modal
+    plus the `expo-location` permission flow
+  - a **walk-in (slotless) doctor** — must show hours, days and a call button
+    and **no Book button**
 
-**7. Optionally `python manage.py send_update_push 1.2.0 --send`** to reach
-people who are not opening the app. Same precondition as step 6.
+**4. Production build**, only after 1–3:
 
-**8. Only after adoption plateaus (a week or two), set `APP_MIN_VERSION=1.2.0`**
-to make it mandatory. **Never set `APP_MIN_VERSION` to a version that is not
-already live** — that blocks every install with no way out.
+```bash
+cd "/Users/kvishnuvardhan/Desktop/app /Tokenwalla"   # note the space in "app /"
+eas build --profile production --platform android
+```
 
-**Not on this list on purpose:** Sentry sourcemaps (`SENTRY_DISABLE_AUTO_UPLOAD`
-is `true` in all three EAS profiles, so production crashes arrive minified). It
-needs `SENTRY_AUTH_TOKEN` in EAS secrets *before* the flag comes off, and
-changing build config immediately before a release is how you lose a build.
-Do it in the release *after* 1.2.0.
+Takes versionCode **37 permanently**. Then upload the `.aab` to Play Console by
+hand — EAS Submissions has never been used, so nothing is automated here.
+
+**5. Confirm 1.2.0 is live in Play Console.** Gates step 6. Not the same as
+"the build succeeded".
+
+**6. Then set `APP_LATEST_VERSION=1.2.0`** — this time pointing at a version
+that exists, which is the real rollout. Optionally
+`python manage.py send_update_push 1.2.0 --send`.
+
+**7. After adoption plateaus (a week or two), `APP_MIN_VERSION=1.2.0`.**
+**Never set `APP_MIN_VERSION` to a version that is not already live** — it
+blocks every install with no way out.
+
+**Still deliberately out of scope:** Sentry sourcemaps
+(`SENTRY_DISABLE_AUTO_UPLOAD=true` in all three EAS profiles, so production
+crashes arrive minified). It needs `SENTRY_AUTH_TOKEN` in EAS secrets *before*
+the flag comes off, and changing build config immediately before a release is
+how you lose a build. Do it in the release **after** 1.2.0.
 
 ### 6. Watch the first day live 🟡
 

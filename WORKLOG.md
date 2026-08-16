@@ -28,6 +28,143 @@ Newest entry on top. Update the **Status** columns as things land.
 
 ---
 
+## 2026-08-17 — The app finally left the test runner: five real bugs, found on a device
+
+**Merged:** web/backend **#30 #31 #32 #33 #34** · app **#10 #11 #12**. Both mains
+green and deployed. `main` = `8f4b6d8f` (backend, **deploy verified**) ·
+`9b582c9` (app, **not built for production**).
+
+**The day's shape:** everything before today was verified by test suites. Today
+a preview APK went on a real handset, and it found **five bugs that no test
+would ever have caught** — four of them the same root cause.
+
+### 🔴 LEFTOVER THAT MUST BE CLEARED
+
+**`APP_LATEST_VERSION` is set to `1.2.1` on Railway right now.** It was set to
+prove the update prompt works, and proving it worked. While it stays set, every
+install on 1.1.3 is nagged toward a version that **is not in the Play Store** —
+a prompt they cannot satisfy. **Blank it.**
+
+```bash
+curl -s https://tokenwalla-production.up.railway.app/api/app-version/
+```
+
+### The root cause that produced five bugs
+
+**Every hidden screen in the patient layout is a `Tabs.Screen` (`href: null`),
+not a stack screen.** A tab navigator keeps ONE instance alive for the whole
+session, so `useEffect(..., [])` runs **once per app session, not per visit**,
+and any state not keyed to the current entity survives into the next one.
+
+| Screen | Symptom | PR |
+|---|---|---|
+| `doctor/[id]` | Second doctor showed the first one's photo/name/fee for ~0.1s | #10 |
+| `booking-token` | A patient's **second booking in one session** got no confirmation notification and no ~2.1h reminder | #10 |
+| `booking-token`, `my-qr` | Download button stuck spinning after a pending share | #10 |
+| `edit-profile` | Carried `otpVerified` across visits → client let an unverified mobile change through (server correctly rejected it) | #10 |
+| **`HomeScreen`** | **A patient who logs out and back in received NO push at all** | #11 |
+
+The `HomeScreen` one is the serious one and it was missed in the first sweep
+**because it lives in `components/`, not `app/(patient)/`**. The audit boundary
+is "is it rendered by a `Tabs.Screen`", not "which directory is it in".
+
+### How the push bug hid — worth remembering
+
+Reported as *"booking notified, cancel didn't"*. That reads like a cancel bug.
+It wasn't: `booking-token.tsx` fires its **own local** notification, which
+masked the fact that the server push never arrived. Cancel has no local
+equivalent, so only cancel looked broken. **One bug, two symptoms, and the
+louder symptom pointed at the wrong half.**
+
+Proven from the Railway log, which is the only place it was visible:
+
+```
+device registered for user 21     ← old account
+logout → login as ...0601         ← now user 4
+(no "device registered for user 4")
+Booking 21 created for user 4
+[push] no registered devices for: ✅ Booking confirmed
+```
+
+### The WhatsApp report that was three separate things
+
+*"No WhatsApp, and no rows in whatsapplog either."*
+
+1. **Patient sends never ran.** `whatsapp_opt_in` was False for user 4 — set via
+   the website's own opt-out toggle (`MyBookings.js`). The senders `return`
+   **before** writing their `WhatsAppLog` row, so an opt-out leaves **no trail
+   at all**. And the flag was in no admin fieldset, column or filter, so staff
+   could neither see it nor undo it. Fixed in #34.
+2. **The token was never the problem** — `hospital_new_booking` sent fine, with
+   a `wamid`. That single log line ruled out the whole "rotate broke it" theory.
+3. **`(#132001) Template name does not exist`** was `hospital_cancellation` —
+   template #10, still in review at Meta. Known, inert, not a bug.
+
+### Deploy verification, closed for good (#33)
+
+`/health/` now reports the commit Railway built (`RAILWAY_GIT_COMMIT_SHA`).
+The two previous deploys could only be confirmed because they happened to add
+an endpoint to probe; the one before this added none, and "the service is up"
+had to stand in for "the new code is live". Those are different claims.
+
+```bash
+curl -s .../health/ && git rev-parse --short=8 origin/main   # must match
+```
+
+It proved itself the same day: `8f4b6d8f` on both sides.
+
+### The update gate had a hole (#12)
+
+`checkForUpdate()` ran only on a **cold launch** — the root `useEffect` fires
+once per app *process*, and on Android a process survives for days. So someone
+tapping the "please update" push usually saw **nothing**: the app was resumed,
+never relaunched. That silently broke the push → gate chain the push was
+designed around.
+
+Now re-checked on `AppState` → `active`, rate-limited: a **block** always
+prompts (non-dismissible anyway, and such a build must not become usable by
+backgrounding it), a **nag** at most once per 6h. Decision extracted as a pure
+`shouldPrompt()` with 6 tests and an injected clock.
+
+**Verified on the device**: prompt appears, "Not now" sticks across a
+background/reopen. First time this feature has ever been observed working.
+
+### Also landed
+
+- **`manage.py send_update_push`** (#30) — the nudge half of the update story.
+  Payload carries **no `screen` key** on purpose: installed builds route taps
+  with a handler baked into the build, so an unknown route needs an app release
+  — exactly what an out-of-date install cannot do. Absent the key, the tap just
+  opens the app and the gate does the work. Does not send without `--send`.
+- **Doctor page: ~30 emoji → Ionicons** (#12). Open/Closed now uses the same
+  status dot as the Available pill; Instagram/Facebook use the real brand SVGs
+  already in that file for the share sheet. Share *message* keeps its emoji —
+  that goes to WhatsApp, where emoji are the right register.
+- **Dashboard visible-polling** (#32) and the **session-2 wrap** (#31).
+
+### Process lessons this day earned
+
+1. **Pushing a branch is not opening a PR.** Three branches sat with
+   `pull/new/…` links mistaken for PRs; nothing could be merged because nothing
+   existed. Verify with the API, not the push output.
+2. **A merge is two clicks** — *Merge pull request* then **Confirm merge**. The
+   badge must turn purple. `pushed_at` on the repo not moving is proof no merge
+   reached GitHub.
+3. **Driving Chrome can open PRs; it cannot merge them** — the classifier blocks
+   the merge intent. Both automated paths are closed, so merging is Vishnu's,
+   always.
+4. **Build a preview before a production build.** Preview reuses the version
+   code; production auto-increments **permanently**. Three preview builds today
+   found five bugs and burned no store version. versionCode 37 is still free.
+
+### Tests
+
+backend **227** (2 skipped) · web **25** · app **139** · zero
+`graph.facebook.com` / `exp.host` leaks under `-v 2` · migrations clean ·
+`check --deploy` clean under `DEBUG=False`.
+
+---
+
 ## 2026-08-16 (session 2) — Readiness audit, the update push, and four stale-state bugs in the app
 
 **Branches:** `feat/app-update-push` (backend) · `fix/doctor-detail-stale-flash`
