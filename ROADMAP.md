@@ -7,7 +7,9 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-16
+- **Last updated:** 2026-08-16 (session 2 — readiness audit; **the release
+  runbook is item 5a**, and everything left on it needs a login, a deploy, or a
+  public release, so none of it can come from a session)
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -469,6 +471,75 @@ uploaded by hand from the `.aab`, and EAS cannot tell you which version that is.
 Carries: the checkout fix, both navigation fixes, the launch-time update gate,
 the ₹15→₹20 price correction, search typeahead, and the notification icon
 (baked in at build time — it cannot be added later without another release).
+
+**Also now riding along (2026-08-16 session 2,
+`fix/doctor-detail-stale-flash`, 3 commits, unmerged):** the doctor-detail stale
+flash Vishnu reported, the second-booking notification loss in `booking-token`,
+the `edit-profile` OTP carry-over, and two stuck download spinners. All four are
+the same root cause — **hidden patient screens are `Tabs.Screen`s, so one
+instance serves the whole session.** See the 2026-08-16 session-2 WORKLOG entry.
+
+### 5a. The release runbook — everything left is behind a credential 🔴
+
+**Written 2026-08-16 session 2, after a readiness audit scored the backend ready
+and the app undelivered.** None of the steps below can be done from a session:
+each needs a login, or is a deploy, or is a public release. They are ordered so
+that no step depends on a later one.
+
+**1. Rotate the WhatsApp token — do this first, it is a live exposure.**
+See item 4a. Independent of everything else; do not let the app work delay it.
+
+**2. Merge the five open PRs.** ~~Open them~~ — **all opened 2026-08-16 session
+2 through the browser**, since `gh` is still unauthenticated on this machine.
+Opening PRs via Chrome works and is now the fallback; `gh auth login` would
+still be faster.
+
+| PR | Repo | Branch | CI |
+|---|---|---|---|
+| **#30** | web/backend | `feat/app-update-push` | ✅ ready to merge |
+| **#31** | web/backend | `docs/wrap-2026-08-16-s2` (this wrap) | ✅ ready to merge |
+| **#32** | web/backend | `perf/dashboard-visible-polling` | ✅ ready to merge |
+| **#10** | app | `fix/doctor-detail-stale-flash` | — |
+| **#5** | app | `feat/popular-doctors-first` | — (open since 2026-08-14) |
+
+Merge order does not matter — none of them touch the same files. **Merging the
+web/backend three deploys them** (Railway + Vercel on push to `main`); the app
+two only reach patients through the build in step 4.
+
+**3. Finish the device checks on the preview APK** (item 5). Push is the only
+one proven. A production build permanently burns versionCode 37, so a broken
+picker costs build 38.
+
+**4. `eas build --profile production --platform android`, then upload the
+`.aab` to Play Console by hand.** EAS Submissions is empty — nothing has ever
+been submitted through EAS, so this step is manual and EAS cannot tell you what
+is live. Worth setting up `eas submit` while in there.
+
+**5. Confirm 1.2.0 shows as live in Play Console.** This gates step 6 — it is
+not optional and it is not the same as "the build succeeded".
+
+**6. Only then set `APP_LATEST_VERSION=1.2.0` on Railway.** Everyone on 1.1.3
+gets the dismissible nag with a real download behind it.
+
+> **Why this is step 6 and not step 1.** Setting it was requested in session 2
+> and deliberately refused. Play is on **1.1.3**; 1.2.0 has only ever been a
+> *preview* build. `APP_LATEST_VERSION=1.2.0` today nags every install toward
+> something that is not downloadable — a nag with no exit, on real patients —
+> and `1.1.3` is a no-op (`compare(1.1.3, 1.1.3) = 0`, not `< 0`). There is no
+> value that helps until the store release lands.
+
+**7. Optionally `python manage.py send_update_push 1.2.0 --send`** to reach
+people who are not opening the app. Same precondition as step 6.
+
+**8. Only after adoption plateaus (a week or two), set `APP_MIN_VERSION=1.2.0`**
+to make it mandatory. **Never set `APP_MIN_VERSION` to a version that is not
+already live** — that blocks every install with no way out.
+
+**Not on this list on purpose:** Sentry sourcemaps (`SENTRY_DISABLE_AUTO_UPLOAD`
+is `true` in all three EAS profiles, so production crashes arrive minified). It
+needs `SENTRY_AUTH_TOKEN` in EAS secrets *before* the flag comes off, and
+changing build config immediately before a release is how you lose a build.
+Do it in the release *after* 1.2.0.
 
 ### 6. Watch the first day live 🟡
 
