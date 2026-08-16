@@ -28,6 +28,86 @@ Newest entry on top. Update the **Status** columns as things land.
 
 ---
 
+## 2026-08-16 (session 2) — Readiness audit, the update push, and four stale-state bugs in the app
+
+**Branches:** `feat/app-update-push` (backend) · `fix/doctor-detail-stale-flash`
+(app, 3 commits) · this wrap. **All pushed, none merged — `gh` is still not
+authenticated, so every PR has to be opened by hand.**
+
+### Readiness audit — the backend half is ready, the app half is undelivered
+
+| Check | Result |
+|---|---|
+| Backend suite | **225 passed, 2 skipped** (the Postgres-only concurrency pair) |
+| `-v 2` outbound leaks | **0** `graph.facebook.com`, **0** `exp.host` — no thread escaped |
+| Web tests | 20/20 |
+| App tests | 133/133, `tsc` clean |
+| `makemigrations --check` | clean |
+| Live API | 200; `cache: {backend: redis, ok: true}` |
+| Live headers | HSTS+preload, `nosniff`, `X-Frame-Options: DENY`, COOP, referrer-policy |
+| Notification wiring | all 10 events fire push **and** WhatsApp, verified call site by call site |
+
+### The update push (backend)
+
+`push_app_update()` + `manage.py send_update_push <version> [--send]`. The
+force-update gate already existed end to end and works; what was missing was any
+way to reach someone who is not opening the app.
+
+Two decisions worth keeping:
+
+- **The payload carries no `screen` key.** Installed builds route a tap on
+  `data.screen` with a handler that ships *with the build*, so an unknown value
+  would need an app release to be understood — exactly what an out-of-date
+  install cannot do. Absent the key both branches fall through, the tap just
+  opens the app, and the launch gate does the blocking. Locked by a test.
+- **A broadcast cannot be recalled**, so it does not send without `--send`.
+
+Sent one role at a time so `audience` matches the recipient; otherwise a hospital
+staffer finds the notice in their patient tab.
+
+### Four stale-state bugs in the app — all one root cause
+
+**Every hidden screen in the patient layout is a `Tabs.Screen` (`href: null`),
+not a stack screen.** A tab navigator keeps ONE instance alive for the whole
+session, so any state not keyed to the current entity survives into the next
+visit. This is the single most useful thing learned today and it will bite again
+the next time a hidden screen is added.
+
+| Screen | Bug | Fix |
+|---|---|---|
+| `doctor/[id]` | **Reported by Vishnu.** Picking a second doctor showed the first one's photo, name and fee for ~0.1s. `loading` was still false and `doctor` still held the previous one | Reset the four pieces of per-doctor state up front + cancel in-flight requests on `id` change |
+| `booking-token` | `notifiedRef` was a boolean set once and never cleared, so a patient's **SECOND booking in one session** got neither `notifyBookingConfirmed` nor the ~2.1h `scheduleAppointmentReminder` | Keyed the ref to the token |
+| `booking-token` / `my-qr` | A share left pending kept the Download button spinning and disabled on the next visit | Reset `downloading` per token / on focus |
+| `edit-profile` | Loaded the user in a `[]` effect — once per app **session**. Carried `otpVerified` over, so the client gate passed for a number never verified | `useFocusEffect` + reset the OTP fields |
+
+**The `edit-profile` one is NOT a security hole, and the reason matters:**
+`MeView.patch` checks a per-number `otp_verified:<mobile>` cache flag and
+consumes it, so the server was rejecting these correctly. The client was just
+letting the request leave, producing a confusing 400 on a screen that showed the
+number as verified. Server-side verification earned its keep again.
+
+**Audited and deliberately unchanged:** `about`/`terms`/`privacy`/`refund` (no
+state), `contact` (form state feeds a `mailto:`; persisting it is right, the mail
+app may never send), `notifications` (live store via `useNotificationCenter`),
+`payment` (**already** reset its fee breakdown per doctor — the pattern the
+others were missing). `app/(hospital)/_layout.tsx` is a `Stack`, so the whole
+defect class does not apply there.
+
+### What this session could not do, and why
+
+Everything left on the list is behind a credential or is a public release:
+rotating the WhatsApp token (Meta login), the store release (Google account),
+the Railway env vars (a deploy), and opening the PRs (`gh` unauthenticated).
+See ROADMAP item 5a for the ordered runbook.
+
+**One correction to an earlier plan:** setting `APP_LATEST_VERSION` was requested
+this session and **deliberately not done**. Play is on **1.1.3**; 1.2.0 has only
+ever been a *preview* build. `1.2.0` would nag every install toward something
+that is not downloadable, and `1.1.3` is a no-op. The gate is not the blocker —
+the missing store release is.
+
+---
+
 ## 2026-08-16 (auto) — Session update @ 03:30
 
 Auto-generated snapshot (branch `docs/close-item4-whatsapp`, 1 changed file).
