@@ -4,8 +4,8 @@ A running record of changes so we can cross-check what's done and what's pending
 Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** unmerged — `perf/dashboard-visible-polling` (**no PR**) + this wrap (web/backend) · `feat/popular-doctors-first` (PR #5) in the app. **The backlog is cleared and the branch list is swept** — 34 remote / 37 local merged branches deleted 2026-08-14. Merged 2026-08-14: web/backend PRs #20–#24, app PRs #6–#9; 2026-08-16: PR #25 (session-3 wrap, which triggered the deploy). **Do NOT delete** `develop` (deploys to staging), `harden-password-validators` or `website-cleanup-eslint-deadDep` — the last two look dead but hold unmerged work.
-- **Latest commit at last update:** `8427628` main (web/backend, **deployed & live** — PR #27 pairing) · `fc8da3a` main (app, **1.2.0 + Sentry, not built**)
-- **Last updated:** 2026-08-16 (deploy unstuck, items 0/2b/4 closed, both channels paired, templates 8–10 in review; **token needs rotating — item 4a**)
+- **Latest commit at last update:** `1dd33e8a` main (web/backend, **deployed & verified via `/health/` commit**) · `9b582c9` main (app, 1.2.0 — **not built for production**; Play is still on 1.1.3, versionCode 37 free)
+- **Last updated:** 2026-08-17 session 2 — **token rotated (item 4a closed), patient WhatsApp proven, nothing wrong in production.** Only item 5b step 3 remains: the location-picker and walk-in-doctor device checks, then the production build.
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -25,6 +25,44 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-17 (session 2) — Token rotated, WhatsApp proven, production is clean
+
+**No code changed.** This session closed the three operational items left over
+from session 1. `main` = `1dd33e8a` (backend, deployed & verified) · `9b582c9`
+(app). No PRs open except the old `railway-app` bot one (#3).
+
+| Item | Result |
+|---|---|
+| **WhatsApp token rotated** (item 4a 🔴) | ✅ New System-User token generated in Meta, `WHATSAPP_ACCESS_TOKEN` updated on Railway, service redeployed clean |
+| **Patient WhatsApp verified** (5b step 1) | ✅ `whatsapp_opt_in` ticked for user 4 via the new admin field, booking put through, **message arrived** |
+| **`APP_LATEST_VERSION` blanked** (5b step 0) | ✅ `/api/app-version/` back to `""` — no install is being nagged |
+| **Update prompt verified on device** | ✅ Nag appeared at `1.2.1`; "Not now" survived a background/reopen, proving the 6h cooldown and the new resume re-check |
+
+**One booking proved three things at once.** Rotating a token is unverifiable
+until something sends — a bad paste and a good one look identical, and
+`send_template` returns rather than raising. Putting a real booking through the
+app exercised the new token, the patient-side `booking_confirmation` (whose
+opt-in gate had never let a single send through), and the hospital alert in one
+action. That is the cheapest possible proof and it should be the standard check
+after any WhatsApp credential change.
+
+**Health after the variable change:** `/health/` → `1dd33e8a`, `cache.ok` true,
+`/api/doctors/` serving 15. A variable-only deploy restarts the service without
+changing the commit, so `/health/` cannot tell you *whether* it redeployed —
+only that it came back up. `/api/app-version/` is the check for whether the
+variable actually took.
+
+**Still not done, and now the only thing between here and the store:** the
+hospital location picker and a walk-in doctor. Both need a device, both are on
+the APK already installed (`D7tIwO2…`, commit `67999e5`).
+
+**Cleanup owed:** `preview/integration-2` and `preview/integration-2026-08-17`
+are throwaway branches used to build preview APKs while PRs were open.
+Everything they carried is merged. Delete them before someone cuts a release
+build from one.
 
 ---
 

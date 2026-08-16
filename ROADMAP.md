@@ -7,10 +7,11 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-17 — **all code is merged and deployed.** What's
-  left is item **5b**: a store release plus two credential-gated tasks. Start
-  with **5b step 0** — `APP_LATEST_VERSION` is set to `1.2.1` from a test and
-  is nagging every user toward a version that isn't in the store.
+- **Last updated:** 2026-08-17 (session 2) — **all code merged and deployed, no
+  outstanding security work, nothing wrong in production.** Item 4a (token
+  rotation) is closed. What's left is item **5b step 3**: two device checks —
+  the **hospital location picker** and a **walk-in doctor** — then the
+  production build. versionCode 37 is still free.
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -254,7 +255,27 @@ Read both service logs on the Railway dashboard. Neither is a zombie.
 "Sent 0" and "Ledgered 0" are both correct at 4 lifetime bookings with no doctor
 on `FULL`. The crons work; there is nothing for them to do yet.
 
-### 4a. ROTATE THE WHATSAPP TOKEN — it was pasted into a chat 🔴
+### ~~4a. ROTATE THE WHATSAPP TOKEN~~ ✅ 2026-08-17 — ROTATED AND PROVEN
+
+**Done, and proven by a real send.** Vishnu generated a new System-User token in
+Meta and updated `WHATSAPP_ACCESS_TOKEN` on Railway; the service redeployed
+clean (`/health/` → `1dd33e8a`, Redis ok, `/api/doctors/` serving). A booking was
+then put through the app end-to-end and the WhatsApp arrived — which is the only
+proof that matters here, because a bad paste is indistinguishable from a good one
+until something actually sends.
+
+The old token is dead. The exposure opened on 2026-08-16 is closed.
+
+**The rule this earned, kept because it will recur:** a secret never needs to
+travel to be used — it is already in the environment that needs it. Run the
+command where the credential lives (the Railway container), never move the
+credential to the command. The rotation itself was also done by hand for the
+same reason: doing it through a session would have put the replacement token in
+a transcript, which is exactly how the first one leaked.
+
+**Original problem, kept for context:**
+
+### ~~4a-history. The token was pasted into a chat~~ 🔴 → closed above
 
 **Do this first tomorrow if it is not already done.** During the 2026-08-16
 session the live `WHATSAPP_ACCESS_TOKEN` was pasted into the chat transcript
@@ -491,42 +512,42 @@ What closed here: the five open PRs (all merged), the preview-build gate (three
 builds run, five bugs found and fixed on a real device), and the deploy
 verification gap (`/health/` now reports `RAILWAY_GIT_COMMIT_SHA`).
 
-### 5b. What is actually left 🔴
+### 5b. What is actually left 🟠 — down to a store release
 
-**Ordered so no step depends on a later one. None of it can come from a
-session: each needs a login, is a deploy, or is a public release.**
+**Steps 0, 1 and 2 all closed 2026-08-17.** Nothing is wrong in production and
+there is no outstanding security work. What remains is two device checks and
+the release itself.
 
-**0. 🔴 BLANK `APP_LATEST_VERSION` — it is set to `1.2.1` right now.**
-Set on 2026-08-17 to prove the update prompt works. It worked. While it stays
-set, every install on 1.1.3 is nagged toward a version **that is not in the Play
-Store** — a prompt they cannot satisfy. This is the only thing currently wrong
-in production.
+**~~0. Blank `APP_LATEST_VERSION`~~ ✅ 2026-08-17** — verified blank:
 
 ```bash
 curl -s https://tokenwalla-production.up.railway.app/api/app-version/
+# {"min_version": "", "latest_version": "", ...}
 ```
 
-**1. Verify patient WhatsApp — the last unproven path.**
-`/secure-admin-tw/users/user/` → user 4 → tick **Whatsapp opt in** (the field
-renders now that #34 deployed), then book once and confirm the message arrives.
+It had been set to `1.2.1` to prove the update prompt fires. It did — the nag
+appeared, and "Not now" survived a background/reopen, which is the first time
+that feature has been observed working. Then blanked, because pointing 1.1.3
+installs at a store that only has 1.1.3 is a prompt nobody can satisfy.
 
-Hospital-side WhatsApp is proven working (a real `wamid` on 2026-08-17), so the
-token and templates are healthy — but **no patient-side send has ever been
-observed succeeding**, because every attempt so far returned early at the
-opt-out gate. Do not assume it works.
+**~~1. Verify patient WhatsApp~~ ✅ 2026-08-17.** `whatsapp_opt_in` ticked back
+on for user 4 through the admin (which only became possible when #34 shipped —
+the field was in no fieldset, column or filter before). A booking was then put
+through end-to-end and the message arrived. **The last unproven path is proven.**
 
-**2. Rotate the WhatsApp token.** See item 4a. Still the only live security
-exposure, still independent of everything else.
+**~~2. Rotate the WhatsApp token~~ ✅ 2026-08-17.** See item 4a — rotated in
+Meta, updated on Railway, redeploy clean, and confirmed by the same real booking
+above. There is no outstanding credential exposure.
 
-**3. Finish the two device checks that have never run.** Confirmed on-device
-2026-08-17: push, booking, cancel, the doctor page, the update prompt. Still
-untested:
+**3. Finish the two device checks that have never run.** 🟠 **← START HERE.**
+Confirmed on-device 2026-08-17: push (incl. after an account switch), booking,
+cancel, the doctor page, the update prompt, and WhatsApp. Still untested:
   - the **hospital location picker** — highest risk: Leaflet in a WebView modal
     plus the `expo-location` permission flow
   - a **walk-in (slotless) doctor** — must show hours, days and a call button
     and **no Book button**
 
-**4. Production build**, only after 1–3:
+**4. Production build**, only after 3:
 
 ```bash
 cd "/Users/kvishnuvardhan/Desktop/app /Tokenwalla"   # note the space in "app /"
@@ -535,6 +556,12 @@ eas build --profile production --platform android
 
 Takes versionCode **37 permanently**. Then upload the `.aab` to Play Console by
 hand — EAS Submissions has never been used, so nothing is automated here.
+
+**Build from `main` (`9b582c9`), not from a `preview/integration-*` branch.**
+Three preview builds were cut from throwaway integration branches while PRs were
+still open; everything they carried is now merged, so those branches are dead.
+Delete `preview/integration-2` and `preview/integration-2026-08-17` (local and
+remote) so nobody builds a release off one by accident.
 
 **5. Confirm 1.2.0 is live in Play Console.** Gates step 6. Not the same as
 "the build succeeded".
