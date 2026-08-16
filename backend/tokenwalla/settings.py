@@ -339,6 +339,22 @@ APP_STORE_URL      = config(
 )
 APP_UPDATE_MESSAGE = config('APP_UPDATE_MESSAGE', default='')
 
+# ── Deployed commit ───────────────────────────────────────────────────────────
+# Railway injects RAILWAY_GIT_COMMIT_SHA into the container it builds. Surfaced
+# on /health/ so "did the deploy land?" is a fact rather than an inference.
+#
+# Both previous deploys could only be confirmed because they happened to add an
+# endpoint to probe (`/api/app-version/` was the tripwire for the 2026-08-16
+# one). The 2026-08-16 session-2 deploy added no HTTP surface at all — a
+# management command, docs and a frontend tweak — so there was nothing to check
+# and "the service is up" had to stand in for "the new code is live". Those are
+# different claims, and the gap cost a session once already (item 0, where a
+# paid bill did not re-trigger a deploy and nobody could tell).
+#
+# Short SHA only. The repo is public, so this discloses nothing that a `git log`
+# does not, and /health/ is public.
+GIT_COMMIT = config('RAILWAY_GIT_COMMIT_SHA', default='')[:8]
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 LOGGING = {
     'version':                  1,

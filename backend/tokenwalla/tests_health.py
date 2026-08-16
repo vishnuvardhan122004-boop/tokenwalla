@@ -64,3 +64,27 @@ class HealthProbeTests(TestCase):
         with mock.patch('tokenwalla.urls.cache.get', return_value=None):
             body = self.client.get(self.url).json()
         self.assertFalse(body['cache']['ok'])
+
+    @override_settings(GIT_COMMIT='4648fe91')
+    def test_reports_the_deployed_commit(self):
+        """So a deploy can be confirmed instead of inferred.
+
+        The two deploys before this were only verifiable because they happened
+        to add an endpoint to probe; one that adds no HTTP surface left "the
+        service is up" standing in for "the new code is live".
+        """
+        self.assertEqual(self.client.get(self.url).json()['commit'], '4648fe91')
+
+    @override_settings(GIT_COMMIT='')
+    def test_a_missing_commit_is_empty_not_an_error(self):
+        """Locally and in tests Railway's variable is absent.
+
+        An unset value must degrade to '' — never raise, and never make the
+        healthcheck look unhealthy, or Railway would restart the service over a
+        cosmetic field.
+        """
+        res = self.client.get(self.url)
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(body['commit'], '')
+        self.assertEqual(body['status'], 'ok')

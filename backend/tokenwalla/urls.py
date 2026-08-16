@@ -45,10 +45,16 @@ def health_check(request):
     200. Railway's healthcheck restarts the service on a failure, and restarting
     does not fix an unreachable Redis — it would turn a degraded API into a
     restart loop with no API at all. Read `cache.ok` to judge that.
+
+    `commit` is the short SHA this container was built from, so a deploy can be
+    confirmed by comparing it to `git rev-parse --short main` instead of hunting
+    for a behaviour change to probe. Empty locally and in tests, where Railway's
+    variable is absent — an empty string means "unknown", never "not deployed".
     """
     return JsonResponse({
         'status':  'ok',
         'version': '1.0.0',
+        'commit':  settings.GIT_COMMIT,
         'cache':   _cache_probe(),
     })
 
