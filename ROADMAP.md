@@ -489,16 +489,22 @@ that no step depends on a later one.
 **1. Rotate the WhatsApp token — do this first, it is a live exposure.**
 See item 4a. Independent of everything else; do not let the app work delay it.
 
-**2. Open and merge the four outstanding PRs.** `gh auth login` once removes
-this friction permanently — it has now cost time in four sessions.
+**2. Merge the five open PRs.** ~~Open them~~ — **all opened 2026-08-16 session
+2 through the browser**, since `gh` is still unauthenticated on this machine.
+Opening PRs via Chrome works and is now the fallback; `gh auth login` would
+still be faster.
 
-| Branch | Repo | Link |
-|---|---|---|
-| `feat/app-update-push` | web/backend | `.../tokenwalla/pull/new/feat/app-update-push` |
-| `docs/wrap-2026-08-16-s2` | web/backend | this wrap |
-| `perf/dashboard-visible-polling` | web/backend | oldest, lowest risk |
-| `fix/doctor-detail-stale-flash` | app | `.../tokenwalla.app/pull/new/fix/doctor-detail-stale-flash` |
-| `feat/popular-doctors-first` | app | PR #5, already open |
+| PR | Repo | Branch | CI |
+|---|---|---|---|
+| **#30** | web/backend | `feat/app-update-push` | ✅ ready to merge |
+| **#31** | web/backend | `docs/wrap-2026-08-16-s2` (this wrap) | ✅ ready to merge |
+| **#32** | web/backend | `perf/dashboard-visible-polling` | ✅ ready to merge |
+| **#10** | app | `fix/doctor-detail-stale-flash` | — |
+| **#5** | app | `feat/popular-doctors-first` | — (open since 2026-08-14) |
+
+Merge order does not matter — none of them touch the same files. **Merging the
+web/backend three deploys them** (Railway + Vercel on push to `main`); the app
+two only reach patients through the build in step 4.
 
 **3. Finish the device checks on the preview APK** (item 5). Push is the only
 one proven. A production build permanently burns versionCode 37, so a broken
