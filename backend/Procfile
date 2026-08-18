@@ -1,1 +1,1 @@
-web: gunicorn tokenwalla.wsgi --workers 3 --threads 4 --timeout 60
+web: gunicorn tokenwalla.wsgi --workers 3 --threads 8 --timeout 60
