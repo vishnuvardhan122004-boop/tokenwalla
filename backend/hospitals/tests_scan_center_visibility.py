@@ -120,3 +120,69 @@ class DefaultsTests(TestCase):
             kind=Hospital.SCAN_CENTER)
         scan = Scan.objects.create(center=centre, name='CBC', price=300)
         self.assertEqual(scan.payment_collection_mode, Scan.COLLECT_SERVICE_ONLY)
+
+
+class RegistrationKindTests(TestCase):
+    """`kind` arrives on a PUBLIC, unauthenticated endpoint and decides which
+    patient-facing list a row lands in, so it is whitelisted, not trusted."""
+
+    URL = '/api/hospitals/register/'
+
+    def _register(self, mobile, **extra):
+        return APIClient().post(self.URL, {
+            'name': f'Provider {mobile}', 'mobile': mobile,
+            'password': 'secret123', 'city': 'Hindupur', **extra,
+        }, format='json')
+
+    def test_registering_as_a_scan_centre_works(self):
+        res = self._register('9111100001', kind='SCAN_CENTER')
+        self.assertIn(res.status_code, (200, 201), res.content)
+        self.assertEqual(
+            Hospital.objects.get(mobile='9111100001').kind, Hospital.SCAN_CENTER)
+
+    def test_omitting_kind_registers_a_hospital(self):
+        self._register('9111100002')
+        self.assertEqual(
+            Hospital.objects.get(mobile='9111100002').kind, Hospital.HOSPITAL)
+
+    def test_an_unrecognised_kind_falls_back_to_hospital(self):
+        """Fails safe: a typo or a hostile value must not place a row somewhere
+        it was never approved to appear."""
+        for i, bad in enumerate(['scan_center', 'ADMIN', 'x', '', 'SCAN CENTER']):
+            mobile = f'91111001{i:02d}'
+            with self.subTest(kind=bad):
+                self._register(mobile, kind=bad)
+                self.assertEqual(
+                    Hospital.objects.get(mobile=mobile).kind, Hospital.HOSPITAL)
+
+
+class LoginPayloadTests(TestCase):
+    """The dashboard decides Doctors-tab vs Scans-tab from the login payload.
+
+    Caught in a browser, not by a test: every backend test passed while the
+    centre dashboard still showed a Doctors tab, because `kind` was simply
+    absent from the embedded hospital object.
+    """
+
+    def test_login_payload_carries_the_kind(self):
+        from django.contrib.auth.hashers import make_password
+        centre = Hospital.objects.create(
+            name='Vijaya Diagnostics', city='Hindupur', mobile='9222200001',
+            status='active', password=make_password('secret123'),
+            kind=Hospital.SCAN_CENTER)
+        res = APIClient().post('/api/hospitals/login/',
+                               {'mobile': '9222200001', 'password': 'secret123'},
+                               format='json')
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(res.json()['user']['hospital']['kind'], Hospital.SCAN_CENTER)
+        self.assertEqual(centre.kind, Hospital.SCAN_CENTER)
+
+    def test_a_hospital_login_still_reports_hospital(self):
+        from django.contrib.auth.hashers import make_password
+        Hospital.objects.create(
+            name='Sri Sarwodhaya', city='Hindupur', mobile='9222200002',
+            status='active', password=make_password('secret123'))
+        res = APIClient().post('/api/hospitals/login/',
+                               {'mobile': '9222200002', 'password': 'secret123'},
+                               format='json')
+        self.assertEqual(res.json()['user']['hospital']['kind'], Hospital.HOSPITAL)

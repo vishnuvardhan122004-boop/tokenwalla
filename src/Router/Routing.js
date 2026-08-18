@@ -6,6 +6,7 @@ import AllDoctor      from '../componets/AllDoctor';
 import Login          from '../componets/Login';
 import Profilecreate  from '../componets/profilecreate';
 import DoctorDetails  from '../componets/DoctorsDetails';
+import ScanCenterDetails from '../componets/ScanCenterDetails';
 import Payment        from '../componets/Payment';
 import BookingToken   from '../componets/BookingToken';
 import Terms          from '../componets/Terms';
@@ -70,6 +71,7 @@ const Routing = () => (
     <Route path="/alldoctor"     element={<AllDoctor />} />
     <Route path="/AllDoctor"     element={<Navigate to="/alldoctor" replace />} />
     <Route path="/doctor/:id"    element={<DoctorDetails />} />
+    <Route path="/scan-center/:id" element={<ScanCenterDetails />} />
     <Route path="/login"         element={<Login />} />
     <Route path="/profilecreate" element={<Profilecreate />} />
     <Route path="/terms"         element={<Terms />} />

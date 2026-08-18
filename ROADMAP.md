@@ -760,10 +760,10 @@ untouched.
 | 2 | `Booking.scan` + CheckConstraint + `provider_*` properties + the logic sites | backend | ✅ `feat/scan-bookings` |
 | 3 | Scan checkout — `scanId` in create-order, fee math, verify binding, refunds | backend | 🔴 **blocked on the GST answer** |
 | 4 | Scan CRUD endpoints + admin + slot-availability | backend | ✅ `feat/scan-endpoints` |
-| 5 | Registration: **Hospital / Scanning Centre** choice on `Usercreate.js` | web | |
-| 6 | `/alldoctor` `[Doctors｜Scan Centres]` toggle + centre cards | web | |
-| 7 | `ScanCenterDetails.js` (**the one new file**) — menu → slots → pay | web | |
-| 8 | Centre dashboard: manage scans, see the queue | web | |
+| 5 | Registration: **Hospital / Scanning Centre** choice on `Usercreate.js` | web | ✅ `feat/scan-web` |
+| 6 | `/alldoctor` `[Doctors｜Scan Centres]` toggle + centre cards | web | ✅ `feat/scan-web` |
+| 7 | `ScanCenterDetails.js` (**the one new file**) — menu → slots → **call to book** | web | ✅ `feat/scan-web` |
+| 8 | Centre dashboard: manage scans, see the queue | web | ✅ `feat/scan-web` |
 | 9 | Mirror 5–8 | app | |
 | 10 | Report delivery — upload, WhatsApp, download | backend + web | |
 
@@ -780,6 +780,22 @@ one another's positions. The same trap sits behind any
 it into `doctor__isnull=True`, and it matches every scan booking in the system.
 `Booking.provider_filter` exists for exactly this, and a test demonstrates the
 naive version failing so nobody simplifies it back.
+
+**Slice 7 ships WITHOUT a Book button, on purpose.** `SCAN_CHECKOUT_ENABLED`
+in `ScanCenterDetails.js` is `false`, so the CTA is "Call <number> to book" —
+the same proven pattern the walk-in doctor screen uses. Flipping that constant
+is the LAST step of slice 3, after create-order, verify and refunds all handle
+a scan. Everything else on the page is real: the menu, prices, prep text, and
+live slot availability off `/api/scans/<id>/slot-availability/`.
+
+**Browser verification, 2026-08-18**, against local SQLite with a seeded
+centre. It caught one bug no backend test could: the centre dashboard still
+showed a **Doctors** tab because `kind` was absent from the hospital object
+embedded in the login response. Every backend test passed while the screen was
+wrong. Fixed and now pinned by `LoginPayloadTests`. Also confirmed live: no
+centre in the default `/api/hospitals/`, `?kind=` opt-in works, a typo fails
+closed, and today's morning slots correctly strike out under the 2h cutoff
+while 4 PM stays open.
 
 **Slice 4 added `slot-availability` beyond its stated scope**, deliberately: it
 is the same contract as the doctor endpoint, so slice 7 can drive the existing

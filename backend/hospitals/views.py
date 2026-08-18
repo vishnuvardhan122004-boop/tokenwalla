@@ -116,8 +116,19 @@ class HospitalRegisterView(APIView):
             except (TypeError, ValueError):
                 return None
 
+        # Provider kind. Whitelisted against the model's own choices rather than
+        # trusted: this endpoint is public and unauthenticated, and `kind`
+        # decides which patient-facing list a row appears in. Anything not
+        # recognised — absent, blank, misspelt, or hostile — registers a
+        # HOSPITAL, which is the safe default because it is the behaviour that
+        # existed before centres did.
+        kind = data.get('kind', Hospital.HOSPITAL)
+        if kind not in dict(Hospital.KIND_CHOICES):
+            kind = Hospital.HOSPITAL
+
         hospital = Hospital.objects.create(
             name=name,
+            kind=kind,
             city=data.get('city', '').strip(),
             address=data.get('address', '').strip(),
             location=data.get('location', '').strip(),
@@ -251,6 +262,10 @@ class HospitalLoginView(APIView):
                 'hospital': {
                     'id': hospital.id,
                     'name': hospital.name,
+                    # The dashboard reads this to decide whether its provider
+                    # tab manages Doctors or Scans. Additive — clients that
+                    # ignore it behave exactly as before.
+                    'kind': hospital.kind,
                     'city': hospital.city,
                     'address': hospital.address,
                     'mobile': hospital.mobile,
