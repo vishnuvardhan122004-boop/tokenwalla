@@ -7,11 +7,13 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-17 (session 2) — **all code merged and deployed, no
-  outstanding security work, nothing wrong in production.** Item 4a (token
-  rotation) is closed. What's left is item **5b step 3**: two device checks —
-  the **hospital location picker** and a **walk-in doctor** — then the
-  production build. versionCode 37 is still free.
+- **Last updated:** 2026-08-18 — **all code merged and deployed, no outstanding
+  security work, nothing wrong in production.** Item 4a (token rotation) is
+  closed; so are 5b steps 0, 1 and 2. What's left is item **5b step 3**: two
+  device checks — the **hospital location picker** and a **walk-in doctor** —
+  then the production build. versionCode 37 is still free.
+  Also merged since: the gunicorn threads 4→8 capacity bump (PR #37) and the
+  read-path stress harness — both in **Later**, neither blocking the release.
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -610,6 +612,23 @@ What would actually move it: one hospital doing ten bookings a week, and one
 real doctor on `FULL` so the payout path carries money and teaches you which of
 the careful edge cases were the right ones.
 
+**Capacity is settled, and it is not the constraint — checked 2026-08-18.**
+Three different ceilings, and the binding one is not technical:
+
+| Ceiling | Daily number | Set by |
+|---|---|---|
+| **Bookings/day** | **~hundreds** | doctors x slots x `max_per_slot` |
+| Signups/day | ~1,000-2,000 | SMS spend + per-IP OTP cap (2000/day) |
+| Server traffic | ~1-2M requests | 24 gunicorn slots (3x8) |
+
+`bookings/capacity.py` enforces `max_per_slot` per doctor per slot, so the
+**daily booking ceiling is how many appointment slots exist** — with 11 doctors
+that is a few hundred a day, and it is ~1,000x below what the server can serve.
+**More infrastructure cannot raise it; more doctors can.** Signups die on SMS
+money (~Rs 0.25/send) before they die on compute. So do not spend another
+session on workers, replicas, AWS or async — that was priced out on 2026-08-18
+and the answer was no.
+
 ---
 
 ## Next
@@ -725,7 +744,19 @@ Resolved and deliberately removed, so they don't get re-added:
   looking at still polls every 10s.
 - Per-day booking archive/purge so queue tables stay small
 - Load-test the checkout path specifically — the only path holding an external
-  HTTP call
+  HTTP call. **`backend/stress_test.sh` covers it** (2026-08-18, ApacheBench, no
+  new dependency). It refuses any non-localhost URL by design: load-testing
+  production would create real bookings, call live Razorpay and burn real SMS
+  credit. The checkout leg additionally refuses to run against a live-mode
+  Razorpay key, and deletes the throwaway rows it creates on the way out.
+  **Gunicorn threads bumped 4 → 8 for this path** (2026-08-18, merged as PR
+  #37). Checkout holds a thread while waiting on Razorpay (order create/fetch +
+  payment fetch) — pure I/O wait, GIL released — so more threads ≈ more
+  simultaneous in-flight payments (~12 → ~24) at negligible RAM. DB stays safe:
+  3×8 = 24 Postgres connections per replica, under the ~100 default. **Workers
+  left at 3 on purpose** (RAM-bound, container-gated) and
+  **replicas/async/PgBouncer deliberately not touched** — YAGNI at 4 lifetime
+  bookings. Watch the Railway memory graph after it deploys.
 - Notify-the-beneficiary option for "book for someone else"
 - Reword the approved `doctor_unavailable` Meta template to drop "Dr."
 

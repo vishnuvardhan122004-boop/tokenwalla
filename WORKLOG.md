@@ -4,8 +4,8 @@ A running record of changes so we can cross-check what's done and what's pending
 Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** unmerged — `perf/dashboard-visible-polling` (**no PR**) + this wrap (web/backend) · `feat/popular-doctors-first` (PR #5) in the app. **The backlog is cleared and the branch list is swept** — 34 remote / 37 local merged branches deleted 2026-08-14. Merged 2026-08-14: web/backend PRs #20–#24, app PRs #6–#9; 2026-08-16: PR #25 (session-3 wrap, which triggered the deploy). **Do NOT delete** `develop` (deploys to staging), `harden-password-validators` or `website-cleanup-eslint-deadDep` — the last two look dead but hold unmerged work.
-- **Latest commit at last update:** `1dd33e8a` main (web/backend, **deployed & verified via `/health/` commit**) · `9b582c9` main (app, 1.2.0 — **not built for production**; Play is still on 1.1.3, versionCode 37 free)
-- **Last updated:** 2026-08-17 session 2 — **token rotated (item 4a closed), patient WhatsApp proven, nothing wrong in production.** Only item 5b step 3 remains: the location-picker and walk-in-doctor device checks, then the production build.
+- **Latest commit at last update:** `08363b7` main (web/backend, **deployed & live** — PR #37 threads 4→8) · `9b582c9` main (app, 1.2.0 — **not built for production**; Play is still on 1.1.3, versionCode 37 free)
+- **Last updated:** 2026-08-18 — **token rotated (item 4a closed), patient WhatsApp proven, nothing wrong in production.** Threads 4→8 merged (PR #37) and capacity priced out and closed. Only item 5b step 3 remains: the location-picker and walk-in-doctor device checks, then the production build.
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -63,6 +63,30 @@ the APK already installed (`D7tIwO2…`, commit `67999e5`).
 are throwaway branches used to build preview APKs while PRs were open.
 Everything they carried is merged. Delete them before someone cuts a release
 build from one.
+
+---
+
+## 2026-08-18 — Capacity priced out: threads doubled, and the real ceiling found
+
+**Merged:** web/backend **#37** (gunicorn `--threads 4 → 8`).
+
+- **`--threads 4 → 8`** in `backend/Procfile` + `backend/railway.json` (kept in
+  sync — two deploy paths, they must match). Checkout holds a thread waiting on
+  Razorpay (order create/fetch + payment fetch): pure I/O wait, GIL released, so
+  threads ~double simultaneous in-flight payments (~12 → ~24) at negligible RAM.
+  DB safe: 3×8 = 24 Postgres connections/replica, under the ~100 default.
+- **`backend/stress_test.sh`** — load harness on ApacheBench (already on macOS,
+  no new dependency). Read paths plus a **checkout leg** added the same day; see
+  the entry below for what the checkout leg refuses to do.
+- **The capacity question is answered, and the answer is "not the problem".**
+  Daily bookings are bounded by `max_per_slot` × slots × doctors — a few hundred
+  a day at 11 doctors — roughly 1,000× below what the server serves. Workers,
+  replicas, PgBouncer, async workers and a move to AWS were all considered and
+  **rejected**: none of them raise a ceiling set by how many appointment slots
+  exist. Recorded in ROADMAP item 7 so it does not get re-litigated.
+
+**No tests added for the threads change** — it is a config value with nothing to
+assert. The harness's guards were driven by hand instead.
 
 ---
 
