@@ -128,7 +128,7 @@ def push_doctor_unavailable(booking):
             booking.user,
             title='⚠️ Doctor unavailable',
             body=(
-                f'{booking.doctor.name} is unavailable on {booking.date}. '
+                f'{booking.provider_name} is unavailable on {booking.date}. '
                 f'Tap to reschedule token {booking.token} for FREE.'
             ),
             data={
@@ -159,7 +159,7 @@ def push_booking_confirmed(booking):
             booking.user,
             title='✅ Booking confirmed',
             body=(
-                f'Token {booking.token} with {booking.doctor.name} at '
+                f'Token {booking.token} with {booking.provider_name} at '
                 f'{booking.hospital.name} on {booking.date}, {booking.slot}.'
             ),
             data={
@@ -188,7 +188,7 @@ def push_appointment_reminder(booking):
             booking.user,
             title='⏰ Appointment reminder',
             body=(
-                f'Token {booking.token} with {booking.doctor.name} at '
+                f'Token {booking.token} with {booking.provider_name} at '
                 f'{booking.hospital.name} — {booking.slot} today.'
             ),
             data={
@@ -231,7 +231,7 @@ def push_new_booking_to_hospital(booking):
         push_to_hospital(
             booking.hospital_id,
             title='🔔 New Appointment Booked',
-            body=f'{patient} booked {booking.doctor.name} at {booking.slot}. Token {booking.token}.',
+            body=f'{patient} booked {booking.provider_name} at {booking.slot}. Token {booking.token}.',
             data={
                 'screen': 'hospital-dashboard',
                 'type': 'new_booking',
@@ -262,7 +262,7 @@ def push_booking_cancelled(booking, refund_info=None):
         push_to_user(
             booking.user,
             title='Booking cancelled',
-            body=f'Token {booking.token} with {booking.doctor.name} is cancelled. {money}',
+            body=f'Token {booking.token} with {booking.provider_name} is cancelled. {money}',
             data={
                 'screen': 'my-bookings',
                 'type': 'booking_cancelled',
@@ -336,7 +336,7 @@ def push_cancellation_to_hospital(booking):
             booking.hospital_id,
             title='Booking cancelled',
             body=(
-                f'{patient} cancelled token {booking.token} with {booking.doctor.name} '
+                f'{patient} cancelled token {booking.token} with {booking.provider_name} '
                 f'at {booking.slot}. The slot is free again.'
             ),
             data={

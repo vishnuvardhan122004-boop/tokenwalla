@@ -136,7 +136,7 @@ def _idempotent_booking_response(existing):
         'booking': {
             'id':           existing.id,
             'token':        existing.token,
-            'doctorName':   existing.doctor.name,
+            'doctorName':   existing.provider_name,
             'hospital':     existing.hospital.name,
             'date':         str(existing.date),
             'slot':         existing.slot,
@@ -421,7 +421,7 @@ class VerifyPaymentView(APIView):
                     'booking': {
                         'id':           booking.id,
                         'token':        booking.token,
-                        'doctorName':   booking.doctor.name,
+                        'doctorName':   booking.provider_name,
                         'hospital':     booking.hospital.name,
                         'date':         str(booking.date),
                         'slot':         booking.slot,
@@ -719,7 +719,7 @@ class VerifyPaymentView(APIView):
                 'booking': {
                     'id':           existing_booking.id,
                     'token':        existing_booking.token,
-                    'doctorName':   existing_booking.doctor.name,
+                    'doctorName':   existing_booking.provider_name,
                     'hospital':     existing_booking.hospital.name,
                     'date':         new_date,
                     'slot':         new_slot,
@@ -845,7 +845,7 @@ class BookingReceiptView(APIView):
             'booking': {
                 'id':        booking.id,
                 'token':     booking.token,
-                'doctor':    booking.doctor.name,
+                'doctor':    booking.provider_name,
                 'hospital':  booking.hospital.name,
                 'date':      str(booking.date),
                 'slot':      booking.slot,

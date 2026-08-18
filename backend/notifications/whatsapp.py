@@ -95,7 +95,7 @@ def send_booking_confirmation(booking):
         template_name=settings.WHATSAPP_TEMPLATE_BOOKING_CONFIRM,
         params=[
             patient_name,
-            booking.doctor.name,
+            booking.provider_name,
             booking.hospital.name,
             str(booking.date),
             booking.slot,
@@ -130,7 +130,7 @@ def send_doctor_unavailable(booking):
         template_name=settings.WHATSAPP_TEMPLATE_DOCTOR_UNAVAILABLE,
         params=[
             patient_name,
-            booking.doctor.name,
+            booking.provider_name,
             booking.hospital.name,
             str(booking.date),
             booking.slot,
@@ -174,7 +174,7 @@ def send_hospital_new_booking(booking):
             hospital.name,
             patient_name,
             booking.patient_display_mobile,
-            booking.doctor.name,
+            booking.provider_name,
             str(booking.date),
             booking.slot,
             booking.token,
@@ -202,7 +202,7 @@ def send_appointment_reminder(booking):
         template_name=settings.WHATSAPP_TEMPLATE_REMINDER,
         params=[
             patient_name,
-            booking.doctor.name,
+            booking.provider_name,
             booking.hospital.name,
             str(booking.date),
             booking.slot,
@@ -253,7 +253,7 @@ def send_booking_cancelled(booking, refund_info=None):
         template_name=settings.WHATSAPP_TEMPLATE_BOOKING_CANCELLED,
         params=[
             user.first_name or user.username,
-            booking.doctor.name,
+            booking.provider_name,
             booking.hospital.name,
             str(booking.date),
             booking.token,
@@ -290,7 +290,7 @@ def send_booking_no_show(booking):
         template_name=settings.WHATSAPP_TEMPLATE_NO_SHOW,
         params=[
             user.first_name or user.username,
-            booking.doctor.name,
+            booking.provider_name,
             booking.hospital.name,
             str(booking.date),
             booking.token,
@@ -369,7 +369,7 @@ def send_queue_advance(booking):
         template_name=settings.WHATSAPP_TEMPLATE_QUEUE_ADVANCE,
         params=[
             user.first_name or user.username,
-            booking.doctor.name,
+            booking.provider_name,
             booking.hospital.name,
             booking.token,
         ],
@@ -404,7 +404,7 @@ def send_booking_on_hold(booking):
         template_name=settings.WHATSAPP_TEMPLATE_ON_HOLD,
         params=[
             user.first_name or user.username,
-            booking.doctor.name,
+            booking.provider_name,
             booking.hospital.name,
             booking.token,
         ],
@@ -442,7 +442,7 @@ def send_hospital_cancellation(booking):
         params=[
             hospital.name,
             booking.patient_display_name,
-            booking.doctor.name,
+            booking.provider_name,
             str(booking.date),
             booking.slot,
             booking.token,
