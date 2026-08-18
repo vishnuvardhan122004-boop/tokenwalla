@@ -21,7 +21,8 @@ order** by the `params` list in `notifications/whatsapp.py`.
 > all confirmed to match what `notifications/whatsapp.py` sends. Those seven need
 > **no** submitting; treat them as a record of what was approved.
 >
-> **Any section marked ⏳ SUBMIT THIS is NOT approved yet** and does need
+> **Every section is ✅ as of 2026-08-18 — nothing is pending submission.**
+> Any section marked ⏳ SUBMIT THIS is NOT approved yet and does need
 > submitting. Templates get added whenever a new sender is written, so this block
 > deliberately does not name a total — check the per-section marker, which is the
 > only thing that stays true.
@@ -308,7 +309,7 @@ Env var: `WHATSAPP_TEMPLATE_NO_SHOW` (default `booking_no_show`).
 
 ---
 
-## 8. `queue_advance`  ⏳ IN REVIEW (submitted 2026-08-16)
+## 8. `queue_advance`  ✅ approved 2026-08-18 (not yet sent to a handset)
 
 Sent when hospital staff call the patient in (`CONFIRMED/WAITING → IN_PROGRESS`),
 from both the dashboard Call button and the QR scanner. Push already covers this;
@@ -334,7 +335,7 @@ Env var: `WHATSAPP_TEMPLATE_QUEUE_ADVANCE` (default `queue_advance`).
 
 ---
 
-## 9. `booking_on_hold`  ⏳ IN REVIEW (submitted 2026-08-16)
+## 9. `booking_on_hold`  ✅ approved 2026-08-18 (not yet sent to a handset)
 
 Sent when staff put a waiting patient on hold, so the queue visibly moves past
 them. Must say they are **still in the queue** — a patient who thinks they were
@@ -357,7 +358,7 @@ Env var: `WHATSAPP_TEMPLATE_ON_HOLD` (default `booking_on_hold`).
 
 ---
 
-## 10. `hospital_cancellation`  ⏳ IN REVIEW (submitted 2026-08-16)
+## 10. `hospital_cancellation`  ✅ approved 2026-08-18 (not yet sent to a handset)
 
 Goes to the **hospital**, not the patient — the other half of
 `hospital_new_booking`. The hospital is told when a booking arrives, so it should
@@ -406,9 +407,13 @@ Env var: `WHATSAPP_TEMPLATE_HOSPITAL_CANCELLED` (default `hospital_cancellation`
 > reference". Only the copy changed; the param order is untouched, so no code
 > change was needed.
 
-> **Until these three are approved, the code is inert, not broken.**
-> `send_template` logs a warning and returns on an unknown template, so the push
-> half still fires and nothing fails. Verify each after approval with
+> **Approved 2026-08-18 — all three cleared Meta review.** No code change was
+> needed: the names already match the `WHATSAPP_TEMPLATE_*` defaults and the
+> param order never moved. They are now live senders, not inert ones.
+>
+> **Still unproven on a handset.** §1–7 carry a "verified" date because each was
+> actually delivered; these three have only Meta's approval. Send one of each to
+> close that gap:
 > `send_test_whatsapp <mobile> --template queue_advance` (sample params for all
 > three are built into the command).
 

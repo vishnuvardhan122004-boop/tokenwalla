@@ -310,9 +310,10 @@ WHATSAPP_TEMPLATE_HOSPITAL_NEW_BOOKING = config('WHATSAPP_TEMPLATE_HOSPITAL_NEW_
 WHATSAPP_TEMPLATE_DOCTOR_PAYOUT  = config('WHATSAPP_TEMPLATE_DOCTOR_PAYOUT', default='doctor_payout')
 WHATSAPP_TEMPLATE_BOOKING_CANCELLED = config('WHATSAPP_TEMPLATE_BOOKING_CANCELLED', default='booking_cancelled')
 WHATSAPP_TEMPLATE_NO_SHOW        = config('WHATSAPP_TEMPLATE_NO_SHOW', default='booking_no_show')
-# Added 2026-08-16 to pair WhatsApp with the three push-only events. Until each
-# name is APPROVED in Meta, send_template logs a warning and returns — the code
-# is inert, never broken. See notifications/WHATSAPP_TEMPLATES.md sections 8-10.
+# Added 2026-08-16 to pair WhatsApp with the three push-only events; all three
+# were APPROVED in Meta on 2026-08-18, so these are live senders now. An unknown
+# name would still only log a warning and return — inert, never broken. See
+# notifications/WHATSAPP_TEMPLATES.md sections 8-10.
 WHATSAPP_TEMPLATE_QUEUE_ADVANCE  = config('WHATSAPP_TEMPLATE_QUEUE_ADVANCE', default='queue_advance')
 WHATSAPP_TEMPLATE_ON_HOLD        = config('WHATSAPP_TEMPLATE_ON_HOLD', default='booking_on_hold')
 WHATSAPP_TEMPLATE_HOSPITAL_CANCELLED = config('WHATSAPP_TEMPLATE_HOSPITAL_CANCELLED', default='hospital_cancellation')
