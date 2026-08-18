@@ -5,7 +5,7 @@ Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** unmerged — `perf/dashboard-visible-polling` (**no PR**) + this wrap (web/backend) · `feat/popular-doctors-first` (PR #5) in the app. **The backlog is cleared and the branch list is swept** — 34 remote / 37 local merged branches deleted 2026-08-14. Merged 2026-08-14: web/backend PRs #20–#24, app PRs #6–#9; 2026-08-16: PR #25 (session-3 wrap, which triggered the deploy). **Do NOT delete** `develop` (deploys to staging), `harden-password-validators` or `website-cleanup-eslint-deadDep` — the last two look dead but hold unmerged work.
 - **Latest commit at last update:** `08363b7` main (web/backend, **deployed & live** — PR #37 threads 4→8) · `9b582c9` main (app, 1.2.0 — **not built for production**; Play is still on 1.1.3, versionCode 37 free)
-- **Last updated:** 2026-08-18 — **token rotated (item 4a closed), patient WhatsApp proven, nothing wrong in production.** Threads 4→8 merged (PR #37) and capacity priced out and closed. Only item 5b step 3 remains: the location-picker and walk-in-doctor device checks, then the production build.
+- **Last updated:** 2026-08-18 (session 2) — **token rotated (item 4a closed), patient WhatsApp proven, nothing wrong in production.** PRs #38 (stress harness) and #39 (templates 8–10 approved) merged; branch list swept 22 → 11. Two branches pushed with **no PR** — see ROADMAP item 1. Item 5b step 3 still gates the release.
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -63,6 +63,46 @@ the APK already installed (`D7tIwO2…`, commit `67999e5`).
 are throwaway branches used to build preview APKs while PRs were open.
 Everything they carried is merged. Delete them before someone cuts a release
 build from one.
+
+---
+
+## 2026-08-18 (session 2) — Two stale ROADMAPs reconciled, and a branch list that had been lying
+
+**Merged:** **#38** (docs reconcile + checkout load leg), **#39** (templates
+8–10 approved). **Pushed, no PR yet:** `chore/password-validators`,
+`chore/eslint-dead-dep`.
+
+- **The ROADMAP had forked.** Yesterday's wrap was written on a tree predating
+  PR #36, so it re-opened item 4a (token rotation) and 5b step 0
+  (`APP_LATEST_VERSION`) — both already closed on 08-17. Rebuilt the 08-18
+  content on top of #36 instead of merging two diverging ROADMAPs. **The rule
+  that would have prevented it is already written in item 1: fetch before
+  branching.** It was not followed, and it cost the first hour of this session.
+- **`--checkout` leg on `stress_test.sh`** — `/create-order/` is the only
+  endpoint holding a thread on an outbound call, so it is the only one whose
+  number speaks to threads 4→8. Mints its own JWT and doctor id locally, writes
+  no rows, and fails closed unless the key is the test pair.
+- **A live-mode Razorpay key is in local `backend/.env`** — found because the
+  leg refused to run. Nothing charged; the allowlist held. **ROADMAP 4c**, and
+  it still blocks the only measurement left. The key was classified, never
+  printed into the session.
+- **`AUTH_PASSWORD_VALIDATORS` is decorative** — no `validate_password` call
+  exists in the backend, so every real password path bypasses it. The merged
+  validators harden the admin surface only. **ROADMAP 4d** records the gap and
+  why wiring it up is a behaviour change on a live endpoint, not a chore.
+- **eslint re-enabled in the web build.** The original branch was 76 commits
+  behind and conflicted in `package-lock.json`; its other half was already on
+  main. Re-applied the one remaining line rather than resolving a 1,700-line
+  lock conflict. `CI=true npm run build` — the condition Vercel builds under —
+  compiles with zero warnings.
+- **Branch sweep: 22 remote branches → 11.** 14 were dead. One of them,
+  `perf/dashboard-visible-polling`, had been listed in ROADMAP item 1 as
+  unmerged work for four days and was empty the whole time.
+
+**Two process lessons, both about the gap between pushed and done.** A pushed
+branch with no PR is invisible — it happened to three commits this morning and
+to two more this afternoon. And a branch existing is not work existing: check
+`git rev-list --count origin/main..<branch>` before believing a table.
 
 ---
 

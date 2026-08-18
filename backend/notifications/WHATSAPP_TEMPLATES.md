@@ -21,11 +21,16 @@ order** by the `params` list in `notifications/whatsapp.py`.
 > all confirmed to match what `notifications/whatsapp.py` sends. Those seven need
 > **no** submitting; treat them as a record of what was approved.
 >
-> **Every section is ✅ as of 2026-08-18 — nothing is pending submission.**
-> Any section marked ⏳ SUBMIT THIS is NOT approved yet and does need
-> submitting. Templates get added whenever a new sender is written, so this block
-> deliberately does not name a total — check the per-section marker, which is the
-> only thing that stays true.
+> **Every section is ✅ as of 2026-08-18 — nothing is pending submission.** That
+> is today's state, not a rule: templates get added whenever a new sender is
+> written, and a new one starts unapproved. **A section marked ⏳ SUBMIT THIS is
+> not approved and does need submitting** — this block deliberately names no
+> total, because the per-section marker is the only thing that stays true.
+>
+> **✅ means approved by Meta. It does not mean proven.** §1–7 carry a *verified*
+> date because each actually arrived on a handset; §8–10 have approval only. An
+> approved template with mismatched params fails at send time, in production —
+> see ROADMAP item 4b.
 >
 > **An unapproved template is inert, not broken:** `send_template` logs a warning
 > and returns, so the paired push still fires and nothing fails.

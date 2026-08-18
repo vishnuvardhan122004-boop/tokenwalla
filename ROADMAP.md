@@ -12,10 +12,12 @@ the things that can lose money or break a live booking come first.
   closed; so are 5b steps 0, 1 and 2. What's left is item **5b step 3**: two
   device checks — the **hospital location picker** and a **walk-in doctor** —
   then the production build. versionCode 37 is still free.
-  Also merged since: the gunicorn threads 4→8 capacity bump (PR #37) and the
-  stress harness — both in **Later**, neither blocking the release. **New
-  2026-08-18: item 4c** — a live-mode Razorpay key is in local `backend/.env`.
-  Nothing was charged, but swap it before anyone tests a checkout locally.
+  Also merged since: the gunicorn threads 4→8 capacity bump (PR #37), the
+  stress harness (#38) and the template approvals (#39). **Two items opened
+  2026-08-18: 4c** — a live-mode Razorpay key is in local `backend/.env`,
+  nothing was charged but swap it before anyone tests a checkout locally — and
+  **4d**, the password validators that no code path consults. **Two branches are
+  pushed with no PR** (see item 1); pushing is not merging.
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -62,7 +64,33 @@ urgent:
 | Branch | Repo | PR | Deploys | Note |
 |---|---|---|---|---|
 | `feat/popular-doctors-first` (1) | app | #5 open | store, via EAS | app half of the ranking; safe to ship before the backend deploys |
-| `perf/dashboard-visible-polling` (1) | web | **none opened** | Vercel | oldest, lowest risk, hospital-facing only |
+| ~~`perf/dashboard-visible-polling`~~ | web | — | — | **DEAD — corrected 2026-08-18** |
+
+> ⚠️ **`perf/dashboard-visible-polling` was never unmerged.** This table called
+> it "1 commit, none opened, oldest, lowest risk" for four days. Checked on
+> 2026-08-18: **zero commits ahead of main, empty diff.** Its content had been
+> absorbed long ago. A branch that still exists is not a branch that still holds
+> work — `git rev-list --count origin/main..<branch>` is the only thing that
+> settles it, and it takes a second.
+
+**Branch sweep, 2026-08-18.** 14 dead remote branches deleted (every commit
+already on main), plus their local copies. The remote went 22 → 11. Kept
+`develop` (it deploys to staging — never delete it) and the four `railway/*`
+bot branches. The full check, worth re-running before any future sweep:
+
+```bash
+for b in $(git branch -r | grep -v HEAD | grep -v 'origin/main$'); do
+  echo "$(git rev-list --count origin/main..$b) $b"
+done
+```
+
+**Still pushed with NO PR — 2026-08-18.** Both are green and both are one
+commit; neither is merged, and neither will merge itself:
+
+| Branch | What | Proof |
+|---|---|---|
+| `chore/password-validators` | 3 Django password validators (see **4d**) | 227 backend tests, migrations clean |
+| `chore/eslint-dead-dep` | drops `DISABLE_ESLINT_PLUGIN=true` from the build | `CI=true npm run build` clean, 25 web tests |
 
 **Merged 2026-08-14 — web/backend:** `feat/app-version-gate` (**#22**, closing
 item 2c), `feat/popular-doctors-first` (**#20**), `docs/wrap-2026-08-13-s3`
@@ -335,16 +363,19 @@ cd backend && ./stress_test.sh --checkout
 (empty / prefix / length), which is enough to decide and does not put the
 credential in a transcript. Same rule as the WhatsApp token in 4a.
 
-### 4b. Verify templates 8–10 once Meta approves them 🟠
+### 4b. Prove templates 8–10 on a handset — approved 2026-08-18 🟠
 
-`queue_advance`, `booking_on_hold` and `hospital_cancellation` were submitted
-2026-08-16 and are **In review** (Utility). Approval is usually minutes to hours.
-They are the WhatsApp half of the three push-only events, so **until they are
-approved those events still send push only** — which is exactly today's
-behaviour, so nothing is regressing while you wait.
+**Meta approved all three on 2026-08-18** (PR #39): `queue_advance`,
+`booking_on_hold` and `hospital_cancellation`. No code change was needed — the
+names already matched the `WHATSAPP_TEMPLATE_*` defaults and the param order
+never moved. They are **live senders now, not inert ones**, so queue-advance,
+on-hold and hospital-cancellation events send on both channels.
 
-When approved, prove each actually delivers — a status of Approved is not proof
-the params line up:
+**That is exactly why this item is still open.** Sections 1–7 of
+`WHATSAPP_TEMPLATES.md` carry a *verified* date because each actually arrived on
+a phone. These three have only Meta's approval, and approval is not proof the
+params line up — a template that is approved and mis-parameterised fails at send
+time, in production, to a real patient. Prove each:
 
 ```bash
 python manage.py send_test_whatsapp <mobile> --template queue_advance
@@ -415,6 +446,44 @@ consent), not a gap. Payouts are already covered by `doctor_payout`.
 > carries the body text and sample values. The rule above is unchanged: they were
 > needed because new *senders* were written, not because a template was missing.
 > The registration answer still stands.
+
+### 4d. The password validators are decorative — nothing calls them 🟠
+
+**Found 2026-08-18 while landing `harden-password-validators`.** The branch adds
+`CommonPasswordValidator`, `NumericPasswordValidator` and
+`UserAttributeSimilarityValidator`, and its comment says the third one stops a
+patient using their own phone number as their password.
+
+**It does not, because no code path runs the validators.** There is no
+`validate_password` call anywhere in `backend/`. `AUTH_PASSWORD_VALIDATORS` is
+consulted only by Django's admin forms, `createsuperuser` and `changepassword`.
+Every real path sets the password directly, which bypasses validation entirely:
+
+| Path | Where |
+|---|---|
+| patient signup | `users/serializers.py` — `RegisterSerializer.create` |
+| OTP password reset | `users/auth_views.py` (~475) |
+| hospital user create/update | `hospitals/views.py` (124, 222, 491) |
+| admin bootstrap | `users/auth_views.py` (~640), `create_admin_user.py` |
+
+So the merged change is **real hardening of the admin surface and nothing
+else**. That is worth having and it is not a regression — but do not read the
+setting and conclude patient passwords are validated. They are not.
+
+**The fix, when someone wants it — and it is a behaviour change, not a chore.**
+Wiring `validate_password` into `RegisterSerializer` and the reset view starts
+**rejecting passwords that are accepted today**, on a live signup endpoint. Two
+things to settle first:
+
+1. The reset view enforces its own ad-hoc *"at least 6 characters"* check. Add
+   the validators and there are two disagreeing rules on one field — decide
+   which one owns the message the patient sees.
+2. `MinimumLengthValidator` is already set to 6, which is **below** Django's
+   default 8. Turning validation on without revisiting that ships a weaker rule
+   with an official-looking name.
+
+Existing passwords keep working either way — validators run on set, not on
+login. Nobody is locked out by this.
 
 ### 5. Ship the mobile app — two of three gates cleared 🟠
 
