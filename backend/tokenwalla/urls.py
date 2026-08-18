@@ -97,6 +97,8 @@ urlpatterns = [
     path('api/auth/',         include('users.urls')),
     path('api/doctors/',      include('doctors.urls')),
     path('api/hospitals/',    include('hospitals.urls')),
+    # Additive: nothing installed calls this, so it carries no contract risk.
+    path('api/scans/',        include('scans.urls')),
     path('api/bookings/',     include('bookings.urls')),
     path('api/payment/',      include('payments.urls')),
     path('api/notifications/', include('notifications.urls')),

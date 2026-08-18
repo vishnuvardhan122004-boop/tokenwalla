@@ -58,6 +58,27 @@ class IsDoctorOwnerHospitalOrAdmin(BasePermission):
         )
 
 
+class IsScanOwnerCenterOrAdmin(BasePermission):
+    """
+    Object-level: a centre account may only mutate scans belonging to its OWN
+    centre; admins (or staff) may mutate any. Exactly IsDoctorOwnerHospitalOrAdmin
+    with obj.center_id in place of obj.hospital_id — a scanning centre is a
+    Hospital row, so the same User.last_name convention identifies it.
+    """
+    message = 'You can only manage scans for your own centre.'
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if getattr(user, 'role', None) == 'admin' or user.is_staff:
+            return True
+        return (
+            getattr(user, 'role', None) == 'hospital' and
+            str(getattr(user, 'last_name', '')) == str(obj.center_id)
+        )
+
+
 class IsOwnerOrAdmin(BasePermission):
     """
     Object-level: user must own the object (obj.user) or be admin.

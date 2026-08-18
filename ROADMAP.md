@@ -756,10 +756,10 @@ untouched.
 
 | # | Slice | Repo | State |
 |---|---|---|---|
-| 1 | `Hospital.kind` + `Scan` model + migrations + **the exclusion filter**, with tests proving old-client responses are unchanged | backend | 🟢 in progress |
-| 2 | `Booking.scan` + CheckConstraint + `provider_*` properties + the 7 logic sites | backend | |
-| 3 | Scan checkout — `scanId` in create-order, fee math, verify binding, refunds | backend | |
-| 4 | Scan CRUD endpoints + admin | backend | |
+| 1 | `Hospital.kind` + `Scan` model + migrations + **the exclusion filter**, with tests proving old-client responses are unchanged | backend | ✅ `feat/scan-centers-model` |
+| 2 | `Booking.scan` + CheckConstraint + `provider_*` properties + the logic sites | backend | ✅ `feat/scan-bookings` |
+| 3 | Scan checkout — `scanId` in create-order, fee math, verify binding, refunds | backend | 🔴 **blocked on the GST answer** |
+| 4 | Scan CRUD endpoints + admin + slot-availability | backend | ✅ `feat/scan-endpoints` |
 | 5 | Registration: **Hospital / Scanning Centre** choice on `Usercreate.js` | web | |
 | 6 | `/alldoctor` `[Doctors｜Scan Centres]` toggle + centre cards | web | |
 | 7 | `ScanCenterDetails.js` (**the one new file**) — menu → slots → pay | web | |
@@ -768,6 +768,24 @@ untouched.
 | 10 | Report delivery — upload, WhatsApp, download | backend + web | |
 
 Slices 1–8 ship independently of the app; slice 9 rides the next build.
+
+**The three merged-ready branches are a STACK — merge 1 → 2 → 4, in that order.**
+
+**Two things slice 2 corrected about this plan.** The estimate said 7 logic
+sites; it was 10 — `bookings/serializers.py` held three the grep missed. One of
+them, `build_queue_map`, grouped by `doctor_id`, so every scan booking would
+have shared the key `(None, date)` and queued patients at unrelated centres into
+one another's positions. The same trap sits behind any
+`filter(doctor=booking.doctor)` on a scan booking: doctor is None, the ORM turns
+it into `doctor__isnull=True`, and it matches every scan booking in the system.
+`Booking.provider_filter` exists for exactly this, and a test demonstrates the
+naive version failing so nobody simplifies it back.
+
+**Slice 4 added `slot-availability` beyond its stated scope**, deliberately: it
+is the same contract as the doctor endpoint, so slice 7 can drive the existing
+slot grid from either provider and stays purely front end. Counting is per
+SCAN, never per centre — an MRI being full must not close the blood draw running
+at the same time on different equipment.
 
 **Slice 10 is the one nobody would think to plan for, and it may be the most
 valuable.** A consultation ends when the patient walks out; a scan does not —
