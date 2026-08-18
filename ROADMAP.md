@@ -7,11 +7,18 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-18 — **all code merged and deployed, no outstanding
-  security work, nothing wrong in production.** Item 4a (token rotation) is
-  closed; so are 5b steps 0, 1 and 2. What's left is item **5b step 3**: two
-  device checks — the **hospital location picker** and a **walk-in doctor** —
-  then the production build. versionCode 37 is still free.
+- **Last updated:** 2026-08-18 (session 3) — **all code merged and deployed, no
+  outstanding security work, nothing wrong in production.** Item 4a (token
+  rotation) is closed; so are 5b steps 0, 1 and 2, and **4b is now closed too**
+  — all ten WhatsApp templates are approved and proven on a handset.
+  **5b step 3's two device checks found real gaps and both are fixed in code**
+  (app PR, unmerged): the hospital register screen had no map picker at all, and
+  a walk-in doctor rendered "0 Daily Slots" plus a "Queue View" plan row
+  promising a token it will never issue. Neither fix has run on a handset yet —
+  that, Android back, and the live ₹25.37 booking are what one preview build
+  closes. versionCode 37 is still free.
+  **New this session: item 8 — scanning centres**, agreed as a full booking
+  flow, slice 1 in progress.
   Also merged since: the gunicorn threads 4→8 capacity bump (PR #37) and the
   stress harness — both in **Later**, neither blocking the release. **New
   2026-08-18: item 4c** — a live-mode Razorpay key is in local `backend/.env`.
@@ -335,10 +342,19 @@ cd backend && ./stress_test.sh --checkout
 (empty / prefix / length), which is enough to decide and does not put the
 credential in a transcript. Same rule as the WhatsApp token in 4a.
 
-### 4b. Verify templates 8–10 once Meta approves them 🟠
+### ~~4b. Verify templates 8–10 once Meta approves them~~ ✅ 2026-08-18 — CLOSED
+
+**All three approved and delivered to a handset on 2026-08-18.** Vishnu ran the
+three commands below against the live Railway service and every message arrived,
+which is the same bar §1–7 meet. `WHATSAPP_TEMPLATES.md` now marks all ten
+"approved & delivering (verified)" and no longer says "seven". No code change was
+ever needed — the names already matched the `WHATSAPP_TEMPLATE_*` defaults and
+the param order never moved. **This closes the "notify on both channels" goal.**
+
+The original item follows, for the record.
 
 `queue_advance`, `booking_on_hold` and `hospital_cancellation` were submitted
-2026-08-16 and are **In review** (Utility). Approval is usually minutes to hours.
+2026-08-16 and were **In review** (Utility). Approval is usually minutes to hours.
 They are the WhatsApp half of the three push-only events, so **until they are
 approved those events still send push only** — which is exactly today's
 behaviour, so nothing is regressing while you wait.
@@ -659,6 +675,120 @@ that is a few hundred a day, and it is ~1,000x below what the server can serve.
 money (~Rs 0.25/send) before they die on compute. So do not spend another
 session on workers, replicas, AWS or async — that was priced out on 2026-08-18
 and the answer was no.
+
+### 8. Scanning centres — a second provider type 🟢 IN PROGRESS
+
+**Agreed 2026-08-18 with Vishnu: the FULL booking flow, not a listings-only
+first cut.** The patient journey he asked for, verbatim:
+
+```
+All Doctors → [Scan Centres] → tap centre → scan menu
+  → pick a scan (e.g. MRI Brain) → check slots → payment → books a slot
+```
+
+Scanning centres are becoming a partnership, so they need to be discoverable,
+bookable and payable like a doctor is.
+
+#### The design, and why
+
+**A scanning centre is a `Hospital` row with `kind='SCAN_CENTER'`, not a new
+model.** It has name, city, address, lat/lng, mobile, landline, photos, hours,
+an approval status, a login and a payout account — `Hospital` already has every
+one of those columns. A second provider model would duplicate registration,
+login, approval, profile, gallery, payout details and the admin page to gain
+nothing. Scan centres therefore also reuse `/Hlogin`; `kind` routes them to the
+right dashboard after auth.
+
+**What IS new is the bookable unit: a `Scan`.** Reusing `Doctor` was rejected —
+its rows carry name/specialization/experience and every patient-facing string
+says "Dr.", so an MRI would surface as `Dr. MRI Brain` in the queue, in the
+WhatsApp templates and in old app builds. `Scan` lives in its own app (`scans/`),
+mirroring `doctors/`, and carries **its own `slots` / `days` / `max_per_slot`**
+because an MRI is a 45-minute slot and a blood draw is 5.
+
+**The structural difference from a doctor: a centre is a MENU.** A doctor *is*
+the service — one name, one fee, straight to slots. A centre offers twenty
+services at twenty prices, so the detail page gains a step: pick the scan, then
+the slot. The scan is selected in place and the slot grid expands below it — no
+route change, so back still works and nothing has to be carried across a
+navigation.
+
+#### ⚠️ The constraint that shapes the whole feature
+
+**Build 36 is live on Play and calls `/api/hospitals/` and `/api/doctors/`.**
+Those installs cannot be updated on our schedule. If a scan centre appears in
+either response, build 36 renders it as a hospital with a Book button that leads
+nowhere. So:
+
+| Endpoint | Behaviour |
+|---|---|
+| `/api/hospitals/` **list** | default-excludes `kind=SCAN_CENTER` |
+| `/api/doctors/` **list** | default-excludes doctors whose hospital is a centre |
+| `/api/hospitals/?kind=SCAN_CENTER` | opt-in, new clients only |
+| `/api/hospitals/<id>/` **detail** | **NOT filtered** — the centre's own dashboard fetches itself by id, and filtering detail would lock it out of its own profile |
+
+This is the same move `exclude_test_hospitals()` already makes for `[TEST]` rows,
+and it is what lets the website ship *before* any app release. **A query param
+beat a separate `/api/scan-centers/` endpoint** — same isolation, three lines
+instead of a new view.
+
+#### The `Booking` change, measured not guessed
+
+`Booking.doctor` is `NOT NULL`. A first grep suggested ~33 dependent sites and
+looked frightening; grepping precisely showed the real shape:
+
+| Kind | Count | Fix |
+|---|---|---|
+| `booking.doctor.name` for **display** (WhatsApp ×9, push ×6, receipts ×3) | 20 | one `booking.provider_name` property absorbs all of them |
+| Real **logic** — slots, capacity, queue position, ledger writes | 7 | genuine per-site work |
+
+So: `doctor` becomes nullable, `scan` is added nullable, and a **CheckConstraint
+requires exactly one of them**. The constraint is what makes the nullable column
+safe — the DB refuses a booking with neither, so a missed guard fails loudly at
+write time instead of silently orphaning a booking. `DoctorLedger` gets the same
+treatment so scan payouts stay auditable per centre.
+
+Checkout is purely additive: `CreateOrderView` already branches on `doctorId`;
+scans add a `scanId` branch beside it. Old builds send `doctorId` and are
+untouched.
+
+#### Slices
+
+| # | Slice | Repo | State |
+|---|---|---|---|
+| 1 | `Hospital.kind` + `Scan` model + migrations + **the exclusion filter**, with tests proving old-client responses are unchanged | backend | 🟢 in progress |
+| 2 | `Booking.scan` + CheckConstraint + `provider_*` properties + the 7 logic sites | backend | |
+| 3 | Scan checkout — `scanId` in create-order, fee math, verify binding, refunds | backend | |
+| 4 | Scan CRUD endpoints + admin | backend | |
+| 5 | Registration: **Hospital / Scanning Centre** choice on `Usercreate.js` | web | |
+| 6 | `/alldoctor` `[Doctors｜Scan Centres]` toggle + centre cards | web | |
+| 7 | `ScanCenterDetails.js` (**the one new file**) — menu → slots → pay | web | |
+| 8 | Centre dashboard: manage scans, see the queue | web | |
+| 9 | Mirror 5–8 | app | |
+| 10 | Report delivery — upload, WhatsApp, download | backend + web | |
+
+Slices 1–8 ship independently of the app; slice 9 rides the next build.
+
+**Slice 10 is the one nobody would think to plan for, and it may be the most
+valuable.** A consultation ends when the patient walks out; a scan does not —
+the report comes back hours or days later. `COMPLETED` is terminal today, so
+this is the only place the existing lifecycle genuinely does not fit. It is also
+a reason for a patient to come back to the app, which a doctor booking never
+gives us. It touches no money path, so it can land after slice 3 whenever.
+
+#### Two things NOT decided, both blocking slice 3
+
+- **GST on scan prices.** `fees.py` hardcodes that the consultation fee is exempt
+  and GST applies only to (platform + gateway). Diagnostic services are generally
+  exempt under the same clinical-establishment provision, but **that is a tax
+  question for Vishnu's CA, not a code decision**, and it determines the receipt.
+  Do not price a scan until it is answered.
+- **Collection mode.** Assume `SERVICE_ONLY`, same as doctors, unless told
+  otherwise — the alternative has us holding a centre's money with no payout
+  account on file. Never make `FULL` a default or a fallback.
+
+Payouts stay **manual**, per the standing decision. `payout_target` gains a
+scan-centre branch in slice 3. No payout API.
 
 ---
 

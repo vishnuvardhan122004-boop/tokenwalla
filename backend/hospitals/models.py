@@ -20,6 +20,28 @@ def exclude_test_hospitals(qs, field='name'):
     return qs.exclude(**{f'{field}__istartswith': TEST_HOSPITAL_PREFIX})
 
 
+def exclude_scan_centers(qs, field='kind'):
+    """Drop scanning centres from a queryset built for hospital-shaped clients.
+
+    THIS IS AN API-CONTRACT GUARD, not a preference. Build 36 is live on the
+    Play Store and calls `/api/hospitals/` and `/api/doctors/`; those installs
+    cannot be updated on our schedule. A scanning centre in either response
+    renders there as a hospital with a Book button that leads nowhere, because
+    the bookable unit for a centre is a Scan and build 36 has never heard of
+    one. So centres are invisible by default and a new client opts in with
+    `?kind=SCAN_CENTER`.
+
+    Same shape as exclude_test_hospitals: `field` is the path to the kind, so
+    this works on Hospital itself ('kind') and on anything related to it
+    ('hospital__kind').
+
+    Deliberately LIST-only. Do not apply this to the detail endpoint — a centre
+    fetches itself by id to render its own dashboard and profile, and filtering
+    detail would lock it out of its own account.
+    """
+    return qs.exclude(**{field: Hospital.SCAN_CENTER})
+
+
 def show_test_hospitals_to(user) -> bool:
     """Only signed-in hospital staff and admins see the test fixtures.
 
@@ -35,6 +57,27 @@ def show_test_hospitals_to(user) -> bool:
 
 
 class Hospital(models.Model):
+    # ── Provider kind ─────────────────────────────────────────────────────────
+    # A scanning centre (MRI/CT/X-ray/blood) is a Hospital row, not a separate
+    # model: it needs name, city, address, coordinates, mobile, landline,
+    # photos, hours, an approval status, a login and a payout account — all of
+    # which already live here. A second provider model would duplicate
+    # registration, login, approval, profile, gallery and payout details to
+    # gain nothing.
+    #
+    # HOSPITAL is the default and must stay so: every row that existed before
+    # this column, and every client that never sends it, means a hospital.
+    # What differs is the bookable unit — a hospital has Doctors, a centre has
+    # Scans (see the `scans` app).
+    HOSPITAL    = 'HOSPITAL'
+    SCAN_CENTER = 'SCAN_CENTER'
+    KIND_CHOICES = [
+        (HOSPITAL,    'Hospital / Clinic'),
+        (SCAN_CENTER, 'Scanning Centre'),
+    ]
+    kind     = models.CharField(
+        max_length=20, choices=KIND_CHOICES, default=HOSPITAL, db_index=True,
+    )
     name     = models.CharField(max_length=200)
     city     = models.CharField(max_length=100)
     address  = models.TextField(blank=True)
