@@ -76,8 +76,15 @@ build from one.
   threads ~double simultaneous in-flight payments (~12 → ~24) at negligible RAM.
   DB safe: 3×8 = 24 Postgres connections/replica, under the ~100 default.
 - **`backend/stress_test.sh`** — load harness on ApacheBench (already on macOS,
-  no new dependency). Read paths plus a **checkout leg** added the same day; see
-  the entry below for what the checkout leg refuses to do.
+  no new dependency). Read paths, plus an opt-in **`--checkout` leg** hitting
+  `/create-order/` — the only endpoint that holds a thread on an outbound call,
+  and so the only one whose number says anything about the thread count. It
+  mints its own JWT and doctor id from the local DB (nothing to paste), writes
+  no local rows, and fails closed unless the Razorpay key is the test pair.
+- **A live-mode Razorpay key was found in local `backend/.env`** — by the leg
+  refusing to run. Nothing was charged; the allowlist held. Logged as ROADMAP
+  item **4c**, and it blocks the load test until the test pair is swapped in.
+  The key was classified (prefix/length), never printed into the session.
 - **The capacity question is answered, and the answer is "not the problem".**
   Daily bookings are bounded by `max_per_slot` × slots × doctors — a few hundred
   a day at 11 doctors — roughly 1,000× below what the server serves. Workers,
@@ -86,7 +93,10 @@ build from one.
   exist. Recorded in ROADMAP item 7 so it does not get re-litigated.
 
 **No tests added for the threads change** — it is a config value with nothing to
-assert. The harness's guards were driven by hand instead.
+assert. The harness's three refusals were driven by hand instead (non-localhost,
+no-server, non-test-key) and all three fire. **The checkout happy path is
+unproven** and stays that way until item 4c is fixed — so the threads 4→8 number
+is still a reasoned guess, not a measurement.
 
 ---
 

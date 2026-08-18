@@ -13,7 +13,9 @@ the things that can lose money or break a live booking come first.
   device checks — the **hospital location picker** and a **walk-in doctor** —
   then the production build. versionCode 37 is still free.
   Also merged since: the gunicorn threads 4→8 capacity bump (PR #37) and the
-  read-path stress harness — both in **Later**, neither blocking the release.
+  stress harness — both in **Later**, neither blocking the release. **New
+  2026-08-18: item 4c** — a live-mode Razorpay key is in local `backend/.env`.
+  Nothing was charged, but swap it before anyone tests a checkout locally.
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -303,6 +305,35 @@ unaffected throughout.
 already in the environment that needs it. Run the command where the credential
 already lives (the Railway container) instead of moving the credential to the
 command.
+
+### 4c. A live-mode Razorpay key is sitting in local `backend/.env` 🔴
+
+**Found 2026-08-18 by the checkout load test refusing to run.** The local
+`RAZORPAY_KEY_ID` is non-empty, begins `rzp_`, and is **not** the test prefix.
+CLAUDE.md names this exact condition: a local checkout against it charges a real
+card, and Razorpay has no sandbox for live credentials.
+
+Nothing was charged — the harness fails closed on an allowlist (`rzp_test_*`
+only) and never issued a request. But **any manual local checkout would**, and
+that is the normal way this repo gets tested.
+
+Swap both halves of the pair in `backend/.env` for the `rzp_test_` pair, then:
+
+```bash
+touch backend/tokenwalla/settings.py   # .env is not picked up by the reloader
+```
+
+**This also blocks the checkout load test** (see Later): the leg is written and
+its guards are proven, but its happy path has never executed, because the only
+key available refuses. Re-run it once the test key is in:
+
+```bash
+cd backend && ./stress_test.sh --checkout
+```
+
+**The value was never printed into this session** — only classified
+(empty / prefix / length), which is enough to decide and does not put the
+credential in a transcript. Same rule as the WhatsApp token in 4a.
 
 ### 4b. Verify templates 8–10 once Meta approves them 🟠
 
@@ -747,8 +778,12 @@ Resolved and deliberately removed, so they don't get re-added:
   HTTP call. **`backend/stress_test.sh` covers it** (2026-08-18, ApacheBench, no
   new dependency). It refuses any non-localhost URL by design: load-testing
   production would create real bookings, call live Razorpay and burn real SMS
-  credit. The checkout leg additionally refuses to run against a live-mode
-  Razorpay key, and deletes the throwaway rows it creates on the way out.
+  credit. The checkout leg (`--checkout`) additionally fails closed unless the
+  key is the `rzp_test_` pair, and writes no local rows at all — `/create-order/`
+  only calls Razorpay; bookings are written by `/verify/`, which cannot be driven
+  synthetically and is therefore out of scope. **Both refusals are proven; the
+  happy path is NOT** — the only key on this machine is live-mode, so the leg has
+  never actually executed. See item 4c.
   **Gunicorn threads bumped 4 → 8 for this path** (2026-08-18, merged as PR
   #37). Checkout holds a thread while waiting on Razorpay (order create/fetch +
   payment fetch) — pure I/O wait, GIL released — so more threads ≈ more
