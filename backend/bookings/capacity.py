@@ -41,11 +41,28 @@ class SlotUnavailable(Exception):
         self.reason = reason        # 'full' | 'too_soon' | 'invalid_slot'
 
 
-def _booked_count(doctor_id, date_val, slot_val, exclude_pk=None):
+def provider_filter(provider):
+    """Booking-queryset kwargs selecting THIS provider.
+
+    A Scan and a Doctor can share an id, so the column must be chosen
+    explicitly. Filtering a scan on `doctor_id` would also silently degrade to
+    `doctor__isnull=True` and count every scan booking in the system — see
+    Booking.provider_filter for the same trap.
+    """
+    from scans.models import Scan
+    return {'scan_id': provider.id} if isinstance(provider, Scan) else {'doctor_id': provider.id}
+
+
+def _provider_noun(provider):
+    from scans.models import Scan
+    return 'scan' if isinstance(provider, Scan) else 'doctor'
+
+
+def _booked_count(provider, date_val, slot_val, exclude_pk=None):
     from bookings.models import Booking
 
     qs = Booking.objects.filter(
-        doctor_id=doctor_id, date=date_val, slot=slot_val,
+        **provider_filter(provider), date=date_val, slot=slot_val,
         status__in=OCCUPYING_STATUSES,
     )
     if exclude_pk is not None:
@@ -53,17 +70,24 @@ def _booked_count(doctor_id, date_val, slot_val, exclude_pk=None):
     return qs.count()
 
 
-def check_slot_available(doctor, date_val, slot_val, *, exclude_pk=None):
+def check_slot_available(provider, date_val, slot_val, *, exclude_pk=None):
     """Raise SlotUnavailable if this slot can't take another booking.
+
+    `provider` is a Doctor or a Scan — both carry `slots` and `max_per_slot`,
+    and capacity means the same thing for each. Capacity is per SCAN, not per
+    centre: an MRI has one machine and fills at one booking, while the blood
+    draw running at the same time is different equipment.
 
     Read-only and unlocked — use before taking any money, so the common
     collision is a clean rejection with no payment involved. For the
     after-capture backstop use `check_slot_available_locked`, which closes the
     race this one cannot.
     """
-    if slot_val not in (doctor.slots or []):
+    noun = _provider_noun(provider)
+
+    if slot_val not in (provider.slots or []):
         raise SlotUnavailable(
-            'Invalid slot for this doctor.', reason='invalid_slot')
+            f'Invalid slot for this {noun}.', reason='invalid_slot')
 
     if not is_slot_bookable(date_val, slot_val):
         raise SlotUnavailable(
@@ -71,7 +95,7 @@ def check_slot_available(doctor, date_val, slot_val, *, exclude_pk=None):
             f'Please pick a later slot.',
             reason='too_soon')
 
-    if _booked_count(doctor.id, date_val, slot_val, exclude_pk) >= doctor.max_per_slot:
+    if _booked_count(provider, date_val, slot_val, exclude_pk) >= provider.max_per_slot:
         raise SlotUnavailable(
             f'Slot "{slot_val}" on {date_val} is full. Please pick another slot.',
             reason='full')
@@ -102,3 +126,25 @@ def check_slot_available_locked(doctor_id, date_val, slot_val, *, exclude_pk=Non
     doctor = Doctor.objects.select_for_update().select_related('hospital').get(pk=doctor_id)
     check_slot_available(doctor, date_val, slot_val, exclude_pk=exclude_pk)
     return doctor
+
+
+def check_scan_slot_available_locked(scan_id, date_val, slot_val, *, exclude_pk=None):
+    """The scan equivalent. Returns the Scan, with its centre selected.
+
+    MUST run inside `transaction.atomic()`.
+
+    Locks the SCAN row, for exactly the reason the doctor version locks the
+    doctor row: `SELECT ... FOR UPDATE` on the matching booking rows only locks
+    rows that already exist, so two concurrent INSERTs for the last seat would
+    both count N-1 and both succeed. Contention is per scan, which is the right
+    granularity — an MRI filling up must not block the blood draw.
+    """
+    from scans.models import Scan
+
+    if not transaction.get_connection().in_atomic_block:
+        raise RuntimeError(
+            'check_scan_slot_available_locked must run inside transaction.atomic()')
+
+    scan = Scan.objects.select_for_update().select_related('center').get(pk=scan_id)
+    check_slot_available(scan, date_val, slot_val, exclude_pk=exclude_pk)
+    return scan

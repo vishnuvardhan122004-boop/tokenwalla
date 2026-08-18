@@ -758,7 +758,7 @@ untouched.
 |---|---|---|---|
 | 1 | `Hospital.kind` + `Scan` model + migrations + **the exclusion filter**, with tests proving old-client responses are unchanged | backend | ✅ `feat/scan-centers-model` |
 | 2 | `Booking.scan` + CheckConstraint + `provider_*` properties + the logic sites | backend | ✅ `feat/scan-bookings` |
-| 3 | Scan checkout — `scanId` in create-order, fee math, verify binding, refunds | backend | 🔴 **blocked on the GST answer** |
+| 3 | Scan checkout — `scanId` in create-order, fee math, verify binding, refunds | backend | ✅ `feat/scan-web` — **SERVICE_ONLY only** |
 | 4 | Scan CRUD endpoints + admin + slot-availability | backend | ✅ `feat/scan-endpoints` |
 | 5 | Registration: **Hospital / Scanning Centre** choice on `Usercreate.js` | web | ✅ `feat/scan-web` |
 | 6 | `/alldoctor` `[Doctors｜Scan Centres]` toggle + centre cards | web | ✅ `feat/scan-web` |
@@ -781,12 +781,16 @@ it into `doctor__isnull=True`, and it matches every scan booking in the system.
 `Booking.provider_filter` exists for exactly this, and a test demonstrates the
 naive version failing so nobody simplifies it back.
 
-**Slice 7 ships WITHOUT a Book button, on purpose.** `SCAN_CHECKOUT_ENABLED`
-in `ScanCenterDetails.js` is `false`, so the CTA is "Call <number> to book" —
-the same proven pattern the walk-in doctor screen uses. Flipping that constant
-is the LAST step of slice 3, after create-order, verify and refunds all handle
-a scan. Everything else on the page is real: the menu, prices, prep text, and
-live slot availability off `/api/scans/<id>/slot-availability/`.
+**Slice 7's Book button is now LIVE** — `SCAN_CHECKOUT_ENABLED` was flipped
+once slice 3 landed. The call-the-centre fallback is kept and is not dead code:
+a FULL-mode scan still routes to it, because create-order refuses those.
+
+`bookings/capacity.py` is now provider-agnostic, and
+`check_scan_slot_available_locked` locks the **Scan** row for the same reason
+the doctor version locks the doctor row — `SELECT … FOR UPDATE` on matching
+booking rows only locks rows that already exist, so two concurrent INSERTs for
+the last seat would both count N−1 and both succeed. Contention is per scan, so
+a full MRI never blocks the blood draw.
 
 **Browser verification, 2026-08-18**, against local SQLite with a seeded
 centre. It caught one bug no backend test could: the centre dashboard still
@@ -812,11 +816,20 @@ gives us. It touches no money path, so it can land after slice 3 whenever.
 
 #### Two things NOT decided, both blocking slice 3
 
-- **GST on scan prices.** `fees.py` hardcodes that the consultation fee is exempt
-  and GST applies only to (platform + gateway). Diagnostic services are generally
-  exempt under the same clinical-establishment provision, but **that is a tax
-  question for Vishnu's CA, not a code decision**, and it determines the receipt.
-  Do not price a scan until it is answered.
+- **GST on scan prices — NARROWER THAN FIRST THOUGHT, and now enforced in code.**
+  `fees.py` hardcodes that the provider's fee is exempt and GST applies only to
+  (platform + gateway). That is right for a consultation; whether a diagnostic
+  price is exempt the same way is still a tax question for Vishnu's CA.
+
+  But it only bites in **FULL** mode, where the scan price flows online. Under
+  **SERVICE_ONLY** — the default — the price never goes through us at all, and
+  the arithmetic is identical to a doctor's. So slice 3 shipped for
+  SERVICE_ONLY, and `_create_scan_order` **refuses a FULL scan with a 409** and
+  never calls the gateway. `ScanCenterDetails.js` routes those scans to a phone
+  call instead of a checkout that cannot complete.
+
+  **The CA's answer unblocks exactly one thing: deleting that refusal.** Until
+  then no scan can be sold with the price online, so there is no exposure.
 - **Collection mode.** Assume `SERVICE_ONLY`, same as doctors, unless told
   otherwise — the alternative has us holding a centre's money with no payout
   account on file. Never make `FULL` a default or a fallback.

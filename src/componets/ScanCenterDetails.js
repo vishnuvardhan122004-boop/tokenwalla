@@ -14,17 +14,15 @@ import SEO from './SEO';
  * than navigating to a second page. Back still works, nothing has to be carried
  * across a navigation, and on a phone it is one scroll instead of a page load.
  */
-// Scan checkout is item 8 slice 3 and is NOT built: /api/payment/create-order/
-// only branches on doctorId, so a scan order would 400 at the gateway step.
-// Until it lands the centre is browsable — scans, prices, prep, real slot
-// availability — and booking goes through a phone call, which is the same
-// pattern the walk-in doctor screen already ships and which is proven.
+// Enabled 2026-08-18 with item 8 slice 3: /api/payment/create-order/ branches
+// on scanId, /verify/ binds the scan from the ORDER TAGS, and the capacity
+// backstop refunds a slot that fills after capture.
 //
-// Flipping this to true is the LAST step of slice 3, after create-order,
-// verify and the refund path all handle a scan. Do not flip it early: a Book
-// button that takes money for a slot the backend cannot honour is precisely
-// the failure this codebase refuses everywhere else.
-const SCAN_CHECKOUT_ENABLED = false;
+// The kept fallback below is not dead code. A scan set to FULL collection is
+// refused by create-order with a 409 until the GST treatment of diagnostic
+// prices is confirmed, so those scans still route to a phone call rather than
+// a checkout that cannot complete.
+const SCAN_CHECKOUT_ENABLED = true;
 
 export default function ScanCenterDetails() {
   const { id } = useParams();
@@ -266,7 +264,8 @@ export default function ScanCenterDetails() {
                           {/* No slot to sell means no token to sell. The CTA
                               stays disabled rather than taking money for a slot
                               that was never chosen. */}
-                          {SCAN_CHECKOUT_ENABLED ? (
+                          {SCAN_CHECKOUT_ENABLED
+                            && scan.fee_breakdown?.collection_mode !== 'FULL' ? (
                             <>
                               <button
                                 className="sc-book"
@@ -294,8 +293,8 @@ export default function ScanCenterDetails() {
                               </a>
                               <p className="sc-note">
                                 {selectedSlot
-                                  ? `Ask for ${scan.name} at ${selectedSlot}. Online booking for scans is coming soon.`
-                                  : 'Online booking for scans is coming soon.'}
+                                  ? `Ask for ${scan.name} at ${selectedSlot}.`
+                                  : 'This scan is booked over the phone.'}
                               </p>
                             </>
                           ) : (
