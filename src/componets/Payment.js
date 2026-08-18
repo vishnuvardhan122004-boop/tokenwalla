@@ -10,9 +10,17 @@ export default function Payment() {
   const navigate  = useNavigate();
   const {
     doctorId, doctorName, hospital,
+    scanId, scanName,
     date, slot,
     queue_access = true,
   } = location.state || {};
+
+  // One screen, either provider. The server prices whichever id it is sent and
+  // is the only authority on the amount — this page never computes what to
+  // charge, it only previews it.
+  const isScan       = !!scanId;
+  const providerId   = isScan ? scanId : doctorId;
+  const providerName = isScan ? scanName : doctorName;
 
   // The itemised bill comes from the SERVER (doctor.fee_breakdown, computed by
   // payments/fees.py — the same code that prices the order). We don't recompute
@@ -43,24 +51,24 @@ export default function Payment() {
   }, [navigate]);
 
   useEffect(() => {
-    if (!doctorId) { navigate('/alldoctor'); return; }
+    if (!providerId) { navigate('/alldoctor'); return; }
     let cancelled = false;
-    // Drop the previous doctor's figures first — otherwise a slow or failed
-    // load leaves the last doctor's price on screen as if it were this one's.
+    // Drop the previous provider's figures first — otherwise a slow or failed
+    // load leaves the last one's price on screen as if it were this one's.
     setBreakdown(null);
     setFeeError('');
-    API.get(`/doctors/${doctorId}/`)
+    API.get(isScan ? `/scans/${scanId}/` : `/doctors/${doctorId}/`)
       .then(({ data }) => {
         if (cancelled) return;
         // A backend that predates fee_breakdown would leave this screen stuck on
         // "Loading…" forever, so fall back to the local mirror. It's a preview
         // either way — the amount charged is the server's order amount.
         setBreakdown(data.fee_breakdown
-          || computeFeeBreakdown(data.fee, data.payment_collection_mode));
+          || computeFeeBreakdown(isScan ? data.price : data.fee, data.payment_collection_mode));
       })
       .catch(() => { if (!cancelled) setFeeError('Could not load the fee details. Check your connection and try again.'); });
     return () => { cancelled = true; };
-  }, [doctorId, navigate]);
+  }, [providerId, isScan, scanId, doctorId, navigate]);
 
   const loadScript = () => new Promise((resolve) => {
     if (window.Razorpay) return resolve(true);
@@ -95,14 +103,17 @@ export default function Payment() {
       // payment happens, so a collision is a clean message instead of a
       // charge-then-refund. The server re-checks after capture regardless.
       const { data: orderData } = await API.post('/payment/create-order/', {
-        doctorId, date, slot,
+        ...(isScan ? { scanId } : { doctorId }), date, slot,
       });
 
       const verify = async () => {
         try {
           const { data: verifyData } = await API.post('/payment/verify/', {
             order_id: orderData.order_id,
-            booking: { doctorId, doctorName, hospital, date, slot, queue_access, bookedForName, bookedForMobile },
+            booking: {
+              ...(isScan ? { scanId, scanName } : { doctorId, doctorName }),
+              hospital, date, slot, queue_access, bookedForName, bookedForMobile,
+            },
           });
           if (verifyData.success) {
             navigate('/booking-token', {
@@ -147,7 +158,7 @@ export default function Payment() {
         currency: orderData.currency || 'INR',
         order_id: orderData.order_id,
         name:     'TokenWalla',
-        description: `Consultation with ${doctorName}`,
+        description: `Consultation with ${providerName}`,
         prefill: {
           name:     bookedForName || user?.name || user?.username,
           contact:  user?.mobile || '',
@@ -169,7 +180,7 @@ export default function Payment() {
     }
   };
 
-  if (!user || !doctorId) return null;
+  if (!user || !providerId) return null;
 
   return (
     <>
@@ -359,7 +370,7 @@ export default function Payment() {
             <div className="pay-rows">
               <div className="pay-row">
                 <span className="pay-row-label">Doctor</span>
-                <span className="pay-row-value">{doctorName}</span>
+                <span className="pay-row-value">{providerName}</span>
               </div>
               <div className="pay-row">
                 <span className="pay-row-label">Hospital</span>

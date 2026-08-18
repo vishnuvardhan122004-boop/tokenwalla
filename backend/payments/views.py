@@ -35,6 +35,7 @@ from bookings.serializers import BookingSerializer
 # enforced here and not just in the UI.
 from bookings.capacity import (
     SlotUnavailable, check_slot_available, check_slot_available_locked,
+    check_scan_slot_available_locked,
 )
 from tokenwalla.permissions import IsAdmin
 # Shared, single-source-of-truth Razorpay PG helpers (see payments/razorpay_utils.py).
@@ -252,6 +253,13 @@ class CreateOrderView(APIView):
         if doctor_id:
             return self._create_booking_order(request, doctor_id)
 
+        # Scan checkout. A separate branch, not a widened one: the doctor path
+        # is live and carrying real money, and every installed app build sends
+        # doctorId. Nothing above this line changes shape.
+        scan_id = request.data.get('scanId') or request.data.get('scan_id')
+        if scan_id:
+            return self._create_scan_order(request, scan_id)
+
         # ── Fixed-amount plan (the ₹5 reschedule fee) ─────────────────────────
         #    The client sends `amount` in RUPEES now (Razorpay's unit), not paise.
         plan_info = plan_for_amount(request.data.get('amount', 0))
@@ -279,6 +287,88 @@ class CreateOrderView(APIView):
             'key':       order['key'],
             'amount':    str(plan_info['fee']),
             'currency':  'INR',
+        })
+
+    def _create_scan_order(self, request, scan_id):
+        """Create a Razorpay order for a scan booking.
+
+        Deliberately mirrors _create_booking_order — same slot pre-check, same
+        fee engine, same tag-binding discipline — because the two must not be
+        able to drift.
+
+        FULL collection is REFUSED for now. `payments/fees.py` treats the
+        provider's fee as GST-exempt, which is correct for a doctor's
+        consultation. Whether a diagnostic centre's scan price is exempt the
+        same way is a tax question that has not been answered, and getting it
+        wrong means under-collecting GST on every scan we ever sell. Under
+        SERVICE_ONLY the scan price never flows online, only the service fee
+        does, and that arithmetic is identical to a doctor's — so this refusal
+        is the exact boundary of the unanswered question, not a blanket block.
+        """
+        from scans.models import Scan
+        from hospitals.models import Hospital
+
+        try:
+            scan = Scan.objects.select_related('center').get(pk=scan_id)
+        except (Scan.DoesNotExist, ValueError, TypeError):
+            return Response({'message': 'Scan not found.'}, status=404)
+
+        if scan.center.kind != Hospital.SCAN_CENTER:
+            # The whole flow assumes the owner is a centre. Refuse rather than
+            # take money against a row that cannot be served.
+            return Response({'message': 'This scan is not bookable.'}, status=400)
+
+        if not scan.available:
+            return Response({'message': 'This scan is not available right now.'}, status=409)
+
+        if scan.payment_collection_mode == Scan.COLLECT_FULL:
+            logger.error(
+                'Scan %s is set to FULL collection but scan GST treatment is '
+                'unconfirmed — refusing to price it.', scan.id)
+            return Response(
+                {'message': 'Online payment of the scan price is not enabled yet. '
+                            'Please contact the centre to book.'},
+                status=409)
+
+        date_val = str(request.data.get('date', '') or '').strip()
+        slot_val = str(request.data.get('slot', '') or '').strip()
+        if date_val and slot_val:
+            try:
+                check_slot_available(scan, date_val, slot_val)
+            except SlotUnavailable as exc:
+                return Response({'message': exc.message}, status=409)
+
+        collection_mode = scan.payment_collection_mode
+        breakdown = compute_fee_breakdown(scan.price, collection_mode)
+        order_id  = f'tw_{uuid.uuid4().hex}'
+        try:
+            order = create_order(
+                order_id=order_id,
+                amount_rupees=breakdown['final_amount'],
+                customer=self._customer(request),
+                tags={
+                    'user_id':  str(request.user.id),
+                    'plan':     'booking',
+                    'scan_id':  str(scan.id),
+                    # Reuses the `doctor_fee` tag key on purpose: verify already
+                    # rebuilds the split from it, and a second key would mean a
+                    # second code path through the most safety-critical
+                    # arithmetic in the system. It holds the provider's fee —
+                    # here, the scan price.
+                    'doctor_fee': str(scan.price),
+                    'collection_mode': collection_mode,
+                },
+            )
+        except Exception as exc:
+            logger.error('Razorpay scan-order creation failed: %s', exc)
+            return Response({'message': 'Payment gateway error. Try again.'}, status=502)
+
+        return Response({
+            'order_id':  order['order_id'],
+            'key':       order['key'],
+            'amount':    str(breakdown['final_amount']),
+            'currency':  'INR',
+            'breakdown': _serialize_breakdown(breakdown),
         })
 
     def _create_booking_order(self, request, doctor_id):
@@ -458,6 +548,27 @@ class VerifyPaymentView(APIView):
                                 status=400)
             booking_data = {**booking_data, 'doctorId': tag_doctor}
 
+        # Same binding for a scan, and the same reason: the provider is whoever
+        # the ORDER was priced for, never whoever the client names at redemption.
+        # A scan order must also never be redeemed as a doctor booking — that
+        # would attach a captured payment to a provider it was not priced for.
+        tag_scan     = str(tags.get('scan_id') or '')
+        claimed_scan = str(booking_data.get('scanId') or '')
+        if tag_scan:
+            if claimed_scan and claimed_scan != tag_scan:
+                logger.error('Order %s was paid for scan %s but redeemed against %s.',
+                             order_id, tag_scan, claimed_scan)
+                return Response({'success': False,
+                                 'message': 'Payment does not match the selected scan.'},
+                                status=400)
+            booking_data = {**booking_data, 'scanId': tag_scan, 'doctorId': None}
+        elif claimed_scan:
+            logger.error('Order %s carries no scan tag but was redeemed as scan %s.',
+                         order_id, claimed_scan)
+            return Response({'success': False,
+                             'message': 'Payment does not match the selected scan.'},
+                            status=400)
+
         breakdown = compute_fee_breakdown(
             tags.get('doctor_fee') or 0,
             tags.get('collection_mode') or 'FULL',
@@ -485,9 +596,15 @@ class VerifyPaymentView(APIView):
                             amount_inr, queue_access, breakdown):
         from doctors.models import Doctor
         from payments.models import Payment
+        from scans.models import Scan
 
+        # One handler for both providers. Duplicating it would mean two copies
+        # of the capacity backstop, the refund-on-failure path and the
+        # idempotency guards — the three things in this file that most need to
+        # stay identical.
         doctor_id = booking_data.get('doctorId')
-        if not doctor_id:
+        scan_id   = booking_data.get('scanId')
+        if not doctor_id and not scan_id:
             return Response({'success': False, 'message': 'doctorId is required.'}, status=400)
 
         date_val = booking_data.get('date', '').strip()
@@ -495,11 +612,18 @@ class VerifyPaymentView(APIView):
         if not date_val or not slot_val:
             return Response({'success': False, 'message': 'Date and slot are required.'}, status=400)
 
+        is_scan = bool(scan_id)
         try:
-            doctor   = Doctor.objects.select_related('hospital').get(pk=doctor_id)
-            hospital = doctor.hospital
-        except Doctor.DoesNotExist:
-            return Response({'success': False, 'message': 'Doctor not found.'}, status=404)
+            if is_scan:
+                provider = Scan.objects.select_related('center').get(pk=scan_id)
+                hospital = provider.center
+            else:
+                provider = Doctor.objects.select_related('hospital').get(pk=doctor_id)
+                hospital = provider.hospital
+        except (Doctor.DoesNotExist, Scan.DoesNotExist):
+            return Response({'success': False,
+                             'message': 'Scan not found.' if is_scan else 'Doctor not found.'},
+                            status=404)
 
         # "Book for someone else" — optional beneficiary details. Blank ⇒ self.
         booked_for_name   = str(booking_data.get('bookedForName', '')   or '').strip()[:100]
@@ -517,14 +641,19 @@ class VerifyPaymentView(APIView):
                 # bookings/capacity.py for why the lock is on the doctor and
                 # not on the booking rows. Raising rolls this block back before
                 # anything is created, and the handler below refunds.
-                doctor   = check_slot_available_locked(doctor.id, date_val, slot_val)
-                hospital = doctor.hospital
+                if is_scan:
+                    provider = check_scan_slot_available_locked(provider.id, date_val, slot_val)
+                    hospital = provider.center
+                else:
+                    provider = check_slot_available_locked(provider.id, date_val, slot_val)
+                    hospital = provider.hospital
 
                 token = _generate_token()
 
                 new_booking = Booking.objects.create(
                     user         = request.user,
-                    doctor       = doctor,
+                    doctor       = None if is_scan else provider,
+                    scan         = provider if is_scan else None,
                     hospital     = hospital,
                     date         = date_val,
                     slot         = slot_val,
@@ -568,8 +697,9 @@ class VerifyPaymentView(APIView):
             _dispatch_booking_notifications(new_booking)
 
             logger.info(
-                'Booking %s created for user %s doctor %s',
-                new_booking.id, request.user.id, doctor.id,
+                'Booking %s created for user %s %s %s',
+                new_booking.id, request.user.id,
+                'scan' if is_scan else 'doctor', provider.id,
             )
 
             return Response({
@@ -579,7 +709,13 @@ class VerifyPaymentView(APIView):
                 'booking': {
                     'id':           new_booking.id,
                     'token':        token,
-                    'doctorName':   doctor.name,
+                    # Key kept for the installed app builds, which read
+                    # doctorName. For a scan it carries the scan's name —
+                    # mislabelled but legible, the same choice made in
+                    # BookingViewSet._serialize_booking.
+                    'doctorName':   provider.name,
+                    'providerName': provider.name,
+                    'providerKind': 'SCAN' if is_scan else 'DOCTOR',
                     'hospital':     hospital.name,
                     'date':         str(new_booking.date),
                     'slot':         new_booking.slot,

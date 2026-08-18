@@ -46,6 +46,15 @@ function SkeletonCard() {
 export default function AllDoctor() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
+  // 'doctors' | 'centres'. The doctor path below is untouched by this: the
+  // centre path sits BESIDE it rather than generalising it, because the doctor
+  // list is the live, working, revenue-carrying screen and a shared abstraction
+  // would put every future scan-centre change inside it.
+  const [mode,       setMode]       = useState('doctors');
+  const [centres,    setCentres]    = useState([]);
+  const [scans,      setScans]      = useState([]);
+  const [modality,   setModality]   = useState('All');
+
   const [doctors,    setDoctors]    = useState([]);
   const [loading,    setLoading]    = useState(true);
   // Seed the search from a ?q= param (e.g. the hero specialty chips link here).
@@ -103,6 +112,55 @@ export default function AllDoctor() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  // Scanning centres. Fetched lazily — a patient who never switches modes never
+  // pays for these two requests. `?kind=SCAN_CENTER` is the opt-in the backend
+  // requires; without it the hospitals endpoint returns hospitals only.
+  useEffect(() => {
+    if (mode !== 'centres' || centres.length) return;
+    setLoading(true);
+    Promise.all([
+      API.get('/hospitals/', { params: { kind: 'SCAN_CENTER' } }),
+      API.get('/scans/'),
+    ])
+      .then(([hRes, sRes]) => {
+        const asList = (d) => (Array.isArray(d) ? d : (d.results || []));
+        setCentres(asList(hRes.data));
+        setScans(asList(sRes.data));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [mode, centres.length]);
+
+  // Scans grouped by centre — drives the "N scans · from ₹X" line on each card
+  // without a request per centre.
+  const scansByCentre = scans.reduce((acc, sc) => {
+    (acc[sc.center] = acc[sc.center] || []).push(sc);
+    return acc;
+  }, {});
+
+  const modalities = ['All', ...new Set(scans.map(sc => sc.modality).filter(Boolean))];
+
+  const filteredCentres = centres
+    .map(c => ({ ...c, scans: scansByCentre[c.id] || [] }))
+    .filter(c => {
+      const haystack = [
+        c.name, c.city, c.address, c.location,
+        ...c.scans.map(sc => `${sc.name} ${sc.modality} ${sc.keywords}`),
+      ].filter(Boolean).join(' ').toLowerCase();
+      const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+      const matchSearch   = words.every(w => haystack.includes(w));
+      const matchCity     = !city || (c.city || '').toLowerCase().includes(city.toLowerCase());
+      const matchModality = modality === 'All'
+        || c.scans.some(sc => (sc.modality || '').toLowerCase() === modality.toLowerCase());
+      return matchSearch && matchCity && matchModality;
+    })
+    // A centre with nothing listed is a dead end for a patient — a card that
+    // opens onto an empty menu. Ranked to the bottom rather than hidden, so the
+    // centre still appears for a search by name.
+    .sort((a, b) => (b.scans.length > 0) - (a.scans.length > 0) || b.scans.length - a.scans.length);
+
+  const priceFrom = (list) => (list.length ? Math.min(...list.map(sc => sc.price || 0)) : 0);
 
   const actualSpecs = ['All', ...new Set(doctors.map(d => d.specialization).filter(Boolean))];
 
@@ -337,6 +395,28 @@ export default function AllDoctor() {
         .empty-sub { color: var(--gray-400); font-size: 15px; }
 
         @keyframes twPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        /* ── Doctors ⇄ Scan Centres switch ── */
+        .mode-switch {
+          display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 10px;
+          background: var(--gray-100, #F1F5F9); border-radius: 999px;
+        }
+        .mode-btn {
+          border: none; background: transparent; cursor: pointer;
+          padding: 7px 16px; border-radius: 999px;
+          font-size: 13px; font-weight: 600; color: var(--gray-500, #64748B);
+          transition: background .15s, color .15s, box-shadow .15s;
+        }
+        .mode-btn:hover { color: var(--gray-800, #1E293B); }
+        .mode-btn.is-active {
+          background: #fff; color: var(--blue-700, #12497F);
+          box-shadow: 0 1px 3px rgba(15,23,42,.12);
+        }
+
+        .centre-empty { text-align: center; padding: 64px 24px; color: var(--gray-400, #94A3B8); }
+        .centre-empty i { font-size: 34px; opacity: .5; }
+        .centre-empty-title { margin-top: 12px; font-size: 17px; font-weight: 700; color: var(--gray-800, #1E293B); }
+        .centre-empty-sub { margin-top: 4px; font-size: 13.5px; }
+
         @media (max-width: 600px) { .doc-grid { grid-template-columns: 1fr; } .filter-row { flex-wrap: wrap; } }
       `}</style>
 
@@ -346,28 +426,81 @@ export default function AllDoctor() {
         <div className="ad-header">
           <div className="ad-header-grid" />
           <div className="tw-container ad-header-inner">
-            <div className="tw-section-label">{t('doctors.findYourDoctor')}</div>
-            <h1 className="ad-title">{t('doctors.titlePrefix')} <span style={{ color: 'var(--blue-600)' }}>{t('doctors.titleAccent')}</span></h1>
-            <p className="ad-sub">
-              {loading ? t('doctors.loading') : t('doctors.summary', { count: doctors.length, cities: cities.length })}
-            </p>
-            <div className="spec-pills">
-              {actualSpecs.map(spec => (
-                <button
-                  key={spec}
-                  className={`spec-pill ${specFilter === spec ? 'active' : ''}`}
-                  onClick={() => setSpecFilter(spec)}
-                >
-                  {spec}
-                </button>
-              ))}
-            </div>
+            {/* The hero follows the mode. Leaving "Book a Doctor Appointment"
+                above a list of diagnostic centres reads as a broken page, and
+                the specialisation pills are meaningless there — a centre has
+                modalities, not specialisations. Not translated yet: the scan
+                strings have no i18n keys, and inventing keys the translation
+                files do not carry would render blank in te/hi. */}
+            {mode === 'doctors' ? (
+              <>
+                <div className="tw-section-label">{t('doctors.findYourDoctor')}</div>
+                <h1 className="ad-title">{t('doctors.titlePrefix')} <span style={{ color: 'var(--blue-600)' }}>{t('doctors.titleAccent')}</span></h1>
+                <p className="ad-sub">
+                  {loading ? t('doctors.loading') : t('doctors.summary', { count: doctors.length, cities: cities.length })}
+                </p>
+                <div className="spec-pills">
+                  {actualSpecs.map(spec => (
+                    <button
+                      key={spec}
+                      className={`spec-pill ${specFilter === spec ? 'active' : ''}`}
+                      onClick={() => setSpecFilter(spec)}
+                    >
+                      {spec}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="tw-section-label">FIND A SCANNING CENTRE</div>
+                <h1 className="ad-title">
+                  Book a <span style={{ color: 'var(--blue-600)' }}>Scan or Test</span>
+                </h1>
+                <p className="ad-sub">
+                  {loading
+                    ? t('doctors.loading')
+                    : `${centres.length} centre${centres.length === 1 ? '' : 's'} · MRI, CT, X-ray and blood tests`}
+                </p>
+                <div className="spec-pills">
+                  {modalities.map(m => (
+                    <button
+                      key={m}
+                      className={`spec-pill ${modality === m ? 'active' : ''}`}
+                      onClick={() => setModality(m)}
+                    >
+                      {m === 'All' ? 'All' : m}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
         {/* Sticky filters */}
         <div className="ad-filters">
           <div className="tw-container">
+            {/* Doctors ⇄ Scan Centres. A patient looking for an MRI and one
+                looking for a paediatrician are on different errands; this is
+                the switch between them. */}
+            <div className="mode-switch">
+              {[
+                { key: 'doctors', icon: 'bi-clipboard-pulse', label: 'Doctors' },
+                { key: 'centres', icon: 'bi-activity',        label: 'Scan Centres' },
+              ].map(m => (
+                <button
+                  key={m.key}
+                  type="button"
+                  className={`mode-btn ${mode === m.key ? 'is-active' : ''}`}
+                  aria-pressed={mode === m.key}
+                  onClick={() => setMode(m.key)}
+                >
+                  <i className={`bi ${m.icon} me-1`} />{m.label}
+                </button>
+              ))}
+            </div>
+
             <div className="filter-row">
               <div className="search-wrap">
                 <span className="search-icon"><i className="bi bi-search me-1" /></span>
@@ -404,12 +537,26 @@ export default function AllDoctor() {
                 <i className={`bi ${locating ? 'bi-arrow-repeat' : 'bi-geo-alt'} me-1`} />
                 {locating ? t('doctors.locating') : t('doctors.nearMe')}
               </button>
-              <button className={`avail-toggle ${availOnly ? 'active' : ''}`} onClick={() => setAvailOnly(p => !p)}>
-                <span className="toggle-dot" />
-                {t('doctors.availableOnly')}
-              </button>
+              {mode === 'doctors' ? (
+                <button className={`avail-toggle ${availOnly ? 'active' : ''}`} onClick={() => setAvailOnly(p => !p)}>
+                  <span className="toggle-dot" />
+                  {t('doctors.availableOnly')}
+                </button>
+              ) : (
+                /* "Available today" is a doctor concept — a centre's machines
+                   are not on leave. Modality is the filter that matters here. */
+                <select className="filter-select" value={modality} onChange={e => setModality(e.target.value)}>
+                  {modalities.map(m => (
+                    <option key={m} value={m}>{m === 'All' ? 'All scan types' : m}</option>
+                  ))}
+                </select>
+              )}
               <span className="results-count">
-                {loading ? '...' : t('doctors.results', { count: filtered.length })}
+                {loading
+                  ? '...'
+                  : mode === 'doctors'
+                    ? t('doctors.results', { count: filtered.length })
+                    : `${filteredCentres.length} centre${filteredCentres.length === 1 ? '' : 's'}`}
               </span>
             </div>
           </div>
@@ -425,7 +572,7 @@ export default function AllDoctor() {
               </div>
             )}
 
-            {!loading && filtered.length === 0 && (
+            {!loading && mode === 'doctors' && filtered.length === 0 && (
               <div className="empty-state">
                 <span className="empty-icon"><i className="bi bi-search me-1" /></span>
                 <div className="empty-title">{t('doctors.noResults')}</div>
@@ -440,7 +587,90 @@ export default function AllDoctor() {
               </div>
             )}
 
-            {!loading && filtered.length > 0 && (
+            {/* ── SCAN CENTRES ── */}
+            {!loading && mode === 'centres' && filteredCentres.length === 0 && (
+              <div className="centre-empty">
+                <i className="bi bi-activity" />
+                <div className="centre-empty-title">No scanning centres yet</div>
+                <div className="centre-empty-sub">
+                  We're onboarding diagnostic partners now. Try the Doctors tab.
+                </div>
+              </div>
+            )}
+
+            {!loading && mode === 'centres' && filteredCentres.length > 0 && (
+              <div className="doc-grid">
+                {filteredCentres.map((c, idx) => (
+                  <Link
+                    to={`/scan-center/${c.id}`}
+                    className="doc-card fade-up"
+                    key={c.id}
+                    style={{ animationDelay: `${idx * 0.05}s` }}
+                  >
+                    <div className="card-img-wrap">
+                      {c.image && !c.image.includes('placehold')
+                        ? <img className="card-img" src={c.image} alt={c.name} />
+                        : <div className="card-img-placeholder"><i className="bi bi-activity" /></div>
+                      }
+                      <div className="card-avail yes">
+                        <span className="avail-dot" />
+                        Scan Centre
+                      </div>
+                      {(c.open_time || c.close_time) && (
+                        <div className="hospital-tag">
+                          <i className="bi bi-clock me-1" />{c.open_time || '—'} – {c.close_time || '—'}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="card-body">
+                      <div className="card-spec">
+                        {[...new Set(c.scans.map(sc => sc.modality).filter(Boolean))].slice(0, 3).join(' · ') || 'Diagnostics'}
+                      </div>
+                      <div className="card-name">{c.name}</div>
+                      <div className="card-meta">
+                        <div className="meta-item">
+                          <div className="meta-icon"><i className="bi bi-geo-alt me-1" /></div>
+                          {c.city}
+                        </div>
+                        <div className="meta-item">
+                          <div className="meta-icon"><i className="bi bi-clipboard2-pulse me-1" /></div>
+                          {c.scans.length} scan{c.scans.length === 1 ? '' : 's'}
+                        </div>
+                      </div>
+                      {c.scans.length > 0 && (
+                        <div className="slot-chips">
+                          {c.scans.slice(0, 3).map(sc => (
+                            <span className="slot-chip" key={sc.id}>{sc.name}</span>
+                          ))}
+                          {c.scans.length > 3 && <span className="slot-more">+{c.scans.length - 3}</span>}
+                        </div>
+                      )}
+                      <div className="card-slots-count">
+                        {c.scans.length > 0
+                          ? `${c.scans.length} scan${c.scans.length === 1 ? '' : 's'} available`
+                          : 'Contact the centre directly'}
+                      </div>
+                      <div className="card-footer">
+                        <div className="card-fee">
+                          {c.scans.length > 0 ? (
+                            <>
+                              <span className="card-fee-amount">from ₹{priceFrom(c.scans)}</span>
+                              <span className="card-fee-sub">per scan</span>
+                            </>
+                          ) : (
+                            <span className="card-fee-sub">Prices on request</span>
+                          )}
+                        </div>
+                        <span className="book-btn">View scans</span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            {!loading && mode === 'doctors' && filtered.length > 0 && (
               <div className="doc-grid">
                 {filtered.map((doc, idx) => (
                   <Link

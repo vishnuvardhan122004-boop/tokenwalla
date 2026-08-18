@@ -85,6 +85,9 @@ const Hdashboard = () => {
   const [tokenDetail,          setTokenDetail]          = useState(null);
   const [queue,                setQueue]                = useState({ waiting: [], onHold: [], inProgress: [], completed: [] });
   const [doctors,              setDoctors]              = useState([]);
+  const [scans,                setScans]                = useState([]);
+  const [scanForm,             setScanForm]             = useState(null);   // null = closed
+  const [scanSaving,           setScanSaving]           = useState(false);
   const [loading,              setLoading]              = useState(false);
   const [showForm,             setShowForm]             = useState(false);
   const [editDoctor,           setEditDoctor]           = useState(null);
@@ -152,6 +155,71 @@ const Hdashboard = () => {
     loadDoctors();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hospital]);
+
+  // A scanning centre is a Hospital row with kind=SCAN_CENTER. Everything on
+  // this dashboard — queue, payments, QR scanner — works identically for one;
+  // the only difference is that its bookable unit is a Scan, not a Doctor.
+  const isCentre = hospital?.kind === 'SCAN_CENTER';
+
+  const fetchScans = async () => {
+    if (!hospital?.id) return;
+    try {
+      const { data } = await API.get('/scans/', { params: { center: hospital.id } });
+      setScans(Array.isArray(data) ? data : (data.results || []));
+    } catch {
+      setScans([]);
+    }
+  };
+
+  useEffect(() => {
+    if (isCentre && activeTab === 'doctors') fetchScans();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCentre, activeTab, hospital?.id]);
+
+  const saveScan = async (e) => {
+    e.preventDefault();
+    if (!scanForm) return;
+    setScanSaving(true);
+    const payload = {
+      center: hospital.id,
+      name: (scanForm.name || '').trim(),
+      modality: (scanForm.modality || '').trim(),
+      price: Number(scanForm.price) || 0,
+      duration_minutes: Number(scanForm.duration_minutes) || 15,
+      max_per_slot: Number(scanForm.max_per_slot) || 1,
+      prep_instructions: scanForm.prep_instructions || '',
+      available: scanForm.available !== false,
+      // Comma-separated in the form, arrays on the wire — same shapes as Doctor.
+      slots: (scanForm.slotsText || '').split(',').map(v => v.trim()).filter(Boolean),
+      days:  (scanForm.daysText  || '').split(',').map(v => v.trim()).filter(Boolean),
+    };
+    try {
+      if (scanForm.id) await API.patch(`/scans/${scanForm.id}/`, payload);
+      else             await API.post('/scans/', payload);
+      setScanForm(null);
+      await fetchScans();
+      setToast({ type: 'success', msg: scanForm.id ? 'Scan updated' : 'Scan added' });
+    } catch (err) {
+      const errs = err?.response?.data?.errors;
+      setToast({
+        type: 'error',
+        msg: errs ? Object.values(errs).flat().join(' ') : 'Could not save the scan.',
+      });
+    } finally {
+      setScanSaving(false);
+    }
+  };
+
+  const deleteScan = async (scan) => {
+    if (!window.confirm(`Remove "${scan.name}" from your list?`)) return;
+    try {
+      await API.delete(`/scans/${scan.id}/`);
+      await fetchScans();
+      setToast({ type: 'success', msg: 'Scan removed' });
+    } catch {
+      setToast({ type: 'error', msg: 'Could not remove the scan.' });
+    }
+  };
 
   // Poll the queue only while the tab is actually being looked at. A reception
   // desk leaves this dashboard open all day behind other windows; a plain
@@ -577,7 +645,9 @@ const Hdashboard = () => {
         <div className="tw-tabs mb-4">
           {[
             { key: "queue",    label: <><i className="bi bi-people me-1" />Queue</> },
-            { key: "doctors",  label: <><i className="bi bi-person-badge me-1" />Doctors</> },
+            isCentre
+              ? { key: "doctors", label: <><i className="bi bi-clipboard2-pulse me-1" />Scans</> }
+              : { key: "doctors", label: <><i className="bi bi-person-badge me-1" />Doctors</> },
             { key: "payments", label: <><i className="bi bi-credit-card me-1" />Payments</> },
             { key: "scanner",  label: <><i className="bi bi-qr-code-scan me-1" />Scanner</> },
           ].map(({ key, label }) => (
@@ -756,7 +826,151 @@ const Hdashboard = () => {
         )}
 
         {/* ── Doctors Tab ── */}
-        {activeTab === "doctors" && (
+        {/* ── Scans Tab (a scanning centre's version of the Doctors tab) ── */}
+        {activeTab === "doctors" && isCentre && (
+          <>
+            <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+              <div>
+                <h5 className="mb-0 fw-bold">Your scans</h5>
+                <small className="text-muted">
+                  Patients see these, with prices, on your centre page.
+                </small>
+              </div>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => setScanForm({
+                  name: '', modality: '', price: '', duration_minutes: 15,
+                  max_per_slot: 1, prep_instructions: '', available: true,
+                  slotsText: '', daysText: '',
+                })}
+              >
+                <i className="bi bi-plus-lg me-1" />Add a scan
+              </button>
+            </div>
+
+            {scanForm && (
+              <form className="card p-3 mb-3 shadow-sm" onSubmit={saveScan}>
+                <div className="row g-2">
+                  <div className="col-md-6">
+                    <label className="form-label small fw-semibold">Scan name</label>
+                    <input className="form-control" required placeholder="e.g. MRI Brain"
+                      value={scanForm.name}
+                      onChange={e => setScanForm(f => ({ ...f, name: e.target.value }))} />
+                  </div>
+                  <div className="col-md-3">
+                    <label className="form-label small fw-semibold">Type</label>
+                    <input className="form-control" placeholder="MRI"
+                      value={scanForm.modality}
+                      onChange={e => setScanForm(f => ({ ...f, modality: e.target.value }))} />
+                  </div>
+                  <div className="col-md-3">
+                    <label className="form-label small fw-semibold">Price (₹)</label>
+                    <input className="form-control" type="number" min="0" required
+                      value={scanForm.price}
+                      onChange={e => setScanForm(f => ({ ...f, price: e.target.value }))} />
+                  </div>
+                  <div className="col-md-3">
+                    <label className="form-label small fw-semibold">Minutes</label>
+                    <input className="form-control" type="number" min="1"
+                      value={scanForm.duration_minutes}
+                      onChange={e => setScanForm(f => ({ ...f, duration_minutes: e.target.value }))} />
+                  </div>
+                  <div className="col-md-3">
+                    <label className="form-label small fw-semibold">Patients per slot</label>
+                    <input className="form-control" type="number" min="1"
+                      value={scanForm.max_per_slot}
+                      onChange={e => setScanForm(f => ({ ...f, max_per_slot: e.target.value }))} />
+                    <small className="text-muted">Usually 1 — one machine, one patient.</small>
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label small fw-semibold">Days</label>
+                    <input className="form-control" placeholder="Mon, Tue, Wed"
+                      value={scanForm.daysText}
+                      onChange={e => setScanForm(f => ({ ...f, daysText: e.target.value }))} />
+                  </div>
+                  <div className="col-12">
+                    <label className="form-label small fw-semibold">Time slots</label>
+                    <input className="form-control" placeholder="09:00 AM, 09:30 AM, 10:00 AM"
+                      value={scanForm.slotsText}
+                      onChange={e => setScanForm(f => ({ ...f, slotsText: e.target.value }))} />
+                    <small className="text-muted">Comma separated. Leave empty if you take walk-ins only.</small>
+                  </div>
+                  <div className="col-12">
+                    <label className="form-label small fw-semibold">Before you come</label>
+                    <textarea className="form-control" rows={2}
+                      placeholder="e.g. Do not eat for 8 hours. Remove all metal objects."
+                      value={scanForm.prep_instructions}
+                      onChange={e => setScanForm(f => ({ ...f, prep_instructions: e.target.value }))} />
+                    <small className="text-muted">
+                      Shown to the patient before they book and again on their token.
+                    </small>
+                  </div>
+                </div>
+                <div className="d-flex gap-2 mt-3">
+                  <button className="btn btn-primary btn-sm" disabled={scanSaving}>
+                    {scanSaving ? 'Saving…' : scanForm.id ? 'Save changes' : 'Add scan'}
+                  </button>
+                  <button type="button" className="btn btn-light btn-sm" onClick={() => setScanForm(null)}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {scans.length === 0 && !scanForm && (
+              <div className="card p-4 text-center text-muted">
+                No scans listed yet. Patients can find your centre but cannot see
+                what you offer until you add one.
+              </div>
+            )}
+
+            <div className="row g-2">
+              {scans.map(sc => (
+                <div className="col-md-6" key={sc.id}>
+                  <div className="card p-3 h-100 shadow-sm">
+                    <div className="d-flex justify-content-between align-items-start gap-2">
+                      <div className="min-w-0">
+                        <div className="fw-bold">{sc.name}</div>
+                        <div className="small text-muted">
+                          {sc.modality && <span className="me-2">{sc.modality}</span>}
+                          {sc.duration_minutes} min · {sc.slots?.length || 0} slot{sc.slots?.length === 1 ? '' : 's'}
+                        </div>
+                        {sc.prep_instructions && (
+                          <div className="small text-warning-emphasis mt-1">
+                            <i className="bi bi-exclamation-triangle me-1" />{sc.prep_instructions}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-end flex-shrink-0">
+                        <div className="fw-bold">₹{sc.price}</div>
+                        <span className={`badge ${sc.available ? 'bg-success' : 'bg-secondary'}`}>
+                          {sc.available ? 'Listed' : 'Hidden'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="d-flex gap-2 mt-2">
+                      <button
+                        className="btn btn-outline-primary btn-sm"
+                        onClick={() => setScanForm({
+                          ...sc,
+                          slotsText: (sc.slots || []).join(', '),
+                          daysText:  (sc.days  || []).join(', '),
+                        })}
+                      >
+                        Edit
+                      </button>
+                      <button className="btn btn-outline-danger btn-sm" onClick={() => deleteScan(sc)}>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {activeTab === "doctors" && !isCentre && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-3">
               <h5 className="mb-0 fw-bold">Our Doctors ({doctors.length})</h5>

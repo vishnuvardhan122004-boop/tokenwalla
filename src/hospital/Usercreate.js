@@ -13,9 +13,16 @@ const Husercreate = () => {
   useAuthKeyboard();
 
   const [hospital, setHospital] = useState({
+    kind: 'HOSPITAL',
     name: '', city: '', address: '', location: '', mobile: '', password: '', confirmPassword: '',
     latitude: null, longitude: null,
   });
+
+  // One flag drives every label on this page. A scanning centre registers
+  // through the same form, the same OTP and the same admin approval as a
+  // hospital — only the wording and the bookable unit differ.
+  const isCentre = hospital.kind === 'SCAN_CENTER';
+  const noun     = isCentre ? 'Scanning Centre' : 'Hospital';
 
   const [loading,     setLoading]     = useState(false);
   const [otpLoading,  setOtpLoading]  = useState(false);
@@ -40,7 +47,7 @@ const Husercreate = () => {
 
   const validate = () => {
     const newErrors = {};
-    if (!hospital.name.trim())    newErrors.name    = 'Hospital name is required';
+    if (!hospital.name.trim())    newErrors.name    = `${noun} name is required`;
     if (!hospital.city.trim())    newErrors.city    = 'City is required';
     if (!hospital.address.trim()) newErrors.address = 'Address is required';
     if (!/^[6-9]\d{9}$/.test(hospital.mobile)) newErrors.mobile = 'Enter a valid 10-digit mobile';
@@ -92,6 +99,7 @@ const Husercreate = () => {
     setLoading(true);
     try {
       await API.post('/hospitals/register/', {
+        kind:      hospital.kind,
         name:      hospital.name.trim(),
         city:      hospital.city.trim(),
         address:   hospital.address.trim(),
@@ -101,7 +109,7 @@ const Husercreate = () => {
         mobile:    hospital.mobile,
         password:  hospital.password,
       });
-      setSuccess('Hospital registered! Your account is under review — you can log in once an admin approves it.');
+      setSuccess(`${noun} registered! Your account is under review — you can log in once an admin approves it.`);
       setTimeout(() => navigate('/Hlogin'), 2200);
     } catch (err) {
       setError(err?.response?.data?.message || 'Registration failed. Please try again.');
@@ -115,6 +123,24 @@ const Husercreate = () => {
   return (
     <>
       <style>{authCSS}</style>
+      <style>{`
+        .kind-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 22px; }
+        .kind-card {
+          display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+          padding: 13px 14px; border-radius: 12px; cursor: pointer; text-align: left;
+          background: #fff; border: 1.5px solid var(--blue-50, #E6F0FA);
+          transition: border-color .15s, background .15s, box-shadow .15s;
+        }
+        .kind-card:hover { border-color: var(--blue-200, #A9CCEC); }
+        .kind-card.is-active {
+          border-color: var(--blue-600, #1565C0); background: var(--blue-50, #E6F0FA);
+          box-shadow: 0 0 0 3px rgba(21,101,192,.10);
+        }
+        .kind-card-icon  { font-size: 20px; line-height: 1.2; }
+        .kind-card-label { font-size: 13.5px; font-weight: 700; color: var(--gray-800, #1E293B); }
+        .kind-card-sub   { font-size: 11.5px; color: var(--gray-400, #94A3B8); line-height: 1.35; }
+        @media (max-width: 420px) { .kind-choice { grid-template-columns: 1fr; } }
+      `}</style>
       <div className="auth-page">
 
         {/* ── Left panel ── */}
@@ -127,18 +153,24 @@ const Husercreate = () => {
               <span className="auth-brand-name"><span className="accent">Token</span>walla</span>
             </Link>
 
-            <div className="auth-panel-label">Hospital Registration</div>
-            <h1 className="auth-panel-title">List Your<br /><span className="accent">Hospital Online</span></h1>
+            <div className="auth-panel-label">{noun} Registration</div>
+            <h1 className="auth-panel-title">
+              List Your<br />
+              <span className="accent">{isCentre ? 'Centre Online' : 'Hospital Online'}</span>
+            </h1>
             <p className="auth-panel-sub">
-              Join TokenWalla to let patients discover your doctors, book OPD slots,
-              and manage your live queue — all in one place.
+              {isCentre
+                ? 'Join TokenWalla to let patients discover your scans, see your prices, book a slot and manage your live queue — all in one place.'
+                : 'Join TokenWalla to let patients discover your doctors, book OPD slots, and manage your live queue — all in one place.'}
             </p>
 
             <div className="auth-features">
               {[
-                { icon: '🩺', title: 'Get Discovered',    desc: 'Patients across AP & Telangana find and book your doctors' },
+                isCentre
+                  ? { icon: '🔬', title: 'Get Discovered', desc: 'Patients across AP & Telangana find your scans and prices' }
+                  : { icon: '🩺', title: 'Get Discovered', desc: 'Patients across AP & Telangana find and book your doctors' },
                 { icon: '🎫', title: 'Digital Tokens',    desc: 'Replace paper queues with live, trackable tokens' },
-                { icon: '✅', title: 'Verified & Trusted', desc: 'Every hospital is admin-verified before going live' },
+                { icon: '✅', title: 'Verified & Trusted', desc: `Every ${noun.toLowerCase()} is admin-verified before going live` },
               ].map((f, i) => (
                 <div className="auth-feature" key={i}>
                   <div className="auth-feature-icon">{f.icon}</div>
@@ -154,8 +186,31 @@ const Husercreate = () => {
 
         {/* ── Right panel (form) ── */}
         <div className="auth-right">
-          <div className="auth-form-title">Create Hospital Account</div>
+          <div className="auth-form-title">Create {noun} Account</div>
           <div className="auth-form-sub">Register in a minute — it's free to join</div>
+
+          {/* What are you registering? First question on the page, because it
+              changes what the account can do: a hospital lists doctors and OPD
+              slots, a centre lists scans and their prices. Switching it later
+              means an admin edit, so it is asked up front rather than buried. */}
+          <div className="kind-choice">
+            {[
+              { value: 'HOSPITAL',    icon: '🏥', label: 'Hospital / Clinic',  sub: 'You have doctors and OPD slots' },
+              { value: 'SCAN_CENTER', icon: '🔬', label: 'Scanning Centre',    sub: 'MRI, CT, X-ray, blood tests' },
+            ].map(opt => (
+              <button
+                type="button"
+                key={opt.value}
+                className={`kind-card ${hospital.kind === opt.value ? 'is-active' : ''}`}
+                aria-pressed={hospital.kind === opt.value}
+                onClick={() => setHospital(prev => ({ ...prev, kind: opt.value }))}
+              >
+                <span className="kind-card-icon">{opt.icon}</span>
+                <span className="kind-card-label">{opt.label}</span>
+                <span className="kind-card-sub">{opt.sub}</span>
+              </button>
+            ))}
+          </div>
 
           {/* Progress */}
           <div className="auth-progress">
@@ -171,12 +226,13 @@ const Husercreate = () => {
 
             {/* Hospital name */}
             <div className="auth-field">
-              <label className="auth-field-label">Hospital Name</label>
+              <label className="auth-field-label">{noun} Name</label>
               <div className="auth-input-wrap">
-                <span className="auth-input-icon">🏥</span>
+                <span className="auth-input-icon">{isCentre ? '🔬' : '🏥'}</span>
                 <input
                   className={`auth-input ${errors.name ? 'has-error' : ''}`}
-                  name="name" placeholder="e.g. City Care Hospital"
+                  name="name"
+                  placeholder={isCentre ? 'e.g. Vijaya Diagnostics' : 'e.g. City Care Hospital'}
                   value={hospital.name} onChange={handleChange}
                 />
               </div>
@@ -368,7 +424,7 @@ const Husercreate = () => {
             </div>
 
             <button className="auth-submit" disabled={loading || !!success}>
-              {loading ? <><div className="spinner" /> Registering...</> : 'Register Hospital →'}
+              {loading ? <><div className="spinner" /> Registering...</> : `Register ${noun} →`}
             </button>
           </form>
 
