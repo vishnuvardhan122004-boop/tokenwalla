@@ -455,3 +455,42 @@ def send_hospital_cancellation(booking):
         wa_message_id=result.get('message_id') or '',
         error=result.get('error') or '',
     )
+
+
+def send_scan_report_ready(booking):
+    """Tell a patient their scan report is available.
+
+    Deliberately carries NO link. The report is medical PII served only behind
+    an ownership check, and a WhatsApp message is forwardable — putting a URL in
+    it would hand the report to whoever the message reaches. The patient opens
+    the app or the site, where their session proves who they are.
+
+    Params: {{1}} patient {{2}} scan {{3}} centre {{4}} booking reference.
+    "Booking reference", never "token" — the word token beside a code-like value
+    trips Meta's Authentication/OTP classifier and gets the template rejected
+    (see WHATSAPP_TEMPLATES.md §2).
+    """
+    from .models import WhatsAppLog
+
+    user = booking.user
+    if not getattr(user, 'whatsapp_opt_in', True):
+        return
+
+    result = send_template(
+        to_mobile=booking.patient_display_mobile or user.mobile,
+        template_name=settings.WHATSAPP_TEMPLATE_SCAN_REPORT,
+        params=[
+            booking.patient_display_name,
+            booking.provider_name,
+            booking.hospital.name,
+            booking.token,
+        ],
+    )
+    WhatsAppLog.objects.create(
+        booking=booking,
+        template=settings.WHATSAPP_TEMPLATE_SCAN_REPORT,
+        to_mobile=booking.patient_display_mobile or user.mobile,
+        success=result['success'],
+        message_id=result.get('message_id') or '',
+        error=result.get('error') or '',
+    )

@@ -318,6 +318,10 @@ WHATSAPP_TEMPLATE_NO_SHOW        = config('WHATSAPP_TEMPLATE_NO_SHOW', default='
 WHATSAPP_TEMPLATE_QUEUE_ADVANCE  = config('WHATSAPP_TEMPLATE_QUEUE_ADVANCE', default='queue_advance')
 WHATSAPP_TEMPLATE_ON_HOLD        = config('WHATSAPP_TEMPLATE_ON_HOLD', default='booking_on_hold')
 WHATSAPP_TEMPLATE_HOSPITAL_CANCELLED = config('WHATSAPP_TEMPLATE_HOSPITAL_CANCELLED', default='hospital_cancellation')
+# Scan report ready (item 8 slice 10). Not yet submitted to Meta — until the
+# name is APPROVED, send_template logs a warning and returns, so the paired push
+# still fires and the patient is still told. Inert, never broken.
+WHATSAPP_TEMPLATE_SCAN_REPORT    = config('WHATSAPP_TEMPLATE_SCAN_REPORT', default='scan_report_ready')
 WHATSAPP_TEMPLATE_LANG           = config('WHATSAPP_TEMPLATE_LANG', default='en')
 ADMIN_SETUP_KEY = config('ADMIN_SETUP_KEY', default='')
 
@@ -440,3 +444,17 @@ if 'test' in sys.argv:
             'LOCATION': 'tokenwalla-tests',
         }
     }
+    # Never let the suite upload to the real Cloudinary account. With the
+    # Cloudinary backend configured, ANY test that saves a FileField/ImageField
+    # makes a live outbound upload — it writes real files into the production
+    # media store, it fails without network, and it fails again on Cloudinary's
+    # own content validation (a fake PDF fixture is rejected as "Invalid PDF").
+    # Found on 2026-08-18 building scan reports, the first feature to upload a
+    # file from a test. Same reasoning as the cache override directly above:
+    # a test result must not depend on an external service.
+    STORAGES = {
+        'default':     {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    }
+    import tempfile
+    MEDIA_ROOT = tempfile.mkdtemp(prefix='tokenwalla-test-media-')

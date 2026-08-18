@@ -88,6 +88,7 @@ const Hdashboard = () => {
   const [scans,                setScans]                = useState([]);
   const [scanForm,             setScanForm]             = useState(null);   // null = closed
   const [scanSaving,           setScanSaving]           = useState(false);
+  const [uploadingFor,         setUploadingFor]         = useState(null);
   const [loading,              setLoading]              = useState(false);
   const [showForm,             setShowForm]             = useState(false);
   const [editDoctor,           setEditDoctor]           = useState(null);
@@ -207,6 +208,31 @@ const Hdashboard = () => {
       });
     } finally {
       setScanSaving(false);
+    }
+  };
+
+  // Upload a result file for a completed scan booking. The patient is notified
+  // by the server (push now, WhatsApp once the template is approved); this
+  // screen never sees the file again — reports are served only through the
+  // ownership-checked download endpoint.
+  const uploadReport = async (booking, file) => {
+    if (!file) return;
+    setUploadingFor(booking.id);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('title', `${booking.doctor_name || 'Scan'} report`);
+    try {
+      await API.post(`/bookings/${booking.id}/reports/`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setToast({ type: 'success', msg: 'Report uploaded — the patient has been notified.' });
+    } catch (err) {
+      setToast({
+        type: 'error',
+        msg: err?.response?.data?.message || 'Could not upload the report.',
+      });
+    } finally {
+      setUploadingFor(null);
     }
   };
 
@@ -782,6 +808,29 @@ const Hdashboard = () => {
                         >
                           <i className="bi bi-ticket-perforated me-1" />Token: {p.token}
                         </button>
+
+                        {/* A scan's journey doesn't end at the visit — the
+                            report comes back later. Only offered for scan
+                            bookings; a consultation has nothing to upload. */}
+                        {isCentre && p.provider_kind === 'SCAN' && (
+                          <div className="mt-2">
+                            <label className="btn btn-sm btn-outline-success py-0 px-2 mb-0">
+                              {uploadingFor === p.id
+                                ? 'Uploading…'
+                                : <><i className="bi bi-upload me-1" />Upload report</>}
+                              <input
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                hidden
+                                disabled={uploadingFor === p.id}
+                                onChange={e => {
+                                  uploadReport(p, e.target.files?.[0]);
+                                  e.target.value = '';   // allow re-picking the same file
+                                }}
+                              />
+                            </label>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

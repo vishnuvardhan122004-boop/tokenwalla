@@ -765,7 +765,7 @@ untouched.
 | 7 | `ScanCenterDetails.js` (**the one new file**) — menu → slots → **call to book** | web | ✅ `feat/scan-web` |
 | 8 | Centre dashboard: manage scans, see the queue | web | ✅ `feat/scan-web` |
 | 9 | Mirror 5–8 | app | |
-| 10 | Report delivery — upload, WhatsApp, download | backend + web | |
+| 10 | Report delivery — upload, WhatsApp, download | backend + web | ✅ `feat/scan-reports` |
 
 Slices 1–8 ship independently of the app; slice 9 rides the next build.
 
@@ -800,6 +800,26 @@ wrong. Fixed and now pinned by `LoginPayloadTests`. Also confirmed live: no
 centre in the default `/api/hospitals/`, `?kind=` opt-in works, a typo fails
 closed, and today's morning slots correctly strike out under the 2h cutoff
 while 4 PM stays open.
+
+**Slice 10 found a live bug in the TEST SUITE, not in the feature.** With the
+Cloudinary backend configured, ANY test that saves a `FileField`/`ImageField`
+made a **live outbound upload into the production media store** — it also fails
+with no network, and Cloudinary rejected a fake-PDF fixture outright ("Invalid
+PDF"). Scan reports were simply the first feature to upload a file from a test
+and expose it. `settings.py` now forces `FileSystemStorage` into a temp
+`MEDIA_ROOT` under `manage.py test`, the same way it already forces LocMemCache.
+Recorded in CLAUDE.md as trap 4b.
+
+**Reports are medical PII, and the access model is the feature.** The storage
+URL is never serialised, never sent over WhatsApp and never returned by the API
+— a URL is a bearer token, and a WhatsApp message is forwardable. Clients get
+`/api/bookings/<id>/reports/<rid>/download/`, which re-checks ownership on every
+request against an allow-list of three: the patient, that centre's own staff,
+and an admin. Unauthorised reads return **404, not 403** — a 403 confirms the
+booking exists. A patient may READ their report but may never upload one.
+`scan_report_ready` is **§11 of WHATSAPP_TEMPLATES.md and is NOT submitted**;
+until Meta approves it the push half still fires, so the patient is told on one
+channel rather than none.
 
 **Slice 4 added `slot-availability` beyond its stated scope**, deliberately: it
 is the same contract as the doctor endpoint, so slice 7 can drive the existing

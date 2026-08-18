@@ -151,7 +151,7 @@ salaried doctor's money goes to their hospital) and *on which rail*
 
 ## Testing
 
-`cd backend && python manage.py test` (158 tests) and `CI=true npx react-scripts
+`cd backend && python manage.py test` (304 tests) and `CI=true npx react-scripts
 test --watchAll=false` (13). Payment changes must keep `payments/tests_payments.py`
 and `payments/tests_integration.py` green — they cover the fee math, refund
 tiers, the manual-payout flow, and the order-binding/idempotency regressions.
@@ -169,7 +169,7 @@ collides with a LATER, UNRELATED test's first write and fails it with
 `database table is locked`. It reproduces about one run in four, on a different
 test each time, so a single green run proves nothing.
 
-There are four such threads. Any test that reaches one must patch it — and note
+There are five such threads. Any test that reaches one must patch it — and note
 the `_whatsapp_async` row grew on 2026-08-16: the **call** and **QR scan**
 endpoints now fire one too (queue-advance WhatsApp), so a test of either that
 previously needed no patch does now. The sender writes a `WhatsAppLog` row, so
@@ -181,6 +181,7 @@ the thread does a **DB write**, which is the flake, with or without a token:
 | `/api/payment/payouts/mark-paid/` | `payments.views._notify_doctor_payout_async` |
 | doctor toggled to unavailable | `doctors.views._notify_doctor_unavailable` |
 | booking cancel / hold / no-show / **call** / **QR scan** | `bookings.views._whatsapp_async` |
+| **scan report upload** (added 2026-08-18) | `scans.views._notify_report_ready_async` |
 
 ```python
 @mock.patch('payments.views._dispatch_booking_notifications', lambda b: None)
@@ -200,6 +201,16 @@ failing the 2h booking cutoff. Compute dates from `timezone.localdate()`.
 **3. Never let a test depend on the time of day.** A cutoff test using today's
 date with an `09:00 AM` slot passed at 23:00 and failed at 01:00. Pin the clock
 instead: `@mock.patch('tokenwalla.utils.timezone.now')`.
+
+**4b. The test suite must never touch Cloudinary.** With the Cloudinary backend
+configured, ANY test that saves a `FileField`/`ImageField` makes a live outbound
+upload — writing real files into the **production media store**, failing without
+network, and failing again on Cloudinary's own content validation (a fake PDF
+fixture comes back "Invalid PDF"). `settings.py` now forces
+`FileSystemStorage` into a temp `MEDIA_ROOT` under `manage.py test`, the same
+way it forces LocMemCache. Found 2026-08-18 building scan reports, the first
+feature to upload a file from a test. Don't undo it, and don't add a storage
+override that reads an env var.
 
 **4. Don't add `TransactionTestCase` to this suite.** Its teardown truncates
 every table, which is a lot of destructive machinery against the shared-cache

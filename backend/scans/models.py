@@ -86,3 +86,51 @@ class Scan(models.Model):
 
     def __str__(self):
         return f'{self.name} — {self.center.name}'
+
+
+class ScanReport(models.Model):
+    """A result file for a completed scan booking — the PDF the patient came for.
+
+    This is the stage a doctor booking does not have. A consultation is over
+    when the patient walks out; a scan is not, because the report comes back
+    hours or days later. `COMPLETED` stays terminal — a report is a related row,
+    not a new status, so nothing about the queue, refund or payout lifecycle
+    moves.
+
+    A ForeignKey rather than a OneToOne: a blood panel routinely comes back as
+    several PDFs, and one row per file costs nothing today while a OneToOne
+    would need a migration the first time a centre uploads two.
+
+    PRIVACY — the reason this model has no public URL field. The file is medical
+    PII. It is served ONLY by an authenticated, ownership-checked download view;
+    the storage URL is never serialised, never sent over WhatsApp and never
+    returned by the API. See scans.views.ScanReportDownloadView.
+    """
+    booking     = models.ForeignKey(
+        'bookings.Booking', on_delete=models.CASCADE, related_name='reports')
+    file        = models.FileField(upload_to='scan_reports/')
+    title       = models.CharField(max_length=200, blank=True, default='')
+    notes       = models.TextField(blank=True, default='')
+    # Who uploaded it, for an audit trail. SET_NULL so removing a staff account
+    # never deletes a patient's report.
+    uploaded_by = models.ForeignKey(
+        'users.User', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='uploaded_scan_reports')
+    # Set once the patient has been told. Kept as a timestamp rather than a bool
+    # so a re-send is visible and a failed notify is distinguishable from one
+    # that never ran.
+    notified_at = models.DateTimeField(null=True, blank=True)
+    created     = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created']
+        indexes = [
+            models.Index(fields=['booking', 'created'], name='idx_scanreport_booking'),
+        ]
+
+    def __str__(self):
+        return f'{self.title or "Report"} for booking {self.booking_id}'
+
+    @property
+    def display_title(self):
+        return self.title or (self.booking.provider_name if self.booking_id else 'Report')
