@@ -175,6 +175,18 @@ def record_absence_refund(booking):
         if existing is not None:
             return existing, {'adjusted': True, 'reason': 'already_recorded'}
 
+        # DoctorLedger is keyed to a Doctor. Scan-centre payouts get their own
+        # ledger routing in slice 3; until then no scan booking can be created
+        # (there is no scan checkout), so this is unreachable. It is here anyway
+        # because "unreachable" is a claim about today's code, and the failure
+        # it would otherwise cause is an IntegrityError on a null FK inside a
+        # refund — the worst possible place to discover it.
+        if booking.doctor_id is None:
+            logger.error(
+                'Absence refund skipped: booking %s is a scan booking and scan '
+                'ledger routing is not built yet (item 8 slice 3).', booking.id)
+            return None, {'adjusted': False, 'reason': 'scan_ledger_not_implemented'}
+
         payment = getattr(booking, 'payment', None)
         doctor_fee = payment.doctor_fee if payment else Decimal('0.00')
         payout = compute_doctor_payout(doctor_fee)

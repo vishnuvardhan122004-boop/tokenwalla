@@ -399,8 +399,7 @@ class RescheduleBookingView(APIView):
         if not new_slot:
             return Response({'message': 'Slot is required.'}, status=400)
 
-        doctor_slots = booking.doctor.slots or []
-        if new_slot not in doctor_slots:
+        if new_slot not in booking.provider_slots:
             return Response(
                 {'message': f'Slot "{new_slot}" is not available for this doctor.'},
                 status=400
@@ -416,7 +415,7 @@ class RescheduleBookingView(APIView):
                 Booking.objects
                 .select_for_update()
                 .filter(
-                    doctor=booking.doctor,
+                    **booking.provider_filter,
                     date=new_date,
                     slot=new_slot,
                     status__in=['CONFIRMED', 'IN_PROGRESS'],
@@ -424,7 +423,7 @@ class RescheduleBookingView(APIView):
                 .exclude(pk=booking.pk)
                 .count()
             )
-            if booked >= booking.doctor.max_per_slot:
+            if booked >= booking.provider_max_per_slot:
                 return Response(
                     {'message': f'Slot "{new_slot}" on {new_date} is full. Please pick another slot.'},
                     status=400
@@ -480,7 +479,7 @@ class ScanQRView(APIView):
             queue_position = (
                 Booking.objects
                 .filter(
-                    doctor_id=booking.doctor_id,
+                    **booking.provider_filter,
                     date=booking.date,
                     slot=booking.slot,
                     status='CONFIRMED',
@@ -499,9 +498,19 @@ class ScanQRView(APIView):
             'patient_mobile': booking.patient_display_mobile,
             'booked_by_name': booking.user.first_name or booking.user.username,
             'is_for_other':   bool(booking.booked_for_name),
-            'doctor_name':    booking.doctor.name,
-            'specialization': booking.doctor.specialization,
-            'doctor_fee':     booking.doctor.fee,
+            # The doctor_* keys are kept and kept POPULATED for a scan booking
+            # (name → scan name, specialization → modality, fee → price). They
+            # are API contract: build 36 reads them and would render an empty
+            # card, or crash, on a null. A patient who books a scan on the web
+            # and then opens the old app sees "MRI Brain / MRI / ₹4500" under a
+            # "doctor" label — mislabelled, but true and legible. The provider_*
+            # keys below are the correct names for new clients.
+            'doctor_name':    booking.provider_name,
+            'specialization': booking.provider_detail,
+            'doctor_fee':     booking.provider_fee,
+            'provider_name':  booking.provider_name,
+            'provider_kind':  'SCAN' if booking.is_scan else 'DOCTOR',
+            'scan_id':        booking.scan_id,
             'hospital_name':  booking.hospital.name,
             'date':           str(booking.date),
             'slot':           booking.slot,
