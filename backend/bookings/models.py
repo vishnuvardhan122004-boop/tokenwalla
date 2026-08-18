@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from doctors.models import Doctor
 from hospitals.models import Hospital
+from scans.models import Scan
 from bookings.utils import parse_slot_datetime
 
 User = get_user_model()
@@ -49,7 +50,24 @@ class Booking(models.Model):
         (PAYOUT_PAID,       'Paid'),
     ]
     user         = models.ForeignKey(User,     on_delete=models.CASCADE,  related_name='bookings')
-    doctor       = models.ForeignKey(Doctor,   on_delete=models.PROTECT,  related_name='bookings')
+    # ── The provider: EXACTLY ONE of doctor / scan ────────────────────────────
+    # `doctor` was NOT NULL until scanning centres arrived. It is nullable now
+    # because a scan booking has no doctor — but "nullable" is not "optional":
+    # the CheckConstraint below requires exactly one of the two, so a booking
+    # with neither is rejected by the database. That is deliberate. A missed
+    # guard in application code then fails loudly at write time instead of
+    # silently creating an orphan booking that no queue, payout or notification
+    # can resolve.
+    #
+    # Read them through the provider_* properties rather than directly; that is
+    # what keeps the ~20 display sites (WhatsApp, push, receipts) from each
+    # needing their own None check.
+    doctor       = models.ForeignKey(Doctor,   on_delete=models.PROTECT,  related_name='bookings',
+                                     null=True, blank=True)
+    scan         = models.ForeignKey(Scan,     on_delete=models.PROTECT,  related_name='bookings',
+                                     null=True, blank=True)
+    # The facility, either way — a hospital for a doctor booking, the centre
+    # (also a Hospital row, kind=SCAN_CENTER) for a scan. Never null.
     hospital     = models.ForeignKey(Hospital, on_delete=models.PROTECT,  related_name='bookings')
     date         = models.DateField()
     slot         = models.CharField(max_length=20)
@@ -93,6 +111,67 @@ class Booking(models.Model):
         """Best contact number for the patient at the hospital — beneficiary's if given, else the account holder's."""
         return self.booked_for_mobile or self.user.mobile
 
+    # ── Provider accessors ────────────────────────────────────────────────────
+    # One layer so the rest of the codebase never asks "doctor or scan?". Every
+    # display site (notifications, receipts, serializers) reads provider_name and
+    # is correct for both without a branch.
+
+    @property
+    def is_scan(self):
+        return self.scan_id is not None
+
+    @property
+    def provider(self):
+        """The Doctor or Scan this booking is for."""
+        return self.scan if self.is_scan else self.doctor
+
+    @property
+    def provider_name(self):
+        """What the patient is booked with — "Dr. Hari krishna" or "MRI Brain"."""
+        p = self.provider
+        return p.name if p else ''
+
+    @property
+    def provider_detail(self):
+        """The line under the name: a doctor's specialization, a scan's modality."""
+        if self.is_scan:
+            return self.scan.modality or ''
+        return self.doctor.specialization if self.doctor else ''
+
+    @property
+    def provider_fee(self):
+        """List price in ₹ — consultation fee or scan price.
+
+        NOT what was charged. The amount actually taken is on the Payment row;
+        this is the provider's advertised price, which is what the display sites
+        were already showing.
+        """
+        if self.is_scan:
+            return self.scan.price
+        return self.doctor.fee if self.doctor else 0
+
+    @property
+    def provider_slots(self):
+        p = self.provider
+        return (p.slots or []) if p else []
+
+    @property
+    def provider_max_per_slot(self):
+        p = self.provider
+        return p.max_per_slot if p else 0
+
+    @property
+    def provider_filter(self):
+        """Kwargs selecting other bookings for the SAME provider.
+
+        Queue position and capacity both mean "other bookings against this
+        doctor" or "against this scan". Filtering on `doctor=self.doctor` would
+        be actively wrong for a scan: doctor is None there, so it matches
+        `doctor__isnull=True` — i.e. every scan booking at every centre in the
+        country. Hence an explicit key rather than a plain attribute read.
+        """
+        return {'scan_id': self.scan_id} if self.is_scan else {'doctor_id': self.doctor_id}
+
     @property
     def scheduled_datetime(self):
         """The slot's start as an aware datetime (Asia/Kolkata).
@@ -114,6 +193,18 @@ class Booking(models.Model):
                 condition=~models.Q(queue_payment_id=''),
                 name='uniq_booking_queue_payment_id_nonblank',
             ),
+            # Exactly one provider. This is what makes the nullable `doctor`
+            # column safe: neither-set and both-set are both rejected by the
+            # database, so a bug in a booking-creation path surfaces as an
+            # IntegrityError at the point of the mistake rather than as an
+            # unresolvable booking discovered later by a patient.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(doctor__isnull=False, scan__isnull=True)
+                    | models.Q(doctor__isnull=True,  scan__isnull=False)
+                ),
+                name='booking_exactly_one_provider',
+            ),
         ]
         indexes = [
             # Most-used query: queue for a hospital on a date
@@ -122,6 +213,9 @@ class Booking(models.Model):
             models.Index(fields=['user', 'status'],             name='idx_booking_user_status'),
             # Queue position lookup
             models.Index(fields=['doctor', 'date', 'status'],  name='idx_booking_doc_date_status'),
+            # The scan equivalent — queue position and slot capacity query it
+            # exactly as the doctor path does.
+            models.Index(fields=['scan', 'date', 'status'],    name='idx_booking_scan_date_status'),
             # Admin / reports
             models.Index(fields=['status'],                     name='idx_booking_status'),
             models.Index(fields=['created'],                    name='idx_booking_created'),

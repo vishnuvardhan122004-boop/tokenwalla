@@ -51,6 +51,18 @@ class Command(BaseCommand):
                 booking.save(update_fields=['doctor_payout_status'])
                 continue
 
+            # Same reason as the refund path: DoctorLedger is doctor-keyed and
+            # scan payout routing lands in slice 3. Crucially this does NOT mark
+            # the booking settled — it stays PENDING, so it is re-scanned every
+            # run and shows up as a growing, visible backlog rather than money
+            # owed to a centre quietly vanishing.
+            if booking.doctor_id is None:
+                logger.error(
+                    'Booking %s is a scan booking; scan ledger routing is not '
+                    'built yet (item 8 slice 3). Left PENDING on purpose.',
+                    booking.id)
+                continue
+
             try:
                 with transaction.atomic():
                     # Re-fetch under a row lock and re-check the payout status:

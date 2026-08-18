@@ -1,9 +1,16 @@
+from django.db.models import Q
 from rest_framework import serializers
+
 from .models import Booking
 
 
 class BookingSerializer(serializers.ModelSerializer):
-    doctor_name    = serializers.CharField(source='doctor.name',     read_only=True)
+    # Reads through provider_name so a scan booking serialises its scan's name
+    # here instead of a null. The key name stays `doctor_name` because installed
+    # app builds read it — see the note in BookingViewSet._serialize_booking.
+    doctor_name    = serializers.CharField(source='provider_name',    read_only=True)
+    provider_name  = serializers.CharField(read_only=True)
+    provider_kind  = serializers.SerializerMethodField()
     hospital_name  = serializers.CharField(source='hospital.name',   read_only=True)
     hospital_mobile = serializers.CharField(source='hospital.mobile', read_only=True)
     # user.first_name is the account holder's real name (set at registration).
@@ -23,10 +30,14 @@ class BookingSerializer(serializers.ModelSerializer):
             'id', 'token', 'status', 'date', 'slot', 'amount',
             'payment_id', 'order_id', 'created',
             'queue_access', 'queue_position', 'free_reschedule',
-            'doctor', 'doctor_name', 'hospital', 'hospital_name', 'hospital_mobile',
+            'doctor', 'doctor_name', 'scan', 'provider_name', 'provider_kind',
+            'hospital', 'hospital_name', 'hospital_mobile',
             'user', 'user_name', 'patient_name', 'patient_mobile', 'user_mobile',
             'booked_for_name', 'booked_for_mobile', 'is_for_other',
         ]
+
+    def get_provider_kind(self, obj):
+        return 'SCAN' if obj.is_scan else 'DOCTOR'
 
     def get_is_for_other(self, obj):
         return bool(obj.booked_for_name)
@@ -50,9 +61,12 @@ class BookingSerializer(serializers.ModelSerializer):
             return queue_map.get(obj.id)
 
         # Slow path (single-object detail view): one extra query, acceptable
+        # provider_filter, not `doctor=obj.doctor`: on a scan booking doctor is
+        # None, which would filter `doctor__isnull=True` and queue the patient
+        # against every scan booking in the system.
         waiting_ids = list(
             Booking.objects
-            .filter(doctor=obj.doctor, date=obj.date, status='CONFIRMED')
+            .filter(**obj.provider_filter, date=obj.date, status='CONFIRMED')
             .order_by('created')
             .values_list('id', flat=True)
         )
@@ -71,26 +85,30 @@ def build_queue_map(bookings_qs):
         queue_map = build_queue_map(bookings)
         BookingSerializer(bookings, many=True, context={'queue_map': queue_map})
     """
-    # Collect doctor IDs present in the queryset
-    doctor_ids = bookings_qs.values_list('doctor_id', flat=True).distinct()
+    # Group by PROVIDER — (doctor_id, scan_id) — not doctor alone. Keying on
+    # doctor_id only would give every scan booking the key (None, date) and
+    # queue patients at unrelated centres into one another's positions.
+    provider_ids = bookings_qs.values_list('doctor_id', 'scan_id').distinct()
+    doctor_ids = {d for d, _ in provider_ids if d is not None}
+    scan_ids   = {s for _, s in provider_ids if s is not None}
 
-    # Fetch all waiting bookings for those doctors, ordered for queue position
+    # Fetch all waiting bookings for those providers, ordered for queue position
     active = list(
         Booking.objects
         .filter(
-            doctor_id__in=doctor_ids,
+            Q(doctor_id__in=doctor_ids) | Q(scan_id__in=scan_ids),
             status='CONFIRMED',
         )
-        .order_by('doctor_id', 'date', 'created')
-        .values('id', 'doctor_id', 'date')
+        .order_by('doctor_id', 'scan_id', 'date', 'created')
+        .values('id', 'doctor_id', 'scan_id', 'date')
     )
 
     queue_map = {}
 
-    # Build position counters per (doctor_id, date) group
+    # Build position counters per (provider, date) group
     counters = {}
     for row in active:
-        key = (row['doctor_id'], str(row['date']))
+        key = (row['doctor_id'], row['scan_id'], str(row['date']))
         counters[key] = counters.get(key, 0) + 1
         queue_map[row['id']] = counters[key]
 
