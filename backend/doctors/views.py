@@ -10,7 +10,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from .models import Doctor
 from .serializers import DoctorSerializer
-from hospitals.models import exclude_test_hospitals, show_test_hospitals_to
+from hospitals.models import (
+    exclude_scan_centers, exclude_test_hospitals, show_test_hospitals_to,
+)
 from payments.payout_utils import payout_target
 from tokenwalla.permissions import IsHospitalStaff, IsDoctorOwnerHospitalOrAdmin
 from tokenwalla.utils import is_slot_bookable
@@ -125,6 +127,14 @@ class DoctorViewSet(viewsets.ModelViewSet):
         # a payout against it. Staff and admins still see them.
         if not show_test_hospitals_to(getattr(self.request, 'user', None)):
             qs = exclude_test_hospitals(qs, field='hospital__name')
+
+        # A scanning centre has Scans, not Doctors, so this should normally
+        # match nothing. It is here because "should" is not a guarantee: a
+        # centre mis-registered as a hospital, or one that added a doctor before
+        # its kind was corrected, would otherwise leak a bookable row into the
+        # installed app builds — which is exactly the failure the [TEST] filter
+        # above was added for, after it happened in production on 2026-08-11.
+        qs = exclude_scan_centers(qs, field='hospital__kind')
         return qs
 
     # ── Popularity ────────────────────────────────────────────────────────────

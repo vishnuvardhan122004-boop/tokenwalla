@@ -14,7 +14,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from tokenwalla.utils import is_valid_landline
 
 from .models import (
-    Hospital, HospitalPhoto, exclude_test_hospitals, show_test_hospitals_to,
+    Hospital, HospitalPhoto, exclude_scan_centers, exclude_test_hospitals,
+    show_test_hospitals_to,
 )
 from .serializers import HospitalSerializer
 
@@ -53,11 +54,26 @@ def _verify_otp(mobile, otp_entered):
 # ── Views ─────────────────────────────────────────────────────────────────────
 
 class HospitalListView(APIView):
-    """Public — list only APPROVED (active) hospitals."""
+    """Public — list only APPROVED (active) hospitals.
+
+    `?kind=SCAN_CENTER` opts into scanning centres. Without it the response is
+    hospitals only, byte-for-byte what it was before centres existed — which is
+    the whole point: the installed app builds calling this endpoint have never
+    heard of a Scan and would render a centre as a bookable hospital. See
+    exclude_scan_centers().
+    """
     permission_classes = [AllowAny]
 
     def get(self, request):
         hospitals = Hospital.objects.filter(status='active').order_by('name')
+
+        # Unknown/absent value ⇒ hospitals. An old client sends nothing; a typo
+        # must not silently widen the list, so only the exact opt-in counts.
+        if request.query_params.get('kind') == Hospital.SCAN_CENTER:
+            hospitals = hospitals.filter(kind=Hospital.SCAN_CENTER)
+        else:
+            hospitals = exclude_scan_centers(hospitals)
+
         if not show_test_hospitals_to(request.user):
             hospitals = exclude_test_hospitals(hospitals)
         return Response(HospitalSerializer(hospitals, many=True).data)
