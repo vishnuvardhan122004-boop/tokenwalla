@@ -7,22 +7,23 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-18 (session 3) — **all code merged and deployed, no
-  outstanding security work, nothing wrong in production.** Item 4a (token
-  rotation) is closed; so are 5b steps 0, 1 and 2, and **4b is now closed too**
-  — all ten WhatsApp templates are approved and proven on a handset.
-  **5b step 3's two device checks found real gaps and both are fixed in code**
-  (app PR, unmerged): the hospital register screen had no map picker at all, and
-  a walk-in doctor rendered "0 Daily Slots" plus a "Queue View" plan row
-  promising a token it will never issue. Neither fix has run on a handset yet —
-  that, Android back, and the live ₹25.37 booking are what one preview build
-  closes. versionCode 37 is still free.
-  **New this session: item 8 — scanning centres**, agreed as a full booking
-  flow, slice 1 in progress.
-  Also merged since: the gunicorn threads 4→8 capacity bump (PR #37) and the
-  stress harness — both in **Later**, neither blocking the release. **New
-  2026-08-18: item 4c** — a live-mode Razorpay key is in local `backend/.env`.
-  Nothing was charged, but swap it before anyone tests a checkout locally.
+- **Last updated:** 2026-08-19 — **item 8 (scanning centres) is COMPLETE and
+  DEPLOYED. All ten slices, both repos, merged and live.** Production is on
+  `3ebf78e8`; `/api/scans/` returns 200 for the first time, and the default
+  `/api/hospitals/` is still 13 rows, all `HOSPITAL`, zero leak — a malformed
+  `?kind=` fails closed, so build 36 in the wild sees exactly what it saw
+  before. 304 backend tests, 25 frontend, migrations clean.
+  **The feature is live but INVISIBLE**: no scanning centre is registered yet,
+  so nothing changes for a patient until one signs up at `/Husercreate` and
+  adds scans. That is the intended state, not a gap.
+  Also closed: **4b** (all ten WhatsApp templates approved and proven on a
+  handset) and the two app fixes from the 5b device checks (map picker on the
+  hospital register screen; walk-in "0 Daily Slots" and the contradictory
+  "Queue View" plan row).
+  **Still open and unchanged: item 5b step 3 — the app has never run on a
+  device.** Two app PRs merged today are unbuilt. That preview build is now the
+  oldest thing on the list. **4c** (live Razorpay key in local `backend/.env`)
+  is also still open.
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -564,8 +565,9 @@ verification gap (`/health/` now reports `RAILWAY_GIT_COMMIT_SHA`).
 ### 5b. What is actually left 🟠 — down to a store release
 
 **Steps 0, 1 and 2 all closed 2026-08-17.** Nothing is wrong in production and
-there is no outstanding security work. What remains is two device checks and
-the release itself.
+there is no outstanding security work. What remains is **one preview build and
+the device pass it enables** — true for five days now, while the app repo has
+accumulated three merged-but-unbuilt PRs (#13, #14, #15).
 
 **~~0. Blank `APP_LATEST_VERSION`~~ ✅ 2026-08-17** — verified blank:
 
@@ -588,13 +590,37 @@ through end-to-end and the message arrived. **The last unproven path is proven.*
 Meta, updated on Railway, redeploy clean, and confirmed by the same real booking
 above. There is no outstanding credential exposure.
 
-**3. Finish the two device checks that have never run.** 🟠 **← START HERE.**
+**3. Cut a PREVIEW build and do the device pass.** 🟠 **← START HERE. This is
+the oldest open item in the file.**
+
 Confirmed on-device 2026-08-17: push (incl. after an account switch), booking,
-cancel, the doctor page, the update prompt, and WhatsApp. Still untested:
-  - the **hospital location picker** — highest risk: Leaflet in a WebView modal
-    plus the `expo-location` permission flow
-  - a **walk-in (slotless) doctor** — must show hours, days and a call button
-    and **no Book button**
+cancel, the doctor page, the update prompt, and WhatsApp.
+
+**Both original device checks found real bugs, and both are now FIXED AND
+MERGED but still UNBUILT** (app `main` `a20ad2e`):
+  - the **hospital register screen had no map picker at all** — the component
+    already existed and was used by the hospital *profile* screen and by the
+    website; register simply never called it (app PR #13)
+  - a **walk-in doctor** rendered "0 Daily Slots" / "10 Per Slot", and carried a
+    "Queue View - Token + live queue position tracking" row two lines above a
+    summary reading "Walk-in - no token" (app PRs #13, #14)
+
+**Nothing merged into the app has ever run on a handset** — that now includes
+all of slice 9 (scanning centres in the app). There is no simulator or Android
+SDK on this machine, so a build is the only way to check any of it. What to
+exercise once installed:
+  - hospital register -> **Pin exact location on map**: does Leaflet render, or
+    a half-grey panel? Does "use my location" prompt and fly? **Press Android
+    back while the map modal is open** — it must close the modal, not throw you
+    to hospital login and lose the whole form
+  - a **walk-in doctor** — `Walk-in / Visit Type`, no plan row, no Book button,
+    call button works
+  - **Scan Centres tab** — with no centre registered it must read "No scanning
+    centres yet", NOT list hospitals. That is `utils/scanCenters.ts` doing its
+    job; hospitals appearing there means the client-side `kind` filter broke
+  - **Android back** from doctor detail and payment
+  - a real **Rs 25.37 booking** — the APK carries a live-mode gateway key, so
+    this charges a real card
 
 **4. Production build**, only after 3:
 
@@ -676,7 +702,37 @@ money (~Rs 0.25/send) before they die on compute. So do not spend another
 session on workers, replicas, AWS or async — that was priced out on 2026-08-18
 and the answer was no.
 
-### 8. Scanning centres — a second provider type 🟢 IN PROGRESS
+### ~~8. Scanning centres — a second provider type~~ ✅ 2026-08-19 — SHIPPED
+
+**All ten slices merged and deployed.** Backend `main` `3ebf78e`, app `main`
+`a20ad2e`. Verified against production, not assumed:
+
+| Probe | Result |
+|---|---|
+| `/api/hospitals/` default | 13 rows, all `HOSPITAL`, **zero leak** |
+| `?kind=SCAN_CENTER` | `[]` — no centres registered yet |
+| `?kind=scan_center` (typo) | **fails closed** |
+| `/api/doctors/` | 15, unaffected |
+| `/api/scans/` | **200**, live |
+
+**Two things are left, and neither is code:**
+
+1. **A scanning centre has to register.** The feature is live but invisible
+   until one signs up at `/Husercreate` (pick "Scanning Centre"), is approved in
+   the admin, and adds scans from its dashboard. Nothing changes for a patient
+   before that.
+2. **`FULL` collection is refused with a 409** — see the GST note below. Every
+   scan prices as `SERVICE_ONLY`: the patient pays the ₹25.37 service fee
+   online and the scan price at the centre.
+
+**Not built, deliberately:** slice 10's WhatsApp template `scan_report_ready` is
+**not submitted to Meta** (see item 9). Push fires meanwhile, so a patient whose
+report is uploaded is still told — on one channel instead of two.
+
+The original plan and its reasoning follow, kept because the design decisions
+are the useful part.
+
+### 8-history. The plan, as agreed 2026-08-18
 
 **Agreed 2026-08-18 with Vishnu: the FULL booking flow, not a listings-only
 first cut.** The patient journey he asked for, verbatim:
@@ -859,8 +915,69 @@ scan-centre branch in slice 3. No payout API.
 
 ---
 
+### 9. Submit `scan_report_ready` to Meta 🟡
+
+**The last unfinished piece of item 8, and it is a form, not code.** The backend
+already reads this exact template name, so nothing needs redeploying once it is
+approved.
+
+Paste-ready content is in `backend/notifications/WHATSAPP_TEMPLATES.md` §11.
+Name `scan_report_ready`, **category Utility** (not Marketing), English, no
+header/footer/buttons.
+
+```
+Hello {{1}}, your report for {{2}} at {{3}} is ready. Booking reference {{4}}.
+Open TokenWalla to view and download it. Please contact the centre if you have
+any questions.
+```
+
+Samples: Rahul · MRI Brain · Vijaya Diagnostics · TW-TEST-0001.
+
+**Three rules baked into that wording, each learned the hard way:** it opens
+*and* closes with text (Meta's own inline warning: variables cannot sit at
+either end); it says "Booking reference" not "token" (the word *token* beside a
+code-like value trips the Authentication/OTP classifier — that is what got
+§8–10 rejected the first time); and it carries **no link**, because the report
+is medical PII and a WhatsApp message is forwardable.
+
+**Do NOT try to automate the submission.** Attempted 2026-08-18 via browser: the
+WhatsApp Manager create-template form accepts clicks and typing, shows a fully
+valid state — name field green-ticked, Submit enabled — and submits nothing. Two
+attempts, no template, and **no entry in the Activity log**, which is the
+authoritative check. Reading Meta state in the browser works fine; only the
+write fails. Fill it in by hand.
+
+Verify after approval:
+
+```bash
+python manage.py send_test_whatsapp <mobile> --template scan_report_ready
+```
+
+---
+
 ## Next
 
+- **Slice 10 has no app half** — new 2026-08-19. The website ships scan-report
+  download in `MyBookings.js`; the app (`a20ad2e`) has **no `reports/` call at
+  all**. A patient who books a scan on the app is notified their report is
+  ready and then has nowhere in the app to open it. Same shape as the two gaps
+  below it, and the same cause: a feature that spans repos, finished on one.
+- **`/ship`'s own secret-scan trips the production guard** — new 2026-08-19.
+  Step 4 of the checklist greps the diff for the live Razorpay key prefix, and
+  `guard-production.py` matches that prefix **in the command text itself**, so
+  the gate's own step is blocked every time it runs. It fired twice today: once
+  on the scan, once while writing this very bullet, which is why this sentence
+  describes the prefix instead of quoting it. Same false-positive shape as the
+  `origin/main` one below — the guard matches mentions, not usage. Until it is
+  narrowed, **a `/ship` report saying "no secrets" is quietly one check short**,
+  and that is the part that matters: the gate silently degrades rather than
+  failing loudly. One-line fix, its own commit, never folded into a feature PR.
+- **The test counts in the docs are badly stale** — new 2026-08-19. `CLAUDE.md`
+  said 158 backend tests and the `/ship` checklist says 99; the real numbers are
+  **304 backend / 25 frontend** (250 backend before item 8). A stale baseline
+  defeats the check it exists for — "did the count drop?" is unanswerable when
+  nobody knows what it should be. `CLAUDE.md` fixed today; the `/ship` skill
+  still says 99.
 - **Check both repos when a feature spans them** — new 2026-08-13 (session 2),
   and it has now bitten twice in one day. The walk-in/landline work shipped
   with the landline fallback in the app doctor card but not the web one, and
@@ -1002,6 +1119,59 @@ Resolved and deliberately removed, so they don't get re-added:
 > since 1.1.3 (36) on 2026-08-08, so **nothing in the app entries has reached a
 > patient** until an EAS build ships. Check item 5 before assuming an app change
 > is live.
+
+- **2026-08-19** — **Item 8 shipped: scanning centres, all ten slices, both
+  repos.** Backend `main` `3ebf78e`, app `main` `a20ad2e`, production on
+  `3ebf78e8`. A centre is a `Hospital` row with `kind='SCAN_CENTER'`; the
+  bookable unit is a new `Scan`. Checkout, reports, both front ends, the app.
+  **The guard is the load-bearing part** and it verified against production:
+  the default `/api/hospitals/` is unchanged for build 36 in the wild, and a
+  malformed `?kind=` fails closed rather than widening the list.
+
+  **Three bugs the test suite could not have caught, all found by looking:**
+  **(1) `build_queue_map` grouped by `doctor_id`**, so every scan booking would
+  have shared the key `(None, date)` and queued patients at unrelated centres
+  into one another's positions. The same trap sits behind any
+  `filter(doctor=booking.doctor)` on a scan booking — doctor is None, the ORM
+  degrades it to `doctor__isnull=True`, and it matches every scan booking in the
+  system. Hence `Booking.provider_filter`, with a test that demonstrates the
+  naive version failing so nobody simplifies it back.
+  **(2) The centre dashboard showed a "Doctors" tab** because `kind` was absent
+  from the **login response** — every backend test passed while the screen was
+  wrong. Found in a browser, now pinned by `LoginPayloadTests`.
+  **(3) The test suite was uploading to real Cloudinary** — the production media
+  store. With the Cloudinary backend configured, *any* test saving a
+  `FileField`/`ImageField` made a live outbound upload. `settings.py` now forces
+  `FileSystemStorage` into a temp `MEDIA_ROOT` under `manage.py test`, the same
+  way it already forces LocMemCache. One module went from 8.4s to 0.09s — that
+  gap was network. Recorded as CLAUDE.md trap 4b.
+
+  **The GST question turned out to be narrower than first thought.** It only
+  bites in `FULL` mode, where the scan price flows online. Under `SERVICE_ONLY`
+  — the default — the price never passes through us and the arithmetic is
+  identical to a doctor's. So checkout shipped for `SERVICE_ONLY`, and
+  `_create_scan_order` **refuses a `FULL` scan with a 409 and never calls the
+  gateway**. The CA's answer unblocks exactly one thing: deleting that refusal.
+
+- **2026-08-19** — **Five PRs merged after three failed rounds, and the cause is
+  worth remembering.** `main` did not move across three separate "I merged"
+  reports. Two independent faults: (1) the first merge order given used
+  **stacked** compare links, so PR #42 merged into `feat/scan-bookings` instead
+  of `main` and its content never reached production; (2) the remaining PRs had
+  **never been opened** — a `compare/...` link opens the *form*, it does not
+  create anything. Once opened, the blocker was GitHub's **two-step merge**:
+  "Merge pull request" only expands a commit-message box; the actual merge is
+  the **"Confirm merge"** button inside it. **Always give `compare/main...branch`
+  links, and check the badge is purple "Merged", not green "Open".**
+
+- **2026-08-19** — **All ten WhatsApp templates approved and proven on a
+  handset** (closes item 4b). §8–10 delivered against the live Railway service.
+  `WHATSAPP_TEMPLATES.md` no longer says "seven".
+
+- **2026-08-19** — **Two app fixes from the 5b device checks merged** (app PRs
+  #13, #14): the map picker on the hospital register screen, and the walk-in
+  doctor's stats row plus the contradictory "Queue View" plan row. **Merged, not
+  built** — see item 5b step 3.
 
 - **2026-08-16** — **The three new templates submitted to Meta, via the browser.**
   `queue_advance`, `booking_on_hold` and `hospital_cancellation` are **In review**

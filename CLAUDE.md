@@ -152,7 +152,7 @@ salaried doctor's money goes to their hospital) and *on which rail*
 ## Testing
 
 `cd backend && python manage.py test` (304 tests) and `CI=true npx react-scripts
-test --watchAll=false` (13). Payment changes must keep `payments/tests_payments.py`
+test --watchAll=false` (25). Payment changes must keep `payments/tests_payments.py`
 and `payments/tests_integration.py` green — they cover the fee math, refund
 tiers, the manual-payout flow, and the order-binding/idempotency regressions.
 
