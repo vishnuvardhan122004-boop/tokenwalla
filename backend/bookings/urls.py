@@ -19,6 +19,7 @@ from .views import (
     RescheduleBookingView,
     ScanQRView,
 )
+from scans.views import ScanReportDownloadView, ScanReportListCreateView
 
 urlpatterns = [
     path('',                         AllBookingsView.as_view()),
@@ -31,6 +32,12 @@ urlpatterns = [
     path('cancel/<int:pk>/',         CancelBookingView.as_view()),
     path('absence-refund/<int:pk>/', AbsenceRefundView.as_view()),
     path('reschedule/<int:pk>/',     RescheduleBookingView.as_view()),
+
+    # ── Scan reports ──────────────────────────────────────────────────────────
+    # Nested under the booking because access is decided by the BOOKING's owner,
+    # never by the report id alone.
+    path('<int:pk>/reports/',                        ScanReportListCreateView.as_view()),
+    path('<int:pk>/reports/<int:report_id>/download/', ScanReportDownloadView.as_view()),
 
     # ── QR Scanner endpoints ──────────────────────────────────────────────────
     # GET  /api/bookings/scan/<token>/  → look up booking info

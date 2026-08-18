@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from hospitals.models import Hospital
 
-from .models import Scan
+from .models import Scan, ScanReport
 
 
 class ScanSerializer(serializers.ModelSerializer):
@@ -97,3 +97,29 @@ class ScanSerializer(serializers.ModelSerializer):
         rep['image'] = self.get_image_url(instance)
         rep.pop('image_url', None)
         return rep
+
+
+class ScanReportSerializer(serializers.ModelSerializer):
+    """A scan report, WITHOUT its storage URL.
+
+    `file` is deliberately absent from `fields`. It is medical PII, and the
+    storage backend's URL is a bearer token: anyone who obtains it can read the
+    report, forever, with no login. Clients get `download_url` — a path on our
+    own API that checks ownership on every request — and nothing else.
+    """
+    download_url = serializers.SerializerMethodField()
+    uploaded_by_name = serializers.SerializerMethodField()
+    title = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model  = ScanReport
+        fields = ['id', 'booking', 'title', 'notes', 'created',
+                  'download_url', 'uploaded_by_name']
+        read_only_fields = ['id', 'booking', 'created']
+
+    def get_download_url(self, obj):
+        return f'/api/bookings/{obj.booking_id}/reports/{obj.id}/download/'
+
+    def get_uploaded_by_name(self, obj):
+        u = obj.uploaded_by
+        return (u.first_name or u.username) if u else ''

@@ -425,3 +425,28 @@ def push_payout_to_hospital(batch):
         )
     except Exception as exc:
         logger.warning('[push] hospital payout push failed for batch %s: %s', batch.id, exc)
+
+
+def push_scan_report_ready(booking):
+    """Patient alert when a scan report is uploaded.
+
+    Deep-links to my-bookings rather than carrying the file: the report is
+    served only behind an ownership check, so the patient opens it from inside
+    a session that proves who they are.
+    """
+    try:
+        push_to_user(
+            booking.user,
+            title='📄 Your report is ready',
+            body=f'{booking.provider_name} at {booking.hospital.name} — open TokenWalla to view it.',
+            data={
+                'screen': 'my-bookings',
+                'type': 'scan_report',
+                'appId': f'report-{booking.id}',
+                'audience': 'patient',
+                'token': booking.token,
+            },
+            role='patient',
+        )
+    except Exception as exc:
+        logger.warning('[push] scan report push failed for booking %s: %s', booking.id, exc)

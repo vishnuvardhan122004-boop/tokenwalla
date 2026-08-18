@@ -6,13 +6,18 @@ only touch its own scans. Deliberately mirrors DoctorViewSet rather than
 inventing a second shape, so anyone who knows one knows the other.
 """
 import logging
+import threading
 from datetime import datetime
 
 from django.db.models import Count, F
+from django.http import FileResponse
+from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from hospitals.models import (
     Hospital, exclude_test_hospitals, show_test_hospitals_to,
@@ -20,8 +25,8 @@ from hospitals.models import (
 from tokenwalla.permissions import IsHospitalStaff, IsScanOwnerCenterOrAdmin
 from tokenwalla.utils import is_slot_bookable
 
-from .models import Scan
-from .serializers import ScanSerializer
+from .models import Scan, ScanReport
+from .serializers import ScanReportSerializer, ScanSerializer
 
 logger = logging.getLogger('tokenwalla')
 
@@ -159,3 +164,159 @@ class ScanViewSet(viewsets.ModelViewSet):
             )
         self.perform_create(serializer)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+# ── Reports ───────────────────────────────────────────────────────────────────
+
+def _notify_report_ready_async(report):
+    """Tell the patient their report is up — push + WhatsApp, off-thread.
+
+    THIS IS THE FIFTH BACKGROUND THREAD IN THE CODEBASE, and it does a DB write
+    (WhatsAppLog, plus stamping notified_at). Any test that reaches the report
+    upload endpoint MUST patch `scans.views._notify_report_ready_async`, or the
+    thread outlives the test, opens its own connection, and collides with a
+    LATER, UNRELATED test's first write against the shared-cache in-memory
+    SQLite — failing a different test about one run in four. See CLAUDE.md.
+    """
+    def _run():
+        from django.db import connection
+        from django.utils import timezone as tz
+        from notifications.push import push_scan_report_ready
+        from notifications.whatsapp import send_scan_report_ready
+        try:
+            booking = report.booking
+            try:
+                push_scan_report_ready(booking)
+            except Exception as exc:
+                logger.warning('scan report push failed for %s: %s', report.id, exc)
+            try:
+                send_scan_report_ready(booking)
+            except Exception as exc:
+                logger.warning('scan report WhatsApp failed for %s: %s', report.id, exc)
+            ScanReport.objects.filter(pk=report.pk).update(notified_at=tz.now())
+        except Exception as exc:
+            logger.exception('scan report notify failed for %s: %s', report.id, exc)
+        finally:
+            connection.close()
+
+    threading.Thread(target=_run, name=f'scan-report-{report.id}', daemon=True).start()
+
+
+
+def _may_see_report(user, booking):
+    """Who is allowed anywhere near a scan report.
+
+    A scan report is medical PII, so this is an allow-list of three, checked on
+    every single request rather than once at upload:
+
+      * the patient the booking belongs to,
+      * the centre that produced it (its own staff account, and no other
+        centre's — the hospital id a staff user manages lives in
+        User.last_name, the same convention every other owner check here uses),
+      * an admin.
+
+    Deliberately NOT "anyone with the link": the storage URL is never exposed,
+    precisely so that forwarding a WhatsApp message cannot leak a report.
+    """
+    if not user or not user.is_authenticated:
+        return False
+    if getattr(user, 'role', None) == 'admin' or user.is_staff:
+        return True
+    if booking.user_id == user.id:
+        return True
+    return (
+        getattr(user, 'role', None) == 'hospital'
+        and str(getattr(user, 'last_name', '')) == str(booking.hospital_id)
+    )
+
+
+def _is_centre_staff(user, booking):
+    """Only the centre that ran the scan may UPLOAD. A patient may read their
+    own report but must never be able to publish one."""
+    if not user or not user.is_authenticated:
+        return False
+    if getattr(user, 'role', None) == 'admin' or user.is_staff:
+        return True
+    return (
+        getattr(user, 'role', None) == 'hospital'
+        and str(getattr(user, 'last_name', '')) == str(booking.hospital_id)
+    )
+
+
+class ScanReportListCreateView(APIView):
+    """GET  /api/bookings/<pk>/reports/   — list (patient, centre or admin)
+    POST /api/bookings/<pk>/reports/   — upload (centre or admin only)
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes     = [MultiPartParser, FormParser, JSONParser]
+
+    def _booking(self, pk):
+        from bookings.models import Booking
+        return get_object_or_404(
+            Booking.objects.select_related('user', 'hospital', 'scan'), pk=pk)
+
+    def get(self, request, pk):
+        booking = self._booking(pk)
+        if not _may_see_report(request.user, booking):
+            # 404, not 403: a 403 confirms the booking exists, which is itself a
+            # small leak when the id is guessable.
+            return Response({'message': 'Not found.'}, status=404)
+        return Response(ScanReportSerializer(booking.reports.all(), many=True).data)
+
+    def post(self, request, pk):
+        booking = self._booking(pk)
+        if not _is_centre_staff(request.user, booking):
+            return Response({'message': 'Not found.'}, status=404)
+
+        if booking.scan_id is None:
+            return Response(
+                {'message': 'Reports can only be attached to a scan booking.'},
+                status=400)
+
+        upload = request.FILES.get('file')
+        if not upload:
+            return Response({'message': 'A file is required.'}, status=400)
+
+        report = ScanReport.objects.create(
+            booking     = booking,
+            file        = upload,
+            title       = (request.data.get('title') or '').strip()[:200],
+            notes       = (request.data.get('notes') or '').strip(),
+            uploaded_by = request.user,
+        )
+
+        # Tell the patient, off-thread. The report is already durably saved, so
+        # a slow or failing Meta call must never fail this upload — the centre
+        # would re-upload and we would store the file twice.
+        _notify_report_ready_async(report)
+
+        logger.info('Scan report %s uploaded for booking %s by user %s',
+                    report.id, booking.id, request.user.id)
+        return Response(ScanReportSerializer(report).data, status=201)
+
+
+class ScanReportDownloadView(APIView):
+    """GET /api/bookings/<pk>/reports/<report_id>/download/
+
+    The ONLY route to the file. Ownership is re-checked here on every request,
+    which is the whole point: the storage URL is never handed out, so a
+    forwarded link is worthless without a session that passes _may_see_report.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk, report_id):
+        from bookings.models import Booking
+        booking = get_object_or_404(
+            Booking.objects.select_related('user', 'hospital'), pk=pk)
+        if not _may_see_report(request.user, booking):
+            return Response({'message': 'Not found.'}, status=404)
+
+        report = get_object_or_404(ScanReport, pk=report_id, booking=booking)
+        try:
+            fh = report.file.open('rb')
+        except Exception:
+            logger.exception('Scan report %s file could not be opened', report.id)
+            return Response({'message': 'The report file is unavailable.'}, status=502)
+
+        filename = (report.file.name or 'report').rsplit('/', 1)[-1]
+        return FileResponse(fh, as_attachment=True, filename=filename)

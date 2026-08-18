@@ -69,6 +69,11 @@ export default function MyBookings() {
   const [payingReschedule,  setPayingReschedule]  = useState(false);
   const [doctorSlots,       setDoctorSlots]       = useState([]);
   const [waOptIn,           setWaOptIn]           = useState(true);
+  // { [bookingId]: report[] }. Fetched only for completed SCAN bookings —
+  // a consultation has no report, and asking for one on every card would be a
+  // request per booking for nothing.
+  const [reports,           setReports]           = useState({});
+  const [downloading,       setDownloading]       = useState(null);
   const [downloadingId,     setDownloadingId]     = useState(null);
 
   const showToast = (msg, type = 'success') => {
@@ -270,6 +275,48 @@ export default function MyBookings() {
   };
 
   const visible     = filterBookings(bookings, tab);
+  // A scan's journey does not end at the visit: the report comes back hours or
+  // days later. This is the only place in the product where something arrives
+  // AFTER a booking is COMPLETED.
+  useEffect(() => {
+    const scanBookings = bookings.filter(
+      b => b.provider_kind === 'SCAN' && b.status === 'COMPLETED');
+    if (scanBookings.length === 0) return;
+    let cancelled = false;
+    Promise.all(scanBookings.map(b =>
+      API.get(`/bookings/${b.id}/reports/`)
+        .then(({ data }) => [b.id, Array.isArray(data) ? data : []])
+        .catch(() => [b.id, []])          // 404 on a backend without reports yet
+    )).then(pairs => {
+      if (!cancelled) setReports(Object.fromEntries(pairs));
+    });
+    return () => { cancelled = true; };
+  }, [bookings]);
+
+  // The report is never a plain link: the endpoint requires the Authorization
+  // header, so an <a href> would 401. Fetch it as a blob through the API client
+  // and hand the browser the bytes.
+  const downloadReport = async (bookingId, report) => {
+    setDownloading(report.id);
+    try {
+      const res = await API.get(report.download_url.replace(/^\/api/, ''), {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${report.title || 'report'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setToast({ type: 'error', msg: 'Could not download the report. Please try again.' });
+    } finally {
+      setDownloading(null);
+    }
+  };
+
   const activeCount = bookings.filter(b => b.status === 'CONFIRMED' || b.status === 'IN_PROGRESS').length;
   const amSlots     = doctorSlots.filter(s => s.includes('AM'));
   const pmSlots     = doctorSlots.filter(s => s.includes('PM'));
@@ -296,6 +343,13 @@ export default function MyBookings() {
         .mb-card { background: #fff; border: 1px solid var(--blue-100); border-radius: 18px; overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s; box-shadow: var(--shadow-sm); }
         .mb-card:hover { border-color: var(--blue-200); box-shadow: var(--shadow-md); }
         .mb-card-top { display: flex; align-items: stretch; }
+        .mb-reports { padding: 14px 18px; border-top: 1px solid var(--blue-50); background: #F8FAFC; }
+        .mb-reports-title { font-size: 12.5px; font-weight: 700; color: var(--gray-700); margin-bottom: 8px; }
+        .mb-report-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0; }
+        .mb-report-name { font-size: 13.5px; color: var(--gray-800); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mb-report-btn { border: 1px solid var(--blue-200); background: #fff; color: var(--blue-700); font-size: 12.5px; font-weight: 700; padding: 6px 13px; border-radius: 9px; cursor: pointer; flex-shrink: 0; }
+        .mb-report-btn:disabled { opacity: .6; cursor: default; }
+        .mb-report-pending { font-size: 12.5px; color: var(--gray-500); }
         .mb-token-col { width: 110px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 14px; border-right: 1px solid var(--blue-50); background: var(--blue-50); }
         .mb-token-label { font-size: 10px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--blue-400); margin-bottom: 6px; }
         .mb-token-num { font-family: var(--font-mono); font-size: 1.4rem; font-weight: 500; color: var(--blue-700); line-height: 1; text-align: center; word-break: break-all; }
@@ -453,6 +507,38 @@ export default function MyBookings() {
                           </div>
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>Auto-refreshes every 15s</div>
+                      </div>
+                    )}
+
+                    {/* ── SCAN REPORTS (the stage a consultation doesn't have) ── */}
+                    {booking.provider_kind === 'SCAN' && booking.status === 'COMPLETED' && (
+                      <div className="mb-reports">
+                        {(reports[booking.id] || []).length > 0 ? (
+                          <>
+                            <div className="mb-reports-title">
+                              <i className="bi bi-file-earmark-medical me-1" />Your reports
+                            </div>
+                            {reports[booking.id].map(r => (
+                              <div className="mb-report-row" key={r.id}>
+                                <span className="mb-report-name">{r.title || 'Report'}</span>
+                                <button
+                                  className="mb-report-btn"
+                                  disabled={downloading === r.id}
+                                  onClick={() => downloadReport(booking.id, r)}
+                                >
+                                  {downloading === r.id
+                                    ? 'Downloading…'
+                                    : <><i className="bi bi-download me-1" />Download</>}
+                                </button>
+                              </div>
+                            ))}
+                          </>
+                        ) : (
+                          <div className="mb-report-pending">
+                            <i className="bi bi-hourglass-split me-1" />
+                            Your report isn&apos;t ready yet. We&apos;ll message you the moment it is.
+                          </div>
+                        )}
                       </div>
                     )}
 

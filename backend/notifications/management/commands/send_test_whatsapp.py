@@ -42,6 +42,8 @@ SAMPLE_PARAMS = {
                              '2026-07-26', 'TW-TEST-0001'],
     # {{1}} doctor {{2}} amount {{3}} hospital {{4}} reference
     'doctor_payout':        ['Anita Rao', '500.00', 'City Care Clinic', 'NA'],
+    # {{1}} patient {{2}} scan {{3}} centre {{4}} booking reference
+    'scan_report_ready':    ['Rahul', 'MRI Brain', 'Vijaya Diagnostics', 'TW-TEST-0001'],
 }
 
 

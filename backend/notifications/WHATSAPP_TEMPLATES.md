@@ -21,7 +21,8 @@ order** by the `params` list in `notifications/whatsapp.py`.
 > all confirmed to match what `notifications/whatsapp.py` sends. Those seven need
 > **no** submitting; treat them as a record of what was approved.
 >
-> **Every section is ✅ as of 2026-08-18 — nothing is pending submission.**
+> **§11 (`scan_report_ready`) is ⏳ NOT SUBMITTED — added 2026-08-18 with scan
+> reports. §1–10 are all ✅.**
 > Any section marked ⏳ SUBMIT THIS is NOT approved yet and does need
 > submitting. Templates get added whenever a new sender is written, so this block
 > deliberately does not name a total — check the per-section marker, which is the
@@ -418,6 +419,48 @@ Env var: `WHATSAPP_TEMPLATE_HOSPITAL_CANCELLED` (default `hospital_cancellation`
 > three are built into the command).
 
 ---
+
+## 11. `scan_report_ready`  ⏳ SUBMIT THIS (added 2026-08-18, not yet submitted)
+
+Sent when a scanning centre uploads a result file for a completed scan booking
+(`POST /api/bookings/<id>/reports/`). The push half fires today regardless, so
+until this is approved the patient is still told — just on one channel.
+
+**Category: Utility.** Language: `en`.
+
+**Carries NO link, deliberately.** The report is medical PII and is served only
+behind an ownership check. A WhatsApp message is forwardable, so a URL in it
+would hand the report to whoever the message reaches. The patient opens the app
+or the site, where their session proves who they are.
+
+Params, in the order `notifications.whatsapp.send_scan_report_ready` sends them:
+
+| | |
+|---|---|
+| `{{1}}` | patient name |
+| `{{2}}` | scan name (e.g. "MRI Brain") |
+| `{{3}}` | centre name |
+| `{{4}}` | booking reference |
+
+Suggested body — note it opens and closes with text, never a variable, which is
+the rule that got §8–10 rejected the first time:
+
+```
+Hello {{1}}, your report for {{2}} at {{3}} is ready. Booking reference {{4}}.
+Open TokenWalla to view and download it. Please contact the centre if you have
+any questions.
+```
+
+**"Booking reference", never "token"** — the word *token* beside a code-like
+value trips Meta's Authentication/OTP classifier (see §2).
+
+Verify after approval:
+
+```bash
+python manage.py send_test_whatsapp <mobile> --template scan_report_ready
+```
+
+Sample params are built into the command.
 
 ## Submission checklist
 
