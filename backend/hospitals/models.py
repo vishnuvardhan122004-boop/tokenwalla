@@ -112,13 +112,12 @@ class Hospital(models.Model):
     open_time    = models.CharField(max_length=5, blank=True)
     close_time   = models.CharField(max_length=5, blank=True)
     # ── Registration / licence number ─────────────────────────────────────────
-    # The diagnostic-centre registration number a centre is licensed under
-    # (states differ: Clinical Establishments Act registration, AERB for CT/PET,
-    # a lab's NABL id). Free text and blank-able rather than validated: the
-    # format is not one we get to define, and a wrong regex would block real
-    # partners. It is REQUIRED to register a scanning centre and REQUIRED to
-    # approve one (see approval_blocker) — a hospital keeps registering without
-    # it, unchanged.
+    # The registration a centre operates under (states differ: Clinical
+    # Establishments Act, AERB for CT/PET, a lab's NABL id). NOT asked for at
+    # registration and NOT required to approve — verification happens on a phone
+    # call, and staff record the number here afterwards. Written only from
+    # Django admin, which is why it is blank-able and unvalidated: the format is
+    # not one we get to define.
     #
     # Never serialised publicly: it identifies the business, patients have no
     # use for it, and it is the field an impersonator would want to read.
@@ -147,24 +146,6 @@ class Hospital(models.Model):
 
     def __str__(self):
         return self.name
-
-    def approval_blocker(self):
-        """Why this row cannot go live yet, or None if it can be approved.
-
-        BOTH approval paths call this — the Django admin bulk action and the
-        admin API endpoint — so a requirement is added once instead of in each,
-        and neither can drift into approving something the other refuses.
-
-        A scanning centre must have its registration number on file before it
-        takes a single booking. It is the one field separating a real centre
-        from anybody who can type a name and a mobile number, and the
-        consequence of getting it wrong is a patient walking into a building
-        for an MRI.
-        """
-        if self.kind == self.SCAN_CENTER and not (self.license_number or '').strip():
-            return ('No registration / licence number on file — required before '
-                    'a scanning centre can be approved.')
-        return None
 
 
 class HospitalPhoto(models.Model):

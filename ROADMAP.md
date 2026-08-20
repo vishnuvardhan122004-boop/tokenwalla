@@ -765,7 +765,7 @@ untouched.
 | 7 | `ScanCenterDetails.js` (**the one new file**) — menu → slots → **call to book** | web | ✅ `feat/scan-web` |
 | 8 | Centre dashboard: manage scans, see the queue | web | ✅ `feat/scan-web` |
 | 9 | Mirror 5–8 | app | ✅ `feat/scan-centers` |
-| 11 | Production gaps: centre CTAs, licence-gated approval, centre payouts, FULL mode, app scan CRUD + reports | all three | ✅ |
+| 11 | Production gaps: centre CTAs, centre payouts, FULL mode, app scan CRUD + reports | all three | ✅ |
 | 10 | Report delivery — upload, WhatsApp, download | backend + web | ✅ `feat/scan-reports` |
 
 Slices 1–8 ship independently of the app; slice 9 rides the next build.
@@ -863,10 +863,12 @@ The other four gaps, all of them "the feature exists but nothing reaches it":
     footer, hero, both login screens. The form always had the toggle; a centre
     owner had no way to learn that. Now `?kind=SCAN_CENTER` preselects it from
     a link that says the words.
-  * **Centre-specific approval.** `Hospital.license_number` is required to
-    register a centre and required to approve one. `approval_blocker()` is one
-    method called by BOTH approval paths (admin action + admin API) so a new
-    requirement is added once.
+  * **Centre verification is a PHONE CALL, not a form field.** A registration
+    number was collected and gated on at first; that was reversed 2026-08-20 —
+    demanding it in the form only costs partners who don't have it to hand.
+    `Hospital.license_number` survives as an admin-only column where staff
+    record what the call turns up. There is no approval gate: a centre is
+    approved by a human who rang them.
   * **The app's Scans tab was read-only**, so a centre that registered on the
     app could never list a scan. `components/ScanEditorModal.tsx` is the
     centre's version of the doctor form, and `constants/slots.ts` now holds the

@@ -126,16 +126,11 @@ class HospitalRegisterView(APIView):
         if kind not in dict(Hospital.KIND_CHOICES):
             kind = Hospital.HOSPITAL
 
-        # A scanning centre must supply its registration / licence number here.
-        # Collected at registration rather than chased afterwards: approval is
-        # blocked without it (Hospital.approval_blocker), so asking later just
-        # means a partner sitting in 'pending' wondering why.
+        # Optional, and deliberately not required. Verification of a centre's
+        # registration happens on a PHONE CALL before approval, so demanding the
+        # number in the form only costs us partners who don't have it to hand.
+        # Staff record what the call turns up in Django admin.
         license_number = str(data.get('license_number', '') or '').strip()[:60]
-        if kind == Hospital.SCAN_CENTER and not license_number:
-            return Response(
-                {'message': 'Registration / licence number is required for a scanning centre.'},
-                status=400,
-            )
 
         hospital = Hospital.objects.create(
             name=name,
@@ -572,9 +567,6 @@ class HospitalApproveView(APIView):
             )
 
         if action == 'approve':
-            blocker = hospital.approval_blocker()
-            if blocker:
-                return Response({'message': blocker}, status=400)
             hospital.status = 'active'
             hospital.save(update_fields=['status'])
 
