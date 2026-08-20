@@ -112,6 +112,7 @@ export default function Footer() {
               <h6>{t('footer.hospital')}</h6>
               <Link to="/Hlogin">{t('footer.hospitalLogin')}</Link>
               <Link to="/Husercreate">{t('footer.registerHospital')}</Link>
+              <Link to="/Husercreate?kind=SCAN_CENTER">{t('footer.registerScanCenter')}</Link>
               <Link to="/Hdashboard">{t('footer.dashboard')}</Link>
             </div>
 

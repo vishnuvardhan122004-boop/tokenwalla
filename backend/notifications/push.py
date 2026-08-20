@@ -405,15 +405,21 @@ def push_payout_to_hospital(batch):
 
     Salaried doctors settle to the hospital's own payout account, so the hospital
     — not the doctor — is the party that needs to reconcile this one.
+
+    A scan-centre batch has no doctor: the centre IS the payee and the recipient
+    of this push. It is also the ONLY channel a centre gets, because the doctor
+    payout WhatsApp template is doctor-shaped and unapproved for centres.
     """
     try:
         doctor = batch.doctor
         ref = (batch.razorpay_payout_id or '').strip()
+        hospital_id = batch.center_id if batch.center_id else doctor.hospital_id
+        subject     = batch.center.name if batch.center_id else doctor.name
         push_to_hospital(
-            doctor.hospital_id,
+            hospital_id,
             title='Payout sent',
             body=(
-                f'₹{batch.total_amount} for {doctor.name} has been transferred'
+                f'₹{batch.total_amount} for {subject} has been transferred'
                 f'{f" (ref {ref})" if ref else ""}.'
             ),
             data={

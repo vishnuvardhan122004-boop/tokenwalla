@@ -18,10 +18,10 @@ import SEO from './SEO';
 // on scanId, /verify/ binds the scan from the ORDER TAGS, and the capacity
 // backstop refunds a slot that fills after capture.
 //
-// The kept fallback below is not dead code. A scan set to FULL collection is
-// refused by create-order with a 409 until the GST treatment of diagnostic
-// prices is confirmed, so those scans still route to a phone call rather than
-// a checkout that cannot complete.
+// BOTH collection modes now check out online — a centre chooses per scan the
+// way a doctor chooses per doctor. The phone fallback below survives only for
+// a centre with checkout switched off entirely; it is no longer keyed to the
+// collection mode.
 const SCAN_CHECKOUT_ENABLED = true;
 
 export default function ScanCenterDetails() {
@@ -264,8 +264,7 @@ export default function ScanCenterDetails() {
                           {/* No slot to sell means no token to sell. The CTA
                               stays disabled rather than taking money for a slot
                               that was never chosen. */}
-                          {SCAN_CHECKOUT_ENABLED
-                            && scan.fee_breakdown?.collection_mode !== 'FULL' ? (
+                          {SCAN_CHECKOUT_ENABLED ? (
                             <>
                               <button
                                 className="sc-book"

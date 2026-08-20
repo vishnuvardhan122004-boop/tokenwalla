@@ -190,6 +190,8 @@ const Hdashboard = () => {
       max_per_slot: Number(scanForm.max_per_slot) || 1,
       prep_instructions: scanForm.prep_instructions || '',
       available: scanForm.available !== false,
+      payment_collection_mode:
+        scanForm.payment_collection_mode === 'FULL' ? 'FULL' : 'SERVICE_ONLY',
       // Comma-separated in the form, arrays on the wire — same shapes as Doctor.
       slots: (scanForm.slotsText || '').split(',').map(v => v.trim()).filter(Boolean),
       days:  (scanForm.daysText  || '').split(',').map(v => v.trim()).filter(Boolean),
@@ -891,6 +893,9 @@ const Hdashboard = () => {
                   name: '', modality: '', price: '', duration_minutes: 15,
                   max_per_slot: 1, prep_instructions: '', available: true,
                   slotsText: '', daysText: '',
+                  // Never default to FULL: that would have us holding a centre's
+                  // money before anyone chose it, with no payout account on file.
+                  payment_collection_mode: 'SERVICE_ONLY',
                 })}
               >
                 <i className="bi bi-plus-lg me-1" />Add a scan
@@ -943,6 +948,22 @@ const Hdashboard = () => {
                       value={scanForm.slotsText}
                       onChange={e => setScanForm(f => ({ ...f, slotsText: e.target.value }))} />
                     <small className="text-muted">Comma separated. Leave empty if you take walk-ins only.</small>
+                  </div>
+                  <div className="col-12">
+                    <label className="form-label small fw-semibold">How the patient pays</label>
+                    <select
+                      className="form-select"
+                      value={scanForm.payment_collection_mode === 'FULL' ? 'FULL' : 'SERVICE_ONLY'}
+                      onChange={e => setScanForm(f => ({ ...f, payment_collection_mode: e.target.value }))}
+                    >
+                      <option value="SERVICE_ONLY">Service fee only — scan price paid at your centre</option>
+                      <option value="FULL">Scan price + service fee — paid online</option>
+                    </select>
+                    <small className="text-muted">
+                      {scanForm.payment_collection_mode === 'FULL'
+                        ? 'We collect the scan price and settle it to your payout account — add one on your Profile if you have not.'
+                        : 'Nothing is owed to you by us; the patient settles the scan price at your counter.'}
+                    </small>
                   </div>
                   <div className="col-12">
                     <label className="form-label small fw-semibold">Before you come</label>

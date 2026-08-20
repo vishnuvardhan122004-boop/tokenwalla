@@ -155,6 +155,7 @@ def record_absence_refund(booking):
     from django.db import transaction
     from bookings.models import Booking
     from payments.models import DoctorLedger
+    from payments.payout_utils import ledger_owner
     from payments.fees import compute_doctor_payout
 
     if booking.status != Booking.COMPLETED:
@@ -175,28 +176,27 @@ def record_absence_refund(booking):
         if existing is not None:
             return existing, {'adjusted': True, 'reason': 'already_recorded'}
 
-        # DoctorLedger is keyed to a Doctor. Scan-centre payouts get their own
-        # ledger routing in slice 3; until then no scan booking can be created
-        # (there is no scan checkout), so this is unreachable. It is here anyway
-        # because "unreachable" is a claim about today's code, and the failure
-        # it would otherwise cause is an IntegrityError on a null FK inside a
-        # refund — the worst possible place to discover it.
-        if booking.doctor_id is None:
+        # Doctor or scanning centre — the clawback is netted against whoever
+        # the earning was credited to. Refusing rather than guessing: the
+        # failure this avoids is an IntegrityError on a null FK inside a refund,
+        # the worst possible place to discover a routing gap.
+        owner = ledger_owner(booking)
+        if owner is None:
             logger.error(
-                'Absence refund skipped: booking %s is a scan booking and scan '
-                'ledger routing is not built yet (item 8 slice 3).', booking.id)
-            return None, {'adjusted': False, 'reason': 'scan_ledger_not_implemented'}
+                'Absence refund skipped: booking %s has no payout owner '
+                '(no doctor, no scan centre).', booking.id)
+            return None, {'adjusted': False, 'reason': 'no_payout_owner'}
 
         payment = getattr(booking, 'payment', None)
         doctor_fee = payment.doctor_fee if payment else Decimal('0.00')
         payout = compute_doctor_payout(doctor_fee)
 
         entry = DoctorLedger.objects.create(
-            doctor  = booking.doctor,
             booking = booking,
             amount  = _q(-payout),   # negative — deducted from the next payout batch
             reason  = DoctorLedger.ABSENCE_REFUND,
+            **owner,
         )
-    logger.info('Absence refund ledger %s: doctor %s −₹%s (booking %s)',
-                entry.id, booking.doctor_id, payout, booking.id)
+    logger.info('Absence refund ledger %s: %s −₹%s (booking %s)',
+                entry.id, entry, payout, booking.id)
     return entry, {'adjusted': True, 'amount': str(payout)}

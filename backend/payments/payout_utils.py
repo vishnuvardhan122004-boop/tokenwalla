@@ -31,6 +31,32 @@ def payout_target(doctor):
     return doctor
 
 
+def ledger_owner(booking):
+    """Which payee a booking's earnings belong to, as DoctorLedger kwargs.
+
+    A scan booking has no doctor — the money is owed to the centre that owns the
+    Scan. Returned as kwargs (`{'doctor': …}` or `{'center': …}`) rather than a
+    bare object so no caller can accidentally write `doctor=None`, which the
+    ledger's CheckConstraint would reject anyway but only after the surrounding
+    transaction has done its work.
+
+    A scanning centre IS its own payout target: Hospital already carries the
+    upi_vpa / bank / account-holder fields, so `choose_mode()` takes it
+    unchanged. There is no centre equivalent of `payout_to_hospital` — a centre
+    is the top of its own chain.
+
+    Returns None when the booking has neither provider. Impossible under
+    Booking's own CheckConstraint, but this function is used on the money path
+    and returning None lets the caller log and skip rather than guess.
+    """
+    if booking.doctor_id:
+        return {'doctor': booking.doctor}
+    scan = getattr(booking, 'scan', None)
+    if scan is not None and scan.center_id:
+        return {'center': scan.center}
+    return None
+
+
 def choose_mode(target):
     """Which rail `target` should be paid on — 'UPI', 'IMPS', or None.
 

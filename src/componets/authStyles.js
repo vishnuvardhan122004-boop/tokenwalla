@@ -98,6 +98,7 @@ export const authCSS = `
   .auth-field { margin-bottom: 16px; }
   .auth-field-label { font-size: 12px; font-weight: 600; letter-spacing: 0.4px; color: var(--gray-600); margin-bottom: 7px; display: block; }
   .auth-field-error { font-size: 12px; color: var(--color-error-text); margin-top: 5px; display: block; }
+  .auth-field-hint  { font-size: 11.5px; color: var(--gray-400, #94A3B8); margin-top: 5px; display: block; line-height: 1.5; }
 
   .auth-input-wrap { position: relative; }
   .auth-input-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 15px; color: var(--gray-400); pointer-events: none; }

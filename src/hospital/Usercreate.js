@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
-import { useNavigate, Link } from 'react-router';
+import { useNavigate, useSearchParams, Link } from 'react-router';
 import API from '../services/api';
 import { authCSS } from '../componets/authStyles';
 import useAuthKeyboard from '../componets/useAuthKeyboard';
@@ -12,9 +12,16 @@ const Husercreate = () => {
   const navigate = useNavigate();
   useAuthKeyboard();
 
+  // ?kind=SCAN_CENTER lands a centre on the centre form. Whitelisted against
+  // the one value we accept rather than trusted: this is a URL, anyone can
+  // write it, and the toggle above stays the real control either way.
+  const [params] = useSearchParams();
+  const initialKind = params.get('kind') === 'SCAN_CENTER' ? 'SCAN_CENTER' : 'HOSPITAL';
+
   const [hospital, setHospital] = useState({
-    kind: 'HOSPITAL',
+    kind: initialKind,
     name: '', city: '', address: '', location: '', mobile: '', password: '', confirmPassword: '',
+    licenseNumber: '',
     latitude: null, longitude: null,
   });
 
@@ -51,6 +58,10 @@ const Husercreate = () => {
     if (!hospital.city.trim())    newErrors.city    = 'City is required';
     if (!hospital.address.trim()) newErrors.address = 'Address is required';
     if (!/^[6-9]\d{9}$/.test(hospital.mobile)) newErrors.mobile = 'Enter a valid 10-digit mobile';
+    // Centre-only. The backend blocks approval without it, so catching it here
+    // saves a partner sitting in 'pending' with no idea what is missing.
+    if (isCentre && !hospital.licenseNumber.trim())
+      newErrors.licenseNumber = 'Registration / licence number is required';
     if (hospital.password.length < 6) newErrors.password = 'Minimum 6 characters';
     if (hospital.password !== hospital.confirmPassword)
       newErrors.confirmPassword = 'Passwords do not match';
@@ -108,6 +119,7 @@ const Husercreate = () => {
         longitude: hospital.longitude,
         mobile:    hospital.mobile,
         password:  hospital.password,
+        license_number: hospital.licenseNumber.trim(),
       });
       setSuccess(`${noun} registered! Your account is under review — you can log in once an admin approves it.`);
       setTimeout(() => navigate('/Hlogin'), 2200);
@@ -238,6 +250,31 @@ const Husercreate = () => {
               </div>
               {errors.name && <span className="auth-field-error">{errors.name}</span>}
             </div>
+
+            {/* Registration / licence number — scanning centres only. This is
+                the one field separating a real centre from anybody who can type
+                a name, and a patient is walking into the result for an MRI. */}
+            {isCentre && (
+              <div className="auth-field">
+                <label className="auth-field-label">Registration / Licence Number</label>
+                <div className="auth-input-wrap">
+                  <span className="auth-input-icon">🪪</span>
+                  <input
+                    className={`auth-input ${errors.licenseNumber ? 'has-error' : ''}`}
+                    name="licenseNumber"
+                    placeholder="e.g. AP/CEA/2026/1188"
+                    value={hospital.licenseNumber} onChange={handleChange}
+                  />
+                </div>
+                {errors.licenseNumber
+                  ? <span className="auth-field-error">{errors.licenseNumber}</span>
+                  : <span className="auth-field-hint">
+                      Your Clinical Establishments Act registration, AERB licence or
+                      NABL id — whichever your centre operates under. We verify it
+                      before approving your account.
+                    </span>}
+              </div>
+            )}
 
             {/* City / location — real place autocomplete (captures coordinates) */}
             <div className="auth-field">

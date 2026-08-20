@@ -132,7 +132,15 @@ class PayoutBatch(models.Model):
     OTHER = 'OTHER'   # paid manually with no UPI/bank on file (e.g. cash)
     MODE_CHOICES = [(UPI, 'UPI'), (IMPS, 'IMPS'), (OTHER, 'Other')]
 
-    doctor             = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='payout_batches')
+    # EXACTLY ONE of doctor / center. A payout is owed either to a doctor or to
+    # a scanning centre, and the same nullable-but-constrained shape as
+    # Booking's provider columns is used for the same reason: a routing bug
+    # fails at the write instead of stranding somebody's money in a row nothing
+    # can resolve.
+    doctor             = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='payout_batches',
+                                           null=True, blank=True)
+    center             = models.ForeignKey('hospitals.Hospital', on_delete=models.CASCADE,
+                                           related_name='payout_batches', null=True, blank=True)
     total_amount       = models.DecimalField(max_digits=10, decimal_places=2)
     # Optional UTR / transaction reference the admin enters for reconciliation
     # when marking the doctor paid — no gateway ever writes this now.
@@ -145,9 +153,22 @@ class PayoutBatch(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(doctor__isnull=False, center__isnull=True)
+                    | models.Q(doctor__isnull=True,  center__isnull=False)
+                ),
+                name='payoutbatch_exactly_one_payee',
+            ),
+        ]
 
     def __str__(self):
-        return f'Payout ₹{self.total_amount} → {self.doctor_id} [{self.status}]'
+        return f'Payout ₹{self.total_amount} → {self.payee_label} [{self.status}]'
+
+    @property
+    def payee_label(self):
+        return f'centre {self.center_id}' if self.center_id else f'doctor {self.doctor_id}'
 
 
 class DoctorLedger(models.Model):
@@ -167,7 +188,15 @@ class DoctorLedger(models.Model):
         (ABSENCE_REFUND,      'Absence Refund'),
     ]
 
-    doctor       = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='ledger_entries')
+    # EXACTLY ONE of doctor / center, enforced by the constraint below. A scan
+    # booking has no doctor, so its earnings are owed to the centre that owns
+    # the Scan. Route with payout_utils.ledger_owner(booking) rather than
+    # reaching for `booking.doctor` — that is None on every scan booking and an
+    # ORM filter on it silently matches EVERY scan booking in the system.
+    doctor       = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='ledger_entries',
+                                     null=True, blank=True)
+    center       = models.ForeignKey('hospitals.Hospital', on_delete=models.CASCADE,
+                                     related_name='ledger_entries', null=True, blank=True)
     booking      = models.ForeignKey(Booking, null=True, on_delete=models.SET_NULL, related_name='ledger_entries')
     amount       = models.DecimalField(max_digits=10, decimal_places=2)  # + earning, − adjustment
     reason       = models.CharField(max_length=30, choices=REASON_CHOICES)
@@ -179,7 +208,19 @@ class DoctorLedger(models.Model):
         indexes = [
             # The daily payout task's core query: this doctor's unbatched rows.
             models.Index(fields=['doctor', 'payout_batch'], name='idx_ledger_doctor_batch'),
+            # Same query for a scanning centre.
+            models.Index(fields=['center', 'payout_batch'], name='idx_ledger_center_batch'),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(doctor__isnull=False, center__isnull=True)
+                    | models.Q(doctor__isnull=True,  center__isnull=False)
+                ),
+                name='ledger_exactly_one_payee',
+            ),
         ]
 
     def __str__(self):
-        return f'{self.reason} ₹{self.amount} → doctor {self.doctor_id}'
+        payee = f'centre {self.center_id}' if self.center_id else f'doctor {self.doctor_id}'
+        return f'{self.reason} ₹{self.amount} → {payee}'

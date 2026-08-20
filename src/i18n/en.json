@@ -120,7 +120,8 @@
       "title": "Ready to Skip the Queue?",
       "sub": "Join thousands of patients who book smarter with TokenWalla.",
       "bookNow": "Book Appointment Now →",
-      "registerHospital": "Register Your Hospital"
+      "registerHospital": "Register Your Hospital",
+      "registerScanCenter": "Register Your Scanning Centre"
     }
   },
   "doctors": {
@@ -165,6 +166,7 @@
     "myBookings": "My Bookings",
     "hospitalLogin": "Hospital Login",
     "registerHospital": "Register Hospital",
+    "registerScanCenter": "Register Scanning Centre",
     "dashboard": "Dashboard",
     "aboutUs": "About Us",
     "contact": "Contact",

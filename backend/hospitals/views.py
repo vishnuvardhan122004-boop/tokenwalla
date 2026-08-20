@@ -126,6 +126,17 @@ class HospitalRegisterView(APIView):
         if kind not in dict(Hospital.KIND_CHOICES):
             kind = Hospital.HOSPITAL
 
+        # A scanning centre must supply its registration / licence number here.
+        # Collected at registration rather than chased afterwards: approval is
+        # blocked without it (Hospital.approval_blocker), so asking later just
+        # means a partner sitting in 'pending' wondering why.
+        license_number = str(data.get('license_number', '') or '').strip()[:60]
+        if kind == Hospital.SCAN_CENTER and not license_number:
+            return Response(
+                {'message': 'Registration / licence number is required for a scanning centre.'},
+                status=400,
+            )
+
         hospital = Hospital.objects.create(
             name=name,
             kind=kind,
@@ -135,6 +146,7 @@ class HospitalRegisterView(APIView):
             latitude=_coord(data.get('latitude')),
             longitude=_coord(data.get('longitude')),
             mobile=mobile,
+            license_number=license_number,
             password=make_password(password),
             status='pending',
         )
@@ -560,6 +572,9 @@ class HospitalApproveView(APIView):
             )
 
         if action == 'approve':
+            blocker = hospital.approval_blocker()
+            if blocker:
+                return Response({'message': blocker}, status=400)
             hospital.status = 'active'
             hospital.save(update_fields=['status'])
 

@@ -15,6 +15,7 @@ The negative assertions here matter more than the positive ones: proving a
 centre is absent from the default response is the contract. Deleting one of
 these tests to make a change pass is never the right move.
 """
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -135,10 +136,25 @@ class RegistrationKindTests(TestCase):
         }, format='json')
 
     def test_registering_as_a_scan_centre_works(self):
-        res = self._register('9111100001', kind='SCAN_CENTER')
+        res = self._register('9111100001', kind='SCAN_CENTER',
+                             license_number='AP/CEA/2026/1188')
         self.assertIn(res.status_code, (200, 201), res.content)
-        self.assertEqual(
-            Hospital.objects.get(mobile='9111100001').kind, Hospital.SCAN_CENTER)
+        centre = Hospital.objects.get(mobile='9111100001')
+        self.assertEqual(centre.kind, Hospital.SCAN_CENTER)
+        self.assertEqual(centre.license_number, 'AP/CEA/2026/1188')
+
+    def test_a_scan_centre_cannot_register_without_a_licence_number(self):
+        """Collected here rather than chased later: approval is blocked without
+        it, so a centre that skips it just sits in 'pending' with no idea why."""
+        res = self._register('9111100020', kind='SCAN_CENTER')
+        self.assertEqual(res.status_code, 400, res.content)
+        self.assertFalse(Hospital.objects.filter(mobile='9111100020').exists())
+
+    def test_a_hospital_still_registers_without_a_licence_number(self):
+        """The requirement is centre-only. A hospital registering exactly as it
+        did before this field existed must be unaffected."""
+        res = self._register('9111100021')
+        self.assertIn(res.status_code, (200, 201), res.content)
 
     def test_omitting_kind_registers_a_hospital(self):
         self._register('9111100002')
@@ -154,6 +170,43 @@ class RegistrationKindTests(TestCase):
                 self._register(mobile, kind=bad)
                 self.assertEqual(
                     Hospital.objects.get(mobile=mobile).kind, Hospital.HOSPITAL)
+
+
+class CentreApprovalGateTests(TestCase):
+    """One gate, both approval paths. A centre that somehow reached 'pending'
+    without a licence number — seeded by hand, or registered before this field
+    existed — must not be approvable by either route."""
+
+    def _centre(self, mobile, license_number=''):
+        return Hospital.objects.create(
+            name='Sri Diagnostics', city='Hindupur', mobile=mobile,
+            kind=Hospital.SCAN_CENTER, status='pending',
+            license_number=license_number)
+
+    def test_blocker_names_the_missing_licence(self):
+        self.assertIsNotNone(self._centre('9111100030').approval_blocker())
+
+    def test_no_blocker_once_the_licence_is_on_file(self):
+        self.assertIsNone(
+            self._centre('9111100031', 'AP/CEA/2026/9').approval_blocker())
+
+    def test_a_hospital_is_never_blocked_by_it(self):
+        h = Hospital.objects.create(name='City Hospital', city='Hindupur',
+                                    mobile='9111100032', status='pending')
+        self.assertIsNone(h.approval_blocker())
+
+    def test_the_admin_api_refuses_to_approve_a_centre_with_no_licence(self):
+        User = get_user_model()
+        admin = User.objects.create_user(
+            username='9111100039', mobile='9111100039', password='x', role='admin')
+        centre = self._centre('9111100033')
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        res = client.patch(f'/api/hospitals/{centre.id}/approve/',
+                           {'action': 'approve'}, format='json')
+        self.assertEqual(res.status_code, 400, res.content)
+        centre.refresh_from_db()
+        self.assertEqual(centre.status, 'pending')
 
 
 class LoginPayloadTests(TestCase):

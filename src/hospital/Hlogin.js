@@ -45,7 +45,7 @@ export default function Hlogin() {
       });
 
       if (!check.exists) {
-        setError('This mobile is not registered as a hospital. Please register first.');
+        setError('This mobile is not registered as a hospital or scanning centre. Please register first.');
         return;
       }
 
@@ -205,6 +205,9 @@ export default function Hlogin() {
 
           <div className="auth-switch">
             New hospital? <Link to="/Husercreate">Register here →</Link>
+          </div>
+          <div className="auth-switch" style={{ marginTop: 6 }}>
+            New scanning centre? <Link to="/Husercreate?kind=SCAN_CENTER">Register here →</Link>
           </div>
 
           <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid var(--blue-50)', textAlign: 'center' }}>

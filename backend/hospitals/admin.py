@@ -7,9 +7,10 @@ from .models import Hospital
  
 @admin.register(Hospital)
 class HospitalAdmin(admin.ModelAdmin):
-    list_display  = ('name', 'city', 'mobile', 'status', 'booking_count', 'doctor_count', 'created')
-    search_fields = ('name', 'city', 'mobile')
-    list_filter   = ('status',)
+    list_display  = ('name', 'kind', 'city', 'mobile', 'license_number', 'status',
+                     'booking_count', 'doctor_count', 'created')
+    search_fields = ('name', 'city', 'mobile', 'license_number')
+    list_filter   = ('status', 'kind')
     actions       = ['approve_hospitals', 'reject_hospitals', 'safe_delete_hospitals']
 
         # ── Read-only computed columns ─────────────────────────────────────────────
@@ -37,7 +38,15 @@ class HospitalAdmin(admin.ModelAdmin):
         User = get_user_model()
  
         updated = 0
+        blocked = []
         for hospital in queryset.exclude(status='active'):
+            # Same gate as the admin API. A blocked row is SKIPPED and named,
+            # not silently dropped: a bulk approve that quietly does nine of ten
+            # reads as ten.
+            blocker = hospital.approval_blocker()
+            if blocker:
+                blocked.append(f'{hospital.name}: {blocker}')
+                continue
             hospital.status = 'active'
             hospital.save(update_fields=['status'])
             # Activate the linked user so they can log in
@@ -49,6 +58,12 @@ class HospitalAdmin(admin.ModelAdmin):
             f'{updated} hospital(s) approved and set to active.',
             messages.SUCCESS
         )
+        if blocked:
+            self.message_user(
+                request,
+                f'{len(blocked)} not approved — ' + '; '.join(blocked),
+                messages.WARNING,
+            )
  
     # ── Bulk reject ────────────────────────────────────────────────────────────
  
