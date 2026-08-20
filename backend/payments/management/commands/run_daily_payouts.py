@@ -6,9 +6,10 @@ after Razorpay's settlement to our account has landed:
 
 Steps (see the feature spec §6):
   1. Find COMPLETED, not-yet-paid, not-refunded bookings with a fee split.
-  2. Write one DoctorLedger row each: BOOKING_COMPLETED (+doctor_fee). Nothing
-     is deducted — the doctor receives the whole online consultation fee. Move
-     the booking to PROCESSING.
+  2. Write one DoctorLedger row each: BOOKING_COMPLETED (+doctor_fee), keyed to
+     the doctor or — for a scan booking — to the scanning centre. Nothing is
+     deducted; the provider receives the whole online fee. Move the booking to
+     PROCESSING.
 
 Payouts themselves are MANUAL from here — the admin payouts page
 (payments.views.PendingPayoutsView / MarkPayoutPaidView) aggregates every
@@ -24,6 +25,7 @@ from django.db import transaction
 
 from bookings.models import Booking
 from payments.models import DoctorLedger
+from payments.payout_utils import ledger_owner
 
 logger = logging.getLogger('tokenwalla')
 
@@ -37,7 +39,7 @@ class Command(BaseCommand):
             .filter(status=Booking.COMPLETED,
                     doctor_payout_status=Booking.PAYOUT_PENDING)
             .exclude(payment__refunds__isnull=False)   # never pay out a refunded booking
-            .select_related('doctor', 'payment')
+            .select_related('doctor', 'payment', 'scan__center')
         )
 
         written = 0
@@ -51,16 +53,14 @@ class Command(BaseCommand):
                 booking.save(update_fields=['doctor_payout_status'])
                 continue
 
-            # Same reason as the refund path: DoctorLedger is doctor-keyed and
-            # scan payout routing lands in slice 3. Crucially this does NOT mark
-            # the booking settled — it stays PENDING, so it is re-scanned every
-            # run and shows up as a growing, visible backlog rather than money
-            # owed to a centre quietly vanishing.
-            if booking.doctor_id is None:
+            # Doctor or scanning centre. Left PENDING (not settled) if neither
+            # resolves, so the booking is re-scanned every run and surfaces as a
+            # visible backlog rather than money owed quietly vanishing.
+            owner = ledger_owner(booking)
+            if owner is None:
                 logger.error(
-                    'Booking %s is a scan booking; scan ledger routing is not '
-                    'built yet (item 8 slice 3). Left PENDING on purpose.',
-                    booking.id)
+                    'Booking %s has no payout owner (no doctor, no scan centre). '
+                    'Left PENDING on purpose.', booking.id)
                 continue
 
             try:
@@ -74,8 +74,8 @@ class Command(BaseCommand):
                     if locked.doctor_payout_status != Booking.PAYOUT_PENDING:
                         continue
                     DoctorLedger.objects.create(
-                        doctor=booking.doctor, booking=locked,
-                        amount=doctor_fee, reason=DoctorLedger.BOOKING_COMPLETED,
+                        booking=locked, amount=doctor_fee,
+                        reason=DoctorLedger.BOOKING_COMPLETED, **owner,
                     )
                     locked.doctor_payout_status = Booking.PAYOUT_PROCESSING
                     locked.save(update_fields=['doctor_payout_status'])

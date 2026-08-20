@@ -15,6 +15,7 @@ the diff and goes wrong months later, so the guarantees are pinned here:
     reads them and cannot be updated on our schedule.
 """
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
@@ -188,9 +189,10 @@ class OldClientContractTests(ProviderWorldMixin, TestCase):
         self.assertEqual(data['provider_kind'], 'DOCTOR')
 
 
-class LedgerGuardTests(ProviderWorldMixin, TestCase):
-    """Scan payout routing lands in slice 3. Until then the money paths must
-    refuse loudly and must NOT mark anything settled."""
+class ScanLedgerRoutingTests(ProviderWorldMixin, TestCase):
+    """A scan booking has no doctor, so its earnings are owed to the centre that
+    owns the Scan. These pin the routing — the alternative failure is money
+    owed to a centre that never appears on the payouts page."""
 
     def setUp(self):
         self.make_world()
@@ -203,15 +205,32 @@ class LedgerGuardTests(ProviderWorldMixin, TestCase):
             doctor_fee=doctor_fee, status=Payment.PAID)
         return b
 
-    def test_a_scan_booking_that_owes_money_stays_pending(self):
-        """The case the guard exists for. Money is owed to the centre and there
-        is nowhere to ledger it yet, so the booking must remain visible as an
-        unsettled backlog rather than being marked settled."""
+    def test_a_scan_booking_ledgers_to_its_centre(self):
+        """FULL collection means we hold the centre's money, so the earning must
+        land on a ledger row keyed to the CENTRE — not to a null doctor, and not
+        nowhere at all."""
         from django.core.management import call_command
+        from payments.models import DoctorLedger
         b = self._completed_scan_booking(doctor_fee=4500, token='TW-S-50')
         call_command('run_daily_payouts')
         b.refresh_from_db()
-        self.assertEqual(b.doctor_payout_status, Booking.PAYOUT_PENDING)
+        self.assertEqual(b.doctor_payout_status, Booking.PAYOUT_PROCESSING)
+        entry = DoctorLedger.objects.get(booking=b)
+        self.assertEqual(entry.center_id, self.mri.center_id)
+        self.assertIsNone(entry.doctor_id)
+        self.assertEqual(entry.amount, Decimal('4500'))
+
+    def test_ledger_row_needs_exactly_one_payee(self):
+        """The database, not application code, is what makes the nullable
+        `doctor` column safe. Both-set and neither-set must fail at the write."""
+        from payments.models import DoctorLedger
+        b = self._completed_scan_booking(doctor_fee=100, token='TW-S-52')
+        for kwargs in ({}, {'doctor': self.doctor, 'center': self.mri.center}):
+            with self.assertRaises(IntegrityError):
+                with transaction.atomic():
+                    DoctorLedger.objects.create(
+                        booking=b, amount=Decimal('1'),
+                        reason=DoctorLedger.BOOKING_COMPLETED, **kwargs)
 
     def test_a_scan_booking_owing_nothing_settles_normally(self):
         """SERVICE_ONLY is the default, so most scan bookings capture no

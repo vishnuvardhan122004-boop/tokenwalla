@@ -7,9 +7,10 @@ from .models import Hospital
  
 @admin.register(Hospital)
 class HospitalAdmin(admin.ModelAdmin):
-    list_display  = ('name', 'city', 'mobile', 'status', 'booking_count', 'doctor_count', 'created')
-    search_fields = ('name', 'city', 'mobile')
-    list_filter   = ('status',)
+    list_display  = ('name', 'kind', 'city', 'mobile', 'license_number', 'status',
+                     'booking_count', 'doctor_count', 'created')
+    search_fields = ('name', 'city', 'mobile', 'license_number')
+    list_filter   = ('status', 'kind')
     actions       = ['approve_hospitals', 'reject_hospitals', 'safe_delete_hospitals']
 
         # ── Read-only computed columns ─────────────────────────────────────────────

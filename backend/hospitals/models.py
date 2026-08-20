@@ -111,6 +111,17 @@ class Hospital(models.Model):
     # Working hours in 24h "HH:MM" (blank = not set)
     open_time    = models.CharField(max_length=5, blank=True)
     close_time   = models.CharField(max_length=5, blank=True)
+    # ── Registration / licence number ─────────────────────────────────────────
+    # The registration a centre operates under (states differ: Clinical
+    # Establishments Act, AERB for CT/PET, a lab's NABL id). NOT asked for at
+    # registration and NOT required to approve — verification happens on a phone
+    # call, and staff record the number here afterwards. Written only from
+    # Django admin, which is why it is blank-able and unvalidated: the format is
+    # not one we get to define.
+    #
+    # Never serialised publicly: it identifies the business, patients have no
+    # use for it, and it is the field an impersonator would want to read.
+    license_number = models.CharField(max_length=60, blank=True, default='')
     password = models.CharField(max_length=128)
     status   = models.CharField(max_length=20, default='active')
 

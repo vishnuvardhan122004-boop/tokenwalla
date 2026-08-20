@@ -126,6 +126,12 @@ class HospitalRegisterView(APIView):
         if kind not in dict(Hospital.KIND_CHOICES):
             kind = Hospital.HOSPITAL
 
+        # Optional, and deliberately not required. Verification of a centre's
+        # registration happens on a PHONE CALL before approval, so demanding the
+        # number in the form only costs us partners who don't have it to hand.
+        # Staff record what the call turns up in Django admin.
+        license_number = str(data.get('license_number', '') or '').strip()[:60]
+
         hospital = Hospital.objects.create(
             name=name,
             kind=kind,
@@ -135,6 +141,7 @@ class HospitalRegisterView(APIView):
             latitude=_coord(data.get('latitude')),
             longitude=_coord(data.get('longitude')),
             mobile=mobile,
+            license_number=license_number,
             password=make_password(password),
             status='pending',
         )

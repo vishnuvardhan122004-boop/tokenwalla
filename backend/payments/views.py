@@ -296,14 +296,17 @@ class CreateOrderView(APIView):
         fee engine, same tag-binding discipline — because the two must not be
         able to drift.
 
-        FULL collection is REFUSED for now. `payments/fees.py` treats the
-        provider's fee as GST-exempt, which is correct for a doctor's
-        consultation. Whether a diagnostic centre's scan price is exempt the
-        same way is a tax question that has not been answered, and getting it
-        wrong means under-collecting GST on every scan we ever sell. Under
-        SERVICE_ONLY the scan price never flows online, only the service fee
-        does, and that arithmetic is identical to a doctor's — so this refusal
-        is the exact boundary of the unanswered question, not a blanket block.
+        BOTH collection modes are live, and a centre chooses per scan exactly
+        as a doctor chooses per doctor. `fees.py` therefore treats a scan price
+        the same way it treats a consultation fee: the provider's fee is
+        GST-exempt and GST applies only to (platform + gateway). That is a
+        deliberate decision to price a diagnostic service identically to a
+        consultation — confirm it with the CA, because if a scan price is
+        taxable the correction is in fees.py and applies to every FULL scan
+        sold from here on.
+
+        FULL means we hold the centre's money until payout, so the centre must
+        have payout details on file — see payout_utils.ledger_owner.
         """
         from scans.models import Scan
         from hospitals.models import Hospital
@@ -320,15 +323,6 @@ class CreateOrderView(APIView):
 
         if not scan.available:
             return Response({'message': 'This scan is not available right now.'}, status=409)
-
-        if scan.payment_collection_mode == Scan.COLLECT_FULL:
-            logger.error(
-                'Scan %s is set to FULL collection but scan GST treatment is '
-                'unconfirmed — refusing to price it.', scan.id)
-            return Response(
-                {'message': 'Online payment of the scan price is not enabled yet. '
-                            'Please contact the centre to book.'},
-                status=409)
 
         date_val = str(request.data.get('date', '') or '').strip()
         slot_val = str(request.data.get('slot', '') or '').strip()
@@ -1002,65 +996,113 @@ class BookingReceiptView(APIView):
 # and mark it paid here; there is no gateway payout API involved.
 # ─────────────────────────────────────────────────────────────────────────────
 
-class PendingPayoutsView(APIView):
-    """Admin-only: which doctors currently have money owed to them.
+def _payout_row(provider_name, hospital_name, target, pay_to, amount, *,
+                doctor_id=None, center_id=None):
+    """One row of the admin payouts table.
 
-    Aggregates every doctor's unbatched DoctorLedger rows (earnings minus any
-    absence-refund clawbacks). Only positive net balances are shown — a doctor
-    whose clawbacks currently exceed their earnings owes nothing yet.
+    `target` is whoever the money is actually wired to — a Doctor, the hospital
+    employing them, or a scanning centre. All three carry identically named
+    payout fields, which is why this function does not care which it got.
+
+    `payee_key` exists because `doctor_id` is null on a centre row: the admin
+    page needs one stable identifier to key the table and to disable the button
+    it just clicked.
+    """
+    from decimal import Decimal, ROUND_HALF_UP
+    from payments.payout_utils import choose_mode
+
+    mode = choose_mode(target)
+    return {
+        'payee_key':      f'center:{center_id}' if center_id else f'doctor:{doctor_id}',
+        'doctor_id':      doctor_id,
+        'center_id':      center_id,
+        # Kept as `doctor_name` so the existing admin table keeps rendering; for
+        # a centre row it holds the centre's name, which is what that column
+        # means there.
+        'doctor_name':    provider_name,
+        'hospital_name':  hospital_name,
+        'pay_to':         pay_to,
+        'recipient_name': target.account_holder_name or target.name,
+        'mode':           mode,
+        # Where to actually send it — staff wire this by hand, so the page has
+        # to show the account, not just the rail.
+        'upi_vpa':        (target.upi_vpa or '').strip() if mode == 'UPI' else '',
+        'bank_name':      (target.bank_name or '').strip() if mode == 'IMPS' else '',
+        'account_number': (target.bank_account_number or '').strip() if mode == 'IMPS' else '',
+        'ifsc':           (target.ifsc or '').strip() if mode == 'IMPS' else '',
+        'pending_amount': str(amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+    }
+
+
+class PendingPayoutsView(APIView):
+    """Admin-only: which providers currently have money owed to them.
+
+    Aggregates unbatched DoctorLedger rows (earnings minus any absence-refund
+    clawbacks) for BOTH payee kinds — doctors and scanning centres. Only
+    positive net balances are shown: a provider whose clawbacks currently
+    exceed their earnings owes nothing yet.
+
+    The two groupings are separate `values()` queries rather than one, because a
+    single grouping on both columns would emit a `(None, None)`-shaped key for
+    whichever side is null and silently merge unrelated providers.
     """
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
-        from decimal import Decimal, ROUND_HALF_UP
         from django.db.models import Sum
         from doctors.models import Doctor
+        from hospitals.models import Hospital
         from payments.models import DoctorLedger
-        from payments.payout_utils import payout_target, choose_mode
+        from payments.payout_utils import payout_target
 
-        totals = (
-            DoctorLedger.objects
-            .filter(payout_batch__isnull=True)
-            .order_by()
-            .values('doctor_id')
-            .annotate(pending_amount=Sum('amount'))
-        )
+        unbatched = DoctorLedger.objects.filter(payout_batch__isnull=True).order_by()
         rows = []
-        for row in totals:
+
+        doctor_totals = (unbatched.filter(doctor__isnull=False)
+                         .values('doctor_id').annotate(pending_amount=Sum('amount')))
+        for row in doctor_totals:
             amount = row['pending_amount']
             if amount is None or amount <= 0:
                 continue
             doctor = (Doctor.objects.select_related('hospital')
                       .get(pk=row['doctor_id']))
             target = payout_target(doctor)
-            mode   = choose_mode(target)
-            rows.append({
-                'doctor_id':      doctor.id,
-                'doctor_name':    doctor.name,
-                'hospital_name':  doctor.hospital.name if doctor.hospital_id else None,
-                'pay_to':         'hospital' if target is not doctor else 'doctor',
-                'recipient_name': target.account_holder_name or target.name,
-                'mode':           mode,
-                # Where to actually send it — staff wire this by hand, so the
-                # page has to show the account, not just the rail.
-                'upi_vpa':        (target.upi_vpa or '').strip() if mode == 'UPI' else '',
-                'bank_name':      (target.bank_name or '').strip() if mode == 'IMPS' else '',
-                'account_number': (target.bank_account_number or '').strip() if mode == 'IMPS' else '',
-                'ifsc':           (target.ifsc or '').strip() if mode == 'IMPS' else '',
-                'pending_amount': str(amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-            })
+            rows.append(_payout_row(
+                doctor.name,
+                doctor.hospital.name if doctor.hospital_id else None,
+                target,
+                'hospital' if target is not doctor else 'doctor',
+                amount,
+                doctor_id=doctor.id,
+            ))
+
+        # A scanning centre is its own payout target: Hospital already carries
+        # the payout fields, and there is no centre equivalent of a salaried
+        # doctor's payout_to_hospital redirect.
+        center_totals = (unbatched.filter(center__isnull=False)
+                         .values('center_id').annotate(pending_amount=Sum('amount')))
+        for row in center_totals:
+            amount = row['pending_amount']
+            if amount is None or amount <= 0:
+                continue
+            center = Hospital.objects.get(pk=row['center_id'])
+            rows.append(_payout_row(
+                center.name, None, center, 'center', amount, center_id=center.id,
+            ))
+
         rows.sort(key=lambda r: r['doctor_name'])
         return Response({'payouts': rows})
 
 
 class MarkPayoutPaidView(APIView):
-    """Admin-only: record that a doctor's pending balance was paid manually.
+    """Admin-only: record that a provider's pending balance was paid manually.
 
-    Locks and batches that doctor's currently-unbatched ledger rows into one
-    PayoutBatch(PROCESSED), and marks every booking behind those rows as
-    payout-PAID. `reference` (optional) is a UTR / transaction note for
-    reconciliation — nothing is sent anywhere; this only records that the
-    transfer already happened outside the app.
+    Takes `doctor_id` OR `center_id` — a scanning centre is paid the same way a
+    doctor is, from the same ledger. Locks and batches that payee's
+    currently-unbatched ledger rows into one PayoutBatch(PROCESSED), and marks
+    every booking behind those rows as payout-PAID. `reference` (optional) is a
+    UTR / transaction note for reconciliation — nothing is sent anywhere; this
+    only records that the transfer already happened outside the app.
     """
     permission_classes = [IsAuthenticated, IsAdmin]
 
@@ -1068,16 +1110,38 @@ class MarkPayoutPaidView(APIView):
         from decimal import Decimal
         from django.utils import timezone
         from doctors.models import Doctor
+        from hospitals.models import Hospital
         from payments.models import DoctorLedger, PayoutBatch
         from payments.payout_utils import payout_target, choose_mode
 
         doctor_id = request.data.get('doctor_id')
-        if not doctor_id:
-            return Response({'message': 'doctor_id is required.'}, status=400)
-        try:
-            doctor = Doctor.objects.select_related('hospital').get(pk=doctor_id)
-        except (Doctor.DoesNotExist, ValueError, TypeError):
-            return Response({'message': 'Doctor not found.'}, status=404)
+        center_id = request.data.get('center_id')
+        # Exactly one, mirroring the ledger's own constraint. Accepting both
+        # would have to pick a winner, and picking the wrong one pays the wrong
+        # account and closes out the other's ledger rows.
+        if bool(doctor_id) == bool(center_id):
+            return Response(
+                {'message': 'Send exactly one of doctor_id or center_id.'}, status=400)
+
+        doctor = center = None
+        if doctor_id:
+            try:
+                doctor = Doctor.objects.select_related('hospital').get(pk=doctor_id)
+            except (Doctor.DoesNotExist, ValueError, TypeError):
+                return Response({'message': 'Doctor not found.'}, status=404)
+            target   = payout_target(doctor)
+            payee_q  = {'doctor_id': doctor.id}
+            batch_kw = {'doctor': doctor}
+            idem_key = f'doctor_{doctor.id}'
+        else:
+            try:
+                center = Hospital.objects.get(pk=center_id, kind=Hospital.SCAN_CENTER)
+            except (Hospital.DoesNotExist, ValueError, TypeError):
+                return Response({'message': 'Scanning centre not found.'}, status=404)
+            target   = center
+            payee_q  = {'center_id': center.id}
+            batch_kw = {'center': center}
+            idem_key = f'center_{center.id}'
 
         reference = str(request.data.get('reference', '') or '').strip()[:100]
 
@@ -1085,21 +1149,21 @@ class MarkPayoutPaidView(APIView):
             rows = list(
                 DoctorLedger.objects
                 .select_for_update()
-                .filter(doctor_id=doctor_id, payout_batch__isnull=True)
+                .filter(payout_batch__isnull=True, **payee_q)
             )
             total = sum((r.amount for r in rows), Decimal('0'))
             if not rows or total <= 0:
-                return Response({'message': 'This doctor has no pending payout.'}, status=400)
+                return Response({'message': 'This provider has no pending payout.'}, status=400)
 
-            target = payout_target(doctor)
-            mode   = choose_mode(target) or PayoutBatch.OTHER
-            idem   = f'manual_{doctor_id}_{timezone.now():%Y%m%d%H%M%S}'
+            mode = choose_mode(target) or PayoutBatch.OTHER
+            idem = f'manual_{idem_key}_{timezone.now():%Y%m%d%H%M%S}'
 
             batch = PayoutBatch.objects.create(
-                doctor=doctor, total_amount=total, payout_mode=mode,
+                total_amount=total, payout_mode=mode,
                 status=PayoutBatch.PROCESSED,
                 razorpay_payout_id=reference,
                 idempotency_key=idem,
+                **batch_kw,
             )
             entry_ids = [r.id for r in rows]
             DoctorLedger.objects.filter(id__in=entry_ids).update(payout_batch=batch)
@@ -1108,21 +1172,23 @@ class MarkPayoutPaidView(APIView):
             Booking.objects.filter(id__in=booking_ids).update(
                 doctor_payout_status=Booking.PAYOUT_PAID)
 
-        logger.info('Payout batch %s: doctor %s paid ₹%s manually (ref=%s)',
-                    batch.id, doctor_id, total, reference or '—')
+        logger.info('Payout batch %s: %s paid ₹%s manually (ref=%s)',
+                    batch.id, batch.payee_label, total, reference or '—')
 
-        # Tell the doctor their money went out. Best-effort and off the request
-        # thread: the payout is already recorded, so a slow or failing Meta call
-        # must never fail the admin's "mark paid" action.
-        # `doctor` already has `hospital` select_related — attach it so the
-        # background thread doesn't lazy-load either FK on its own connection.
+        # Tell the provider their money went out. Best-effort and off the
+        # request thread: the payout is already recorded, so a slow or failing
+        # Meta call must never fail the admin's "mark paid" action.
+        # The FKs are attached from objects already fetched here so the
+        # background thread doesn't lazy-load them on its own connection.
         batch.doctor = doctor
+        batch.center = center
         _notify_doctor_payout_async(batch)
 
         return Response({
             'success': True,
             'batch_id': batch.id,
-            'doctor_id': doctor.id,
+            'doctor_id': doctor.id if doctor else None,
+            'center_id': center.id if center else None,
             'amount_paid': str(total),
         })
 

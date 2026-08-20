@@ -98,24 +98,31 @@ def _collected(day):
 
 
 def _outstanding_by_doctor():
-    """Net unbatched ledger balance per doctor: [(doctor_id, net_amount), ...].
+    """Net unbatched ledger balance per payee:
+    [((doctor_id, center_id), net_amount), ...].
+
+    Grouped on BOTH columns, not just doctor_id: exactly one of them is set on
+    any row, so grouping on doctor_id alone would fold every scanning centre in
+    the country into a single `None` bucket — one balance where there should be
+    one per centre, and an owed-count that is wrong the moment a second centre
+    is owed anything.
 
     Includes non-positive balances, which the payouts page deliberately hides —
-    a doctor whose absence clawbacks exceed their earnings is owed nothing, but
-    it's worth seeing on the daily check rather than never.
+    a provider whose absence clawbacks exceed their earnings is owed nothing,
+    but it's worth seeing on the daily check rather than never.
     """
     rows = (
         DoctorLedger.objects
         .filter(payout_batch__isnull=True)
         .order_by()                       # clear Meta.ordering — it breaks GROUP BY
-        .values('doctor_id')
+        .values('doctor_id', 'center_id')
         .annotate(net=Sum('amount'))
     )
-    return [(r['doctor_id'], r['net'] or ZERO) for r in rows]
+    return [((r['doctor_id'], r['center_id']), r['net'] or ZERO) for r in rows]
 
 
 def _payouts_owed(balances):
-    """Total currently owed to doctors, and how many are waiting."""
+    """Total currently owed to providers, and how many are waiting."""
     payable = [amount for _, amount in balances if amount > 0]
     return {
         'doctors_owed': len(payable),
@@ -158,7 +165,7 @@ def _attention(day, balances):
         DoctorLedger.objects
         .filter(payout_batch__isnull=True, amount__gt=0, created_at__lt=ageing_cutoff)
         .order_by()
-        .values('doctor_id')
+        .values('doctor_id', 'center_id')
         .distinct()
         .count()
     )
@@ -168,30 +175,37 @@ def _attention(day, balances):
             'severity': 'high',
             'count': ageing,
             'message': (
-                f'{ageing} doctor(s) have money owed for more than '
+                f'{ageing} provider(s) have money owed for more than '
                 f'{PAYOUT_AGEING_DAYS} days. Wire from the Slice account, then '
                 f'mark paid on the payouts page.'
             ),
         })
 
     # 3. Owed money with nowhere to send it — invisible until you try to pay.
-    owed_ids = [doctor_id for doctor_id, amount in balances if amount > 0]
-    if owed_ids:
+    owed_doctor_ids = [d for (d, _c), amount in balances if amount > 0 and d]
+    owed_center_ids = [c for (_d, c), amount in balances if amount > 0 and c]
+    missing = 0
+    if owed_doctor_ids:
         from doctors.models import Doctor
-        missing = 0
-        for doctor in Doctor.objects.select_related('hospital').filter(pk__in=owed_ids):
+        for doctor in Doctor.objects.select_related('hospital').filter(pk__in=owed_doctor_ids):
             if choose_mode(payout_target(doctor)) is None:
                 missing += 1
-        if missing:
-            items.append({
-                'code': 'no_payout_details',
-                'severity': 'high',
-                'count': missing,
-                'message': (
-                    f'{missing} doctor(s) are owed money but have no UPI or bank '
-                    f'details on file. You cannot pay them until this is fixed.'
-                ),
-            })
+    if owed_center_ids:
+        # A centre is its own payout target — the same Hospital payout fields.
+        from hospitals.models import Hospital
+        for center in Hospital.objects.filter(pk__in=owed_center_ids):
+            if choose_mode(center) is None:
+                missing += 1
+    if missing:
+        items.append({
+            'code': 'no_payout_details',
+            'severity': 'high',
+            'count': missing,
+            'message': (
+                f'{missing} provider(s) are owed money but have no UPI or bank '
+                f'details on file. You cannot pay them until this is fixed.'
+            ),
+        })
 
     # 4. A queue someone forgot to close. The patient's booking is stranded in a
     #    live state and will never complete on its own.

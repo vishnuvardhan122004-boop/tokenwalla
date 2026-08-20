@@ -34,7 +34,7 @@ const Payouts = () => {
   const [rows,    setRows]    = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
-  const [paying,  setPaying]  = useState(null);   // doctor_id being marked paid
+  const [paying,  setPaying]  = useState(null);   // payee_key being marked paid
 
   const fetchPending = useCallback(() => {
     setLoading(true);
@@ -72,10 +72,12 @@ const Payouts = () => {
     if (!ok) return;
     const reference = window.prompt('UTR / transaction reference (optional):', '') ?? '';
 
-    setPaying(row.doctor_id);
+    setPaying(row.payee_key);
     try {
+      // A scanning-centre row has no doctor_id — send whichever id it carries.
+      // The endpoint requires exactly one and refuses both.
       await API.post('/payment/payouts/mark-paid/', {
-        doctor_id: row.doctor_id,
+        ...(row.center_id ? { center_id: row.center_id } : { doctor_id: row.doctor_id }),
         reference: reference.trim(),
       });
       fetchPending();
@@ -174,7 +176,7 @@ const Payouts = () => {
             <table className="po-table">
               <thead>
                 <tr>
-                  <th>Doctor</th>
+                  <th>Doctor / Centre</th>
                   <th>Hospital</th>
                   <th>Pay To</th>
                   <th>Pay Into</th>
@@ -187,7 +189,7 @@ const Payouts = () => {
                   <tr><td colSpan={6} className="po-empty"><i className="bi bi-stars me-1" />Everyone is paid up — nothing outstanding</td></tr>
                 )}
                 {rows.map(r => (
-                  <tr key={r.doctor_id}>
+                  <tr key={r.payee_key}>
                     <td style={{ fontWeight: 500 }}>{r.doctor_name}</td>
                     <td style={{ color: 'var(--gray-500)' }}>{r.hospital_name || '—'}</td>
                     <td>
@@ -195,6 +197,11 @@ const Payouts = () => {
                       {r.pay_to === 'hospital' && (
                         <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--gray-400)' }}>
                           (hospital account)
+                        </span>
+                      )}
+                      {r.pay_to === 'center' && (
+                        <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--gray-400)' }}>
+                          (scanning centre)
                         </span>
                       )}
                     </td>
@@ -220,9 +227,9 @@ const Payouts = () => {
                       <button
                         className="po-btn"
                         onClick={() => markPaid(r)}
-                        disabled={paying === r.doctor_id}
+                        disabled={paying === r.payee_key}
                       >
-                        {paying === r.doctor_id ? 'Recording…' : 'Mark Paid'}
+                        {paying === r.payee_key ? 'Recording…' : 'Mark Paid'}
                       </button>
                     </td>
                   </tr>

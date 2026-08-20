@@ -758,13 +758,14 @@ untouched.
 |---|---|---|---|
 | 1 | `Hospital.kind` + `Scan` model + migrations + **the exclusion filter**, with tests proving old-client responses are unchanged | backend | ✅ `feat/scan-centers-model` |
 | 2 | `Booking.scan` + CheckConstraint + `provider_*` properties + the logic sites | backend | ✅ `feat/scan-bookings` |
-| 3 | Scan checkout — `scanId` in create-order, fee math, verify binding, refunds | backend | ✅ `feat/scan-web` — **SERVICE_ONLY only** |
+| 3 | Scan checkout — `scanId` in create-order, fee math, verify binding, refunds | backend | ✅ both modes live |
 | 4 | Scan CRUD endpoints + admin + slot-availability | backend | ✅ `feat/scan-endpoints` |
 | 5 | Registration: **Hospital / Scanning Centre** choice on `Usercreate.js` | web | ✅ `feat/scan-web` |
 | 6 | `/alldoctor` `[Doctors｜Scan Centres]` toggle + centre cards | web | ✅ `feat/scan-web` |
 | 7 | `ScanCenterDetails.js` (**the one new file**) — menu → slots → **call to book** | web | ✅ `feat/scan-web` |
 | 8 | Centre dashboard: manage scans, see the queue | web | ✅ `feat/scan-web` |
-| 9 | Mirror 5–8 | app | |
+| 9 | Mirror 5–8 | app | ✅ `feat/scan-centers` |
+| 11 | Production gaps: centre CTAs, centre payouts, FULL mode, app scan CRUD + reports | all three | ✅ |
 | 10 | Report delivery — upload, WhatsApp, download | backend + web | ✅ `feat/scan-reports` |
 
 Slices 1–8 ship independently of the app; slice 9 rides the next build.
@@ -834,28 +835,51 @@ this is the only place the existing lifecycle genuinely does not fit. It is also
 a reason for a patient to come back to the app, which a doctor booking never
 gives us. It touches no money path, so it can land after slice 3 whenever.
 
-#### Two things NOT decided, both blocking slice 3
+#### Slice 11 — what production needed that slices 1–10 did not cover
 
-- **GST on scan prices — NARROWER THAN FIRST THOUGHT, and now enforced in code.**
-  `fees.py` hardcodes that the provider's fee is exempt and GST applies only to
-  (platform + gateway). That is right for a consultation; whether a diagnostic
-  price is exempt the same way is still a tax question for Vishnu's CA.
+Decided 2026-08-20: **a centre chooses its collection mode per scan, exactly as
+a hospital chooses per doctor.** The FULL refusal in `_create_scan_order` is
+deleted, and `fees.py` prices a scan price the same way it prices a
+consultation fee — provider fee GST-exempt, GST on (platform + gateway) only.
+**That is a decision, not a proof.** If the CA rules a diagnostic price
+taxable, the fix is in `fees.py` and the assertion that has to move is
+`test_full_collection_prices_the_scan_like_a_consultation`.
 
-  But it only bites in **FULL** mode, where the scan price flows online. Under
-  **SERVICE_ONLY** — the default — the price never goes through us at all, and
-  the arithmetic is identical to a doctor's. So slice 3 shipped for
-  SERVICE_ONLY, and `_create_scan_order` **refuses a FULL scan with a 409** and
-  never calls the gateway. `ScanCenterDetails.js` routes those scans to a phone
-  call instead of a checkout that cannot complete.
+Turning FULL on exposed the real blocker, which no slice had listed:
+**`DoctorLedger` was doctor-keyed, so a completed FULL scan booking owed money
+to a centre that could never appear on the payouts page.** `run_daily_payouts`
+and the absence-refund path both said so in a comment and skipped. Fixed by
+giving the ledger and `PayoutBatch` the same shape `Booking` already has —
+nullable `doctor`, new nullable `center`, and a CheckConstraint requiring
+exactly one. `payout_utils.ledger_owner(booking)` is the single routing point;
+`_outstanding_by_doctor` now groups on BOTH columns, because grouping on
+`doctor_id` alone folded every centre in the country into one `None` bucket.
+A centre is its own payout target — `Hospital` already carries the payout
+fields, and the centre edits them on its existing Profile screen.
 
-  **The CA's answer unblocks exactly one thing: deleting that refusal.** Until
-  then no scan can be sold with the price online, so there is no exposure.
-- **Collection mode.** Assume `SERVICE_ONLY`, same as doctors, unless told
-  otherwise — the alternative has us holding a centre's money with no payout
-  account on file. Never make `FULL` a default or a fallback.
+The other four gaps, all of them "the feature exists but nothing reaches it":
 
-Payouts stay **manual**, per the standing decision. `payout_target` gains a
-scan-centre branch in slice 3. No payout API.
+  * **Nothing pointed at the register page.** Every CTA said *Hospital* —
+    footer, hero, both login screens. The form always had the toggle; a centre
+    owner had no way to learn that. Now `?kind=SCAN_CENTER` preselects it from
+    a link that says the words.
+  * **Centre verification is a PHONE CALL, not a form field.** A registration
+    number was collected and gated on at first; that was reversed 2026-08-20 —
+    demanding it in the form only costs partners who don't have it to hand.
+    `Hospital.license_number` survives as an admin-only column where staff
+    record what the call turns up. There is no approval gate: a centre is
+    approved by a human who rang them.
+  * **The app's Scans tab was read-only**, so a centre that registered on the
+    app could never list a scan. `components/ScanEditorModal.tsx` is the
+    centre's version of the doctor form, and `constants/slots.ts` now holds the
+    half-hour grid both forms read.
+  * **Reports existed only on the web** — no upload for a centre, no download
+    for a patient. Both are in the app now, and the patient side pulls bytes
+    through the API client rather than opening a URL: the download endpoint
+    re-checks ownership on every request, so a plain link would 401 anyway, and
+    a URL that did work would be a forwardable bearer token.
+
+Payouts stay **manual**, per the standing decision. No payout API.
 
 ---
 

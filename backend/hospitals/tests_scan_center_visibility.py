@@ -140,6 +140,23 @@ class RegistrationKindTests(TestCase):
         self.assertEqual(
             Hospital.objects.get(mobile='9111100001').kind, Hospital.SCAN_CENTER)
 
+    def test_a_centre_registers_without_a_licence_number(self):
+        """Verification is a phone call before approval, NOT a form field.
+        Demanding the number here only costs us partners who do not have it to
+        hand, so a centre must register — and be approvable — without one."""
+        res = self._register('9111100020', kind='SCAN_CENTER')
+        self.assertIn(res.status_code, (200, 201), res.content)
+        centre = Hospital.objects.get(mobile='9111100020')
+        self.assertEqual(centre.license_number, '')
+
+    def test_a_licence_number_is_stored_when_sent(self):
+        """Optional, not ignored — staff record what the call turns up."""
+        res = self._register('9111100021', kind='SCAN_CENTER',
+                             license_number='AP/CEA/2026/1188')
+        self.assertIn(res.status_code, (200, 201), res.content)
+        self.assertEqual(
+            Hospital.objects.get(mobile='9111100021').license_number, 'AP/CEA/2026/1188')
+
     def test_omitting_kind_registers_a_hospital(self):
         self._register('9111100002')
         self.assertEqual(

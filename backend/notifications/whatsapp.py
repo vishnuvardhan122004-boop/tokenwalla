@@ -321,6 +321,13 @@ def send_doctor_payout_paid(batch):
     from .models import WhatsAppLog
 
     doctor = batch.doctor
+    if doctor is None:
+        # A scan-centre payout. The centre is told by push instead: this
+        # template's params are doctor-shaped ({{3}} is the hospital name) and
+        # Meta approves templates by exact body, so reusing it here would send
+        # an approved template with meaningless params.
+        logger.info('[notifications] batch %s is a centre payout — no doctor WhatsApp', batch.id)
+        return
     if not doctor.mobile:
         logger.info('[notifications] doctor %s has no mobile — skipping payout WhatsApp', doctor.id)
         return

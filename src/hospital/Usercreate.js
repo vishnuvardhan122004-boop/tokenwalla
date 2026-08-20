@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
-import { useNavigate, Link } from 'react-router';
+import { useNavigate, useSearchParams, Link } from 'react-router';
 import API from '../services/api';
 import { authCSS } from '../componets/authStyles';
 import useAuthKeyboard from '../componets/useAuthKeyboard';
@@ -12,8 +12,14 @@ const Husercreate = () => {
   const navigate = useNavigate();
   useAuthKeyboard();
 
+  // ?kind=SCAN_CENTER lands a centre on the centre form. Whitelisted against
+  // the one value we accept rather than trusted: this is a URL, anyone can
+  // write it, and the toggle above stays the real control either way.
+  const [params] = useSearchParams();
+  const initialKind = params.get('kind') === 'SCAN_CENTER' ? 'SCAN_CENTER' : 'HOSPITAL';
+
   const [hospital, setHospital] = useState({
-    kind: 'HOSPITAL',
+    kind: initialKind,
     name: '', city: '', address: '', location: '', mobile: '', password: '', confirmPassword: '',
     latitude: null, longitude: null,
   });

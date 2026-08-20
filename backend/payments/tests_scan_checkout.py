@@ -83,16 +83,29 @@ class CreateScanOrderTests(ScanWorldMixin, TestCase):
         self.assertEqual(tags['scan_id'], str(self.scan.id))
         self.assertNotIn('doctor_id', tags)
 
-    @mock.patch('payments.views.create_order')
-    def test_full_collection_is_refused_until_scan_gst_is_confirmed(self, mock_create):
-        """fees.py treats the provider fee as GST-exempt, which is correct for a
-        consultation. Whether a diagnostic price is exempt the same way is
-        unanswered, and guessing under-collects GST on every scan sold."""
+    @mock.patch('payments.views.create_order',
+                return_value={'order_id': 'order_scan', 'key': 'rzp_test_x'})
+    def test_full_collection_prices_the_scan_like_a_consultation(self, mock_create):
+        """A centre chooses per scan exactly as a doctor chooses per doctor, and
+        fees.py treats the scan price the way it treats a consultation fee:
+        provider fee GST-exempt, GST on (platform + gateway) only. If a CA rules
+        a diagnostic price taxable, THIS is the assertion that has to move.
+        """
         self.scan.payment_collection_mode = Scan.COLLECT_FULL
         self.scan.save(update_fields=['payment_collection_mode'])
         r = self.client.post(self.URL, {'scanId': self.scan.id}, format='json')
-        self.assertEqual(r.status_code, 409)
-        mock_create.assert_not_called()          # no order, no money, no gateway
+        self.assertEqual(r.status_code, 200, r.content)
+        breakdown = r.json()['breakdown']
+        # The ₹4500 scan price now flows online, on top of the service fee.
+        self.assertEqual(breakdown['doctor_fee'], '4500.00')
+        self.assertEqual(breakdown['collection_mode'], 'FULL')
+        self.assertEqual(mock_create.call_args.kwargs['amount_rupees'],
+                         Decimal(breakdown['final_amount']))
+        self.assertGreater(Decimal(breakdown['final_amount']), Decimal('4500'))
+        # Verify rebuilds the split from these — a wrong tag is a wrong payout.
+        tags = mock_create.call_args.kwargs['tags']
+        self.assertEqual(tags['doctor_fee'], '4500')
+        self.assertEqual(tags['collection_mode'], 'FULL')
 
     @mock.patch('payments.views.create_order')
     def test_a_scan_at_a_plain_hospital_is_not_bookable(self, mock_create):
@@ -248,3 +261,70 @@ class VerifyScanBookingTests(ScanWorldMixin, TestCase):
 
         from bookings.capacity import check_slot_available
         check_slot_available(doctor, FUTURE_DATE, SLOT)     # must not raise
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# payouts — a centre is paid from the same ledger a doctor is
+# ─────────────────────────────────────────────────────────────────────────────
+class CentrePayoutTests(ScanWorldMixin, TestCase):
+    """The end of the FULL-collection path. We hold the centre's scan price
+    until someone wires it, so the money has to be VISIBLE on the payouts page
+    and CLOSEABLE from it. A centre missing from that page is money nobody
+    knows is owed."""
+
+    PENDING_URL = '/api/payment/payouts/pending/'
+    PAID_URL    = '/api/payment/payouts/mark-paid/'
+
+    def setUp(self):
+        self.make_world(mode=Scan.COLLECT_FULL)
+        self.centre.upi_vpa = 'vijaya@okaxis'
+        self.centre.payment_method = Hospital.UPI
+        self.centre.account_holder_name = 'Vijaya Diagnostics Pvt Ltd'
+        self.centre.save()
+
+        admin = User.objects.create_user(
+            username='9000000709', mobile='9000000709', password='x', role='admin')
+        self.admin = APIClient()
+        self.admin.force_authenticate(admin)
+
+        booking = Booking.objects.create(
+            user=self.user, scan=self.scan, hospital=self.centre,
+            date=FUTURE_DATE, slot=SLOT, token='TW-PO-1',
+            status=Booking.COMPLETED)
+        Payment.objects.create(
+            booking=booking, order_id='ord_po1', amount=4525,
+            doctor_fee=Decimal('4500'), status=Payment.PAID)
+        from django.core.management import call_command
+        call_command('run_daily_payouts')
+        self.booking = booking
+
+    def _rows(self):
+        res = self.admin.get(self.PENDING_URL)
+        self.assertEqual(res.status_code, 200, res.content)
+        return res.json()['payouts']
+
+    def test_the_centre_appears_on_the_payouts_page(self):
+        row = next(r for r in self._rows() if r['center_id'] == self.centre.id)
+        self.assertIsNone(row['doctor_id'])
+        self.assertEqual(row['pay_to'], 'center')
+        self.assertEqual(row['pending_amount'], '4500.00')
+        # Staff wire this by hand, so the account has to be on the row itself.
+        self.assertEqual(row['mode'], 'UPI')
+        self.assertEqual(row['upi_vpa'], 'vijaya@okaxis')
+        # doctor_id is null here, so the page needs a key that is not it.
+        self.assertEqual(row['payee_key'], f'center:{self.centre.id}')
+
+    def test_marking_the_centre_paid_settles_its_bookings(self):
+        res = self.admin.post(self.PAID_URL, {'center_id': self.centre.id},
+                              format='json')
+        self.assertEqual(res.status_code, 200, res.content)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.doctor_payout_status, Booking.PAYOUT_PAID)
+        self.assertEqual(self._rows(), [])
+
+    def test_exactly_one_payee_id_is_required(self):
+        """Accepting both would have to pick a winner, and the wrong pick pays
+        one account while closing out the other's ledger rows."""
+        for body in ({}, {'doctor_id': 1, 'center_id': self.centre.id}):
+            res = self.admin.post(self.PAID_URL, body, format='json')
+            self.assertEqual(res.status_code, 400, res.content)

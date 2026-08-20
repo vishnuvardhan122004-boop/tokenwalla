@@ -737,6 +737,11 @@ API.get('/doctors/').then(({ data }) => {
               <div className="cta-actions">
                 <Link to="/alldoctor" className="btn-white-outline">{t('hero.cta.bookNow')}</Link>
                 <Link to="/Husercreate" className="btn-white-outline">{t('hero.cta.registerHospital')}</Link>
+                {/* Centres reach the SAME form — the query param only preselects
+                    the toggle. Without a link that says the words "scanning
+                    centre", a centre owner has no way to know the page is for
+                    them. */}
+                <Link to="/Husercreate?kind=SCAN_CENTER" className="btn-white-outline">{t('hero.cta.registerScanCenter')}</Link>
               </div>
             </div>
           </div>
