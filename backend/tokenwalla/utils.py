@@ -4,7 +4,33 @@ Shared helpers used across apps.
 """
 import re
 from datetime import datetime, timedelta, date as date_cls
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
+
+
+# ── Passwords ────────────────────────────────────────────────────────────────
+
+def check_password_strength(password, user=None):
+    """Run AUTH_PASSWORD_VALIDATORS; return a complaint string, or None if fine.
+
+    Django applies those validators ONLY where validate_password() is called —
+    DRF serializers and plain APIViews do not run them for you — so every place
+    that accepts a NEW password from a client has to call this or the settings
+    are decoration. Before this existed the API enforced a 6-char minimum and
+    nothing else, so "123456" and a patient's own phone number both passed.
+
+    Pass `user` (even an unsaved instance carrying username/first_name) so the
+    similarity check has something to compare against.
+
+    Returns a message rather than raising, so each caller keeps its own
+    response shape — the views here don't share one.
+    """
+    try:
+        validate_password(password, user=user)
+    except DjangoValidationError as exc:
+        return ' '.join(exc.messages)
+    return None
 
 SLOT_TIME_FORMAT = '%I:%M %p'   # e.g. "09:00 AM", "12:30 PM"
 BOOKING_CUTOFF_HOURS = 2        # slots within this window of "now" cannot be booked

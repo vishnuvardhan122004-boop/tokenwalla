@@ -3,9 +3,32 @@ tokenwalla/permissions.py
 Custom DRF permission classes shared across all apps.
 """
 import logging
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import BasePermission
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 logger = logging.getLogger('tokenwalla')
+
+
+class StatusAwareJWTAuthentication(JWTAuthentication):
+    """Refuse a blocked user's still-valid access token.
+
+    `User.status` is the moderation flag, but SimpleJWT's `get_user` only looks
+    at `is_active` — and `is_active` is already spoken for here (a hospital
+    account sits inactive while it waits for admin approval), so blocking cannot
+    just reuse it. Without this, blocking someone only stopped *fresh* logins:
+    any token minted before the block kept working for its full lifetime, and
+    /auth/token/refresh/ kept rotating a new 14-day refresh token off it.
+
+    Blocking also blacklists outstanding refresh tokens (see BlockUserView) —
+    that closes the refresh path, this closes the access path.
+    """
+
+    def get_user(self, validated_token):
+        user = super().get_user(validated_token)
+        if getattr(user, 'status', 'active') == 'blocked':
+            raise AuthenticationFailed('Account blocked.', code='user_blocked')
+        return user
 
 
 class IsAdmin(BasePermission):

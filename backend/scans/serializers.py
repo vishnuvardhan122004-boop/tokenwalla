@@ -68,6 +68,14 @@ class ScanSerializer(serializers.ModelSerializer):
                 f'"{value.name}" is registered as a hospital, not a scanning '
                 f'centre. Scans can only be added to a scanning centre.'
             )
+        # And it cannot be moved to a different centre after creation: the
+        # ownership check on update runs against the row's CURRENT centre, so
+        # rewriting the FK would hand the scan to someone else's listing.
+        # Re-sending the unchanged value is fine; only a change is refused.
+        if self.instance is not None and value.pk != self.instance.center_id:
+            raise serializers.ValidationError(
+                'A scan cannot be moved to another centre.'
+            )
         return value
 
     def validate_price(self, value):

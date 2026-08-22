@@ -34,7 +34,8 @@ LOCMEM_CACHE = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMem
 # 'otp' throttle so the attempt-cap (not the rate limit) is what's exercised.
 REST_FRAMEWORK_TEST = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # Mirror settings.py — the real class also enforces User.status.
+        'tokenwalla.permissions.StatusAwareJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
@@ -311,7 +312,7 @@ class AdminSetupTests(TestCase):
     def test_wrong_setup_key_rejected(self):
         res = self.client.post('/api/auth/create-admin/', {
             'setup_key': 'wrong-key', 'mobile': '9800000000',
-            'password': 'password123', 'name': 'Admin',
+            'password': 'Adm1n-Str0ng-2026', 'name': 'Admin',
         }, format='json')
         self.assertEqual(res.status_code, 403)
         self.assertFalse(User.objects.filter(mobile='9800000000').exists())
@@ -319,9 +320,256 @@ class AdminSetupTests(TestCase):
     def test_correct_setup_key_creates_admin(self):
         res = self.client.post('/api/auth/create-admin/', {
             'setup_key': 'super-secret-setup-key', 'mobile': '9800000001',
-            'password': 'password123', 'name': 'Admin',
+            'password': 'Adm1n-Str0ng-2026', 'name': 'Admin',
         }, format='json')
         self.assertEqual(res.status_code, 201)
         user = User.objects.get(mobile='9800000001')
         self.assertEqual(user.role, 'admin')
         self.assertTrue(user.is_superuser)
+
+
+# ── Second security review (2026-08-21) ───────────────────────────────────────
+
+@override_settings(CACHES=LOCMEM_CACHE, REST_FRAMEWORK=REST_FRAMEWORK_TEST)
+class OTPPathInjectionTests(TestCase):
+    """Vuln: a non-numeric OTP reached the 2Factor URL path, and `../` in it
+    was normalised client-side — letting the caller pick which 2Factor endpoint
+    decided the auth outcome (account takeover via /auth/login/)."""
+
+    def setUp(self):
+        self.client = APIClient()
+        cache.clear()
+
+    @override_settings(TWOFACTOR_API_KEY='fake-key')
+    def test_traversal_otp_never_reaches_the_network(self):
+        from users.auth_views import verify_otp
+        mobile = '9111222301'
+        cache.set(f'otp_session:{mobile}', 'session-abc', timeout=300)
+        with patch('requests.get') as mock_get:
+            self.assertFalse(
+                verify_otp(mobile, '../../VERIFY3/9999999999/123456')
+            )
+        mock_get.assert_not_called()
+
+    @override_settings(TWOFACTOR_API_KEY='fake-key')
+    def test_legitimate_code_is_sent_url_encoded(self):
+        from users.auth_views import verify_otp
+        mobile = '9111222302'
+        cache.set(f'otp_session:{mobile}', 'session/abc', timeout=300)
+        with patch('requests.get') as mock_get:
+            mock_get.return_value.json.return_value = {
+                'Status': 'Success', 'Details': 'OTP Matched',
+            }
+            self.assertTrue(verify_otp(mobile, '123456'))
+        url = mock_get.call_args[0][0]
+        self.assertTrue(url.endswith('/SMS/VERIFY/session%2Fabc/123456'), url)
+
+
+@override_settings(CACHES=LOCMEM_CACHE, REST_FRAMEWORK=REST_FRAMEWORK_TEST)
+class RegistrationOwnershipTests(TestCase):
+    """Vuln: registration bound an account to a mobile nobody had proven they
+    owned, so an attacker could squat a stranger's number — and that person's
+    own OTP login would then land inside the attacker's account."""
+
+    def setUp(self):
+        self.client = APIClient()
+        cache.clear()
+
+    def test_register_rejected_without_verified_otp(self):
+        res = self.client.post('/api/auth/register/', {
+            'name': 'Squatter', 'mobile': '9111222303', 'password': 'pw123456',
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(User.objects.filter(mobile='9111222303').exists())
+
+    def test_register_succeeds_after_otp_and_consumes_the_flag(self):
+        mobile = '9111222304'
+        cache.set(f'otp_verified:{mobile}', True, timeout=600)
+        res = self.client.post('/api/auth/register/', {
+            'name': 'Real User', 'mobile': mobile, 'password': 'pw123456',
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+        self.assertIsNone(cache.get(f'otp_verified:{mobile}'))
+
+    def test_hospital_register_rejected_without_verified_otp(self):
+        res = self.client.post('/api/hospitals/register/', {
+            'name': 'Fake Clinic', 'mobile': '9111222305', 'password': 'pw123456',
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(Hospital.objects.filter(mobile='9111222305').exists())
+
+
+@override_settings(CACHES=LOCMEM_CACHE, REST_FRAMEWORK=REST_FRAMEWORK_TEST)
+class TenantReassignmentTests(TestCase):
+    """Vuln: `hospital`/`center` were writable on update, and the ownership
+    check ran against the row's CURRENT owner — so a partner could push its own
+    doctor (payout account and all) into someone else's listing."""
+
+    def setUp(self):
+        self.client = APIClient()
+        cache.clear()
+        self.mine   = Hospital.objects.create(name='Mine',   mobile='9111222306', status='approved')
+        self.theirs = Hospital.objects.create(name='Theirs', mobile='9111222307', status='approved')
+        self.staff  = User.objects.create_user(
+            username='9111222306', mobile='9111222306', password='pw123456',
+            role='hospital', last_name=str(self.mine.id),
+        )
+        self.doctor = Doctor.objects.create(
+            name='Dr Own', specialization='GP', hospital=self.mine, mobile='9111222308',
+        )
+        self.client.force_authenticate(user=self.staff)
+
+    def test_cannot_move_doctor_to_another_hospital(self):
+        res = self.client.patch(
+            f'/api/doctors/{self.doctor.id}/',
+            {'hospital': self.theirs.id}, format='json',
+        )
+        self.assertEqual(res.status_code, 400)
+        self.doctor.refresh_from_db()
+        self.assertEqual(self.doctor.hospital_id, self.mine.id)
+
+    def test_resending_the_same_hospital_still_works(self):
+        res = self.client.patch(
+            f'/api/doctors/{self.doctor.id}/',
+            {'hospital': self.mine.id, 'name': 'Dr Renamed'}, format='json',
+        )
+        self.assertEqual(res.status_code, 200)
+        self.doctor.refresh_from_db()
+        self.assertEqual(self.doctor.name, 'Dr Renamed')
+
+    def test_cannot_move_scan_to_another_centre(self):
+        """Same hole, same shape — and both dashboards re-send the centre id on
+        every scan edit, so the 'unchanged is fine' half matters here too."""
+        from scans.models import Scan
+        for h in (self.mine, self.theirs):
+            h.kind = Hospital.SCAN_CENTER
+            h.save(update_fields=['kind'])
+        scan = Scan.objects.create(center=self.mine, name='MRI Brain', price=4500)
+
+        res = self.client.patch(
+            f'/api/scans/{scan.id}/', {'center': self.theirs.id}, format='json',
+        )
+        self.assertEqual(res.status_code, 400)
+        scan.refresh_from_db()
+        self.assertEqual(scan.center_id, self.mine.id)
+
+        res = self.client.patch(
+            f'/api/scans/{scan.id}/',
+            {'center': self.mine.id, 'name': 'MRI Spine'}, format='json',
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        scan.refresh_from_db()
+        self.assertEqual(scan.name, 'MRI Spine')
+
+
+@override_settings(CACHES=LOCMEM_CACHE, REST_FRAMEWORK=REST_FRAMEWORK_TEST)
+class BlockRevokesSessionTests(TestCase):
+    """Vuln: blocking only set `status`, which nothing but LoginView reads — so
+    the blocked user's existing JWT kept working and /token/refresh/ kept
+    rotating a fresh 14-day refresh token."""
+
+    def setUp(self):
+        self.client = APIClient()
+        cache.clear()
+        self.admin  = User.objects.create_user(
+            username='9111222309', mobile='9111222309', password='pw123456', role='admin',
+        )
+        self.victim = User.objects.create_user(
+            username='9111222310', mobile='9111222310', password='pw123456',
+        )
+
+    def _block(self, user):
+        self.client.force_authenticate(user=self.admin)
+        res = self.client.patch(
+            f'/api/auth/users/{user.id}/block/', {'status': 'blocked'}, format='json',
+        )
+        self.assertEqual(res.status_code, 200)
+        self.client.force_authenticate(user=None)
+
+    def test_block_invalidates_the_refresh_token(self):
+        refresh = str(RefreshToken.for_user(self.victim))
+        self._block(self.victim)
+        res = self.client.post('/api/auth/token/refresh/', {'refresh': refresh}, format='json')
+        self.assertEqual(res.status_code, 401)
+
+    def test_block_invalidates_the_access_token(self):
+        access = str(RefreshToken.for_user(self.victim).access_token)
+        self._block(self.victim)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access}')
+        self.assertEqual(self.client.get('/api/auth/me/').status_code, 401)
+
+    def test_blocking_does_not_approve_a_pending_hospital(self):
+        """is_active is the hospital-approval flag, not the moderation flag —
+        blocking and unblocking must leave admin approval exactly as it was."""
+        pending = User.objects.create_user(
+            username='9111222311', mobile='9111222311', password='pw123456',
+            role='hospital', is_active=False,
+        )
+        self._block(pending)
+        self.client.force_authenticate(user=self.admin)
+        self.client.patch(
+            f'/api/auth/users/{pending.id}/block/', {'status': 'active'}, format='json',
+        )
+        pending.refresh_from_db()
+        self.assertFalse(pending.is_active)
+
+
+@override_settings(CACHES=LOCMEM_CACHE, REST_FRAMEWORK=REST_FRAMEWORK_TEST)
+class PasswordStrengthTests(TestCase):
+    """Vuln: AUTH_PASSWORD_VALIDATORS only bind where validate_password() is
+    called, and nothing called it — so the API enforced a 6-char minimum and
+    nothing else. A patient's own phone number passed as their password."""
+
+    def setUp(self):
+        self.client = APIClient()
+        cache.clear()
+
+    def _verified(self, mobile):
+        cache.set(f'otp_verified:{mobile}', True, timeout=600)
+        return mobile
+
+    def test_register_rejects_the_mobile_as_its_own_password(self):
+        mobile = self._verified('9111222401')
+        res = self.client.post('/api/auth/register/', {
+            'name': 'Phone Password', 'mobile': mobile, 'password': mobile,
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('password', res.json())
+        self.assertFalse(User.objects.filter(mobile=mobile).exists())
+
+    def test_register_rejects_a_common_password(self):
+        mobile = self._verified('9111222402')
+        res = self.client.post('/api/auth/register/', {
+            'name': 'Common', 'mobile': mobile, 'password': 'password123',
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(User.objects.filter(mobile=mobile).exists())
+
+    def test_register_accepts_a_strong_password(self):
+        mobile = self._verified('9111222403')
+        res = self.client.post('/api/auth/register/', {
+            'name': 'Strong', 'mobile': mobile, 'password': 'Pat1ent-Str0ng-2026',
+        }, format='json')
+        self.assertEqual(res.status_code, 201, res.content)
+
+    def test_reset_rejects_a_weak_password_and_keeps_the_old_one(self):
+        mobile = '9111222404'
+        user = User.objects.create_user(
+            username=mobile, mobile=mobile, password='Pat1ent-Str0ng-2026',
+        )
+        self._verified(mobile)
+        res = self.client.post('/api/auth/reset-password/', {
+            'mobile': mobile, 'otp': '123456', 'password': 'password123',
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('Pat1ent-Str0ng-2026'))
+
+    def test_hospital_register_rejects_a_weak_password(self):
+        mobile = self._verified('9111222405')
+        res = self.client.post('/api/hospitals/register/', {
+            'name': 'Weak Clinic', 'mobile': mobile, 'password': 'secret123',
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(Hospital.objects.filter(mobile=mobile).exists())
+        self.assertFalse(User.objects.filter(mobile=mobile).exists())

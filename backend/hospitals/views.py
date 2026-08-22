@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from tokenwalla.utils import is_valid_landline
+from tokenwalla.utils import check_password_strength, is_valid_landline
 
 from .models import (
     Hospital, HospitalPhoto, exclude_scan_centers, exclude_test_hospitals,
@@ -99,6 +99,25 @@ class HospitalRegisterView(APIView):
                 status=400,
             )
 
+        # Same OTP-ownership gate as HospitalResetPasswordView and the mobile
+        # change above: this endpoint is public, and the mobile it takes becomes
+        # the login identity for a partner account that will hold other people's
+        # patient records. Both clients already verify before they get here.
+        if not cache.get(f'otp_verified:{mobile}'):
+            return Response(
+                {'message': 'Please verify your mobile with OTP first.'},
+                status=400,
+            )
+
+        # Before any row is created, so a weak password cannot leave a
+        # half-registered hospital behind. The stand-in user gives the
+        # similarity check the mobile and name to compare against.
+        complaint = check_password_strength(
+            password, user=User(username=mobile, mobile=mobile, first_name=name),
+        )
+        if complaint:
+            return Response({'message': complaint}, status=400)
+
         if Hospital.objects.filter(mobile=mobile).exists():
             return Response(
                 {'message': 'Mobile already registered as a hospital.'},
@@ -157,6 +176,8 @@ class HospitalRegisterView(APIView):
         )
         user.set_password(password)
         user.save()
+
+        cache.delete(f'otp_verified:{mobile}')
 
         logger.info(
             'Hospital "%s" registered (id=%s, user=%s) — awaiting admin approval',
@@ -520,6 +541,13 @@ class HospitalResetPasswordView(APIView):
                 {'message': 'No hospital found with this mobile.'},
                 status=404,
             )
+
+        complaint = check_password_strength(
+            password,
+            user=User(username=mobile, mobile=mobile, first_name=hospital.name),
+        )
+        if complaint:
+            return Response({'message': complaint}, status=400)
 
         hospital.password = make_password(password)
         hospital.save(update_fields=['password'])

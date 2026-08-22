@@ -2,6 +2,7 @@ import hmac
 import secrets
 import re
 import logging
+from urllib.parse import quote
 
 from django.contrib.auth import get_user_model
 from django.conf import settings
@@ -16,6 +17,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from .models import RateCounter
 from .serializers import RegisterSerializer, UserSerializer
 from tokenwalla.permissions import IsAdmin
+from tokenwalla.utils import check_password_strength
 
 logger = logging.getLogger('tokenwalla')
 User   = get_user_model()
@@ -208,6 +210,16 @@ def verify_otp(mobile, otp_entered, register_failure=True):
     password and an OTP, so counting those password mismatches would let anyone
     who knows a mobile number burn a victim's in-flight OTP session.
     """
+    # Reject anything that is not a bare numeric code BEFORE it is used.
+    # verify_otp is also fed the login form's `password` field, and the SMS
+    # branch below interpolates this value into the 2Factor URL path — where
+    # `../` would be normalised away client-side by urllib3 and let a caller
+    # choose which 2Factor endpoint decides the auth outcome. Codes we issue are
+    # always 6 digits (secrets.randbelow(900000) + 100000), so this rejects
+    # nothing legitimate.
+    if not re.fullmatch(r'\d{4,8}', str(otp_entered or '').strip()):
+        return False
+
     api_key    = getattr(settings, 'TWOFACTOR_API_KEY', '')
     session_id = cache.get(f'otp_session:{mobile}')
     via        = cache.get(f'otp_via:{mobile}', 'sms')
@@ -236,7 +248,11 @@ def verify_otp(mobile, otp_entered, register_failure=True):
     # SMS production → verify via 2Factor API
     try:
         import requests
-        url  = f'https://2factor.in/API/V1/{api_key}/SMS/VERIFY/{session_id}/{otp_entered}'
+        url  = (
+            'https://2factor.in/API/V1/'
+            f'{api_key}/SMS/VERIFY/'
+            f'{quote(str(session_id), safe="")}/{quote(str(otp_entered), safe="")}'
+        )
         data = requests.get(url, timeout=8).json()
         if data.get('Status') == 'Success' and 'Matched' in str(data.get('Details', '')):
             _clear_otp_state(mobile)
@@ -257,9 +273,24 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        # Registration is the one place identity is CREATED, so it needs the
+        # same OTP-ownership gate every other mobile-bound operation uses
+        # (ResetPasswordView, the MeView mobile change, hospital register/reset).
+        # Both clients already call /auth/otp/verify/ first and set this flag;
+        # checking it here stops anyone scripting the API from squatting a
+        # stranger's number, which would then swallow that person's own OTP
+        # login (mobile is USERNAME_FIELD and unique).
+        mobile = str(request.data.get('mobile', '')).strip()
+        if not cache.get(f'otp_verified:{mobile}'):
+            return Response(
+                {'message': 'Please verify your mobile with OTP first.'},
+                status=400,
+            )
+
         s = RegisterSerializer(data=request.data)
         if s.is_valid():
             user = s.save()
+            cache.delete(f'otp_verified:{mobile}')
             r    = RefreshToken.for_user(user)
             return Response({
                 'user':    UserSerializer(user).data,
@@ -472,6 +503,10 @@ class ResetPasswordView(APIView):
         except User.DoesNotExist:
             return Response({'message': 'No account found with this mobile.'}, status=404)
 
+        complaint = check_password_strength(password, user=user)
+        if complaint:
+            return Response({'message': complaint}, status=400)
+
         user.set_password(password)
         user.save(update_fields=['password'])
         cache.delete(f'otp_verified:{mobile}')
@@ -569,6 +604,19 @@ class BlockUserView(APIView):
 
         user.status = new_status
         user.save(update_fields=['status'])
+
+        if new_status == 'blocked':
+            # Setting the flag is not enough on its own: StatusAwareJWTAuthentication
+            # refuses the access token they already hold, but an un-blacklisted
+            # refresh token would keep minting new ones — and with
+            # ROTATE_REFRESH_TOKENS it renews its own 14-day life each time, so
+            # the block would never actually land.
+            from rest_framework_simplejwt.token_blacklist.models import (
+                BlacklistedToken, OutstandingToken,
+            )
+            for token in OutstandingToken.objects.filter(user=user):
+                BlacklistedToken.objects.get_or_create(token=token)
+
         logger.info('User %s → %s (by admin %s)', pk, new_status, request.user.id)
         return Response(UserSerializer(user).data)
 
@@ -621,6 +669,15 @@ class CreateAdminView(APIView):
             return Response({'message': 'Password must be at least 8 characters.'}, status=400)
         if not name or len(name) < 2:
             return Response({'message': 'Name must be at least 2 characters.'}, status=400)
+
+        # Before get_or_create, so a weak password cannot leave a created-but-
+        # unconfigured admin row behind. Stand-in user gives the similarity
+        # check the mobile and name to compare against.
+        complaint = check_password_strength(
+            password, user=User(username=mobile, mobile=mobile, first_name=name),
+        )
+        if complaint:
+            return Response({'message': complaint}, status=400)
 
         # ── 4. Create or update admin ─────────────────────────────────────────
         user, created = User.objects.get_or_create(

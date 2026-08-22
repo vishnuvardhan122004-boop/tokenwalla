@@ -15,6 +15,7 @@ The negative assertions here matter more than the positive ones: proving a
 centre is absent from the default response is the contract. Deleting one of
 these tests to make a change pass is never the right move.
 """
+from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -129,9 +130,12 @@ class RegistrationKindTests(TestCase):
     URL = '/api/hospitals/register/'
 
     def _register(self, mobile, **extra):
+        # Registration now requires the mobile to have been OTP-verified (the
+        # clients already do this first); stand in for that step.
+        cache.set(f'otp_verified:{mobile}', True, timeout=600)
         return APIClient().post(self.URL, {
             'name': f'Provider {mobile}', 'mobile': mobile,
-            'password': 'secret123', 'city': 'Hindupur', **extra,
+            'password': 'Clinic-Str0ng-2026', 'city': 'Hindupur', **extra,
         }, format='json')
 
     def test_registering_as_a_scan_centre_works(self):

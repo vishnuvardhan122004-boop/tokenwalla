@@ -2,6 +2,8 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 import re
 
+from tokenwalla.utils import check_password_strength
+
 User = get_user_model()
 
 
@@ -19,6 +21,22 @@ class RegisterSerializer(serializers.ModelSerializer):
         if User.objects.filter(mobile=value).exists():
             raise serializers.ValidationError('Mobile already registered.')
         return value
+
+    def validate(self, attrs):
+        # Checked here, not in validate_password(), because the similarity rule
+        # needs the mobile and name alongside the password — and the mobile IS
+        # the username, so without this a patient's own phone number passes.
+        complaint = check_password_strength(
+            attrs.get('password', ''),
+            user=User(
+                username   = attrs.get('mobile', ''),
+                mobile     = attrs.get('mobile', ''),
+                first_name = attrs.get('name', ''),
+            ),
+        )
+        if complaint:
+            raise serializers.ValidationError({'password': complaint})
+        return attrs
 
     def create(self, validated_data):
         name = validated_data.pop('name')

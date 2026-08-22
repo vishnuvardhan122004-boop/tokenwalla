@@ -66,6 +66,22 @@ class DoctorSerializer(serializers.ModelSerializer):
             "payment_collection_mode": {"required": False},
         }
 
+    def validate_hospital(self, value):
+        """A doctor cannot be moved to a different hospital after creation.
+
+        `hospital` has to stay writable for create (DoctorViewSet.create checks
+        it against the caller's own hospital), but the object-level permission
+        on update is evaluated against the row's CURRENT owner — so without this
+        a hospital could PATCH one of its own doctors, payout account and all,
+        into someone else's listing and lose edit rights on the way out.
+        Re-sending the unchanged value is fine; only a change is refused.
+        """
+        if self.instance is not None and value.pk != self.instance.hospital_id:
+            raise serializers.ValidationError(
+                'A doctor cannot be moved to another hospital.'
+            )
+        return value
+
     def validate(self, attrs):
         # Merge over the instance so a PATCH that touches neither number still
         # validates against the resulting state, not just what was sent.

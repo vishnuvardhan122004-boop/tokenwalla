@@ -197,7 +197,9 @@ ANON_RATE = config('ANON_RATE', default='300/minute')
 # ── REST Framework ────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # JWTAuthentication + a check on User.status, so blocking someone takes
+        # effect on the tokens they already hold. See tokenwalla/permissions.py.
+        'tokenwalla.permissions.StatusAwareJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
@@ -411,6 +413,19 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME':    'django.contrib.auth.password_validation.MinimumLengthValidator',
         'OPTIONS': {'min_length': 6},
+    },
+    # These bind only where validate_password() is called — DRF serializers do
+    # not run them for you — so every endpoint that takes a NEW password from a
+    # client goes through tokenwalla.utils.check_password_strength.
+    # Existing passwords keep working; this applies from the next change on.
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        # Patients sign up with their phone number as the username, so without
+        # this the phone itself passes as a password. `last_name` is left out on
+        # purpose — in this schema it holds a hospital id, not a name.
+        'OPTIONS': {'user_attributes': ('username', 'first_name', 'email')},
     },
 ]
 
