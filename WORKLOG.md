@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** clean — everything merged. Web/backend PRs **#44, #45, #46** (the scan stack) and app PR **#15** all landed 2026-08-19; this wrap is on `docs/wrap-2026-08-19`. **Do NOT delete** `develop` (deploys to staging) or `website-cleanup-eslint-deadDep` (holds unmerged work). ~~`harden-password-validators`~~ and its duplicate `chore/password-validators` were **deleted 2026-08-22** — both only flipped `AUTH_PASSWORD_VALIDATORS`, which was the half that did nothing; the real fix (wiring `validate_password` into all five password entry points) landed in `cfc630c`. See ROADMAP 4d.
-- **Latest commit at last update:** `3ebf78e` main (web/backend, **deployed & verified** — `/health/` reports `3ebf78e8`) · `a20ad2e` main (app, **not built** — Play is still on 1.1.3 / versionCode 36 from 2026-08-08; 37 free)
-- **Last updated:** 2026-08-19 — **scanning centres are live end to end on backend + website, and the app half is merged but unbuilt.** No code written this session: the scan stack was gated, merged and then verified against production. The one thing standing between a working feature and a patient using it is not code — no scanning centre is registered yet.
+- **Branch:** `main` on both repos, no feature branches open. Web/backend main is **5 commits ahead of origin** (security fixes + two docs merges) — pushing auto-deploys. The two `docs/*` branches were merged 2026-08-22 and can be deleted. **Do NOT delete** `develop` (deploys to staging) or `website-cleanup-eslint-deadDep` (holds unmerged work). ~~`harden-password-validators`~~ and its duplicate `chore/password-validators` were **deleted 2026-08-22** — both only flipped `AUTH_PASSWORD_VALIDATORS`, which was the half that did nothing; the real fix (wiring `validate_password` into all five password entry points) landed in `cfc630c`. See ROADMAP 4d.
+- **Latest commit at last update:** `cecf9d9` main (web/backend, **local only — 5 commits unpushed**, so production is still on `d88d0f3`) · `da29520` main (app, 1.3.1 — pushed, **not built**; Play is on 1.3.0)
+- **Last updated:** 2026-08-22 — **security review across all three codebases; four real findings fixed, six false positives filtered.** The security work is committed but **unpushed** — production has none of it yet. One item needs Vishnu and cannot be done in code: revoke the leaked Fast2SMS key. Previously: 2026-08-19 — scanning centres went live end to end on backend + website, with the app half merged but unbuilt.
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -25,6 +25,77 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-22 — Security review across all three codebases: four real findings, six false positives
+
+**Web/backend `cfc630c` + two docs merges, all local and unpushed.** App
+`f0c70e3` (allowBackup) and `da29520` (1.3.1) are pushed but **not built** — the
+backup fix reaches nobody until an EAS build ships.
+
+**Ten candidates, four survived verification.** Every finding was re-checked by an
+independent pass told to refute it; six died there, and the reasons are worth as
+much as the fixes: the payment WebView's `mixedContentMode="always"` is
+load-bearing (inline HTML with no `baseUrl` = opaque origin, so Android blocks the
+Razorpay CDN without it); `adb backup` is dead on targetSdk ≥ 35 and cloud backup
+is E2E-encrypted; scan reports on Cloudinary carry ~31 bits of entropy and the URL
+is never disclosed; the OTP-cap gap needs ~450k requests inside a 300s window.
+**Filing those four would have cost real work and fixed nothing.**
+
+| # | Finding | Fix | Status |
+|---|---|---|---|
+| 1 | OTP path injection → account takeover | digits-only guard at the top of `verify_otp` + `quote()` both segments | ✅ `cfc630c` |
+| 2 | Cross-tenant write: `hospital`/`center` writable on update | refuse on change, allow unchanged | ✅ `cfc630c` |
+| 3 | Registration bound to an unverified mobile (patient **and** hospital) | gate on the `otp_verified` flag the rest of the code already uses | ✅ `cfc630c` |
+| 4 | Fast2SMS key public in git history | removed from `src/.env` — **revocation still outstanding** | 🕒 user action |
+| + | Blocking a user was a no-op against held tokens | `StatusAwareJWTAuthentication` + blacklist refresh tokens on block | ✅ `cfc630c` |
+| + | `AUTH_PASSWORD_VALIDATORS` decorative (ROADMAP 4d) | `check_password_strength` at all five password entry points | ✅ `cfc630c` |
+
+- **The OTP bug was the real one.** `verify_otp` interpolated the submitted value
+  straight into the 2Factor URL, and urllib3 normalises `../` client-side — so an
+  "OTP" of `../../VERIFY3/<attacker>/<code>` picked which 2Factor endpoint decided
+  the auth outcome. One request, victim's JWT pair. The guard went at the top of
+  the shared function, not at the two call sites, so login, verify and hospital
+  login all inherit it. **The branch was untested by construction:** every OTP test
+  runs with `TWOFACTOR_API_KEY=''`, which takes the other path.
+- **Two fixes deliberately did NOT take the short route.** Blocking could have set
+  `is_active=False` in one line — but `is_active` is the *hospital approval* flag,
+  so unblocking would have silently approved a pending hospital. There is a test
+  pinning that. And the tenant FK could have been `read_only`, which would have
+  broken both dashboards: they re-send the centre id on every scan edit.
+- **Password validators, closing ROADMAP 4d.** The item was right — nothing called
+  `validate_password`, so the API enforced 6 characters and nothing else and a
+  patient's own mobile passed. Wired into signup, reset, admin bootstrap and both
+  hospital paths, each *before* any row is written so a rejection cannot leave a
+  half-created account. Two test fixtures used `secret123`/`password123` and now
+  correctly 400. **`MinimumLengthValidator` is still 6, below Django's default 8 —
+  left open on purpose**; that is a product call about receptionist friction.
+- **Branch sweep: 6 deleted.** `chore/password-validators` and
+  `harden-password-validators` were byte-identical patches (different merge-bases
+  made them look divergent) and both superseded. Four `railway/*` deploy-bot
+  branches from June were all superseded by main. **`harden-password-validators`
+  was flagged "Do NOT delete" in this file** — the note was stale, not wrong when
+  written, and it was deleted before that line was read. Recovery SHAs: `5f6f9dc`,
+  `d9b0585`.
+- **Docs branches merged** (`2015a1c`, `cecf9d9`) — 430 lines that existed nowhere
+  else. Main won every ROADMAP conflict (newer), the 19th won the WORKLOG header,
+  and `WHATSAPP_TEMPLATES.md` kept main's §11-pending status *plus* the branch's
+  "✅ means approved by Meta, not proven" note, which main had lost.
+
+**The lesson is about verification, not about the bugs.** Six of ten findings were
+plausible, well-argued and wrong — and the two that would have been most tempting
+to fix (WebView mixed content, tokens in AsyncStorage) were the ones where the
+codebase already had a reason. A finding that survives someone actively trying to
+kill it is worth ten that merely sound right.
+
+**Action items**
+- [ ] **Revoke the Fast2SMS key** in the provider dashboard — deleting the file did
+      nothing; the blob is public in `origin/main` history forever. Provider is
+      unused (OTP is 2Factor), so closing the account is cleanest.
+- [ ] Push the five web/backend commits — **auto-deploys backend + website.**
+- [ ] EAS build so `allowBackup: false` (1.3.1) actually reaches devices.
+- [ ] Decide `MinimumLengthValidator` 6 → 8, or record 6 as intentional.
 
 ---
 
