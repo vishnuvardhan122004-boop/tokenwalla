@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** unmerged — `perf/dashboard-visible-polling` (**no PR**) + this wrap (web/backend) · `feat/popular-doctors-first` (PR #5) in the app. **The backlog is cleared and the branch list is swept** — 34 remote / 37 local merged branches deleted 2026-08-14. Merged 2026-08-14: web/backend PRs #20–#24, app PRs #6–#9; 2026-08-16: PR #25 (session-3 wrap, which triggered the deploy). **Do NOT delete** `develop` (deploys to staging), `harden-password-validators` or `website-cleanup-eslint-deadDep` — the last two look dead but hold unmerged work.
-- **Latest commit at last update:** `08363b7` main (web/backend, **deployed & live** — PR #37 threads 4→8) · `9b582c9` main (app, 1.2.0 — **not built for production**; Play is still on 1.1.3, versionCode 37 free)
-- **Last updated:** 2026-08-18 (session 2) — **token rotated (item 4a closed), patient WhatsApp proven, nothing wrong in production.** PRs #38 (stress harness) and #39 (templates 8–10 approved) merged; branch list swept 22 → 11. Two branches pushed with **no PR** — see ROADMAP item 1. Item 5b step 3 still gates the release.
+- **Branch:** clean — everything merged. Web/backend PRs **#44, #45, #46** (the scan stack) and app PR **#15** all landed 2026-08-19; this wrap is on `docs/wrap-2026-08-19`. **Do NOT delete** `develop` (deploys to staging) or `website-cleanup-eslint-deadDep` (holds unmerged work). ~~`harden-password-validators`~~ and its duplicate `chore/password-validators` were **deleted 2026-08-22** — both only flipped `AUTH_PASSWORD_VALIDATORS`, which was the half that did nothing; the real fix (wiring `validate_password` into all five password entry points) landed in `cfc630c`. See ROADMAP 4d.
+- **Latest commit at last update:** `3ebf78e` main (web/backend, **deployed & verified** — `/health/` reports `3ebf78e8`) · `a20ad2e` main (app, **not built** — Play is still on 1.1.3 / versionCode 36 from 2026-08-08; 37 free)
+- **Last updated:** 2026-08-19 — **scanning centres are live end to end on backend + website, and the app half is merged but unbuilt.** No code written this session: the scan stack was gated, merged and then verified against production. The one thing standing between a working feature and a patient using it is not code — no scanning centre is registered yet.
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -25,6 +25,105 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-19 — Scanning centres shipped; three bugs that tests could not catch
+
+**Item 8 complete: all ten slices, both repos, merged and deployed.** A scanning
+centre is a `Hospital` row with `kind='SCAN_CENTER'`; the bookable unit is a new
+`Scan`. Production is on `3ebf78e8`.
+
+| # | Change | Commit | Status |
+|---|---|---|---|
+| 1 | `Hospital.kind` + `Scan` model + the old-client exclusion guard | `69fec73` | ✅ live |
+| 2 | `Booking` takes a Doctor **or** a Scan, enforced by a CheckConstraint | `991d250` | ✅ live |
+| 4 | `/api/scans/` — public read, centre-staff write, slot availability | `c2cae62` | ✅ live |
+| 3,5–8 | Scan checkout + registration toggle, listing toggle, centre page, scans tab | `0cd3cef`, `d6276d3` | ✅ live |
+| 10 | Scan reports — upload, notify, access-checked download | `de1df7f` | ✅ live |
+| 9 | Scanning centres in the app | app `faf86e2` | ✅ merged, **unbuilt** |
+| — | Map picker on app hospital register; walk-in stats row; walk-in plan row | app `f488d45`, `66dee70` | ✅ merged, **unbuilt** |
+| — | WhatsApp templates §8–10 proven on a handset (closes item 4b) | `a368e3c` | ✅ live |
+
+**Three bugs found by looking, not by testing:**
+- **`build_queue_map` grouped by `doctor_id`** — every scan booking would have
+  shared the key `(None, date)`, queueing patients at unrelated centres into one
+  another's positions. Fixed by `Booking.provider_filter`, with a test that
+  demonstrates the naive version failing.
+- **Centre dashboard showed a "Doctors" tab** — `kind` was absent from the
+  **login response**, so every backend test passed while the screen was wrong.
+  Caught in a browser; pinned by `LoginPayloadTests`.
+- **The test suite was uploading to real Cloudinary** — the production media
+  store. Any test saving a `FileField`/`ImageField` made a live outbound upload.
+  `settings.py` now forces `FileSystemStorage` into a temp `MEDIA_ROOT` under
+  `manage.py test`. One module: 8.4s → 0.09s. CLAUDE.md trap 4b.
+
+**Verified against production**, not assumed: default `/api/hospitals/` = 13
+rows, all `HOSPITAL`, **zero leak**; `?kind=scan_center` (typo) **fails closed**;
+`/api/doctors/` unaffected at 15; `/api/scans/` **200**.
+
+**Tests:** 304 backend (up from 250), 25 frontend, 277 app. `makemigrations
+--check` clean. `test -v 2` shows zero `graph.facebook.com` lines.
+
+**Deliberately not done:** `FULL` collection is refused with a 409 until the CA
+confirms GST on diagnostic prices — the refusal is the exact boundary of the
+open question, and no scan can be sold with its price online meanwhile.
+`scan_report_ready` is not submitted to Meta (item 9); push fires regardless.
+
+**Process lesson, cost three rounds:** `main` did not move across three "I
+merged" reports. Cause (1) — the merge order given used **stacked** compare
+links, so PR #42 merged into `feat/scan-bookings` instead of `main`. Cause (2) —
+the remaining PRs had never been opened; a `compare/...` link opens the *form*,
+it creates nothing. Then GitHub's **two-step merge**: "Merge pull request" only
+expands a box, and **"Confirm merge"** is the real one. Always give
+`compare/main...branch`, and check for the purple **Merged** badge.
+
+**Also learned:** the Meta WhatsApp Manager create-template form **silently
+fails under browser automation** — valid state, enabled Submit, nothing created,
+nothing in the Activity log. Reading Meta state works; writing does not. Submit
+templates by hand.
+
+---
+
+## 2026-08-19 (session 4) — Scan stack shipped and verified live; the app is merged but unbuilt
+
+**No code changed.** This session ran the pre-merge gate, then verified the
+merged result against production rather than assuming the deploy worked.
+
+| What | Result |
+|---|---|
+| `/ship` on `feat/scan-endpoints` | ✅ SHIP — 267 tests (250 on main + exactly the 17 new ones), no migrations, additive API only |
+| Merged (by Vishnu) | web/backend **#44, #45, #46** · app **#15** |
+| Deploy verified | `/health/` → `3ebf78e8`, **matching** `origin/main` — SHA match, not inference |
+| `/api/scans/` | **200**, live for the first time |
+| `/api/bookings/<id>/reports/` | **401**, not 404 — slice 10's routes are deployed and `0002_scanreport` applied |
+| Old-client isolation | default `/api/hospitals/` leaks **0** `SCAN_CENTER` rows |
+| Website (Vercel) | live bundle `main.7f0e04ab.js` carries the centre toggle, `scan-center` route, `slot-availability` and `prep_instructions` |
+| Full suite on merged `main` | **304 backend / 25 frontend**, `makemigrations --check` clean, **0** `graph.facebook.com` lines under `-v 2` |
+
+**The result that matters: the feature is live and empty.** `/api/scans/` returns
+`count: 0` and `?kind=SCAN_CENTER` returns `[]`. Every code path is deployed and
+nothing is bookable, because the remaining chain is human — a centre registers
+at `/Husercreate`, an admin approves it, the centre adds scans. **No scan path
+has ever run against production data**, only against a seeded local centre.
+
+**Three gaps found, none of them in the feature:**
+
+- **Slice 10 has no app half.** The website got report download in
+  `MyBookings.js`; the app at `a20ad2e` has no `reports/` call at all. A patient
+  who books on the app is *told* their report is ready with nowhere to open it.
+- **`/ship`'s own secret scan is blocked by the production guard**, which
+  matches the live-key prefix in the command text rather than actual usage. It
+  fired twice today, the second time while writing the ROADMAP bullet about it.
+  A `/ship` verdict of "no secrets" is therefore one check short — the gate
+  degrades silently instead of failing loudly.
+- **Stale test baselines.** `CLAUDE.md` said 158 backend tests, the `/ship`
+  checklist says 99; the truth is 304 / 25. Both `CLAUDE.md` numbers corrected
+  today; the skill still says 99.
+
+**Note for whoever reads this next:** `ROADMAP.md` carried uncommitted edits
+written by a parallel session (they correctly recorded app PR #15). They were
+kept and built on, not overwritten.
 
 ---
 
