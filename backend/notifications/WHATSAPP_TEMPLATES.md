@@ -28,6 +28,11 @@ order** by the `params` list in `notifications/whatsapp.py`.
 > deliberately does not name a total — check the per-section marker, which is the
 > only thing that stays true.
 >
+> **✅ means approved by Meta. It does not mean proven.** §1–7 carry a *verified*
+> date because each actually arrived on a handset; §8–10 have approval only. An
+> approved template with mismatched params fails at send time, in production —
+> see ROADMAP item 4b.
+>
 > **An unapproved template is inert, not broken:** `send_template` logs a warning
 > and returns, so the paired push still fires and nothing fails.
 >

@@ -69,7 +69,33 @@ urgent:
 | Branch | Repo | PR | Deploys | Note |
 |---|---|---|---|---|
 | `feat/popular-doctors-first` (1) | app | #5 open | store, via EAS | app half of the ranking; safe to ship before the backend deploys |
-| `perf/dashboard-visible-polling` (1) | web | **none opened** | Vercel | oldest, lowest risk, hospital-facing only |
+| ~~`perf/dashboard-visible-polling`~~ | web | — | — | **DEAD — corrected 2026-08-18** |
+
+> ⚠️ **`perf/dashboard-visible-polling` was never unmerged.** This table called
+> it "1 commit, none opened, oldest, lowest risk" for four days. Checked on
+> 2026-08-18: **zero commits ahead of main, empty diff.** Its content had been
+> absorbed long ago. A branch that still exists is not a branch that still holds
+> work — `git rev-list --count origin/main..<branch>` is the only thing that
+> settles it, and it takes a second.
+
+**Branch sweep, 2026-08-18.** 14 dead remote branches deleted (every commit
+already on main), plus their local copies. The remote went 22 → 11. Kept
+`develop` (it deploys to staging — never delete it) and the four `railway/*`
+bot branches. The full check, worth re-running before any future sweep:
+
+```bash
+for b in $(git branch -r | grep -v HEAD | grep -v 'origin/main$'); do
+  echo "$(git rev-list --count origin/main..$b) $b"
+done
+```
+
+**Still pushed with NO PR — 2026-08-18.** Both are green and both are one
+commit; neither is merged, and neither will merge itself:
+
+| Branch | What | Proof |
+|---|---|---|
+| `chore/password-validators` | 3 Django password validators (see **4d**) | 227 backend tests, migrations clean |
+| `chore/eslint-dead-dep` | drops `DISABLE_ESLINT_PLUGIN=true` from the build | `CI=true npm run build` clean, 25 web tests |
 
 **Merged 2026-08-14 — web/backend:** `feat/app-version-gate` (**#22**, closing
 item 2c), `feat/popular-doctors-first` (**#20**), `docs/wrap-2026-08-13-s3`
@@ -359,8 +385,11 @@ They are the WhatsApp half of the three push-only events, so **until they are
 approved those events still send push only** — which is exactly today's
 behaviour, so nothing is regressing while you wait.
 
-When approved, prove each actually delivers — a status of Approved is not proof
-the params line up:
+**That is exactly why this item is still open.** Sections 1–7 of
+`WHATSAPP_TEMPLATES.md` carry a *verified* date because each actually arrived on
+a phone. These three have only Meta's approval, and approval is not proof the
+params line up — a template that is approved and mis-parameterised fails at send
+time, in production, to a real patient. Prove each:
 
 ```bash
 python manage.py send_test_whatsapp <mobile> --template queue_advance
@@ -431,6 +460,68 @@ consent), not a gap. Payouts are already covered by `doctor_payout`.
 > carries the body text and sample values. The rule above is unchanged: they were
 > needed because new *senders* were written, not because a template was missing.
 > The registration answer still stands.
+
+### ~~4d. The password validators are decorative — nothing calls them~~ ✅ 2026-08-22 — CLOSED
+
+**Fixed in `cfc630c`.** `tokenwalla.utils.check_password_strength` runs
+`validate_password` and is called from all five client-facing password entry
+points — patient signup, patient reset, admin bootstrap, hospital register and
+hospital reset — each *before* any row is written, so a rejected password cannot
+leave a half-created account behind. The three validators are enabled in
+settings, with `last_name` dropped from the similarity tuple because in this
+schema it holds a hospital id, not a name. Verified: a patient's own mobile is
+now rejected on both the numeric and similarity rules; `secret123` and
+`password123` are rejected as too common; `Test@1234` still passes. Five
+regression tests in `tests_security.py`; 326 pass.
+
+The two questions this item raised were settled as follows. (1) The reset view
+keeps its own "at least 6 characters" check ahead of the validators — the two
+rules agree, and the explicit one gives the friendlier message first.
+(2) **`MinimumLengthValidator` is still 6, below Django's default of 8 — that
+one is deliberately left open**, because raising it is a product call about how
+much friction a clinic receptionist should hit, not a security fix.
+
+Both duplicate branches (`chore/password-validators`, `harden-password-validators`)
+were deleted 2026-08-22 — they only flipped the settings, which was the half
+that did nothing.
+
+The original item follows, for the record.
+
+**Found 2026-08-18 while landing `harden-password-validators`.** The branch adds
+`CommonPasswordValidator`, `NumericPasswordValidator` and
+`UserAttributeSimilarityValidator`, and its comment says the third one stops a
+patient using their own phone number as their password.
+
+**It does not, because no code path runs the validators.** There is no
+`validate_password` call anywhere in `backend/`. `AUTH_PASSWORD_VALIDATORS` is
+consulted only by Django's admin forms, `createsuperuser` and `changepassword`.
+Every real path sets the password directly, which bypasses validation entirely:
+
+| Path | Where |
+|---|---|
+| patient signup | `users/serializers.py` — `RegisterSerializer.create` |
+| OTP password reset | `users/auth_views.py` (~475) |
+| hospital user create/update | `hospitals/views.py` (124, 222, 491) |
+| admin bootstrap | `users/auth_views.py` (~640), `create_admin_user.py` |
+
+So the merged change is **real hardening of the admin surface and nothing
+else**. That is worth having and it is not a regression — but do not read the
+setting and conclude patient passwords are validated. They are not.
+
+**The fix, when someone wants it — and it is a behaviour change, not a chore.**
+Wiring `validate_password` into `RegisterSerializer` and the reset view starts
+**rejecting passwords that are accepted today**, on a live signup endpoint. Two
+things to settle first:
+
+1. The reset view enforces its own ad-hoc *"at least 6 characters"* check. Add
+   the validators and there are two disagreeing rules on one field — decide
+   which one owns the message the patient sees.
+2. `MinimumLengthValidator` is already set to 6, which is **below** Django's
+   default 8. Turning validation on without revisiting that ships a weaker rule
+   with an official-looking name.
+
+Existing passwords keep working either way — validators run on set, not on
+login. Nobody is locked out by this.
 
 ### 5. Ship the mobile app — two of three gates cleared 🟠
 
