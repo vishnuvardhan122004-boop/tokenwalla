@@ -472,9 +472,18 @@ Sample params are built into the command.
 1. WhatsApp Manager → **Message templates** → **Create template**.
 2. Category **Utility**, language **English**, name exactly as above.
 3. Paste the body; add the sample values from the table so review can render it.
-4. Submit. Approval is usually minutes to a few hours.
-5. Confirm the approved name matches `WHATSAPP_TEMPLATE_DOCTOR_UNAVAILABLE`
-   (default `doctor_unavailable`). Override via env var only if you renamed it.
+   **Type the body by hand, do not paste `{{1}}` into the composer.** The editor
+   auto-closes braces, so typing `{{1}}` yields `{{1}}1}}`. Either type `{{1`
+   and let it close itself, or use the **+ Add variable** button — but note that
+   button trims the space before the variable, so check the preview pane reads
+   `Hello {{1}}, ...` and not `Hello{{1}}, ...` before submitting.
+4. Submit. Approval is usually minutes to a few hours. **Re-open the list and
+   confirm the row is actually there** — a failed submit can return you to the
+   list looking like it worked.
+5. Confirm the approved name matches the `WHATSAPP_TEMPLATE_*` setting that the
+   sender reads — they are listed in `settings.py` around line 318. For §11 that
+   is `WHATSAPP_TEMPLATE_SCAN_REPORT` (default `scan_report_ready`); for §1–10
+   the name is the section heading. Override via env var only if you renamed it.
 6. Ensure these env vars are set on the server (see `settings.py`):
    `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`.
    Without a token the sender no-ops in dev and logs a warning (never crashes).
@@ -482,5 +491,8 @@ Sample params are built into the command.
 ## Testing
 
 - Templates only send to numbers that have opted in (`user.whatsapp_opt_in`).
-- Every send is recorded in `WhatsAppLog` (`event_type='doctor_unavailable'`,
-  `status='sent'|'failed'`), so you can verify delivery in Django admin.
+- Every send is recorded in `WhatsAppLog` (`event_type` matches the sender —
+  e.g. `'scan_report_ready'`, `'doctor_unavailable'`; `status='sent'|'failed'`),
+  so you can verify delivery in Django admin. A `failed` row's `error` field
+  carries Meta's reason — `132001` means the template is not approved under that
+  exact name.

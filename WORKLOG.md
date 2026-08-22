@@ -89,7 +89,33 @@ to fix (WebView mixed content, tokens in AsyncStorage) were the ones where the
 codebase already had a reason. A finding that survives someone actively trying to
 kill it is worth ten that merely sound right.
 
+**Verified in the dashboards the same day — three "pending" items were already done.**
+Memory and this file both listed these as open; none of them were. Railway shows
+**both cron services live** (`send_appointment_reminders` Completed, `payouts.cron`
+last run succeeded, next in 1 hour), `WHATSAPP_ACCESS_TOKEN` **is set** on the web
+service alongside all four other `WHATSAPP_*` vars, and WhatsApp Manager shows **all
+ten templates Active** — including `doctor_payout`, `booking_cancelled` and
+`booking_no_show`, the three called unsubmitted here since 08-07.
+
+The one real gap is **`scan_report_ready`, which genuinely does not exist** in Meta,
+so every scan-report WhatsApp send fails `132001` today. A submission attempt
+returned to the template list looking successful and did **not** create the row —
+**check the list after submitting, never trust the redirect.** The composer also
+auto-closes `{{`, so typing `{{1}}` yields `{{1}}1}}`; §11 now says so.
+
+Found while drafting the Data Safety answers: **there is no account deletion path
+anywhere** in the app or backend, which Google requires for any app with account
+creation. See `DATA-SAFETY.md` in the app repo.
+
+**The lesson, repeated from this morning.** A status file is a claim, not evidence.
+Four items here were stale in the direction of *more work than existed*, and one
+real requirement was missing entirely because nothing had ever looked for it.
+
 **Action items**
+- [ ] Submit `scan_report_ready` in WhatsApp Manager — type the body by hand and
+      confirm the row appears in the list. Body and samples: `WHATSAPP_TEMPLATES.md` §11.
+- [ ] Build an account-deletion path (endpoint + profile row + public page) — Play
+      policy requirement, currently absent entirely.
 - [ ] **Revoke the Fast2SMS key** in the provider dashboard — deleting the file did
       nothing; the blob is public in `origin/main` history forever. Provider is
       unused (OTP is 2Factor), so closing the account is cleanest.
