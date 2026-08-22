@@ -12,8 +12,9 @@ cd backend && python manage.py test
 CI=true npx react-scripts test --watchAll=false
 ```
 
-Paste the real pass/fail counts. Backend was 99 tests at last count — if the
-number dropped, something got deleted; say so.
+Paste the real pass/fail counts. Baseline as of 2026-08-22: **326 backend, 25
+frontend**. If either number dropped, something got deleted; say so. If it
+rose, update this line in the same PR — a stale baseline defeats the check.
 
 ## 2. Money paths still green
 
