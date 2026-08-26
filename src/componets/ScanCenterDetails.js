@@ -290,7 +290,7 @@ export default function ScanCenterDetails() {
                               </button>
                               <p className="sc-note">
                                 {scan.fee_breakdown?.collection_mode === 'FULL'
-                                  ? 'Scan price + service fee payable now'
+                                  ? `${noun.Title.slice(0, -1)} price + service fee payable now`
                                   : `Pay the ₹${scan.price} ${noun.one} price at the centre — only the service fee is paid online`}
                               </p>
                             </>

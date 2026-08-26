@@ -165,8 +165,13 @@ const Hdashboard = () => {
   const isCentre = hospital?.kind === 'SCAN_CENTER' || hospital?.kind === 'BLOOD_CENTER';
   // The only thing separating the two centre kinds in here: the word.
   const unit = hospital?.kind === 'BLOOD_CENTER'
-    ? { one: 'test', many: 'Tests', icon: 'bi-droplet' }
-    : { one: 'scan', many: 'Scans', icon: 'bi-clipboard2-pulse' };
+    ? { one: 'test', many: 'Tests', icon: 'bi-droplet',
+        eg: 'e.g. Complete Blood Count', egType: 'Blood Test',
+        egPrep: 'e.g. 12 hours fasting. Water is fine.' }
+    : { one: 'scan', many: 'Scans', icon: 'bi-clipboard2-pulse',
+        eg: 'e.g. MRI Brain', egType: 'MRI',
+        egPrep: 'e.g. Do not eat for 8 hours. Remove all metal objects.' };
+  const Unit = unit.one[0].toUpperCase() + unit.one.slice(1);
 
   const fetchScans = async () => {
     if (!hospital?.id) return;
@@ -912,14 +917,14 @@ const Hdashboard = () => {
               <form className="card p-3 mb-3 shadow-sm" onSubmit={saveScan}>
                 <div className="row g-2">
                   <div className="col-md-6">
-                    <label className="form-label small fw-semibold">Scan name</label>
-                    <input className="form-control" required placeholder="e.g. MRI Brain"
+                    <label className="form-label small fw-semibold">{Unit} name</label>
+                    <input className="form-control" required placeholder={unit.eg}
                       value={scanForm.name}
                       onChange={e => setScanForm(f => ({ ...f, name: e.target.value }))} />
                   </div>
                   <div className="col-md-3">
                     <label className="form-label small fw-semibold">Type</label>
-                    <input className="form-control" placeholder="MRI"
+                    <input className="form-control" placeholder={unit.egType}
                       value={scanForm.modality}
                       onChange={e => setScanForm(f => ({ ...f, modality: e.target.value }))} />
                   </div>
@@ -962,19 +967,19 @@ const Hdashboard = () => {
                       value={scanForm.payment_collection_mode === 'FULL' ? 'FULL' : 'SERVICE_ONLY'}
                       onChange={e => setScanForm(f => ({ ...f, payment_collection_mode: e.target.value }))}
                     >
-                      <option value="SERVICE_ONLY">Service fee only — scan price paid at your centre</option>
-                      <option value="FULL">Scan price + service fee — paid online</option>
+                      <option value="SERVICE_ONLY">Service fee only — {unit.one} price paid at your centre</option>
+                      <option value="FULL">{Unit} price + service fee — paid online</option>
                     </select>
                     <small className="text-muted">
                       {scanForm.payment_collection_mode === 'FULL'
-                        ? 'We collect the scan price and settle it to your payout account — add one on your Profile if you have not.'
-                        : 'Nothing is owed to you by us; the patient settles the scan price at your counter.'}
+                        ? `We collect the ${unit.one} price and settle it to your payout account — add one on your Profile if you have not.`
+                        : `Nothing is owed to you by us; the patient settles the ${unit.one} price at your counter.`}
                     </small>
                   </div>
                   <div className="col-12">
                     <label className="form-label small fw-semibold">Before you come</label>
                     <textarea className="form-control" rows={2}
-                      placeholder="e.g. Do not eat for 8 hours. Remove all metal objects."
+                      placeholder={unit.egPrep}
                       value={scanForm.prep_instructions}
                       onChange={e => setScanForm(f => ({ ...f, prep_instructions: e.target.value }))} />
                     <small className="text-muted">
@@ -984,7 +989,7 @@ const Hdashboard = () => {
                 </div>
                 <div className="d-flex gap-2 mt-3">
                   <button className="btn btn-primary btn-sm" disabled={scanSaving}>
-                    {scanSaving ? 'Saving…' : scanForm.id ? 'Save changes' : 'Add scan'}
+                    {scanSaving ? 'Saving…' : scanForm.id ? 'Save changes' : `Add ${unit.one}`}
                   </button>
                   <button type="button" className="btn btn-light btn-sm" onClick={() => setScanForm(null)}>
                     Cancel
