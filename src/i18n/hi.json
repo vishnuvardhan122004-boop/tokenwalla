@@ -121,7 +121,8 @@
       "sub": "हज़ारों मरीज़ों से जुड़ें जो TokenWalla के साथ समझदारी से बुकिंग करते हैं।",
       "bookNow": "अभी अपॉइंटमेंट बुक करें →",
       "registerHospital": "अपना अस्पताल पंजीकृत करें",
-      "registerScanCenter": "अपना स्कैनिंग सेंटर पंजीकृत करें"
+      "registerScanCenter": "अपना स्कैनिंग सेंटर पंजीकृत करें",
+      "registerBloodCenter": "अपना ब्लड सेंटर पंजीकृत करें"
     }
   },
   "doctors": {
@@ -167,6 +168,7 @@
     "hospitalLogin": "हॉस्पिटल लॉगिन",
     "registerHospital": "अस्पताल पंजीकृत करें",
     "registerScanCenter": "स्कैनिंग सेंटर पंजीकृत करें",
+    "registerBloodCenter": "ब्लड सेंटर पंजीकृत करें",
     "dashboard": "डैशबोर्ड",
     "aboutUs": "हमारे बारे में",
     "contact": "संपर्क करें",

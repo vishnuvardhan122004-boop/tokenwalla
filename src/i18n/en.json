@@ -121,7 +121,8 @@
       "sub": "Join thousands of patients who book smarter with TokenWalla.",
       "bookNow": "Book Appointment Now →",
       "registerHospital": "Register Your Hospital",
-      "registerScanCenter": "Register Your Scanning Centre"
+      "registerScanCenter": "Register Your Scanning Centre",
+      "registerBloodCenter": "Register Your Blood Centre"
     }
   },
   "doctors": {
@@ -167,6 +168,7 @@
     "hospitalLogin": "Hospital Login",
     "registerHospital": "Register Hospital",
     "registerScanCenter": "Register Scanning Centre",
+    "registerBloodCenter": "Register Blood Centre",
     "dashboard": "Dashboard",
     "aboutUs": "About Us",
     "contact": "Contact",

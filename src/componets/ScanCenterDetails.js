@@ -33,6 +33,15 @@ export default function ScanCenterDetails() {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
 
+  // This one page serves both centre kinds — the flow is identical (pick the
+  // service, then the slot), only the noun differs. Derived from the fetched
+  // centre, so a blood centre says "Tests" no matter which link got here.
+  const noun = centre?.kind === 'BLOOD_CENTER'
+    ? { Title: 'Tests', plural: 'tests', one: 'test',
+        label: 'Blood Centre',    icon: 'bi-droplet' }
+    : { Title: 'Scans', plural: 'scans', one: 'scan',
+        label: 'Scanning Centre', icon: 'bi-activity' };
+
   const [selectedScan, setSelectedScan] = useState(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
@@ -130,7 +139,7 @@ export default function ScanCenterDetails() {
   return (
     <>
       <SEO
-        title={`${centre.name} — scans & prices | TokenWalla`}
+        title={`${centre.name} — ${noun.plural} & prices | TokenWalla`}
         description={`Book MRI, CT, X-ray and blood tests at ${centre.name}, ${centre.city}. See prices and available slots.`}
       />
       <style>{css}</style>
@@ -142,14 +151,14 @@ export default function ScanCenterDetails() {
           {/* ── Header ── */}
           <div className="sc-header">
             <div className="sc-header-main">
-              <div className="sc-kind"><i className="bi bi-activity me-1" /> Scanning Centre</div>
+              <div className="sc-kind"><i className={`bi ${noun.icon} me-1`} /> {noun.label}</div>
               <h1 className="sc-name">{centre.name}</h1>
               <div className="sc-meta">
                 {centre.city && <span><i className="bi bi-geo-alt me-1" />{centre.city}</span>}
                 {(centre.open_time || centre.close_time) && (
                   <span><i className="bi bi-clock me-1" />{centre.open_time || '—'} – {centre.close_time || '—'}</span>
                 )}
-                <span><i className="bi bi-clipboard2-pulse me-1" />{scans.length} scan{scans.length === 1 ? '' : 's'}</span>
+                <span><i className="bi bi-clipboard2-pulse me-1" />{scans.length} {noun.one}{scans.length === 1 ? '' : 's'}</span>
               </div>
               {centre.address && <div className="sc-address">{centre.address}</div>}
             </div>
@@ -178,11 +187,11 @@ export default function ScanCenterDetails() {
           )}
 
           {/* ── The menu ── */}
-          <h2 className="sc-section-title">Scans &amp; Prices</h2>
+          <h2 className="sc-section-title">{noun.Title} &amp; Prices</h2>
 
           {scans.length === 0 && (
             <div className="sc-empty">
-              This centre has not listed its scans yet.
+              This centre has not listed its {noun.plural} yet.
               {callNumber && <> Call <a href={`tel:${callNumber}`}>{callNumber}</a> to ask what they offer.</>}
             </div>
           )}
@@ -282,7 +291,7 @@ export default function ScanCenterDetails() {
                               <p className="sc-note">
                                 {scan.fee_breakdown?.collection_mode === 'FULL'
                                   ? 'Scan price + service fee payable now'
-                                  : `Pay the ₹${scan.price} scan price at the centre — only the service fee is paid online`}
+                                  : `Pay the ₹${scan.price} ${noun.one} price at the centre — only the service fee is paid online`}
                               </p>
                             </>
                           ) : callNumber ? (

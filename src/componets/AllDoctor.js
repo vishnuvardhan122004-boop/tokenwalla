@@ -46,12 +46,29 @@ function SkeletonCard() {
 export default function AllDoctor() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  // 'doctors' | 'centres'. The doctor path below is untouched by this: the
-  // centre path sits BESIDE it rather than generalising it, because the doctor
-  // list is the live, working, revenue-carrying screen and a shared abstraction
-  // would put every future scan-centre change inside it.
+  // 'doctors' | 'SCAN_CENTER' | 'BLOOD_CENTER'. The doctor path below is
+  // untouched by this: the centre path sits BESIDE it rather than generalising
+  // it, because the doctor list is the live, working, revenue-carrying screen
+  // and a shared abstraction would put every future centre change inside it.
+  //
+  // The two CENTRE kinds do share their path, though — same request, same card,
+  // same detail page. Only the words differ, so `mode` doubles as the ?kind=.
   const [mode,       setMode]       = useState('doctors');
-  const [centres,    setCentres]    = useState([]);
+  // Keyed by centre kind, so the two centre tabs cannot show each other's list
+  // and switching back does not refetch.
+  const [centresByKind, setCentresByKind] = useState({});
+
+  const isCentreMode = mode !== 'doctors';
+  const isBlood      = mode === 'BLOOD_CENTER';
+  const centres      = centresByKind[mode] || [];
+  // Every label that separates the two centre kinds, in one place.
+  const centreCopy = isBlood
+    ? { label: 'Blood Centre', unit: 'test', icon: 'bi-droplet',
+        eyebrow: 'FIND A BLOOD CENTRE', titleAccent: 'Blood Test',
+        blurb: 'blood tests and full body checkups', empty: 'No blood centres yet' }
+    : { label: 'Scan Centre',  unit: 'scan', icon: 'bi-activity',
+        eyebrow: 'FIND A SCANNING CENTRE', titleAccent: 'Scan or Test',
+        blurb: 'MRI, CT, X-ray and ultrasound', empty: 'No scanning centres yet' };
   const [scans,      setScans]      = useState([]);
   const [modality,   setModality]   = useState('All');
 
@@ -113,24 +130,31 @@ export default function AllDoctor() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Scanning centres. Fetched lazily — a patient who never switches modes never
-  // pays for these two requests. `?kind=SCAN_CENTER` is the opt-in the backend
-  // requires; without it the hospitals endpoint returns hospitals only.
+  // Centres. Fetched lazily — a patient who never switches modes never pays for
+  // these two requests. `?kind=` is the opt-in the backend requires; without it
+  // the hospitals endpoint returns hospitals only. Both centre kinds run the
+  // SAME request against the same endpoints — only the kind differs.
   useEffect(() => {
-    if (mode !== 'centres' || centres.length) return;
+    if (!isCentreMode || centresByKind[mode]) return;
+    const kind = mode;
     setLoading(true);
     Promise.all([
-      API.get('/hospitals/', { params: { kind: 'SCAN_CENTER' } }),
+      API.get('/hospitals/', { params: { kind } }),
       API.get('/scans/'),
     ])
       .then(([hRes, sRes]) => {
         const asList = (d) => (Array.isArray(d) ? d : (d.results || []));
-        setCentres(asList(hRes.data));
+        // Filter on `kind` for the same reason the app does: a backend that
+        // predates this kind ignores the unknown ?kind= and returns everything,
+        // which would render hospitals as blood centres.
+        setCentresByKind(prev => ({
+          ...prev, [kind]: asList(hRes.data).filter(h => h.kind === kind),
+        }));
         setScans(asList(sRes.data));
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [mode, centres.length]);
+  }, [mode, isCentreMode, centresByKind]);
 
   // Scans grouped by centre — drives the "N scans · from ₹X" line on each card
   // without a request per centre.
@@ -139,7 +163,12 @@ export default function AllDoctor() {
     return acc;
   }, {});
 
-  const modalities = ['All', ...new Set(scans.map(sc => sc.modality).filter(Boolean))];
+  // Only the modalities the CURRENT tab can actually show. `/scans/` returns
+  // every centre's list, so filtering on the raw response offered "MRI" and
+  // "X-Ray" as filters on the blood tab — options that could only ever return
+  // nothing.
+  const visibleScans = centres.flatMap(c => scansByCentre[c.id] || []);
+  const modalities = ['All', ...new Set(visibleScans.map(sc => sc.modality).filter(Boolean))];
 
   const filteredCentres = centres
     .map(c => ({ ...c, scans: scansByCentre[c.id] || [] }))
@@ -453,14 +482,14 @@ export default function AllDoctor() {
               </>
             ) : (
               <>
-                <div className="tw-section-label">FIND A SCANNING CENTRE</div>
+                <div className="tw-section-label">{centreCopy.eyebrow}</div>
                 <h1 className="ad-title">
-                  Book a <span style={{ color: 'var(--blue-600)' }}>Scan or Test</span>
+                  Book a <span style={{ color: 'var(--blue-600)' }}>{centreCopy.titleAccent}</span>
                 </h1>
                 <p className="ad-sub">
                   {loading
                     ? t('doctors.loading')
-                    : `${centres.length} centre${centres.length === 1 ? '' : 's'} · MRI, CT, X-ray and blood tests`}
+                    : `${centres.length} centre${centres.length === 1 ? '' : 's'} · ${centreCopy.blurb}`}
                 </p>
                 <div className="spec-pills">
                   {modalities.map(m => (
@@ -481,20 +510,23 @@ export default function AllDoctor() {
         {/* Sticky filters */}
         <div className="ad-filters">
           <div className="tw-container">
-            {/* Doctors ⇄ Scan Centres. A patient looking for an MRI and one
-                looking for a paediatrician are on different errands; this is
-                the switch between them. */}
+            {/* Doctors ⇄ Scan Centres ⇄ Blood Tests. A patient looking for an
+                MRI, one wanting a CBC and one looking for a paediatrician are
+                on three different errands; this is the switch between them.
+                Modality resets on switch — a leftover "MRI" would filter the
+                blood tab down to nothing and read as an empty segment. */}
             <div className="mode-switch">
               {[
                 { key: 'doctors', icon: 'bi-clipboard-pulse', label: 'Doctors' },
-                { key: 'centres', icon: 'bi-activity',        label: 'Scan Centres' },
+                { key: 'SCAN_CENTER',  icon: 'bi-activity', label: 'Scan Centres' },
+                { key: 'BLOOD_CENTER', icon: 'bi-droplet',  label: 'Blood Tests' },
               ].map(m => (
                 <button
                   key={m.key}
                   type="button"
                   className={`mode-btn ${mode === m.key ? 'is-active' : ''}`}
                   aria-pressed={mode === m.key}
-                  onClick={() => setMode(m.key)}
+                  onClick={() => { setMode(m.key); setModality('All'); }}
                 >
                   <i className={`bi ${m.icon} me-1`} />{m.label}
                 </button>
@@ -547,7 +579,7 @@ export default function AllDoctor() {
                    are not on leave. Modality is the filter that matters here. */
                 <select className="filter-select" value={modality} onChange={e => setModality(e.target.value)}>
                   {modalities.map(m => (
-                    <option key={m} value={m}>{m === 'All' ? 'All scan types' : m}</option>
+                    <option key={m} value={m}>{m === 'All' ? `All ${centreCopy.unit} types` : m}</option>
                   ))}
                 </select>
               )}
@@ -588,21 +620,21 @@ export default function AllDoctor() {
             )}
 
             {/* ── SCAN CENTRES ── */}
-            {!loading && mode === 'centres' && filteredCentres.length === 0 && (
+            {!loading && isCentreMode && filteredCentres.length === 0 && (
               <div className="centre-empty">
-                <i className="bi bi-activity" />
-                <div className="centre-empty-title">No scanning centres yet</div>
+                <i className={`bi ${centreCopy.icon}`} />
+                <div className="centre-empty-title">{centreCopy.empty}</div>
                 <div className="centre-empty-sub">
                   We're onboarding diagnostic partners now. Try the Doctors tab.
                 </div>
               </div>
             )}
 
-            {!loading && mode === 'centres' && filteredCentres.length > 0 && (
+            {!loading && isCentreMode && filteredCentres.length > 0 && (
               <div className="doc-grid">
                 {filteredCentres.map((c, idx) => (
                   <Link
-                    to={`/scan-center/${c.id}`}
+                    to={`/scan-center/${c.id}`}   /* one detail page serves both kinds */
                     className="doc-card fade-up"
                     key={c.id}
                     style={{ animationDelay: `${idx * 0.05}s` }}
@@ -610,11 +642,11 @@ export default function AllDoctor() {
                     <div className="card-img-wrap">
                       {c.image && !c.image.includes('placehold')
                         ? <img className="card-img" src={c.image} alt={c.name} />
-                        : <div className="card-img-placeholder"><i className="bi bi-activity" /></div>
+                        : <div className="card-img-placeholder"><i className={`bi ${centreCopy.icon}`} /></div>
                       }
                       <div className="card-avail yes">
                         <span className="avail-dot" />
-                        Scan Centre
+                        {centreCopy.label}
                       </div>
                       {(c.open_time || c.close_time) && (
                         <div className="hospital-tag">
@@ -635,7 +667,7 @@ export default function AllDoctor() {
                         </div>
                         <div className="meta-item">
                           <div className="meta-icon"><i className="bi bi-clipboard2-pulse me-1" /></div>
-                          {c.scans.length} scan{c.scans.length === 1 ? '' : 's'}
+                          {c.scans.length} {centreCopy.unit}{c.scans.length === 1 ? '' : 's'}
                         </div>
                       </div>
                       {c.scans.length > 0 && (
@@ -648,7 +680,7 @@ export default function AllDoctor() {
                       )}
                       <div className="card-slots-count">
                         {c.scans.length > 0
-                          ? `${c.scans.length} scan${c.scans.length === 1 ? '' : 's'} available`
+                          ? `${c.scans.length} ${centreCopy.unit}${c.scans.length === 1 ? '' : 's'} available`
                           : 'Contact the centre directly'}
                       </div>
                       <div className="card-footer">
@@ -656,13 +688,13 @@ export default function AllDoctor() {
                           {c.scans.length > 0 ? (
                             <>
                               <span className="card-fee-amount">from ₹{priceFrom(c.scans)}</span>
-                              <span className="card-fee-sub">per scan</span>
+                              <span className="card-fee-sub">per {centreCopy.unit}</span>
                             </>
                           ) : (
                             <span className="card-fee-sub">Prices on request</span>
                           )}
                         </div>
-                        <span className="book-btn">View scans</span>
+                        <span className="book-btn">View {centreCopy.unit}s</span>
                       </div>
                     </div>
                   </Link>

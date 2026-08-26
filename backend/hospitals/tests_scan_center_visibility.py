@@ -207,3 +207,86 @@ class LoginPayloadTests(TestCase):
                                {'mobile': '9222200002', 'password': 'secret123'},
                                format='json')
         self.assertEqual(res.json()['user']['hospital']['kind'], Hospital.HOSPITAL)
+
+
+class BloodCenterTests(TestCase):
+    """A blood centre is a SECOND centre kind on the SAME pipeline.
+
+    Two things must hold at once, and they pull in opposite directions:
+
+    1. It is a centre — so it is hidden from build 36 exactly like a scanning
+       centre, and a Scan row may be attached to it.
+    2. It is NOT a scanning centre — so it must not appear in the SCAN_CENTER
+       listing, and vice versa. The two tabs are separate lists.
+
+    The second is the one that would silently regress if someone "simplified"
+    the listing filter to a boolean is-a-centre check.
+    """
+    URL = '/api/hospitals/'
+
+    def setUp(self):
+        self.client = APIClient()
+        self.hospital = Hospital.objects.create(
+            name='Sri Sarwodhaya orthopaedic hospital', city='Hindupur',
+            mobile='9000000401', status='active', password='x')
+        self.scan_centre = Hospital.objects.create(
+            name='Vijaya Diagnostics', city='Hindupur',
+            mobile='9000000402', status='active', password='x',
+            kind=Hospital.SCAN_CENTER)
+        self.blood_centre = Hospital.objects.create(
+            name='Lotus Pathology Lab', city='Hindupur',
+            mobile='9000000403', status='active', password='x',
+            kind=Hospital.BLOOD_CENTER)
+
+    def names(self, res):
+        body = res.json()
+        rows = body['results'] if isinstance(body, dict) and 'results' in body else body
+        return [r['name'] for r in rows]
+
+    def test_hidden_from_clients_that_did_not_opt_in(self):
+        """The build-36 contract, extended to the new kind."""
+        names = self.names(self.client.get(self.URL))
+        self.assertIn('Sri Sarwodhaya orthopaedic hospital', names)
+        self.assertNotIn('Lotus Pathology Lab', names)
+
+    def test_opt_in_returns_only_blood_centres(self):
+        names = self.names(self.client.get(self.URL, {'kind': 'BLOOD_CENTER'}))
+        self.assertEqual(names, ['Lotus Pathology Lab'])
+
+    def test_the_two_centre_kinds_do_not_bleed_into_each_other(self):
+        """Separate tabs mean separate lists — a lab is not an MRI centre."""
+        self.assertNotIn(
+            'Lotus Pathology Lab',
+            self.names(self.client.get(self.URL, {'kind': 'SCAN_CENTER'})))
+        self.assertNotIn(
+            'Vijaya Diagnostics',
+            self.names(self.client.get(self.URL, {'kind': 'BLOOD_CENTER'})))
+
+    def test_a_test_can_be_listed_at_a_blood_centre(self):
+        """The reason this is a kind and not a new model: Scan just works."""
+        Scan.objects.create(
+            center=self.blood_centre, name='Complete Blood Count',
+            modality='Blood Test', price=350, duration_minutes=5,
+            prep_instructions='12 hours fasting required.',
+            slots=['09:00 AM'], days=['Mon'])
+        rows = self.client.get('/api/scans/', {'center': self.blood_centre.id}).json()
+        rows = rows['results'] if isinstance(rows, dict) and 'results' in rows else rows
+        self.assertEqual([r['name'] for r in rows], ['Complete Blood Count'])
+
+    def test_a_test_cannot_be_listed_at_a_plain_hospital(self):
+        """The centre guard still refuses hospitals — it widened, not opened."""
+        from scans.serializers import ScanSerializer
+        ser = ScanSerializer(data={'center': self.hospital.id, 'name': 'CBC',
+                                   'price': 350})
+        self.assertFalse(ser.is_valid())
+        self.assertIn('center', ser.errors)
+
+    def test_registration_accepts_the_new_kind(self):
+        cache.set('otp_verified:9111100050', True, 300)
+        res = self.client.post('/api/hospitals/register/', {
+            'name': 'New Lab', 'mobile': '9111100050', 'password': 'Test@1234',
+            'city': 'Hindupur', 'kind': 'BLOOD_CENTER',
+        }, format='json')
+        self.assertIn(res.status_code, (200, 201), res.content)
+        self.assertEqual(
+            Hospital.objects.get(mobile='9111100050').kind, Hospital.BLOOD_CENTER)

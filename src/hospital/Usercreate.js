@@ -12,11 +12,13 @@ const Husercreate = () => {
   const navigate = useNavigate();
   useAuthKeyboard();
 
-  // ?kind=SCAN_CENTER lands a centre on the centre form. Whitelisted against
-  // the one value we accept rather than trusted: this is a URL, anyone can
-  // write it, and the toggle above stays the real control either way.
+  // ?kind=… lands a centre on the centre form. Whitelisted against the values
+  // we accept rather than trusted: this is a URL, anyone can write it, and the
+  // toggle above stays the real control either way.
+  const CENTRE_KINDS = ['SCAN_CENTER', 'BLOOD_CENTER'];
   const [params] = useSearchParams();
-  const initialKind = params.get('kind') === 'SCAN_CENTER' ? 'SCAN_CENTER' : 'HOSPITAL';
+  const kindParam = params.get('kind');
+  const initialKind = CENTRE_KINDS.includes(kindParam) ? kindParam : 'HOSPITAL';
 
   const [hospital, setHospital] = useState({
     kind: initialKind,
@@ -24,11 +26,16 @@ const Husercreate = () => {
     latitude: null, longitude: null,
   });
 
-  // One flag drives every label on this page. A scanning centre registers
-  // through the same form, the same OTP and the same admin approval as a
-  // hospital — only the wording and the bookable unit differ.
-  const isCentre = hospital.kind === 'SCAN_CENTER';
-  const noun     = isCentre ? 'Scanning Centre' : 'Hospital';
+  // One flag drives every label on this page. A centre registers through the
+  // same form, the same OTP and the same admin approval as a hospital — only
+  // the wording and the bookable unit differ. Both centre kinds take the
+  // identical path; `noun` is the only thing telling them apart here.
+  const isCentre = hospital.kind !== 'HOSPITAL';
+  const noun     = hospital.kind === 'BLOOD_CENTER' ? 'Blood Centre'
+                 : hospital.kind === 'SCAN_CENTER'  ? 'Scanning Centre'
+                 : 'Hospital';
+  const isBlood  = hospital.kind === 'BLOOD_CENTER';
+  const unit     = isBlood ? 'tests' : 'scans';
 
   const [loading,     setLoading]     = useState(false);
   const [otpLoading,  setOtpLoading]  = useState(false);
@@ -166,14 +173,14 @@ const Husercreate = () => {
             </h1>
             <p className="auth-panel-sub">
               {isCentre
-                ? 'Join TokenWalla to let patients discover your scans, see your prices, book a slot and manage your live queue — all in one place.'
+                ? `Join TokenWalla to let patients discover your ${unit}, see your prices, book a slot and manage your live queue — all in one place.`
                 : 'Join TokenWalla to let patients discover your doctors, book OPD slots, and manage your live queue — all in one place.'}
             </p>
 
             <div className="auth-features">
               {[
                 isCentre
-                  ? { icon: '🔬', title: 'Get Discovered', desc: 'Patients across AP & Telangana find your scans and prices' }
+                  ? { icon: isBlood ? '🩸' : '🔬', title: 'Get Discovered', desc: `Patients across AP & Telangana find your ${unit} and prices` }
                   : { icon: '🩺', title: 'Get Discovered', desc: 'Patients across AP & Telangana find and book your doctors' },
                 { icon: '🎫', title: 'Digital Tokens',    desc: 'Replace paper queues with live, trackable tokens' },
                 { icon: '✅', title: 'Verified & Trusted', desc: `Every ${noun.toLowerCase()} is admin-verified before going live` },
@@ -201,8 +208,9 @@ const Husercreate = () => {
               means an admin edit, so it is asked up front rather than buried. */}
           <div className="kind-choice">
             {[
-              { value: 'HOSPITAL',    icon: '🏥', label: 'Hospital / Clinic',  sub: 'You have doctors and OPD slots' },
-              { value: 'SCAN_CENTER', icon: '🔬', label: 'Scanning Centre',    sub: 'MRI, CT, X-ray, blood tests' },
+              { value: 'HOSPITAL',     icon: '🏥', label: 'Hospital / Clinic', sub: 'You have doctors and OPD slots' },
+              { value: 'SCAN_CENTER',  icon: '🔬', label: 'Scanning Centre',   sub: 'MRI, CT, X-ray, ultrasound' },
+              { value: 'BLOOD_CENTER', icon: '🩸', label: 'Blood Centre',      sub: 'Blood tests, full body checkup' },
             ].map(opt => (
               <button
                 type="button"
@@ -238,7 +246,8 @@ const Husercreate = () => {
                 <input
                   className={`auth-input ${errors.name ? 'has-error' : ''}`}
                   name="name"
-                  placeholder={isCentre ? 'e.g. Vijaya Diagnostics' : 'e.g. City Care Hospital'}
+                  placeholder={isBlood ? 'e.g. Lotus Pathology Lab'
+                             : isCentre ? 'e.g. Vijaya Diagnostics' : 'e.g. City Care Hospital'}
                   value={hospital.name} onChange={handleChange}
                 />
               </div>

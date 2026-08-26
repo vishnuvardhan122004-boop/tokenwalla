@@ -742,6 +742,7 @@ API.get('/doctors/').then(({ data }) => {
                     centre", a centre owner has no way to know the page is for
                     them. */}
                 <Link to="/Husercreate?kind=SCAN_CENTER" className="btn-white-outline">{t('hero.cta.registerScanCenter')}</Link>
+                <Link to="/Husercreate?kind=BLOOD_CENTER" className="btn-white-outline">{t('hero.cta.registerBloodCenter')}</Link>
               </div>
             </div>
           </div>

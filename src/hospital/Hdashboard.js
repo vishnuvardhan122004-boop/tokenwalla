@@ -157,10 +157,16 @@ const Hdashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hospital]);
 
-  // A scanning centre is a Hospital row with kind=SCAN_CENTER. Everything on
-  // this dashboard — queue, payments, QR scanner — works identically for one;
-  // the only difference is that its bookable unit is a Scan, not a Doctor.
-  const isCentre = hospital?.kind === 'SCAN_CENTER';
+  // A centre is a Hospital row with kind=SCAN_CENTER or BLOOD_CENTER.
+  // Everything on this dashboard — queue, payments, QR scanner — works
+  // identically for one; the only difference is that its bookable unit is a
+  // Scan, not a Doctor. Branch on the SET, never on SCAN_CENTER alone, or a
+  // blood centre gets the hospital dashboard and cannot reach its own tests.
+  const isCentre = hospital?.kind === 'SCAN_CENTER' || hospital?.kind === 'BLOOD_CENTER';
+  // The only thing separating the two centre kinds in here: the word.
+  const unit = hospital?.kind === 'BLOOD_CENTER'
+    ? { one: 'test', many: 'Tests', icon: 'bi-droplet' }
+    : { one: 'scan', many: 'Scans', icon: 'bi-clipboard2-pulse' };
 
   const fetchScans = async () => {
     if (!hospital?.id) return;
@@ -674,7 +680,7 @@ const Hdashboard = () => {
           {[
             { key: "queue",    label: <><i className="bi bi-people me-1" />Queue</> },
             isCentre
-              ? { key: "doctors", label: <><i className="bi bi-clipboard2-pulse me-1" />Scans</> }
+              ? { key: "doctors", label: <><i className={`bi ${unit.icon} me-1`} />{unit.many}</> }
               : { key: "doctors", label: <><i className="bi bi-person-badge me-1" />Doctors</> },
             { key: "payments", label: <><i className="bi bi-credit-card me-1" />Payments</> },
             { key: "scanner",  label: <><i className="bi bi-qr-code-scan me-1" />Scanner</> },
@@ -882,7 +888,7 @@ const Hdashboard = () => {
           <>
             <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
               <div>
-                <h5 className="mb-0 fw-bold">Your scans</h5>
+                <h5 className="mb-0 fw-bold">Your {unit.many.toLowerCase()}</h5>
                 <small className="text-muted">
                   Patients see these, with prices, on your centre page.
                 </small>
@@ -898,7 +904,7 @@ const Hdashboard = () => {
                   payment_collection_mode: 'SERVICE_ONLY',
                 })}
               >
-                <i className="bi bi-plus-lg me-1" />Add a scan
+                <i className="bi bi-plus-lg me-1" />Add a {unit.one}
               </button>
             </div>
 

@@ -63,10 +63,10 @@ class ScanSerializer(serializers.ModelSerializer):
         exist. A serializer error is also the only version of this the person
         filling in the form can actually act on.
         """
-        if value.kind != Hospital.SCAN_CENTER:
+        if value.kind not in Hospital.CENTER_KINDS:
             raise serializers.ValidationError(
-                f'"{value.name}" is registered as a hospital, not a scanning '
-                f'centre. Scans can only be added to a scanning centre.'
+                f'"{value.name}" is registered as a hospital, not a diagnostic '
+                f'centre. Tests can only be added to a scanning or blood centre.'
             )
         # And it cannot be moved to a different centre after creation: the
         # ownership check on update runs against the row's CURRENT centre, so

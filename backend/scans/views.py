@@ -61,11 +61,11 @@ class ScanViewSet(viewsets.ModelViewSet):
         if modality:
             qs = qs.filter(modality__iexact=modality)
 
-        # A scan can only be booked at a scanning centre. If a row's centre was
-        # flipped back to kind=HOSPITAL after the scan was created, the scan is
-        # unbookable — the whole patient flow keys off the centre being a
-        # centre — so it must not be listed either.
-        qs = qs.filter(center__kind=Hospital.SCAN_CENTER)
+        # A scan can only be booked at a centre (scanning OR blood). If a row's
+        # centre was flipped back to kind=HOSPITAL after the scan was created,
+        # the scan is unbookable — the whole patient flow keys off the centre
+        # being a centre — so it must not be listed either.
+        qs = qs.filter(center__kind__in=Hospital.CENTER_KINDS)
 
         # Same demo-fixture rule as doctors: internal [TEST] centres are not
         # patient-facing, but stay visible to their own staff and to admins.

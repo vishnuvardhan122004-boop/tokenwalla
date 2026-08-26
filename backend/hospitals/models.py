@@ -20,16 +20,18 @@ def exclude_test_hospitals(qs, field='name'):
     return qs.exclude(**{f'{field}__istartswith': TEST_HOSPITAL_PREFIX})
 
 
-def exclude_scan_centers(qs, field='kind'):
-    """Drop scanning centres from a queryset built for hospital-shaped clients.
+def exclude_centers(qs, field='kind'):
+    """Drop diagnostic centres from a queryset built for hospital-shaped clients.
 
     THIS IS AN API-CONTRACT GUARD, not a preference. Build 36 is live on the
     Play Store and calls `/api/hospitals/` and `/api/doctors/`; those installs
-    cannot be updated on our schedule. A scanning centre in either response
-    renders there as a hospital with a Book button that leads nowhere, because
-    the bookable unit for a centre is a Scan and build 36 has never heard of
-    one. So centres are invisible by default and a new client opts in with
-    `?kind=SCAN_CENTER`.
+    cannot be updated on our schedule. A centre in either response renders there
+    as a hospital with a Book button that leads nowhere, because the bookable
+    unit for a centre is a Scan and build 36 has never heard of one. So centres
+    are invisible by default and a new client opts in with `?kind=`.
+
+    Excludes EVERY centre kind, not just SCAN_CENTER — a blood centre is just as
+    unbookable in build 36 as a scanning one. See Hospital.CENTER_KINDS.
 
     Same shape as exclude_test_hospitals: `field` is the path to the kind, so
     this works on Hospital itself ('kind') and on anything related to it
@@ -39,7 +41,7 @@ def exclude_scan_centers(qs, field='kind'):
     fetches itself by id to render its own dashboard and profile, and filtering
     detail would lock it out of its own account.
     """
-    return qs.exclude(**{field: Hospital.SCAN_CENTER})
+    return qs.exclude(**{f'{field}__in': Hospital.CENTER_KINDS})
 
 
 def show_test_hospitals_to(user) -> bool:
@@ -69,12 +71,28 @@ class Hospital(models.Model):
     # this column, and every client that never sends it, means a hospital.
     # What differs is the bookable unit — a hospital has Doctors, a centre has
     # Scans (see the `scans` app).
-    HOSPITAL    = 'HOSPITAL'
-    SCAN_CENTER = 'SCAN_CENTER'
+    HOSPITAL     = 'HOSPITAL'
+    SCAN_CENTER  = 'SCAN_CENTER'
+    # A pathology lab — CBC, lipid profile, thyroid, "full body checkup". It is
+    # a CENTRE, not a third kind of thing: the bookable unit is still a Scan
+    # row (a named test, a price, a slot, prep instructions), the token, queue,
+    # QR check-in, report upload and payout all behave identically. The only
+    # reason it is not simply a SCAN_CENTER is discovery in both directions — a
+    # patient looking for a blood test does not tap "Scan Centres", and a lab
+    # registering does not pick "Scanning Centre". So: separate label, separate
+    # listing, one shared pipeline.
+    BLOOD_CENTER = 'BLOOD_CENTER'
     KIND_CHOICES = [
-        (HOSPITAL,    'Hospital / Clinic'),
-        (SCAN_CENTER, 'Scanning Centre'),
+        (HOSPITAL,     'Hospital / Clinic'),
+        (SCAN_CENTER,  'Scanning Centre'),
+        (BLOOD_CENTER, 'Blood Centre / Pathology Lab'),
     ]
+    # Every kind whose bookable unit is a Scan rather than a Doctor. Branch on
+    # THIS, never on `kind == SCAN_CENTER`, anywhere the question is "does this
+    # provider sell scans?" — ownership guards, checkout, payouts, dashboards.
+    # Compare against the bare kind only where the two centre types must be
+    # told apart, which is exactly the public listing filter and the labels.
+    CENTER_KINDS = (SCAN_CENTER, BLOOD_CENTER)
     kind     = models.CharField(
         max_length=20, choices=KIND_CHOICES, default=HOSPITAL, db_index=True,
     )

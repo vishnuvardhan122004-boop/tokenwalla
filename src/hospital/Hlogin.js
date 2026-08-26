@@ -209,6 +209,9 @@ export default function Hlogin() {
           <div className="auth-switch" style={{ marginTop: 6 }}>
             New scanning centre? <Link to="/Husercreate?kind=SCAN_CENTER">Register here →</Link>
           </div>
+          <div className="auth-switch" style={{ marginTop: 6 }}>
+            New blood centre? <Link to="/Husercreate?kind=BLOOD_CENTER">Register here →</Link>
+          </div>
 
           <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid var(--blue-50)', textAlign: 'center' }}>
             <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>

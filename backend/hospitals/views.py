@@ -14,7 +14,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from tokenwalla.utils import check_password_strength, is_valid_landline
 
 from .models import (
-    Hospital, HospitalPhoto, exclude_scan_centers, exclude_test_hospitals,
+    Hospital, HospitalPhoto, exclude_centers, exclude_test_hospitals,
     show_test_hospitals_to,
 )
 from .serializers import HospitalSerializer
@@ -56,11 +56,15 @@ def _verify_otp(mobile, otp_entered):
 class HospitalListView(APIView):
     """Public — list only APPROVED (active) hospitals.
 
-    `?kind=SCAN_CENTER` opts into scanning centres. Without it the response is
-    hospitals only, byte-for-byte what it was before centres existed — which is
-    the whole point: the installed app builds calling this endpoint have never
-    heard of a Scan and would render a centre as a bookable hospital. See
-    exclude_scan_centers().
+    `?kind=SCAN_CENTER` or `?kind=BLOOD_CENTER` opts into that centre kind.
+    Without it the response is hospitals only, byte-for-byte what it was before
+    centres existed — which is the whole point: the installed app builds calling
+    this endpoint have never heard of a Scan and would render a centre as a
+    bookable hospital. See exclude_centers().
+
+    The opt-in returns ONE kind, never both: a patient browsing blood centres is
+    not asking to see MRI centres, and the two lists are separate tabs in both
+    front ends.
     """
     permission_classes = [AllowAny]
 
@@ -69,10 +73,11 @@ class HospitalListView(APIView):
 
         # Unknown/absent value ⇒ hospitals. An old client sends nothing; a typo
         # must not silently widen the list, so only the exact opt-in counts.
-        if request.query_params.get('kind') == Hospital.SCAN_CENTER:
-            hospitals = hospitals.filter(kind=Hospital.SCAN_CENTER)
+        kind = request.query_params.get('kind')
+        if kind in Hospital.CENTER_KINDS:
+            hospitals = hospitals.filter(kind=kind)
         else:
-            hospitals = exclude_scan_centers(hospitals)
+            hospitals = exclude_centers(hospitals)
 
         if not show_test_hospitals_to(request.user):
             hospitals = exclude_test_hospitals(hospitals)

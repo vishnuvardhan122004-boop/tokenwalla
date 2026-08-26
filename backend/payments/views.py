@@ -316,7 +316,7 @@ class CreateOrderView(APIView):
         except (Scan.DoesNotExist, ValueError, TypeError):
             return Response({'message': 'Scan not found.'}, status=404)
 
-        if scan.center.kind != Hospital.SCAN_CENTER:
+        if scan.center.kind not in Hospital.CENTER_KINDS:
             # The whole flow assumes the owner is a centre. Refuse rather than
             # take money against a row that cannot be served.
             return Response({'message': 'This scan is not bookable.'}, status=400)
@@ -1135,9 +1135,10 @@ class MarkPayoutPaidView(APIView):
             idem_key = f'doctor_{doctor.id}'
         else:
             try:
-                center = Hospital.objects.get(pk=center_id, kind=Hospital.SCAN_CENTER)
+                center = Hospital.objects.get(
+                    pk=center_id, kind__in=Hospital.CENTER_KINDS)
             except (Hospital.DoesNotExist, ValueError, TypeError):
-                return Response({'message': 'Scanning centre not found.'}, status=404)
+                return Response({'message': 'Centre not found.'}, status=404)
             target   = center
             payee_q  = {'center_id': center.id}
             batch_kw = {'center': center}
