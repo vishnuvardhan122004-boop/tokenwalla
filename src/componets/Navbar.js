@@ -202,7 +202,17 @@ export default function Navbar() {
         .mobile-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--blue-600); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif; font-size: 16px; font-weight: 800; }
         @keyframes twPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
         @media (max-width: 860px) { .nav-links { display: none; } .hamburger { display: flex; } .hosp-badge { display: none; } }
-        @media (max-width: 480px) { .nav-inner { padding: 0 16px; } }
+        /* Below 480px brand + lang + login + hamburger overflowed the row and the
+           hamburger got clipped off-screen. Drop the (drawer-duplicated) language
+           pill and tighten the row so the menu button stays tappable. */
+        @media (max-width: 480px) {
+          .nav-inner { padding: 0 16px; gap: 8px; }
+          .nav-wordmark { font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .nav-brand { flex-shrink: 1; min-width: 0; }
+          .nav-logo { flex-shrink: 0; }
+          .nav-right .lang-switch { display: none; }
+          .user-name, .hosp-name { max-width: 80px; }
+        }
         .nav-spacer { height: 64px; }
       `}</style>
 
@@ -349,10 +359,22 @@ export default function Navbar() {
                   <div className="mobile-link-icon"><i className="bi bi-gear me-1" /></div> {t('nav.adminPanel')}
                 </Link>
               )}
-              <div className="mobile-divider" />
-              <Link to="/Hlogin" className="mobile-link">
-                <div className="mobile-link-icon"><i className="bi bi-hospital me-1" /></div> {t('nav.hospitalLogin')}
-              </Link>
+            </>
+          ) : (
+            <Link to="/login" className="btn-primary" style={{ justifyContent: 'center', padding: 14, borderRadius: 12, marginTop: 8 }}>
+              {t('nav.loginMobile')}
+            </Link>
+          )}
+
+          {/* Outside the ternary: logged-out visitors need this too — the footer
+              was previously the only way in. */}
+          <div className="mobile-divider" />
+          <Link to="/Hlogin" className="mobile-link">
+            <div className="mobile-link-icon"><i className="bi bi-hospital me-1" /></div> {t('nav.hospitalLogin')}
+          </Link>
+
+          {(isPatient || isAdmin) && (
+            <>
               <div className="mobile-divider" />
               <button
                 className="mobile-link"
@@ -363,10 +385,6 @@ export default function Navbar() {
                 {t('nav.logout')}
               </button>
             </>
-          ) : (
-            <Link to="/login" className="btn-primary" style={{ justifyContent: 'center', padding: 14, borderRadius: 12, marginTop: 8 }}>
-              {t('nav.loginMobile')}
-            </Link>
           )}
         </div>
       )}
