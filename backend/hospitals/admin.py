@@ -7,11 +7,53 @@ from .models import Hospital
  
 @admin.register(Hospital)
 class HospitalAdmin(admin.ModelAdmin):
-    list_display  = ('name', 'kind', 'city', 'mobile', 'license_number', 'status',
-                     'booking_count', 'doctor_count', 'created')
+    list_display  = ('name', 'kind', 'sells', 'city', 'mobile', 'license_number',
+                     'status', 'booking_count', 'doctor_count', 'created')
     search_fields = ('name', 'city', 'mobile', 'license_number')
-    list_filter   = ('status', 'kind')
-    actions       = ['approve_hospitals', 'reject_hospitals', 'safe_delete_hospitals']
+    # svc_* in the filters is how you find the approval queue: filter any of
+    # them to PENDING to see who is waiting on you.
+    list_filter   = ('status', 'kind',
+                     'svc_consultations', 'svc_scans', 'svc_blood')
+    actions       = ['approve_hospitals', 'reject_hospitals', 'safe_delete_hospitals',
+                     'approve_pending_capabilities']
+
+    @admin.display(description='Sells')
+    def sells(self, obj):
+        """What this provider offers, with anything awaiting you called out."""
+        live    = [s for s in obj.SEGMENT_FIELD if obj.offers(s)]
+        pending = [s for s, f in obj.SEGMENT_FIELD.items()
+                   if getattr(obj, f) == obj.CAP_PENDING]
+        if pending:
+            return format_html(
+                '{} <span style="color:#854F0B;font-weight:600">+{} pending</span>',
+                ', '.join(live) or '—', ', '.join(pending))
+        return ', '.join(live) or '—'
+
+    @admin.action(description='Approve pending service capabilities')
+    def approve_pending_capabilities(self, request, queryset):
+        """Flip every PENDING capability on the selected rows to ACTIVE.
+
+        Separate from approve_hospitals because they answer different questions:
+        that one is "is this a real business", this one is "may they also sell
+        this". A live hospital adding blood tests needs the second, not the first.
+        """
+        changed = 0
+        with transaction.atomic():
+            for hospital in queryset:
+                fields = [f for f in hospital.SEGMENT_FIELD.values()
+                          if getattr(hospital, f) == hospital.CAP_PENDING]
+                if not fields:
+                    continue
+                for f in fields:
+                    setattr(hospital, f, hospital.CAP_ACTIVE)
+                hospital.save(update_fields=fields)
+                changed += len(fields)
+        if changed:
+            self.message_user(request, f'Approved {changed} capability request(s).',
+                              messages.SUCCESS)
+        else:
+            self.message_user(request, 'Nothing was pending on those rows.',
+                              messages.WARNING)
 
         # ── Read-only computed columns ─────────────────────────────────────────────
  

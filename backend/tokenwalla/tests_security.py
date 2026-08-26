@@ -442,8 +442,12 @@ class TenantReassignmentTests(TestCase):
         every scan edit, so the 'unchanged is fine' half matters here too."""
         from scans.models import Scan
         for h in (self.mine, self.theirs):
-            h.kind = Hospital.SCAN_CENTER
-            h.save(update_fields=['kind'])
+            # svc_scans, not just kind: selling scans is a capability now, and
+            # the scan endpoints ask the capability. Setting kind alone would
+            # leave both rows selling nothing and the scan unlisted, which would
+            # make this test pass for the wrong reason (404, not 400).
+            h.kind, h.svc_scans = Hospital.SCAN_CENTER, Hospital.CAP_ACTIVE
+            h.save(update_fields=['kind', 'svc_scans'])
         scan = Scan.objects.create(center=self.mine, name='MRI Brain', price=4500)
 
         res = self.client.patch(

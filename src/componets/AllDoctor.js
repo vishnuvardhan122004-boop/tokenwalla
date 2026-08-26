@@ -28,6 +28,12 @@ const SPEC_SYNONYMS = {
   physio:   ['physio', 'rehab', 'physical'],
 };
 
+// The `?kind=` value each tab sends, mapped to the segment it means. The
+// parameter keeps its old name so no shipped client has to change how it asks.
+const KIND_TO_SEGMENT = {
+  HOSPITAL: 'CONSULT', SCAN_CENTER: 'SCAN', BLOOD_CENTER: 'BLOOD',
+};
+
 function SkeletonCard() {
   return (
     <div style={{ background: '#fff', border: '1px solid var(--blue-100)', borderRadius: 18, overflow: 'hidden' }}>
@@ -144,11 +150,20 @@ export default function AllDoctor() {
     ])
       .then(([hRes, sRes]) => {
         const asList = (d) => (Array.isArray(d) ? d : (d.results || []));
-        // Filter on `kind` for the same reason the app does: a backend that
-        // predates this kind ignores the unknown ?kind= and returns everything,
-        // which would render hospitals as blood centres.
+        // Match on `segments` — what the provider SELLS — not on `kind`, which
+        // is only who they are. A hospital with a scanning wing is
+        // kind=HOSPITAL and belongs in this list; filtering on kind would drop
+        // exactly the hybrids this exists to show.
+        //
+        // Fall back to `kind` when `segments` is absent: that is an older
+        // backend, which is the deploy-order hazard this filter was written for
+        // in the first place. Hybrids cannot exist there, so kind is correct.
+        const want = KIND_TO_SEGMENT[kind];
         setCentresByKind(prev => ({
-          ...prev, [kind]: asList(hRes.data).filter(h => h.kind === kind),
+          ...prev,
+          [kind]: asList(hRes.data).filter(h => (
+            Array.isArray(h.segments) ? h.segments.includes(want) : h.kind === kind
+          )),
         }));
         setScans(asList(sRes.data));
       })

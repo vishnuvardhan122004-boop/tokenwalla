@@ -12,6 +12,7 @@ from .views import (
     HospitalPhotoView,            # NEW
     HospitalPhotoDeleteView,      # NEW
     HospitalPaymentDetailsView,   # NEW
+    HospitalCapabilityView,       # NEW
 )
  
 urlpatterns = [
@@ -27,4 +28,5 @@ urlpatterns = [
     path('<int:pk>/photos/',               HospitalPhotoView.as_view()),        # NEW
     path('<int:pk>/photos/<int:photo_id>/', HospitalPhotoDeleteView.as_view()), # NEW
     path('<int:pk>/payment-details/',      HospitalPaymentDetailsView.as_view()), # NEW
+    path('<int:pk>/capabilities/',         HospitalCapabilityView.as_view()),     # NEW
 ]

@@ -14,7 +14,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from tokenwalla.utils import check_password_strength, is_valid_landline
 
 from .models import (
-    Hospital, HospitalPhoto, exclude_centers, exclude_test_hospitals,
+    Hospital, HospitalPhoto, in_segment, exclude_test_hospitals,
     show_test_hospitals_to,
 )
 from .serializers import HospitalSerializer
@@ -56,15 +56,18 @@ def _verify_otp(mobile, otp_entered):
 class HospitalListView(APIView):
     """Public — list only APPROVED (active) hospitals.
 
-    `?kind=SCAN_CENTER` or `?kind=BLOOD_CENTER` opts into that centre kind.
-    Without it the response is hospitals only, byte-for-byte what it was before
-    centres existed — which is the whole point: the installed app builds calling
-    this endpoint have never heard of a Scan and would render a centre as a
-    bookable hospital. See exclude_centers().
+    `?kind=` selects WHAT THE PROVIDER SELLS, not what it calls itself:
+    SCAN_CENTER means "sells scans", BLOOD_CENTER means "sells blood tests".
+    A hybrid — one account offering consultations AND scans — therefore appears
+    in both the default list and the scans list, which is the whole point.
 
-    The opt-in returns ONE kind, never both: a patient browsing blood centres is
-    not asking to see MRI centres, and the two lists are separate tabs in both
-    front ends.
+    Without ?kind= the response is consultation providers only, byte-for-byte
+    what it was before centres existed: the installed app builds calling this
+    endpoint have never heard of a Scan and would render a pure centre as a
+    bookable hospital. See in_segment().
+
+    The parameter keeps its old NAME so no shipped client has to change how it
+    asks; only what it resolves to has changed.
     """
     permission_classes = [AllowAny]
 
@@ -73,11 +76,12 @@ class HospitalListView(APIView):
 
         # Unknown/absent value ⇒ hospitals. An old client sends nothing; a typo
         # must not silently widen the list, so only the exact opt-in counts.
-        kind = request.query_params.get('kind')
-        if kind in Hospital.CENTER_KINDS:
-            hospitals = hospitals.filter(kind=kind)
-        else:
-            hospitals = exclude_centers(hospitals)
+        # Unknown/absent value ⇒ consultation providers, the old default. A
+        # typo must not silently widen the list, so only an exact known value
+        # counts; anything else falls through to the safe branch.
+        kind    = request.query_params.get('kind')
+        segment = Hospital.KIND_TO_SEGMENT.get(kind, Hospital.SEG_CONSULT)
+        hospitals = in_segment(hospitals, segment)
 
         if not show_test_hospitals_to(request.user):
             hospitals = exclude_test_hospitals(hospitals)
@@ -156,9 +160,24 @@ class HospitalRegisterView(APIView):
         # Staff record what the call turns up in Django admin.
         license_number = str(data.get('license_number', '') or '').strip()[:60]
 
+        # What they sell. The card they picked is always on; `also_offers` is
+        # the "we also do…" tick-boxes beside it. Both go straight to ACTIVE
+        # rather than PENDING, because the whole account is already gated by the
+        # admin approval that flips status to 'active' — the reviewer sees the
+        # full registration, capabilities included. Only capabilities added
+        # LATER, from Profile, need their own approval.
+        caps = {f: Hospital.CAP_OFF for f in Hospital.SEGMENT_FIELD.values()}
+        chosen = {Hospital.KIND_TO_SEGMENT[kind]}
+        for seg in (data.get('also_offers') or []):
+            if seg in Hospital.SEGMENT_FIELD:
+                chosen.add(seg)
+        for seg in chosen:
+            caps[Hospital.SEGMENT_FIELD[seg]] = Hospital.CAP_ACTIVE
+
         hospital = Hospital.objects.create(
             name=name,
             kind=kind,
+            **caps,
             city=data.get('city', '').strip(),
             address=data.get('address', '').strip(),
             location=data.get('location', '').strip(),
@@ -295,10 +314,18 @@ class HospitalLoginView(APIView):
                 'hospital': {
                     'id': hospital.id,
                     'name': hospital.name,
-                    # The dashboard reads this to decide whether its provider
-                    # tab manages Doctors or Scans. Additive — clients that
-                    # ignore it behave exactly as before.
+                    # `kind` is the identity (the badge, the labels). The
+                    # dashboard reads `segments` to decide which provider tabs
+                    # to show — a hybrid has more than one. Both are additive:
+                    # a client that ignores them behaves exactly as before.
                     'kind': hospital.kind,
+                    'segments': hospital.active_segments,
+                    # Includes PENDING, so Profile can show "awaiting approval"
+                    # against a capability instead of silently showing it off.
+                    'capabilities': {
+                        seg: getattr(hospital, f)
+                        for seg, f in Hospital.SEGMENT_FIELD.items()
+                    },
                     'city': hospital.city,
                     'address': hospital.address,
                     'mobile': hospital.mobile,
@@ -726,4 +753,106 @@ class HospitalForceDeleteView(APIView):
             'cancelled_bookings': cancelled,
             'deleted_bookings': bookings_deleted,
             'deleted_doctors': doctors_deleted,
+        })
+
+class HospitalCapabilityView(APIView):
+    """A provider asks to sell one more thing; an admin says yes.
+
+    POST  /api/hospitals/<pk>/capabilities/   { "segment": "SCAN" }
+      Provider (or admin) requests a capability. Goes to PENDING, which is NOT
+      offering — the provider appears in no new list until it is approved. An
+      admin doing this gets ACTIVE immediately, since their approval is the
+      thing being waited on.
+
+    PATCH /api/hospitals/<pk>/capabilities/   { "segment": "SCAN",
+                                                "action": "approve"|"reject" }
+      Admin only. approve -> ACTIVE, reject -> OFF.
+
+    Turning a capability OFF is a POST with action="disable" and is allowed to
+    the provider: nobody needs permission to stop offering something. What it
+    does NOT do is delete the Scan rows behind it — they stop being listed and
+    come back intact if the capability is turned on again, because a provider
+    pausing for a month should not lose their price list.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _hospital_or_404(self, pk):
+        try:
+            return Hospital.objects.get(pk=pk)
+        except Hospital.DoesNotExist:
+            return None
+
+    def _may_manage(self, request, hospital) -> bool:
+        """Admins, or the staff account belonging to THIS hospital."""
+        role = getattr(request.user, 'role', None)
+        if role == 'admin' or request.user.is_staff:
+            return True
+        # Hospital staff carry their hospital id in last_name — the same link
+        # HospitalLoginView writes. Compared as strings; last_name is CharField.
+        return role == 'hospital' and str(request.user.last_name) == str(hospital.id)
+
+    @staticmethod
+    def _segment(request):
+        seg = str(request.data.get('segment', '') or '').strip().upper()
+        return seg if seg in Hospital.SEGMENT_FIELD else None
+
+    def post(self, request, pk):
+        hospital = self._hospital_or_404(pk)
+        if hospital is None:
+            return Response({'message': 'Hospital not found.'}, status=404)
+        if not self._may_manage(request, hospital):
+            return Response({'message': 'Not allowed.'}, status=403)
+
+        segment = self._segment(request)
+        if not segment:
+            return Response(
+                {'message': f'segment must be one of {list(Hospital.SEGMENT_FIELD)}.'},
+                status=400)
+
+        field  = Hospital.SEGMENT_FIELD[segment]
+        action = str(request.data.get('action', '') or '').strip().lower()
+        is_admin = getattr(request.user, 'role', None) == 'admin' or request.user.is_staff
+
+        if action == 'disable':
+            new_state = Hospital.CAP_OFF
+        elif is_admin:
+            new_state = Hospital.CAP_ACTIVE
+        else:
+            new_state = Hospital.CAP_PENDING
+
+        setattr(hospital, field, new_state)
+        hospital.save(update_fields=[field])
+        return Response({
+            'segment': segment,
+            'state': new_state,
+            'segments': hospital.active_segments,
+        })
+
+    def patch(self, request, pk):
+        if not (getattr(request.user, 'role', None) == 'admin' or request.user.is_staff):
+            return Response({'message': 'Not allowed.'}, status=403)
+
+        hospital = self._hospital_or_404(pk)
+        if hospital is None:
+            return Response({'message': 'Hospital not found.'}, status=404)
+
+        segment = self._segment(request)
+        if not segment:
+            return Response(
+                {'message': f'segment must be one of {list(Hospital.SEGMENT_FIELD)}.'},
+                status=400)
+
+        action = str(request.data.get('action', '') or '').strip().lower()
+        if action not in ('approve', 'reject'):
+            return Response({'message': 'action must be "approve" or "reject".'},
+                            status=400)
+
+        field = Hospital.SEGMENT_FIELD[segment]
+        setattr(hospital, field,
+                Hospital.CAP_ACTIVE if action == 'approve' else Hospital.CAP_OFF)
+        hospital.save(update_fields=[field])
+        return Response({
+            'segment': segment,
+            'state': getattr(hospital, field),
+            'segments': hospital.active_segments,
         })

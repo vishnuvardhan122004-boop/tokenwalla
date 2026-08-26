@@ -11,7 +11,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from .models import Doctor
 from .serializers import DoctorSerializer
 from hospitals.models import (
-    exclude_centers, exclude_test_hospitals, show_test_hospitals_to,
+    Hospital, in_segment, exclude_test_hospitals, show_test_hospitals_to,
 )
 from payments.payout_utils import payout_target
 from tokenwalla.permissions import IsHospitalStaff, IsDoctorOwnerHospitalOrAdmin
@@ -134,7 +134,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
         # its kind was corrected, would otherwise leak a bookable row into the
         # installed app builds — which is exactly the failure the [TEST] filter
         # above was added for, after it happened in production on 2026-08-11.
-        qs = exclude_centers(qs, field='hospital__kind')
+        qs = in_segment(qs, Hospital.SEG_CONSULT, prefix='hospital__')
         return qs
 
     # ── Popularity ────────────────────────────────────────────────────────────

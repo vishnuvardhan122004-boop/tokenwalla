@@ -14,17 +14,36 @@ class HospitalSerializer(serializers.ModelSerializer):
     # so the website and the app can't disagree about when a notice expires —
     # and so an old app build that ignores the flag simply behaves as before.
     announcement_active = serializers.SerializerMethodField()
+    # What this provider is LIVE in, e.g. ['CONSULT', 'SCAN']. Additive: a
+    # client that ignores it behaves exactly as before, which is why `kind` is
+    # still sent alongside. Clients should match on this rather than on `kind`
+    # — a hospital with a scanning wing is kind=HOSPITAL and belongs in the
+    # Scans tab, and only `segments` can say so.
+    segments = serializers.SerializerMethodField()
+    # Every capability WITH its state, PENDING included. `segments` is the
+    # patient-facing answer (live only); this is the provider's and the admin's,
+    # so a request awaiting approval is visible instead of looking like an
+    # option nobody ever ticked.
+    capabilities = serializers.SerializerMethodField()
 
     class Meta:
         model  = Hospital
         fields = [
-            'id', 'name', 'kind', 'city', 'address', 'location', 'latitude', 'longitude',
+            'id', 'name', 'kind', 'segments', 'capabilities',
+            'city', 'address', 'location',
+            'latitude', 'longitude',
             'mobile', 'landline', 'status',
             'instagram', 'youtube', 'facebook', 'services',
             'description', 'announcement', 'announcement_until',
             'announcement_active', 'open_time', 'close_time',
             'image', 'logo', 'gallery',
         ]
+
+    def get_segments(self, obj):
+        return obj.active_segments
+
+    def get_capabilities(self, obj):
+        return {seg: getattr(obj, f) for seg, f in Hospital.SEGMENT_FIELD.items()}
 
     def get_announcement_active(self, obj):
         if not (obj.announcement or '').strip():

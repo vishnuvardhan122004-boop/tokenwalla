@@ -96,11 +96,35 @@ class PublicReadTests(ScanApiMixin, TestCase):
         Scan.objects.create(center=self.hospital, name='Orphan X-Ray', price=100)
         self.assertNotIn('Orphan X-Ray', self.names(self.client.get(URL)))
 
-    def test_a_centre_flipped_back_to_hospital_delists_its_scans(self):
+    def test_an_owner_that_stops_selling_scans_delists_them(self):
+        """The safety property, restated for capabilities.
+
+        It used to be phrased as "flipped back to kind=HOSPITAL", because kind
+        was the only signal. It no longer is — a hospital may sell scans — so
+        the thing that must delist a scan is the OWNER LOSING THE CAPABILITY.
+        The guarantee is unchanged: a scan nobody can serve is never listed.
+        """
         self.assertIn('MRI Brain', self.names(self.client.get(URL)))
+        self.centre.svc_scans = Hospital.CAP_OFF
+        self.centre.save(update_fields=['svc_scans'])
+        self.assertNotIn('MRI Brain', self.names(self.client.get(URL)))
+
+    def test_a_capability_merely_pending_does_not_list_scans(self):
+        """PENDING is not offering, or the approval gate is decorative."""
+        self.centre.svc_scans = Hospital.CAP_PENDING
+        self.centre.save(update_fields=['svc_scans'])
+        self.assertNotIn('MRI Brain', self.names(self.client.get(URL)))
+
+    def test_changing_kind_alone_no_longer_delists(self):
+        """The behaviour change, pinned so it is a decision and not a drift.
+
+        A scanning centre that rebrands as a hospital still sells scans; only
+        its badge changed. Deleting this test to restore the old coupling would
+        re-break the hybrid case this whole feature exists for.
+        """
         self.centre.kind = Hospital.HOSPITAL
         self.centre.save(update_fields=['kind'])
-        self.assertNotIn('MRI Brain', self.names(self.client.get(URL)))
+        self.assertIn('MRI Brain', self.names(self.client.get(URL)))
 
     def test_price_preview_comes_from_the_fee_engine(self):
         """The preview must be the same arithmetic checkout runs, or the patient

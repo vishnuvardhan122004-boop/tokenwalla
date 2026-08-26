@@ -20,8 +20,15 @@ const Husercreate = () => {
   const kindParam = params.get('kind');
   const initialKind = CENTRE_KINDS.includes(kindParam) ? kindParam : 'HOSPITAL';
 
+  // A registration card is an IDENTITY; this is the segment it already implies,
+  // so "We also offer" never lists the thing they just picked.
+  const PRIMARY_SEGMENT = {
+    HOSPITAL: 'CONSULT', SCAN_CENTER: 'SCAN', BLOOD_CENTER: 'BLOOD',
+  };
+
   const [hospital, setHospital] = useState({
     kind: initialKind,
+    also_offers: [],
     name: '', city: '', address: '', location: '', mobile: '', password: '', confirmPassword: '',
     latitude: null, longitude: null,
   });
@@ -112,7 +119,8 @@ const Husercreate = () => {
     setLoading(true);
     try {
       await API.post('/hospitals/register/', {
-        kind:      hospital.kind,
+        kind:        hospital.kind,
+        also_offers: hospital.also_offers,
         name:      hospital.name.trim(),
         city:      hospital.city.trim(),
         address:   hospital.address.trim(),
@@ -138,6 +146,18 @@ const Husercreate = () => {
       <style>{authCSS}</style>
       <style>{`
         .kind-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 22px; }
+        .also-offer { margin: 4px 0 18px; }
+        .also-offer-title { font-size: 13px; font-weight: 700; color: var(--gray-700,#334155); }
+        .also-offer-hint  { font-size: 11.5px; color: var(--gray-400,#94A3B8); margin: 2px 0 8px; line-height: 1.4; }
+        .also-offer-row {
+          display: flex; align-items: center; gap: 9px; cursor: pointer;
+          border: 1px solid var(--gray-200,#E2E8F0); border-radius: 11px;
+          padding: 9px 12px; margin-bottom: 7px; font-size: 12.5px; font-weight: 600;
+          color: var(--gray-700,#334155); background: #fff;
+        }
+        .also-offer-row.is-on { border-color: var(--blue-600,#1565C0); background: var(--blue-50,#EFF6FF); color: var(--blue-700,#12497F); }
+        .also-offer-row input { accent-color: var(--blue-600,#1565C0); width: 15px; height: 15px; }
+        .also-offer-icon { font-size: 15px; }
         .kind-card {
           display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
           padding: 13px 14px; border-radius: 12px; cursor: pointer; text-align: left;
@@ -202,10 +222,10 @@ const Husercreate = () => {
           <div className="auth-form-title">Create {noun} Account</div>
           <div className="auth-form-sub">Register in a minute — it's free to join</div>
 
-          {/* What are you registering? First question on the page, because it
-              changes what the account can do: a hospital lists doctors and OPD
-              slots, a centre lists scans and their prices. Switching it later
-              means an admin edit, so it is asked up front rather than buried. */}
+          {/* What are you? Identity, not capability — it sets the badge patients
+              see and the words on this page. What you SELL is the tick-boxes
+              below, because a real business is often more than one thing and
+              used to need three separate registrations to say so. */}
           <div className="kind-choice">
             {[
               { value: 'HOSPITAL',     icon: '🏥', label: 'Hospital / Clinic', sub: 'You have doctors and OPD slots' },
@@ -224,6 +244,44 @@ const Husercreate = () => {
                 <span className="kind-card-sub">{opt.sub}</span>
               </button>
             ))}
+          </div>
+
+          {/* ── We also offer ────────────────────────────────────────────────
+              One account, many services. Ticked here they go live with the
+              account; added later from the dashboard they need admin approval.
+              Only segments the card does not already cover are listed, so the
+              primary choice cannot be un-ticked into an account selling
+              nothing. */}
+          <div className="also-offer">
+            <div className="also-offer-title">We also offer</div>
+            <div className="also-offer-hint">
+              Optional. Tick anything else you do — one dashboard, one login.
+            </div>
+            {[
+              { seg: 'CONSULT', icon: '🩺', label: 'Doctor consultations' },
+              { seg: 'SCAN',    icon: '🔬', label: 'Scans (MRI, CT, X-ray)' },
+              { seg: 'BLOOD',   icon: '🩸', label: 'Blood tests' },
+            ]
+              .filter(o => o.seg !== PRIMARY_SEGMENT[hospital.kind])
+              .map(o => {
+                const on = hospital.also_offers.includes(o.seg);
+                return (
+                  <label key={o.seg} className={`also-offer-row ${on ? 'is-on' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() => setHospital(prev => ({
+                        ...prev,
+                        also_offers: on
+                          ? prev.also_offers.filter(x => x !== o.seg)
+                          : [...prev.also_offers, o.seg],
+                      }))}
+                    />
+                    <span className="also-offer-icon">{o.icon}</span>
+                    <span>{o.label}</span>
+                  </label>
+                );
+              })}
           </div>
 
           {/* Progress */}

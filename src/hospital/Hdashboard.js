@@ -157,14 +157,41 @@ const Hdashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hospital]);
 
-  // A centre is a Hospital row with kind=SCAN_CENTER or BLOOD_CENTER.
-  // Everything on this dashboard — queue, payments, QR scanner — works
-  // identically for one; the only difference is that its bookable unit is a
-  // Scan, not a Doctor. Branch on the SET, never on SCAN_CENTER alone, or a
-  // blood centre gets the hospital dashboard and cannot reach its own tests.
-  const isCentre = hospital?.kind === 'SCAN_CENTER' || hospital?.kind === 'BLOOD_CENTER';
-  // The only thing separating the two centre kinds in here: the word.
-  const unit = hospital?.kind === 'BLOOD_CENTER'
+  // What this account SELLS, from the login payload. Falls back to the segment
+  // its `kind` implies, so a session opened against an older backend — which
+  // sends no `segments` — behaves exactly as it did before capabilities.
+  const KIND_TO_SEGMENT = { HOSPITAL: 'CONSULT', SCAN_CENTER: 'SCAN', BLOOD_CENTER: 'BLOOD' };
+  const segments = Array.isArray(hospital?.segments) && hospital.segments.length
+    ? hospital.segments
+    : [KIND_TO_SEGMENT[hospital?.kind] || 'CONSULT'];
+
+  const sellsConsults = segments.includes('CONSULT');
+  const sellsScans    = segments.includes('SCAN');
+  const sellsBlood    = segments.includes('BLOOD');
+
+  // SCAN and BLOOD collapse into ONE switcher entry: a Scan row carries no
+  // segment of its own, so splitting them here would show the same rows twice.
+  // The patient-facing lists still tell them apart — that is answered on the
+  // server from the capabilities — and this is only about editing the price list.
+  const scanLabel = sellsScans && sellsBlood ? 'Scans & Tests'
+                  : sellsBlood               ? 'Tests'
+                  : 'Scans';
+  const providerTabs = [
+    ...(sellsConsults ? [{ key: 'CONSULT', label: 'Doctors', icon: 'bi-person-badge' }] : []),
+    ...(sellsScans || sellsBlood
+      ? [{ key: 'SERVICES', label: scanLabel,
+           icon: sellsBlood && !sellsScans ? 'bi-droplet' : 'bi-clipboard2-pulse' }]
+      : []),
+  ];
+  const [segTab, setSegTab] = useState(providerTabs[0]?.key || 'CONSULT');
+  // Never leave the switcher pointing at something no longer sold.
+  const seg = providerTabs.some(t => t.key === segTab)
+    ? segTab : (providerTabs[0]?.key || 'CONSULT');
+
+  const isCentre = seg !== 'CONSULT';     // this tab manages Scans, not Doctors
+  const isHybrid = providerTabs.length > 1;
+  // Blood-only accounts say "test"; anyone selling scans at all says "scan".
+  const unit = sellsBlood && !sellsScans
     ? { one: 'test', many: 'Tests', icon: 'bi-droplet',
         eg: 'e.g. Complete Blood Count', egType: 'Blood Test',
         egPrep: 'e.g. 12 hours fasting. Water is fine.' }
@@ -184,7 +211,7 @@ const Hdashboard = () => {
   };
 
   useEffect(() => {
-    if (isCentre && activeTab === 'doctors') fetchScans();
+    if ((sellsScans || sellsBlood) && activeTab === 'doctors') fetchScans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCentre, activeTab, hospital?.id]);
 
@@ -518,6 +545,17 @@ const Hdashboard = () => {
         </div>
       )}
       <style>{`
+        /* Segment switcher — a hybrid manages more than one thing from one tab.
+           flex-basis + wrap rather than fixed columns, so a long label like
+           "Scans & Tests" takes its own line instead of being squeezed. */
+        .seg-switch { display: flex; flex-wrap: wrap; gap: 8px; }
+        .seg-btn {
+          display: inline-flex; align-items: center; justify-content: center;
+          flex: 1 1 140px; border: 1px solid var(--gray-200,#E2E8F0); background: #fff;
+          border-radius: 999px; padding: 8px 14px; font-size: 12.5px; font-weight: 700;
+          color: var(--gray-500,#64748B); cursor: pointer;
+        }
+        .seg-btn.is-active { border-color: var(--blue-600,#1565C0); background: var(--blue-50,#EFF6FF); color: var(--blue-700,#12497F); }
         @keyframes fadeInToast{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 
         /* ── Cleaner navbar ── */
@@ -684,9 +722,11 @@ const Hdashboard = () => {
         <div className="tw-tabs mb-4">
           {[
             { key: "queue",    label: <><i className="bi bi-people me-1" />Queue</> },
-            isCentre
-              ? { key: "doctors", label: <><i className={`bi ${unit.icon} me-1`} />{unit.many}</> }
-              : { key: "doctors", label: <><i className="bi bi-person-badge me-1" />Doctors</> },
+            isHybrid
+              ? { key: "doctors", label: <><i className="bi bi-grid me-1" />Services</> }
+              : isCentre
+                ? { key: "doctors", label: <><i className={`bi ${unit.icon} me-1`} />{unit.many}</> }
+                : { key: "doctors", label: <><i className="bi bi-person-badge me-1" />Doctors</> },
             { key: "payments", label: <><i className="bi bi-credit-card me-1" />Payments</> },
             { key: "scanner",  label: <><i className="bi bi-qr-code-scan me-1" />Scanner</> },
           ].map(({ key, label }) => (
@@ -889,6 +929,23 @@ const Hdashboard = () => {
 
         {/* ── Doctors Tab ── */}
         {/* ── Scans Tab (a scanning centre's version of the Doctors tab) ── */}
+        {activeTab === "doctors" && isHybrid && (
+          <div className="seg-switch mb-3">
+            {providerTabs.map(t => (
+              <button
+                key={t.key}
+                type="button"
+                className={`seg-btn ${t.key === seg ? 'is-active' : ''}`}
+                aria-pressed={t.key === seg}
+                onClick={() => setSegTab(t.key)}
+              >
+                <i className={`bi ${t.icon} me-1`} />
+                {t.label} {t.key === 'CONSULT' ? doctors.length : scans.length}
+              </button>
+            ))}
+          </div>
+        )}
+
         {activeTab === "doctors" && isCentre && (
           <>
             <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">

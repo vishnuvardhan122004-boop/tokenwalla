@@ -173,6 +173,37 @@ const Hospitals = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  /* ─── Service capability approval ───────────────────────────────────────── */
+  // A provider that already passed the account approval asking to sell one more
+  // thing. Separate from approveHospital because it answers a different
+  // question: not "is this a real business" but "may they also sell this".
+
+  const SEG_LABEL = { CONSULT: 'Doctor consultations', SCAN: 'Scans', BLOOD: 'Blood tests' };
+
+  const decideCapability = async (hospital, segment, action) => {
+    setActioning(hospital.id);
+    try {
+      const { data } = await API.patch(`/hospitals/${hospital.id}/capabilities/`,
+        { segment, action });
+      setHospitals(prev => prev.map(h => h.id === hospital.id
+        ? { ...h, segments: data.segments,
+            capabilities: { ...h.capabilities, [segment]: data.state } }
+        : h));
+      showToast(action === 'approve'
+        ? `"${hospital.name}" can now offer ${SEG_LABEL[segment]}.`
+        : `Declined ${SEG_LABEL[segment]} for "${hospital.name}".`,
+        action === 'approve' ? 'success' : 'error');
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Could not update.', 'error');
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  const pendingCaps = (h) => Object.entries(h.capabilities || {})
+    .filter(([, state]) => state === 'PENDING')
+    .map(([seg]) => seg);
+
   /* ─── Hospital approval ─────────────────────────────────────────────────── */
 
   const approveHospital = async (hospital) => {
@@ -335,6 +366,9 @@ const Hospitals = () => {
     });
 
   const pendingCount  = hospitals.filter(h => h.status === 'pending').length;
+  // One entry per (provider, requested segment) — a provider may ask for two.
+  const capRequests = hospitals.flatMap(h =>
+    pendingCaps(h).map(segment => ({ hospital: h, segment })));
   const activeCount   = hospitals.filter(h => h.status === 'active').length;
   const rejectedCount = hospitals.filter(h => h.status === 'rejected').length;
 
@@ -523,6 +557,44 @@ const Hospitals = () => {
         <div className="hp-stat-pill pending">  <span><i className="bi bi-hourglass-split me-1" /></span><span className="hp-stat-num">{pendingCount}</span> <span>Pending</span>  </div>
         <div className="hp-stat-pill rejected"> <span><i className="bi bi-slash-circle me-1" /></span><span className="hp-stat-num">{rejectedCount}</span><span>Rejected</span> </div>
       </div>
+
+      {/* ── Pending SERVICE requests ──
+          A live provider asking to sell one more thing. Listed separately from
+          the account queue: these are already-approved businesses, so burying
+          them under a "pending hospitals" count would hide them entirely. */}
+      {capRequests.length > 0 && (
+        <div className="hp-pending-banner" style={{ alignItems: 'flex-start' }}>
+          <div className="hp-pending-icon"><i className="bi bi-plus-square me-1" /></div>
+          <div style={{ flex: 1 }}>
+            <div className="hp-pending-text">
+              {capRequests.length} service request{capRequests.length > 1 ? 's' : ''} waiting
+            </div>
+            <div className="hp-pending-sub">
+              These providers are already live and want to offer something more.
+            </div>
+            <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+              {capRequests.map(({ hospital, segment }) => (
+                <div key={`${hospital.id}-${segment}`}
+                     style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>
+                    {hospital.name} → <strong>{SEG_LABEL[segment]}</strong>
+                  </span>
+                  <button
+                    disabled={actioning === hospital.id}
+                    onClick={() => decideCapability(hospital, segment, 'approve')}
+                    style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: 'var(--color-success-text, #15803D)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                  >Approve</button>
+                  <button
+                    disabled={actioning === hospital.id}
+                    onClick={() => decideCapability(hospital, segment, 'reject')}
+                    style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid var(--color-danger-border, #FCA5A5)', background: 'transparent', color: 'var(--color-danger-text, #B91C1C)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                  >Decline</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Pending alert ── */}
       {pendingCount > 0 && (

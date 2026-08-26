@@ -9,7 +9,7 @@ import logging
 import threading
 from datetime import datetime
 
-from django.db.models import Count, F
+from django.db.models import Count, F, Q
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
@@ -61,11 +61,16 @@ class ScanViewSet(viewsets.ModelViewSet):
         if modality:
             qs = qs.filter(modality__iexact=modality)
 
-        # A scan can only be booked at a centre (scanning OR blood). If a row's
-        # centre was flipped back to kind=HOSPITAL after the scan was created,
-        # the scan is unbookable — the whole patient flow keys off the centre
-        # being a centre — so it must not be listed either.
-        qs = qs.filter(center__kind__in=Hospital.CENTER_KINDS)
+        # A scan is only bookable where the owner still SELLS scans. If the
+        # capability was switched off (or is merely PENDING) after the row was
+        # created, the scan is unbookable — the whole patient flow keys off it —
+        # so it must not be listed either. Note this asks the capability, not
+        # `kind`: a hospital with a scanning wing is kind=HOSPITAL and its scans
+        # are perfectly bookable.
+        qs = qs.filter(
+            Q(center__svc_scans=Hospital.CAP_ACTIVE)
+            | Q(center__svc_blood=Hospital.CAP_ACTIVE)
+        )
 
         # Same demo-fixture rule as doctors: internal [TEST] centres are not
         # patient-facing, but stay visible to their own staff and to admins.

@@ -290,3 +290,258 @@ class BloodCenterTests(TestCase):
         self.assertIn(res.status_code, (200, 201), res.content)
         self.assertEqual(
             Hospital.objects.get(mobile='9111100050').kind, Hospital.BLOOD_CENTER)
+
+
+class HybridProviderTests(TestCase):
+    """One account, more than one thing sold.
+
+    THE POINT OF THIS FILE'S SIBLING CLASSES is that a centre never leaks to a
+    client that did not ask. The point of THIS one is the opposite risk: that in
+    protecting that contract we made it impossible for a real business — a
+    hospital with an in-house scanning wing — to be listed as what it is.
+
+    Both must hold at once, which is why they are tested together.
+    """
+    URL = '/api/hospitals/'
+
+    def setUp(self):
+        self.client = APIClient()
+        # A hospital that also runs a scanning wing. Note kind=HOSPITAL: its
+        # IDENTITY is a hospital, and that is not a lie — what changed is that
+        # identity no longer decides what it may sell.
+        self.hybrid = Hospital.objects.create(
+            name='Sri Sarwodhaya orthopaedic hospital', city='Hindupur',
+            mobile='9000000601', status='active', password='x',
+            kind=Hospital.HOSPITAL,
+            svc_consultations=Hospital.CAP_ACTIVE,
+            svc_scans=Hospital.CAP_ACTIVE)
+        self.pure_centre = Hospital.objects.create(
+            name='Vijaya Diagnostics', city='Hindupur',
+            mobile='9000000602', status='active', password='x',
+            kind=Hospital.SCAN_CENTER, svc_scans=Hospital.CAP_ACTIVE)
+        self.pure_hospital = Hospital.objects.create(
+            name='City Care', city='Hindupur',
+            mobile='9000000603', status='active', password='x')
+
+    def names(self, res):
+        body = res.json()
+        rows = body['results'] if isinstance(body, dict) and 'results' in body else body
+        return [r['name'] for r in rows]
+
+    def test_a_hybrid_appears_in_both_lists(self):
+        """The whole feature in one assertion."""
+        self.assertIn('Sri Sarwodhaya orthopaedic hospital',
+                      self.names(self.client.get(self.URL)))
+        self.assertIn('Sri Sarwodhaya orthopaedic hospital',
+                      self.names(self.client.get(self.URL, {'kind': 'SCAN_CENTER'})))
+
+    def test_the_build_36_contract_still_holds(self):
+        """A pure centre stays invisible to a client that sent no ?kind.
+
+        The hybrid appearing there is correct and is NOT a leak: build 36 can
+        book its doctors. What build 36 must never see is a provider whose only
+        bookable unit is a Scan, because it has never heard of one.
+        """
+        default = self.names(self.client.get(self.URL))
+        self.assertNotIn('Vijaya Diagnostics', default)
+        self.assertIn('City Care', default)
+
+    def test_a_hybrid_is_absent_from_a_segment_it_does_not_sell(self):
+        self.assertNotIn('Sri Sarwodhaya orthopaedic hospital',
+                         self.names(self.client.get(self.URL, {'kind': 'BLOOD_CENTER'})))
+
+    def test_a_pending_capability_lists_the_provider_nowhere_new(self):
+        """Self-serve to request, admin to approve — enforced by exclusion."""
+        self.pure_hospital.svc_scans = Hospital.CAP_PENDING
+        self.pure_hospital.save(update_fields=['svc_scans'])
+        self.assertNotIn('City Care',
+                         self.names(self.client.get(self.URL, {'kind': 'SCAN_CENTER'})))
+        # ...and it keeps the list it already had.
+        self.assertIn('City Care', self.names(self.client.get(self.URL)))
+
+    def test_a_hybrid_may_own_scans(self):
+        """The guard at scans.serializers asks the capability, not the kind."""
+        from scans.serializers import ScanSerializer
+        ser = ScanSerializer(data={'center': self.hybrid.id, 'name': 'MRI Brain',
+                                   'price': 4500})
+        self.assertTrue(ser.is_valid(), ser.errors)
+
+    def test_a_provider_selling_nothing_scan_shaped_may_not(self):
+        from scans.serializers import ScanSerializer
+        ser = ScanSerializer(data={'center': self.pure_hospital.id, 'name': 'MRI',
+                                   'price': 4500})
+        self.assertFalse(ser.is_valid())
+        self.assertIn('center', ser.errors)
+
+    def test_a_hybrids_scan_is_bookable(self):
+        """payments.views checkout guard — miss it and the scan takes no money."""
+        from scans.models import Scan
+        scan = Scan.objects.create(center=self.hybrid, name='MRI Brain', price=4500,
+                                   slots=['09:00 AM'], days=['Mon'])
+        self.assertTrue(scan.center.sells_scans)
+        rows = self.client.get('/api/scans/', {'center': self.hybrid.id}).json()
+        rows = rows['results'] if isinstance(rows, dict) and 'results' in rows else rows
+        self.assertEqual([r['name'] for r in rows], ['MRI Brain'])
+
+    def test_kind_alone_no_longer_creates_a_silent_ghost(self):
+        """Hospital.save() backstop: a row created the old way still works.
+
+        Every caller predating svc_* — the admin add form, fixtures, management
+        commands — passes only `kind`. Without the backstop those rows sell
+        nothing and appear in no list at all, silently and with no error.
+        """
+        legacy = Hospital.objects.create(
+            name='Legacy Centre', city='Hindupur', mobile='9000000604',
+            status='active', password='x', kind=Hospital.SCAN_CENTER)
+        self.assertTrue(legacy.offers(Hospital.SEG_SCAN))
+        self.assertIn('Legacy Centre',
+                      self.names(self.client.get(self.URL, {'kind': 'SCAN_CENTER'})))
+
+    def test_the_backstop_never_overrides_an_explicit_choice(self):
+        explicit = Hospital.objects.create(
+            name='Explicit', city='Hindupur', mobile='9000000605',
+            status='active', password='x', kind=Hospital.SCAN_CENTER,
+            svc_blood=Hospital.CAP_ACTIVE)
+        self.assertFalse(explicit.offers(Hospital.SEG_SCAN))
+        self.assertTrue(explicit.offers(Hospital.SEG_BLOOD))
+
+    def test_turning_everything_off_stays_off(self):
+        """The backstop is insert-only — it must not resurrect a capability."""
+        self.pure_centre.svc_scans = Hospital.CAP_OFF
+        self.pure_centre.save(update_fields=['svc_scans'])
+        self.pure_centre.refresh_from_db()
+        self.assertEqual(self.pure_centre.svc_scans, Hospital.CAP_OFF)
+        self.assertNotIn('Vijaya Diagnostics',
+                         self.names(self.client.get(self.URL, {'kind': 'SCAN_CENTER'})))
+
+    def test_an_unknown_segment_fails_closed(self):
+        """in_segment() must never leak everyone when asked for nobody."""
+        from hospitals.models import in_segment
+        self.assertEqual(in_segment(Hospital.objects.all(), 'NOPE').count(), 0)
+
+    def test_segments_are_serialised_for_the_clients(self):
+        row = next(r for r in self.client.get(self.URL).json()
+                   if r['name'].startswith('Sri Sarwodhaya'))
+        self.assertCountEqual(row['segments'], ['CONSULT', 'SCAN'])
+        # kind is still sent, and still says who they are rather than what they sell.
+        self.assertEqual(row['kind'], 'HOSPITAL')
+
+
+class CapabilityEndpointTests(TestCase):
+    """Self-serve to request, admin to approve — over the wire."""
+    def setUp(self):
+        from users.models import User
+        self.client = APIClient()
+        self.hospital = Hospital.objects.create(
+            name='City Care', city='Hindupur', mobile='9000000701',
+            status='active', password='x')
+        self.other = Hospital.objects.create(
+            name='Rival Care', city='Hindupur', mobile='9000000702',
+            status='active', password='x')
+        # Hospital staff carry their hospital id in last_name, the same link
+        # HospitalLoginView writes.
+        self.staff = User.objects.create(
+            username='9000000701', mobile='9000000701', role='hospital',
+            first_name='City Care', last_name=str(self.hospital.id))
+        self.admin = User.objects.create(
+            username='admin1', mobile='9000000799', role='admin')
+
+    def url(self, h=None):
+        return f'/api/hospitals/{(h or self.hospital).id}/capabilities/'
+
+    def test_a_provider_request_is_pending_not_live(self):
+        self.client.force_authenticate(self.staff)
+        res = self.client.post(self.url(), {'segment': 'SCAN'}, format='json')
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(res.json()['state'], 'PENDING')
+        self.hospital.refresh_from_db()
+        self.assertFalse(self.hospital.offers(Hospital.SEG_SCAN))
+
+    def test_an_admin_approves_it(self):
+        self.hospital.svc_scans = Hospital.CAP_PENDING
+        self.hospital.save(update_fields=['svc_scans'])
+        self.client.force_authenticate(self.admin)
+        res = self.client.patch(self.url(),
+                                {'segment': 'SCAN', 'action': 'approve'}, format='json')
+        self.assertEqual(res.status_code, 200, res.content)
+        self.hospital.refresh_from_db()
+        self.assertTrue(self.hospital.offers(Hospital.SEG_SCAN))
+
+    def test_a_provider_cannot_approve_itself(self):
+        """The whole point of the gate."""
+        self.client.force_authenticate(self.staff)
+        res = self.client.patch(self.url(),
+                                {'segment': 'SCAN', 'action': 'approve'}, format='json')
+        self.assertEqual(res.status_code, 403)
+        self.hospital.refresh_from_db()
+        self.assertFalse(self.hospital.offers(Hospital.SEG_SCAN))
+
+    def test_a_provider_cannot_touch_another_provider(self):
+        self.client.force_authenticate(self.staff)
+        res = self.client.post(self.url(self.other), {'segment': 'SCAN'}, format='json')
+        self.assertEqual(res.status_code, 403)
+
+    def test_disabling_needs_no_approval(self):
+        """Nobody needs permission to stop offering something."""
+        self.hospital.svc_scans = Hospital.CAP_ACTIVE
+        self.hospital.save(update_fields=['svc_scans'])
+        self.client.force_authenticate(self.staff)
+        res = self.client.post(self.url(), {'segment': 'SCAN', 'action': 'disable'},
+                               format='json')
+        self.assertEqual(res.status_code, 200)
+        self.hospital.refresh_from_db()
+        self.assertEqual(self.hospital.svc_scans, Hospital.CAP_OFF)
+
+    def test_disabling_keeps_the_price_list(self):
+        """A provider pausing for a month must not lose their scans."""
+        from scans.models import Scan
+        self.hospital.svc_scans = Hospital.CAP_ACTIVE
+        self.hospital.save(update_fields=['svc_scans'])
+        Scan.objects.create(center=self.hospital, name='MRI Brain', price=4500)
+        self.client.force_authenticate(self.staff)
+        self.client.post(self.url(), {'segment': 'SCAN', 'action': 'disable'},
+                         format='json')
+        self.assertEqual(self.hospital.scans.count(), 1)
+
+    def test_an_unknown_segment_is_rejected(self):
+        self.client.force_authenticate(self.staff)
+        res = self.client.post(self.url(), {'segment': 'DENTAL'}, format='json')
+        self.assertEqual(res.status_code, 400)
+
+    def test_anonymous_gets_nowhere(self):
+        res = self.client.post(self.url(), {'segment': 'SCAN'}, format='json')
+        self.assertIn(res.status_code, (401, 403))
+
+
+class RegistrationCapabilityTests(TestCase):
+    """Capabilities chosen at registration are live once the account is."""
+    def setUp(self):
+        self.client = APIClient()
+
+    def _register(self, mobile, **extra):
+        cache.set(f'otp_verified:{mobile}', True, 300)
+        return self.client.post('/api/hospitals/register/', {
+            'name': 'Multi Care', 'mobile': mobile, 'password': 'Test@1234',
+            'city': 'Hindupur', **extra,
+        }, format='json')
+
+    def test_also_offers_activates_extra_segments(self):
+        res = self._register('9111100101', kind='HOSPITAL', also_offers=['SCAN', 'BLOOD'])
+        self.assertIn(res.status_code, (200, 201), res.content)
+        h = Hospital.objects.get(mobile='9111100101')
+        self.assertCountEqual(h.active_segments, ['CONSULT', 'SCAN', 'BLOOD'])
+        self.assertEqual(h.kind, 'HOSPITAL')   # identity unchanged
+
+    def test_the_picked_card_is_always_on(self):
+        res = self._register('9111100102', kind='BLOOD_CENTER')
+        self.assertIn(res.status_code, (200, 201), res.content)
+        self.assertEqual(
+            Hospital.objects.get(mobile='9111100102').active_segments, ['BLOOD'])
+
+    def test_junk_in_also_offers_is_ignored_not_fatal(self):
+        res = self._register('9111100103', kind='HOSPITAL',
+                             also_offers=['SCAN', 'DENTAL', '', None])
+        self.assertIn(res.status_code, (200, 201), res.content)
+        self.assertCountEqual(
+            Hospital.objects.get(mobile='9111100103').active_segments,
+            ['CONSULT', 'SCAN'])
