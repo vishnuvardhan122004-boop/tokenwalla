@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `main` on both repos, no feature branches open. Web/backend main is **5 commits ahead of origin** (security fixes + two docs merges) — pushing auto-deploys. The two `docs/*` branches were merged 2026-08-22 and can be deleted. **Do NOT delete** `develop` (deploys to staging) or `website-cleanup-eslint-deadDep` (holds unmerged work). ~~`harden-password-validators`~~ and its duplicate `chore/password-validators` were **deleted 2026-08-22** — both only flipped `AUTH_PASSWORD_VALIDATORS`, which was the half that did nothing; the real fix (wiring `validate_password` into all five password entry points) landed in `cfc630c`. See ROADMAP 4d.
-- **Latest commit at last update:** `cecf9d9` main (web/backend, **local only — 5 commits unpushed**, so production is still on `d88d0f3`) · `da29520` main (app, 1.3.1 — pushed, **not built**; Play is on 1.3.0)
-- **Last updated:** 2026-08-22 — **security review across all three codebases; four real findings fixed, six false positives filtered.** The security work is committed but **unpushed** — production has none of it yet. One item needs Vishnu and cannot be done in code: revoke the leaked Fast2SMS key. Previously: 2026-08-19 — scanning centres went live end to end on backend + website, with the app half merged but unbuilt.
+- **Branch:** `main` on both repos, everything pushed, nothing in flight. Fully-merged local branches that can be deleted: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf` (its remote is already gone). **Do NOT delete** `develop` (deploys to staging), `website-cleanup-eslint-deadDep` or `chore/eslint-dead-dep` (both hold unmerged work).
+- **Latest commit at last update:** `3435cc9` main (web/backend — **pushed, so Railway and the web host have both shipped it**) · `2e9e716` main (app, **v1.4.0 — pushed, NOT built**; Play is still on 1.3.0, so 1.3.1, 1.3.2 and 1.4.0 have never reached a handset)
+- **Last updated:** 2026-08-29 — **two feature sessions since the security review, both live on the web and both unbuilt on the app.** 2026-08-26: blood centres as a second centre kind, and one account that can sell consultations + scans + blood tests. 2026-08-28→29: documents from any provider, a per-provider booking notice, centre pages at parity with the doctor page, and the "Dr." prefix finally consistent across web and app. Verified today: **371 backend tests OK (2 skipped) · 30 frontend · `makemigrations --check` clean.** The one thing that has not moved in three weeks is the **app build** — see ROADMAP 5b.
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -25,6 +25,113 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-08-28 (into 08-29) — Documents from any provider, a booking notice per provider, and centre pages that finally match the doctor page
+
+**Web/backend `3435cc9`, app `2e9e716` (v1.4.0). Both repos pushed, so the
+website and API are live. The app is NOT built** — Play is on 1.3.0, so nothing
+in this section has reached a phone.
+
+| # | Change | Web/backend | App | Status |
+|---|---|---|---|---|
+| 1 | CSP + `X-Frame-Options` / `X-Content-Type-Options` / `Referrer-Policy` / `Permissions-Policy` / HSTS on the website | `2370216` | — | ✅ live |
+| 2 | Any provider can share a report, prescription or discharge summary; patients get `/my-documents` | `0a816a3` | `7fdcda7` | ✅ web live · app unbuilt |
+| 3 | Per-doctor / per-service booking notice, set as a timer | `6af1c13` | `2baee68` | ✅ web live · app unbuilt |
+| 4 | Centre pages get the doctor page's About panel — extracted into `ProviderAboutPanel`, not copied | `2593670` | `21aec33` | ✅ web live · app unbuilt |
+| 5 | Walk-in services, hospital banner, per-service photos on centre pages | `3435cc9` | `54779c5` | ✅ web live · app unbuilt |
+| 6 | "Dr." consistent across both products — and correct for scans | `acb7f4a` | `34c5c52`, `dbc3e2a` | ✅ web live · app unbuilt |
+
+**Worth keeping:**
+
+- **`providerLabel()` now exists in both repos** — web `src/services/providerLabel.js`,
+  app `utils/booking.ts` — with the test file copied case for case. Nothing but
+  that duplicated test holds the two in sync; change one, change the other.
+- **Tracing the "Dr." bug found a live one.** The token page was handed
+  `doctorName`, which is undefined for a scan, so **scan bookings showed a blank
+  provider name on the confirmation screen**, and the Razorpay sheet offered
+  "Consultation with …" for a blood test. `doctorName` is *transported* to
+  `/api/payment/verify/`, so the display string had to become a separate
+  variable rather than being labelled at source.
+- **`booking_cutoff_hours` is nullable on purpose.** `NULL` = never chose, use
+  the 2h platform default; `0` = chose zero, bookable until the slot starts. An
+  integer default cannot tell those apart, and `hours or DEFAULT` silently turns
+  a deliberate 0 back into 2 — there is a test pinning exactly that. Bounds live
+  on the serializer (168h cap) so a typo comes back as a 400 the dashboard can
+  render, not a doctor who is quietly unbookable forever. Both front ends
+  already grey out slots from the server's `too_soon` flag, so no patient-side
+  change was needed.
+- **`ScanReport.original_name` is the load-bearing bit of the documents slice.**
+  Cloudinary strips the extension from the public_id, so a saved file arrived as
+  `lab-slip_ubmrst`, which a phone cannot open. Uploads are held to an extension
+  **allow-list** (not a block-list) and 15 MB: the file is served from our domain
+  and opened in a WebView, where `.html` and `.svg` execute.
+- **Migrations, all additive:** `doctors.0014_doctor_booking_cutoff_hours`,
+  `scans.0003_scanreport_original_name`, `scans.0004_scan_booking_cutoff_hours`.
+- **No backend change was needed for the photo uploads** — `ScanViewSet` sets no
+  `parser_classes` and there is no `DEFAULT_PARSER_CLASSES` override, so DRF
+  already accepted multipart. Checked with a direct PATCH before any UI existed.
+
+**Verified 2026-08-29:** 371 backend tests `OK (skipped=2)`, 30 frontend,
+`makemigrations --check` clean. CLAUDE.md still quotes the old 304 / 25.
+
+**Action items**
+
+- [ ] **Build the app.** 1.3.1, 1.3.2 and 1.4.0 all exist in the repo and none
+      has been built or submitted. ROADMAP 5b, now the oldest open item.
+- [ ] Refresh the test baselines in `CLAUDE.md` (304/25 → 371/30) and in the
+      `/ship` checklist (still says 99).
+- [ ] Delete the fully-merged local branches listed at the top of this file.
+
+---
+
+## 2026-08-26 — Blood centres, providers that sell more than one thing, and a mobile menu nobody could reach
+
+**Web/backend `e407267`, app `7fb2435` (v1.3.2).** Web live; the app half of
+both features is merged and unbuilt.
+
+| # | Change | Web/backend | App | Status |
+|---|---|---|---|---|
+| 1 | `BLOOD_CENTER` as a second diagnostic-centre kind — no new model, no new endpoint, no new booking path | `8937aa5` | — | ✅ live |
+| 2 | Mobile nav: the hamburger sat off-screen under 480px, so the drawer was unreachable on every page; Hospital Login opened to logged-out visitors | `a3495ab` | — | ✅ live |
+| 3 | Three copy sites still said "scan" at a blood centre | `0a5db90` | — | ✅ live |
+| 4 | One account can sell more than one thing — `svc_consultations` / `svc_scans` / `svc_blood`, each OFF / PENDING / ACTIVE | `e407267` | `e5c98af` | ✅ web live · app unbuilt |
+| 5 | The Call/Map row truncated a landline | — | `1f422fd` | ✅ merged, unbuilt |
+
+**Worth keeping:**
+
+- **A blood centre is a pathology lab, and a `Scan` row already models a named
+  service with a price, a slot, a duration and prep instructions.** So this is a
+  third `Hospital.kind` reusing the entire pipeline — token, queue, QR check-in,
+  report upload, refunds, payouts. It is not a `SCAN_CENTER` because of
+  discovery in both directions: a patient wanting a CBC does not tap "Scan
+  Centres", and a lab registering does not pick "Scanning Centre".
+- **`kind` answers *who you are*; `svc_*` answers *what you sell*.** Production
+  was already working around the one-value limit in the worst way — by putting
+  services in the business name ("Sri venakteshwara clinic and bharathi lab",
+  "Aditya scans"). No duplicate registrations exist yet, so this landed before
+  anyone paid that cost. The back-fill deliberately guesses **nothing** from a
+  name.
+- **PENDING is not offering.** A capability ticked at registration goes live with
+  the account (the admin already reviews that); one added later stays PENDING and
+  lists the provider nowhere until approved, or the gate is decorative.
+- **The build-36 contract was re-tested on both commits.** No `?kind=` still
+  resolves to consultations, byte for byte; a hybrid now appears there too, which
+  is correct — it has doctors build 36 can book — while its scans stay invisible,
+  also correct, because build 36 cannot book a `Scan`.
+- **Two discovery bugs found by clicking a seeded centre, not by reading the
+  diff:** the modality filter offered MRI and X-Ray on the blood tab (options
+  that could only ever return nothing), and a modality picked on the scan tab
+  survived the switch and emptied the blood tab. The three copy bugs in `0a5db90`
+  were the same shape — all on screens an earlier pass had already touched.
+- **Migrations:** `hospitals.0014_alter_hospital_kind`,
+  `hospitals.0015_hospital_svc_blood_hospital_svc_consultations_and_more`,
+  `hospitals.0016_backfill_service_capabilities`. `Hospital.save()` gives a new
+  row the capability its kind implies — insert-only, and only when all three are
+  OFF — because every caller predating `svc_*` (admin add form, fixtures,
+  management commands, every test) passes only `kind`, and without the backstop
+  those rows would sell nothing and appear in no list, silently.
 
 ---
 

@@ -7,23 +7,21 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-19 — **item 8 (scanning centres) is COMPLETE and
-  DEPLOYED. All ten slices, both repos, merged and live.** Production is on
-  `3ebf78e8`; `/api/scans/` returns 200 for the first time, and the default
-  `/api/hospitals/` is still 13 rows, all `HOSPITAL`, zero leak — a malformed
-  `?kind=` fails closed, so build 36 in the wild sees exactly what it saw
-  before. 304 backend tests, 25 frontend, migrations clean.
-  **The feature is live but INVISIBLE**: no scanning centre is registered yet,
-  so nothing changes for a patient until one signs up at `/Husercreate` and
-  adds scans. That is the intended state, not a gap.
-  Also closed: **4b** (all ten WhatsApp templates approved and proven on a
-  handset) and the two app fixes from the 5b device checks (map picker on the
-  hospital register screen; walk-in "0 Daily Slots" and the contradictory
-  "Queue View" plan row).
-  **Still open and unchanged: item 5b step 3 — the app has never run on a
-  device.** Two app PRs merged today are unbuilt. That preview build is now the
-  oldest thing on the list. **4c** (live Razorpay key in local `backend/.env`)
-  is also still open.
+- **Last updated:** 2026-08-29 — **two feature sessions landed since the last
+  update, both live on the web, neither on a phone.** 2026-08-26 (**item 10**):
+  blood centres as a second diagnostic-centre kind, and `svc_*` capabilities so
+  one account can sell consultations, scans and blood tests without registering
+  three times. 2026-08-28 into 08-29 (**item 11**): documents from any provider
+  plus a patient `/my-documents` page, a per-doctor / per-service booking
+  notice, centre pages at parity with the doctor page, and one shared "Dr." rule
+  across both products. Web/backend `main` is `3435cc9` and pushed, so the API
+  and website are serving all of it; the app is `2e9e716` (**v1.4.0, pushed and
+  NOT built**). 371 backend tests, 30 frontend, `makemigrations --check` clean.
+  **The oldest open item has not moved and is now three weeks old: 5b step 3 —
+  nothing merged into the app has ever run on a handset, and three releases
+  (1.3.1, 1.3.2, 1.4.0) have never been built.** Play is still on 1.3.0.
+  **4c** (live Razorpay key in local `backend/.env`) and **9** (submit
+  `scan_report_ready` to Meta) are also still open and unchanged.
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -655,6 +653,15 @@ verification gap (`/health/` now reports `RAILWAY_GIT_COMMIT_SHA`).
 
 ### 5b. What is actually left 🟠 — down to a store release
 
+> ⚠️ **Re-read 2026-08-29 — this item is now three weeks old and the backlog
+> behind it has tripled.** The app repo is on **v1.4.0** (`2e9e716`) and Play is
+> still on **1.3.0**: 1.3.1, 1.3.2 and 1.4.0 have all been merged and pushed and
+> **none has been built**. Everything from items 10 and 11 — multi-capability
+> providers, documents, the booking notice, centre parity, the "Dr." fix — is
+> live for a patient on the website and invisible to every patient on a phone.
+> The list of what to exercise on-device below is still correct; it is just
+> longer now.
+
 **Steps 0, 1 and 2 all closed 2026-08-17.** Nothing is wrong in production and
 there is no outstanding security work. What remains is **one preview build and
 the device pass it enables** — true for five days now, while the app repo has
@@ -1068,6 +1075,79 @@ Verify after approval:
 python manage.py send_test_whatsapp <mobile> --template scan_report_ready
 ```
 
+### ~~10. Blood centres, and providers that sell more than one thing~~ ✅ 2026-08-26 — SHIPPED
+
+**Web/backend `e407267`, app `7fb2435` (v1.3.2). Live on the web, unbuilt on the
+app.** Two changes that only look like one:
+
+**`BLOOD_CENTER` is a third `Hospital.kind`, not a new subsystem** (`8937aa5`).
+A blood centre is a pathology lab, and a `Scan` row already models a named
+service with a price, a slot, a duration and prep instructions — which is
+exactly a blood test. No new model, no new endpoint, no new booking path: token,
+queue, QR check-in, report upload, refunds and payouts are all reused. It is not
+folded into `SCAN_CENTER` because of discovery in both directions — a patient
+wanting a CBC does not tap "Scan Centres", and a lab registering does not pick
+"Scanning Centre".
+
+**`svc_consultations` / `svc_scans` / `svc_blood` split *what you sell* away
+from *who you are*** (`e407267`). `kind` held one value, `mobile` is unique and
+is the login identity, so a hospital with an in-house scanning wing and a
+pathology lab had to register three times — three approvals, three payout
+accounts, three listings for one address. Production was already working around
+it by putting services in the business name ("Sri venakteshwara clinic and
+bharathi lab", "Aditya scans"), so this landed before anyone paid the duplicate
+cost. Each capability is OFF / PENDING / ACTIVE, not a boolean: ticked at
+registration it goes live with the account, added later it is PENDING until an
+admin approves, and **PENDING lists the provider nowhere** or the gate is
+decorative. The back-fill guesses nothing from a name.
+
+**The build-36 contract is unchanged and was re-tested on both commits.** No
+`?kind=` still resolves to consultations byte for byte; pure centres stay hidden;
+a hybrid appears there too (correct — it has doctors build 36 can book) while its
+scans stay invisible (also correct — build 36 cannot book a `Scan`).
+
+Also closed here: the mobile hamburger was pushed off-screen under 480px, so the
+drawer was unreachable on every page (`a3495ab`), and three copy sites still said
+"scan" at a blood centre (`0a5db90`). Both were found by clicking a seeded
+centre, not by reading a diff.
+
+### ~~11. Documents, booking notice, and centre pages at parity~~ ✅ 2026-08-29 — SHIPPED (web only)
+
+**Web/backend `3435cc9`, app `2e9e716` (v1.4.0). Pushed on both; live on the
+web, and NOT on a phone.** Four slices plus a security header pass:
+
+| Slice | What changed | Web | App |
+|---|---|---|---|
+| Documents | any provider can attach a report / prescription / discharge summary; patients get `/my-documents` | `0a816a3` | `7fdcda7` |
+| Booking notice | per-doctor and per-service lead time, set as a timer | `6af1c13` | `2baee68` |
+| About panel | extracted into `ProviderAboutPanel` and shared with centre pages | `2593670` | `21aec33` |
+| Centre parity | walk-in services, banner image, per-service photos | `3435cc9` | `54779c5` |
+| "Dr." | one `providerLabel()` rule, correct for scans | `acb7f4a` | `34c5c52`, `dbc3e2a` |
+| Headers | CSP, HSTS, frame/content-type/referrer/permissions policy | `2370216` | — |
+
+**Three things from this worth carrying forward:**
+
+1. **`providerLabel()` is duplicated across the two repos** (web
+   `src/services/providerLabel.js`, app `utils/booking.ts`) with the test file
+   copied case for case. There is no shared package; that duplicated test is the
+   only thing that will notice when they drift.
+2. **`booking_cutoff_hours` is nullable deliberately** — `NULL` = use the 2h
+   platform default, `0` = bookable until the slot starts. `hours or DEFAULT`
+   turns a deliberate 0 back into 2, and there is a test pinning that. The 168h
+   serializer cap is what stops a typo (240 for 24) making a doctor unbookable
+   forever.
+3. **Upload safety is an allow-list, not a block-list** — provider files are
+   served from our own domain and opened in a WebView, where `.html` and `.svg`
+   execute. 15 MB cap. `ScanReport.original_name` exists because Cloudinary
+   strips the extension from the public_id, so downloads were arriving as files
+   a phone could not open.
+
+Migrations, all additive and safe to run before the code: `doctors.0014`,
+`scans.0003`, `scans.0004`.
+
+**What this does NOT close:** every one of these has an app half that is merged
+and unbuilt. See 5b.
+
 ---
 
 ## Next
@@ -1091,8 +1171,9 @@ python manage.py send_test_whatsapp <mobile> --template scan_report_ready
   said 158 backend tests and the `/ship` checklist says 99; the real numbers are
   **304 backend / 25 frontend** (250 backend before item 8). A stale baseline
   defeats the check it exists for — "did the count drop?" is unanswerable when
-  nobody knows what it should be. `CLAUDE.md` fixed today; the `/ship` skill
-  still says 99.
+  nobody knows what it should be. `CLAUDE.md` was fixed that day and **went stale again** — as of
+  2026-08-29 the real numbers are **371 backend / 30 frontend**, while
+  `CLAUDE.md` says 304/25 and the `/ship` skill still says 99.
 - **Check both repos when a feature spans them** — new 2026-08-13 (session 2),
   and it has now bitten twice in one day. The walk-in/landline work shipped
   with the landline fallback in the app doctor card but not the web one, and
