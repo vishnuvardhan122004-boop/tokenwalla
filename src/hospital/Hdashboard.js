@@ -221,6 +221,11 @@ const Hdashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCentre, activeTab, hospital?.id]);
 
+  // The picked File, if the centre chose one this session. Null means "leave
+  // whatever is already on the server" — clearing it is not offered, because a
+  // scan with no photo is the normal state and the row simply omits it.
+  const [scanPhoto, setScanPhoto] = useState(null);
+
   const saveScan = async (e) => {
     e.preventDefault();
     if (!scanForm) return;
@@ -245,8 +250,26 @@ const Hdashboard = () => {
       days:  (scanForm.daysText  || '').split(',').map(v => v.trim()).filter(Boolean),
     };
     try {
-      if (scanForm.id) await API.patch(`/scans/${scanForm.id}/`, payload);
-      else             await API.post('/scans/', payload);
+      // JSON unless a new photo was picked. Only then multipart: a JSON body
+      // cannot carry a file, and sending every save as multipart would turn the
+      // slots/days arrays into strings the serializer has to guess at.
+      let body = payload;
+      let config;
+      if (scanPhoto) {
+        const fd = new FormData();
+        Object.entries(payload).forEach(([k, v]) => {
+          if (v === null || v === undefined) { fd.append(k, ''); return; }
+          // One entry per key, so DRF's ListField reads a real list back.
+          if (Array.isArray(v)) { v.forEach(item => fd.append(k, String(item))); return; }
+          fd.append(k, String(v));
+        });
+        fd.append('image', scanPhoto);
+        body = fd;
+        config = { headers: { 'Content-Type': 'multipart/form-data' } };
+      }
+      if (scanForm.id) await API.patch(`/scans/${scanForm.id}/`, body, config);
+      else             await API.post('/scans/', body, config);
+      setScanPhoto(null);
       setScanForm(null);
       await fetchScans();
       setToast({ type: 'success', msg: scanForm.id ? 'Scan updated' : 'Scan added' });
@@ -1053,6 +1076,25 @@ const Hdashboard = () => {
                       value={scanForm.max_per_slot}
                       onChange={e => setScanForm(f => ({ ...f, max_per_slot: e.target.value }))} />
                     <small className="text-muted">Usually 1 — one machine, one patient.</small>
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label small fw-semibold">Photo (optional)</label>
+                    <div className="d-flex align-items-center gap-2">
+                      {(scanPhoto || scanForm.image) && (
+                        <img
+                          src={scanPhoto ? URL.createObjectURL(scanPhoto) : scanForm.image}
+                          alt=""
+                          style={{ width: 46, height: 46, borderRadius: 9, objectFit: 'cover', border: '1px solid #cfe2f3' }}
+                        />
+                      )}
+                      <input
+                        className="form-control"
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.webp"
+                        onChange={e => setScanPhoto(e.target.files?.[0] || null)}
+                      />
+                    </div>
+                    <small className="text-muted">Shown beside this {unit.one} on your public page.</small>
                   </div>
                   <div className="col-md-6">
                     <BookingNoticePicker

@@ -37,6 +37,19 @@ export default function ScanCenterDetails() {
   // This one page serves both centre kinds — the flow is identical (pick the
   // service, then the slot), only the noun differs. Derived from the fetched
   // centre, so a blood centre says "Tests" no matter which link got here.
+  // Walk-in: the centre publishes no slot times for this service, so there is
+  // nothing to book online. Same rule the doctor page uses (slots.length === 0)
+  // — a doctor is one service, a centre is a menu, so it applies per service.
+  const isWalkIn = (scan) => !(scan.slots?.length > 0);
+
+  // Scan.image has existed on the model since centres shipped and was never
+  // rendered anywhere. Decorative only — the name beside it carries the
+  // meaning, so it is aria-hidden with an empty alt.
+  const scanImg = (scan) => {
+    const u = scan.image || scan.image_url;
+    return u && String(u).startsWith('http') && !String(u).includes('placehold') ? u : null;
+  };
+
   const noun = centre?.kind === 'BLOOD_CENTER'
     ? { Title: 'Tests', plural: 'tests', one: 'test',
         label: 'Blood Centre',    icon: 'bi-droplet' }
@@ -149,6 +162,17 @@ export default function ScanCenterDetails() {
         <div className="tw-container">
           <button className="sc-back" onClick={() => navigate(-1)}>← Back</button>
 
+          {/* Banner. Mirrors the doctor page: a centre is chosen largely on
+              whether it looks like somewhere you would walk into, and
+              Hospital.image was already uploaded and never displayed. */}
+          {centre.image && String(centre.image).startsWith('http')
+            && !String(centre.image).includes('placehold') && (
+            <div className="sc-banner">
+              <img src={centre.image} alt={centre.name} />
+              <span className="sc-banner-scrim" />
+            </div>
+          )}
+
           {/* ── Header ── */}
           <div className="sc-header">
             <div className="sc-header-main">
@@ -213,16 +237,22 @@ export default function ScanCenterDetails() {
               return (
                 <div className={`sc-item ${open ? 'is-open' : ''}`} key={scan.id}>
                   <button className="sc-item-row" onClick={() => pickScan(scan)} aria-expanded={open}>
+                    {scanImg(scan) && (
+                      <img className="sc-item-img" src={scanImg(scan)} alt="" aria-hidden="true" />
+                    )}
                     <span className="sc-item-main">
                       <span className="sc-item-name">{scan.name}</span>
                       <span className="sc-item-tags">
                         {scan.modality && <span className="sc-tag">{scan.modality}</span>}
+                        {isWalkIn(scan) && <span className="sc-tag sc-tag-walkin">Walk-in</span>}
                         <span className="sc-dur">{scan.duration_minutes} min</span>
                       </span>
                     </span>
                     <span className="sc-item-right">
                       <span className="sc-price">₹{scan.price}</span>
-                      <span className="sc-select">{open ? 'Close' : 'Select'}</span>
+                      <span className="sc-select">
+                        {open ? 'Close' : isWalkIn(scan) ? 'Details' : 'Select'}
+                      </span>
                     </span>
                   </button>
 
@@ -324,8 +354,31 @@ export default function ScanCenterDetails() {
                         </>
                       ) : (
                         <div className="sc-walkin">
-                          No online slots for this scan.
-                          {callNumber && <> Call <a href={`tel:${callNumber}`}>{callNumber}</a> to arrange a visit.</>}
+                          <div className="sc-walkin-lead">
+                            This {noun.one} is walk-in — the centre takes patients as they
+                            arrive rather than at fixed times, so there is nothing to book
+                            online.
+                          </div>
+                          {(centre.open_time || centre.close_time) && (
+                            <div className="sc-walkin-row">
+                              <span><i className="bi bi-clock me-1" />Centre hours</span>
+                              <strong>{centre.open_time || '—'} – {centre.close_time || '—'}</strong>
+                            </div>
+                          )}
+                          {scan.days?.length > 0 && (
+                            <div className="sc-walkin-row">
+                              <span><i className="bi bi-calendar-event me-1" />Available days</span>
+                              <strong>{scan.days.join(', ')}</strong>
+                            </div>
+                          )}
+                          {callNumber ? (
+                            <a className="sc-walkin-call" href={`tel:${callNumber}`}>
+                              <i className="bi bi-telephone me-1" />Call {callNumber}
+                            </a>
+                          ) : (
+                            <div className="sc-walkin-lead">Contact the centre directly to visit.</div>
+                          )}
+                          <p className="sc-walkin-note">Pay at the centre. No online booking for this {noun.one}.</p>
                         </div>
                       )}
                     </div>
@@ -371,7 +424,7 @@ const css = `
 .sc-item.is-open { border-color: var(--blue-400,#4C8FD6); box-shadow: 0 0 0 3px rgba(21,101,192,.08); }
 .sc-item-row { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 16px;
   padding: 15px 18px; background: none; border: none; cursor: pointer; text-align: left; }
-.sc-item-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.sc-item-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
 .sc-item-name { font-size: 15px; font-weight: 700; color: var(--gray-900,#0F172A); }
 .sc-item-tags { display: flex; gap: 8px; align-items: center; }
 .sc-tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
@@ -412,6 +465,24 @@ const css = `
 .sc-book-call { display: block; text-align: center; text-decoration: none; }
 .sc-note { margin: 8px 0 0; font-size: 12px; color: var(--gray-400,#94A3B8); text-align: center; }
 .sc-walkin { margin-top: 14px; font-size: 13.5px; color: var(--gray-500,#64748B); }
+.sc-item-img { width: 46px; height: 46px; border-radius: 10px; object-fit: cover; flex: none;
+  border: 1px solid var(--blue-100,#B5D4F4); margin-right: 12px; }
+@media (max-width: 640px) { .sc-item-img { width: 40px; height: 40px; margin-right: 10px; } }
+.sc-banner { position: relative; height: 190px; border-radius: 16px; overflow: hidden;
+  margin-bottom: 14px; background: var(--blue-50,#E6F1FB); }
+.sc-banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sc-banner-scrim { position: absolute; inset: 0; background: rgba(4,44,83,0.2); }
+@media (max-width: 640px) { .sc-banner { height: 150px; border-radius: 12px; } }
+.sc-tag-walkin { background: var(--warning-bg,#FAEEDA) !important; color: var(--warning-text,#854F0B) !important;
+  border-color: var(--warning-border,#EF9F27) !important; }
+.sc-walkin-lead { font-size: 13.5px; color: var(--gray-700,#334155); line-height: 1.55; margin-bottom: 10px; }
+.sc-walkin-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px;
+  padding: 7px 0; border-top: 1px solid var(--blue-50,#E6F1FB); color: var(--gray-500,#64748B); }
+.sc-walkin-row strong { color: var(--gray-900,#0F172A); font-weight: 700; text-align: right; }
+.sc-walkin-call { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  margin-top: 12px; width: 100%; background: var(--blue-600,#185FA5); color: #fff; border-radius: 12px;
+  padding: 11px 16px; font-size: 14px; font-weight: 700; text-decoration: none; }
+.sc-walkin-note { font-size: 11.5px; color: var(--gray-400,#94A3B8); margin: 10px 0 0; text-align: center; }
 
 @media (max-width: 600px) {
   .sc-header { padding: 16px; }
