@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router';
 import API from '../services/api';
 import SEO from './SEO';
+import ProviderAboutPanel from './ProviderAboutPanel';
 
 /**
  * /scan-center/:id — a scanning centre and its menu of scans.
@@ -185,6 +186,16 @@ export default function ScanCenterDetails() {
           {centre.announcement_active && centre.announcement && (
             <div className="sc-announce"><i className="bi bi-megaphone me-1" />{centre.announcement}</div>
           )}
+
+          {/* Photos, hours, blurb and socials — the same panel the doctor page
+              shows, and the same data: a centre IS a Hospital row, and this
+              page already fetches /hospitals/<id>/. It was all being returned
+              and thrown away. */}
+          <ProviderAboutPanel
+            info={centre}
+            title={`About the ${noun.label}`}
+            icon={noun.icon}
+          />
 
           {/* ── The menu ── */}
           <h2 className="sc-section-title">{noun.Title} &amp; Prices</h2>

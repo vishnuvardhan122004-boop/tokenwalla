@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import API from '../services/api';
 import { isTestHospital } from '../services/testHospitals';
+import ProviderAboutPanel from './ProviderAboutPanel';
 
 // Local YYYY-MM-DD — must NOT use toISOString() (that converts to UTC and
 // for IST users at night shifts the date back a day, making every slot look
@@ -30,32 +31,6 @@ function getNext7Days() {
 
 const DAYS = getNext7Days();
 
-// Is the hospital open right now? Returns true/false, or null if hours unknown.
-// Handles overnight ranges (e.g. 22:00 – 06:00).
-function hmToMinutes(hm) {
-  if (!hm || typeof hm !== 'string') return null;
-  const m = /^(\d{1,2}):(\d{2})$/.exec(hm.trim());
-  if (!m) return null;
-  const h = Number(m[1]), min = Number(m[2]);
-  if (h > 23 || min > 59) return null;
-  return h * 60 + min;
-}
-function isOpenNow(open, close, now = new Date()) {
-  const o = hmToMinutes(open);
-  const c = hmToMinutes(close);
-  if (o == null || c == null) return null;
-  const cur = now.getHours() * 60 + now.getMinutes();
-  return o <= c ? (cur >= o && cur < c) : (cur >= o || cur < c);
-}
-
-const socialBtn = {
-  display: 'inline-flex', alignItems: 'center', gap: 6,
-  background: '#EAF3FF', border: '1px solid #cfe2f3', color: '#185FA5',
-  borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 600, textDecoration: 'none',
-};
-const servicesLabel = {
-  fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: 1, marginBottom: 8, marginTop: 4,
-};
 const mapBtn = {
   display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8,
   background: '#185FA5', color: '#fff', borderRadius: 10,
@@ -1033,73 +1008,7 @@ export default function DoctorDetails() {
           )}
 
           {/* ── ABOUT THE HOSPITAL ── */}
-          {hospitalInfo && (hospitalInfo.description || hospitalInfo.open_time || hospitalInfo.instagram || hospitalInfo.youtube || hospitalInfo.facebook || (hospitalInfo.services?.length > 0) || (hospitalInfo.gallery?.length > 0)) && (() => {
-            const openNow = isOpenNow(hospitalInfo.open_time, hospitalInfo.close_time);
-            const validImg = (u) => u && String(u).startsWith('http') && !String(u).includes('placehold');
-            return (
-              <div className="dd-block" style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {validImg(hospitalInfo.logo) && (
-                      <img src={hospitalInfo.logo} alt="Logo" style={{ width: 38, height: 38, borderRadius: 10, objectFit: 'cover', border: '1px solid #cfe2f3' }} />
-                    )}
-                    <div className="dd-block-title" style={{ marginBottom: 0 }}>
-                      <div className="dd-block-title-icon"><i className="bi bi-hospital me-1" /></div>
-                      About the Hospital
-                    </div>
-                  </div>
-                  {openNow != null && (
-                    <span style={{
-                      fontSize: 12, fontWeight: 700, borderRadius: 100, padding: '4px 12px', whiteSpace: 'nowrap',
-                      background: openNow ? '#EAF3DE' : '#FCEBEB',
-                      color: openNow ? '#3B6D11' : '#A32D2D',
-                      border: `1px solid ${openNow ? '#97C459' : '#F09595'}`,
-                    }}>
-                      {openNow ? 'Open now' : 'Closed'}
-                    </span>
-                  )}
-                </div>
-
-                {hospitalInfo.open_time && hospitalInfo.close_time && (
-                  <div style={{ fontSize: 14, color: '#475569', marginBottom: 10 }}><i className="bi bi-clock me-1" />{hospitalInfo.open_time} – {hospitalInfo.close_time}</div>
-                )}
-
-                {hospitalInfo.description && (
-                  <p style={{ fontSize: 14, color: '#334155', lineHeight: 1.55, margin: '0 0 12px' }}>{hospitalInfo.description}</p>
-                )}
-
-                {(hospitalInfo.instagram || hospitalInfo.youtube || hospitalInfo.facebook) && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                    {hospitalInfo.instagram && <a href={hospitalInfo.instagram} target="_blank" rel="noreferrer" className="dd-social-btn" style={socialBtn}><i className="bi bi-instagram me-1" />Instagram</a>}
-                    {hospitalInfo.youtube   && <a href={hospitalInfo.youtube}   target="_blank" rel="noreferrer" className="dd-social-btn" style={socialBtn}><i className="bi bi-youtube me-1" />YouTube</a>}
-                    {hospitalInfo.facebook  && <a href={hospitalInfo.facebook}  target="_blank" rel="noreferrer" className="dd-social-btn" style={socialBtn}><i className="bi bi-facebook me-1" />Facebook</a>}
-                  </div>
-                )}
-
-                {hospitalInfo.services?.length > 0 && (
-                  <>
-                    <div style={servicesLabel}>SERVICES</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                      {hospitalInfo.services.map(s => (
-                        <span key={s} style={{ background: '#EAF3FF', border: '1px solid #cfe2f3', color: '#185FA5', borderRadius: 100, padding: '5px 12px', fontSize: 12, fontWeight: 600 }}>{s}</span>
-                      ))}
-                    </div>
-                  </>
-                )}
-
-                {hospitalInfo.gallery?.length > 0 && (
-                  <>
-                    <div style={servicesLabel}>PHOTOS</div>
-                    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
-                      {hospitalInfo.gallery.map(p => (
-                        <img key={p.id} src={p.url} alt="Facility" style={{ width: 150, height: 110, objectFit: 'cover', borderRadius: 12, border: '1px solid #e0e0e0', flexShrink: 0 }} />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })()}
+          <ProviderAboutPanel info={hospitalInfo} />
 
           {/* ── MAIN LAYOUT ── */}
           <div className="dd-layout">
