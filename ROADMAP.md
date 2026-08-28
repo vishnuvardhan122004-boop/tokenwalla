@@ -1171,9 +1171,11 @@ and unbuilt. See 5b.
   said 158 backend tests and the `/ship` checklist says 99; the real numbers are
   **304 backend / 25 frontend** (250 backend before item 8). A stale baseline
   defeats the check it exists for — "did the count drop?" is unanswerable when
-  nobody knows what it should be. `CLAUDE.md` was fixed that day and **went stale again** — as of
-  2026-08-29 the real numbers are **371 backend / 30 frontend**, while
-  `CLAUDE.md` says 304/25 and the `/ship` skill still says 99.
+  nobody knows what it should be. **Closed 2026-08-29.** `CLAUDE.md` was fixed that day
+  and went stale again, and this bullet had itself rotted — it said `/ship`
+  still read 99 when `/ship` had been refreshed to 326/25 on 2026-08-22. Both
+  are now the measured **371 backend (2 skipped) / 30 frontend**, and both carry
+  the date they were measured, so the next drift is visible instead of assumed.
 - **Check both repos when a feature spans them** — new 2026-08-13 (session 2),
   and it has now bitten twice in one day. The walk-in/landline work shipped
   with the landline fallback in the app doctor card but not the web one, and
