@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router';
 import API from '../services/api';
 import { useVisiblePolling } from '../services/useVisiblePolling';
 import { downloadBookingTicket } from '../services/downloadTicket';
+import { downloadReport as fetchReportFile } from '../services/downloadReport';
 import BookingQR from './BookingQR';
 
 const STATUS_MAP = {
@@ -279,11 +280,12 @@ export default function MyBookings() {
   // days later. This is the only place in the product where something arrives
   // AFTER a booking is COMPLETED.
   useEffect(() => {
-    const scanBookings = bookings.filter(
-      b => b.provider_kind === 'SCAN' && b.status === 'COMPLETED');
-    if (scanBookings.length === 0) return;
+    // Any provider may share a document now — a hospital's discharge summary,
+    // not just a centre's scan PDF — so this asks every completed booking.
+    const done = bookings.filter(b => b.status === 'COMPLETED');
+    if (done.length === 0) return;
     let cancelled = false;
-    Promise.all(scanBookings.map(b =>
+    Promise.all(done.map(b =>
       API.get(`/bookings/${b.id}/reports/`)
         .then(({ data }) => [b.id, Array.isArray(data) ? data : []])
         .catch(() => [b.id, []])          // 404 on a backend without reports yet
@@ -293,25 +295,12 @@ export default function MyBookings() {
     return () => { cancelled = true; };
   }, [bookings]);
 
-  // The report is never a plain link: the endpoint requires the Authorization
-  // header, so an <a href> would 401. Fetch it as a blob through the API client
-  // and hand the browser the bytes.
   const downloadReport = async (bookingId, report) => {
     setDownloading(report.id);
     try {
-      const res = await API.get(report.download_url.replace(/^\/api/, ''), {
-        responseType: 'blob',
-      });
-      const url = window.URL.createObjectURL(res.data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${report.title || 'report'}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
+      await fetchReportFile(report);
     } catch {
-      setToast({ type: 'error', msg: 'Could not download the report. Please try again.' });
+      setToast({ type: 'error', msg: 'Could not download the file. Please try again.' });
     } finally {
       setDownloading(null);
     }
@@ -510,13 +499,20 @@ export default function MyBookings() {
                       </div>
                     )}
 
-                    {/* ── SCAN REPORTS (the stage a consultation doesn't have) ── */}
-                    {booking.provider_kind === 'SCAN' && booking.status === 'COMPLETED' && (
+                    {/* ── SHARED DOCUMENTS ──
+                        A scan is ALWAYS expected to produce one, so it gets the
+                        "not ready yet" reassurance. A consultation usually
+                        produces nothing, so it only appears if a file exists —
+                        otherwise every completed visit would nag about a
+                        document nobody is waiting for. */}
+                    {booking.status === 'COMPLETED'
+                      && (booking.provider_kind === 'SCAN'
+                          || (reports[booking.id] || []).length > 0) && (
                       <div className="mb-reports">
                         {(reports[booking.id] || []).length > 0 ? (
                           <>
                             <div className="mb-reports-title">
-                              <i className="bi bi-file-earmark-medical me-1" />Your reports
+                              <i className="bi bi-file-earmark-medical me-1" />Your documents
                             </div>
                             {reports[booking.id].map(r => (
                               <div className="mb-report-row" key={r.id}>

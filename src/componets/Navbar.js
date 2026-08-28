@@ -286,6 +286,9 @@ export default function Navbar() {
                     <Link to="/my-bookings" className="nav-drop-item" onClick={() => setDropOpen(false)}>
                       <div className="nav-drop-icon"><i className="bi bi-ticket-perforated me-1" /></div> {t('nav.myBookings')}
                     </Link>
+                    <Link to="/my-documents" className="nav-drop-item" onClick={() => setDropOpen(false)}>
+                      <div className="nav-drop-icon"><i className="bi bi-file-earmark-medical me-1" /></div> {t('nav.myDocuments')}
+                    </Link>
                     <Link to="/alldoctor" className="nav-drop-item" onClick={() => setDropOpen(false)}>
                       <div className="nav-drop-icon"><i className="bi bi-clipboard-pulse me-1" /></div> {t('nav.findDoctors')}
                     </Link>
@@ -353,6 +356,9 @@ export default function Navbar() {
             <>
               <Link to="/my-bookings" className="mobile-link">
                 <div className="mobile-link-icon"><i className="bi bi-ticket-perforated me-1" /></div> {t('nav.myBookings')}
+              </Link>
+              <Link to="/my-documents" className="mobile-link">
+                <div className="mobile-link-icon"><i className="bi bi-file-earmark-medical me-1" /></div> {t('nav.myDocuments')}
               </Link>
               {isAdmin && (
                 <Link to="/Adashboard" className="mobile-link">

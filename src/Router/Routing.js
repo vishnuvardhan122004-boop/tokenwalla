@@ -16,6 +16,7 @@ import About          from '../componets/About';
 import Contact        from '../componets/Contact';
 import ForgotPassword from '../componets/ForgotPassword';
 import MyBookings     from '../componets/MyBookings';
+import MyDocuments    from '../componets/MyDocuments';
 
 import HLogin      from '../hospital/Hlogin';
 import Husercreate from '../hospital/Usercreate';
@@ -84,6 +85,7 @@ const Routing = () => (
     <Route path="/payment"       element={<RequireAuth><Payment /></RequireAuth>} />
     <Route path="/booking-token" element={<RequireAuth><BookingToken /></RequireAuth>} />
     <Route path="/my-bookings"   element={<RequireAuth><MyBookings /></RequireAuth>} />
+    <Route path="/my-documents"  element={<RequireAuth><MyDocuments /></RequireAuth>} />
 
     <Route path="/Hlogin"      element={<HLogin />} />
     <Route path="/Husercreate" element={<Husercreate />} />

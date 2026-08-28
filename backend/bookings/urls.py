@@ -19,7 +19,10 @@ from .views import (
     RescheduleBookingView,
     ScanQRView,
 )
-from scans.views import ScanReportDownloadView, ScanReportListCreateView
+from scans.views import (
+    MyReportsView, ScanReportDetailView, ScanReportDownloadView,
+    ScanReportListCreateView,
+)
 
 urlpatterns = [
     path('',                         AllBookingsView.as_view()),
@@ -33,10 +36,13 @@ urlpatterns = [
     path('absence-refund/<int:pk>/', AbsenceRefundView.as_view()),
     path('reschedule/<int:pk>/',     RescheduleBookingView.as_view()),
 
-    # ── Scan reports ──────────────────────────────────────────────────────────
+    # ── Shared documents (reports, prescriptions, discharge summaries) ────────
     # Nested under the booking because access is decided by the BOOKING's owner,
-    # never by the report id alone.
+    # never by the report id alone. `reports/mine/` is listed first only for
+    # readability — 'reports' never matches <int:pk> anyway.
+    path('reports/mine/',                            MyReportsView.as_view()),
     path('<int:pk>/reports/',                        ScanReportListCreateView.as_view()),
+    path('<int:pk>/reports/<int:report_id>/',        ScanReportDetailView.as_view()),
     path('<int:pk>/reports/<int:report_id>/download/', ScanReportDownloadView.as_view()),
 
     # ── QR Scanner endpoints ──────────────────────────────────────────────────

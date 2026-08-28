@@ -109,6 +109,12 @@ class ScanReport(models.Model):
     booking     = models.ForeignKey(
         'bookings.Booking', on_delete=models.CASCADE, related_name='reports')
     file        = models.FileField(upload_to='scan_reports/')
+    # The name the provider's file had when they picked it, kept because the
+    # storage does not keep it: Cloudinary strips the extension from the
+    # public_id, so `file.name` comes back as "lab-slip_ubmrst" and a patient
+    # saving that gets a file their phone cannot open. This is what the download
+    # view names the attachment.
+    original_name = models.CharField(max_length=255, blank=True, default='')
     title       = models.CharField(max_length=200, blank=True, default='')
     notes       = models.TextField(blank=True, default='')
     # Who uploaded it, for an audit trail. SET_NULL so removing a staff account

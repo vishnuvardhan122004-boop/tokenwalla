@@ -68,6 +68,17 @@ class ScanReportAccessTests(TestCase):
             role='hospital', last_name=str(centre.id))
         return self.client_for(staff)
 
+    def doctor_booking(self):
+        hospital = Hospital.objects.create(
+            name='Sri Sarwodhaya', city='Hindupur', mobile='9000000805',
+            status='active', password='x')
+        doctor = Doctor.objects.create(
+            hospital=hospital, name='Dr Rao', specialization='GP',
+            mobile='9000000806', fee=200, slots=['09:00 AM'])
+        return Booking.objects.create(
+            user=self.patient, doctor=doctor, hospital=hospital,
+            date=timezone.localdate(), slot='09:00 AM', token='TW-DOC-1')
+
     def upload(self, client=None):
         return (client or self.centre_client(self.centre)).post(
             self.url, {'file': a_pdf(), 'title': 'MRI Brain report'}, format='multipart')
@@ -93,23 +104,71 @@ class ScanReportAccessTests(TestCase):
         r = APIClient().post(self.url, {'file': a_pdf()}, format='multipart')
         self.assertIn(r.status_code, (401, 403))
 
-    def test_a_doctor_booking_cannot_take_a_report(self):
-        hospital = Hospital.objects.create(
-            name='Sri Sarwodhaya', city='Hindupur', mobile='9000000805',
-            status='active', password='x')
-        doctor = Doctor.objects.create(
-            hospital=hospital, name='Dr Rao', specialization='GP',
-            mobile='9000000806', fee=200, slots=['09:00 AM'])
-        b = Booking.objects.create(
-            user=self.patient, doctor=doctor, hospital=hospital,
-            date=timezone.localdate(), slot='09:00 AM', token='TW-DOC-1')
-        r = self.centre_client(hospital).post(
+    def test_a_hospital_can_share_against_a_doctor_booking(self):
+        """A discharge summary is the same object as a scan PDF. The old
+        scan-only gate meant nothing but "we shipped centres first"."""
+        b = self.doctor_booking()
+        r = self.centre_client(b.hospital).post(
             f'/api/bookings/{b.id}/reports/', {'file': a_pdf()}, format='multipart')
-        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.status_code, 201, r.content)
 
     def test_a_file_is_required(self):
         r = self.centre_client(self.centre).post(self.url, {'title': 'x'}, format='multipart')
         self.assertEqual(r.status_code, 400)
+
+    def test_an_executable_file_type_is_refused(self):
+        """The file is stored under our domain and opened in a WebView. An
+        allow-list, because .html and .svg run scripts."""
+        bad = SimpleUploadedFile('x.html', b'<script>alert(1)</script>',
+                                 content_type='text/html')
+        r = self.centre_client(self.centre).post(
+            self.url, {'file': bad}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(ScanReport.objects.count(), 0)
+
+    def test_an_oversized_file_is_refused(self):
+        big = SimpleUploadedFile('huge.pdf', b'x' * (16 * 1024 * 1024),
+                                 content_type='application/pdf')
+        r = self.centre_client(self.centre).post(
+            self.url, {'file': big}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(ScanReport.objects.count(), 0)
+
+    # ── delete ───────────────────────────────────────────────────────────────
+    def detail_url(self):
+        return f'{self.url}{ScanReport.objects.first().id}/'
+
+    def test_the_centre_can_delete_its_own_upload(self):
+        staff = self.centre_client(self.centre)   # one staff account, two calls
+        self.upload(staff)
+        r = staff.delete(self.detail_url())
+        self.assertEqual(r.status_code, 204)
+        self.assertEqual(ScanReport.objects.count(), 0)
+
+    def test_the_patient_cannot_delete_a_report(self):
+        self.upload()
+        r = self.client_for(self.patient).delete(self.detail_url())
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(ScanReport.objects.count(), 1)
+
+    # ── my documents ─────────────────────────────────────────────────────────
+    def test_my_documents_lists_across_bookings_and_only_mine(self):
+        self.upload()
+        b = self.doctor_booking()
+        self.centre_client(b.hospital).post(
+            f'/api/bookings/{b.id}/reports/', {'file': a_pdf()}, format='multipart')
+
+        rows = self.client_for(self.patient).get('/api/bookings/reports/mine/').json()
+        self.assertEqual(len(rows), 2)
+        self.assertNotIn('file', rows[0])           # the storage URL, never
+        self.assertTrue(rows[0]['hospital_name'])   # named, or the list is six "Report"s
+        # The extension the client names the saved file from. Storage does not
+        # keep it, so if this is ever dropped a JPEG saves as .pdf and opens in
+        # nothing.
+        self.assertTrue(rows[0]['original_name'].endswith('.pdf'))
+
+        self.assertEqual(
+            self.client_for(self.other_patient).get('/api/bookings/reports/mine/').json(), [])
 
     # ── read ─────────────────────────────────────────────────────────────────
     def test_the_patient_can_list_their_reports(self):

@@ -83,6 +83,10 @@ const Hdashboard = () => {
   // from ALL dates mixed together, so staff need to split them by day.
   const [dayFilter,            setDayFilter]            = useState("today");
   const [tokenDetail,          setTokenDetail]          = useState(null);
+  // Documents already shared on the booking open in the token modal. Fetched
+  // there and nowhere else: one request when a receptionist actually asks,
+  // instead of one per row on a queue that polls every 15s.
+  const [tokenDocs,            setTokenDocs]            = useState([]);
   const [queue,                setQueue]                = useState({ waiting: [], onHold: [], inProgress: [], completed: [] });
   const [doctors,              setDoctors]              = useState([]);
   const [scans,                setScans]                = useState([]);
@@ -251,7 +255,7 @@ const Hdashboard = () => {
     }
   };
 
-  // Upload a result file for a completed scan booking. The patient is notified
+  // Share a file against a booking. The patient is notified
   // by the server (push now, WhatsApp once the template is approved); this
   // screen never sees the file again — reports are served only through the
   // ownership-checked download endpoint.
@@ -260,19 +264,36 @@ const Hdashboard = () => {
     setUploadingFor(booking.id);
     const fd = new FormData();
     fd.append('file', file);
-    fd.append('title', `${booking.doctor_name || 'Scan'} report`);
+    fd.append('title', `${booking.doctor_name || booking.provider_name || 'Report'} — ${file.name}`);
     try {
       await API.post(`/bookings/${booking.id}/reports/`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setToast({ type: 'success', msg: 'Report uploaded — the patient has been notified.' });
+      setToast({ type: 'success', msg: 'Document shared — the patient has been notified.' });
+      if (tokenDetail?.id === booking.id) loadDocs(booking.id);
     } catch (err) {
       setToast({
         type: 'error',
-        msg: err?.response?.data?.message || 'Could not upload the report.',
+        msg: err?.response?.data?.message || 'Could not share the document.',
       });
     } finally {
       setUploadingFor(null);
+    }
+  };
+
+  const loadDocs = (bookingId) =>
+    API.get(`/bookings/${bookingId}/reports/`)
+      .then(({ data }) => setTokenDocs(Array.isArray(data) ? data : []))
+      .catch(() => setTokenDocs([]));
+
+  const removeDoc = async (bookingId, doc) => {
+    if (!window.confirm(`Remove "${doc.title || 'this document'}" from the patient's records?`)) return;
+    try {
+      await API.delete(`/bookings/${bookingId}/reports/${doc.id}/`);
+      await loadDocs(bookingId);
+      setToast({ type: 'success', msg: 'Document removed.' });
+    } catch {
+      setToast({ type: 'error', msg: 'Could not remove the document.' });
     }
   };
 
@@ -675,6 +696,24 @@ const Hdashboard = () => {
             {tokenDetail.doctor_name && <div className="small mb-1"><span className="text-muted">Doctor:</span> {tokenDetail.doctor_name}</div>}
             {tokenDetail.slot && <div className="small mb-1"><span className="text-muted">Slot:</span> {tokenDetail.slot}</div>}
             <div className="small mb-3"><span className="text-muted">Day:</span> {dayLabelFor(tokenDetail.date)}</div>
+            {tokenDocs.length > 0 && (
+              <div className="mb-3">
+                <div className="small text-muted mb-1">Documents shared with this patient</div>
+                {tokenDocs.map(d => (
+                  <div key={d.id} className="d-flex align-items-center gap-2 small border rounded px-2 py-1 mb-1">
+                    <i className="bi bi-file-earmark-medical text-primary" />
+                    <span className="text-truncate flex-grow-1">{d.title || 'Document'}</span>
+                    <button
+                      className="btn btn-sm btn-link text-danger p-0"
+                      title="Remove"
+                      onClick={() => removeDoc(tokenDetail.id, d)}
+                    >
+                      <i className="bi bi-trash" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             {tokenDetail.status !== "COMPLETED" && (
               <button className="btn btn-outline-danger btn-sm w-100" onClick={() => handleNoShow(tokenDetail.id)}>
                 <i className="bi bi-slash-circle me-1" />Mark as No-show
@@ -786,7 +825,7 @@ const Hdashboard = () => {
                         <div className="small text-muted"><i className="bi bi-clock me-1" />{p.slot}  ·  <i className="bi bi-calendar-event me-1" />{dayLabelFor(p.date)}</div>
                         <button
                           className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
-                          onClick={() => setTokenDetail(p)}
+                          onClick={() => { setTokenDetail(p); setTokenDocs([]); loadDocs(p.id); }}
                           title="Tap for details"
                         >
                           <i className="bi bi-ticket-perforated me-1" />Token: {p.token}
@@ -825,7 +864,7 @@ const Hdashboard = () => {
                         <div className="small text-muted"><i className="bi bi-clock me-1" />{p.slot}  ·  <i className="bi bi-calendar-event me-1" />{dayLabelFor(p.date)}</div>
                         <button
                           className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
-                          onClick={() => setTokenDetail(p)}
+                          onClick={() => { setTokenDetail(p); setTokenDocs([]); loadDocs(p.id); }}
                           title="Tap for details"
                         >
                           <i className="bi bi-ticket-perforated me-1" />Token: {p.token}
@@ -856,34 +895,34 @@ const Hdashboard = () => {
                         <div className="small text-muted"><i className="bi bi-clock me-1" />{p.slot}  ·  <i className="bi bi-calendar-event me-1" />{dayLabelFor(p.date)}</div>
                         <button
                           className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
-                          onClick={() => setTokenDetail(p)}
+                          onClick={() => { setTokenDetail(p); setTokenDocs([]); loadDocs(p.id); }}
                           title="Tap for details"
                         >
                           <i className="bi bi-ticket-perforated me-1" />Token: {p.token}
                         </button>
 
-                        {/* A scan's journey doesn't end at the visit — the
-                            report comes back later. Only offered for scan
-                            bookings; a consultation has nothing to upload. */}
-                        {isCentre && p.provider_kind === 'SCAN' && (
-                          <div className="mt-2">
-                            <label className="btn btn-sm btn-outline-success py-0 px-2 mb-0">
-                              {uploadingFor === p.id
-                                ? 'Uploading…'
-                                : <><i className="bi bi-upload me-1" />Upload report</>}
-                              <input
-                                type="file"
-                                accept=".pdf,.jpg,.jpeg,.png"
-                                hidden
-                                disabled={uploadingFor === p.id}
-                                onChange={e => {
-                                  uploadReport(p, e.target.files?.[0]);
-                                  e.target.value = '';   // allow re-picking the same file
-                                }}
-                              />
-                            </label>
-                          </div>
-                        )}
+                        {/* A visit doesn't end when the patient walks out: the
+                            scan report, the lab result, the discharge summary
+                            all come back later. Offered on every booking — a
+                            hospital's discharge summary is the same object as a
+                            centre's scan PDF. */}
+                        <div className="mt-2">
+                          <label className="btn btn-sm btn-outline-success py-0 px-2 mb-0">
+                            {uploadingFor === p.id
+                              ? 'Uploading…'
+                              : <><i className="bi bi-upload me-1" />Share document</>}
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif"
+                              hidden
+                              disabled={uploadingFor === p.id}
+                              onChange={e => {
+                                uploadReport(p, e.target.files?.[0]);
+                                e.target.value = '';   // allow re-picking the same file
+                              }}
+                            />
+                          </label>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -907,7 +946,7 @@ const Hdashboard = () => {
                               <div className="small text-muted"><i className="bi bi-clock me-1" />{p.slot}  ·  <i className="bi bi-calendar-event me-1" />{dayLabelFor(p.date)}</div>
                               <button
                                 className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
-                                onClick={() => setTokenDetail(p)}
+                                onClick={() => { setTokenDetail(p); setTokenDocs([]); loadDocs(p.id); }}
                                 title="Tap for details"
                               >
                                 <i className="bi bi-ticket-perforated me-1" />Token: {p.token}

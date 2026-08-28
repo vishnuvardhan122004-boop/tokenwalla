@@ -119,12 +119,18 @@ class ScanReportSerializer(serializers.ModelSerializer):
     download_url = serializers.SerializerMethodField()
     uploaded_by_name = serializers.SerializerMethodField()
     title = serializers.CharField(required=False, allow_blank=True)
+    # Who sent it and what for. Redundant inside a booking card, but the
+    # My Documents list has no booking context around it — without these a
+    # patient sees six rows called "Report" and cannot tell them apart.
+    hospital_name = serializers.CharField(source='booking.hospital.name', read_only=True)
+    provider_name = serializers.CharField(source='booking.provider_name',  read_only=True)
 
     class Meta:
         model  = ScanReport
         fields = ['id', 'booking', 'title', 'notes', 'created',
-                  'download_url', 'uploaded_by_name']
-        read_only_fields = ['id', 'booking', 'created']
+                  'download_url', 'uploaded_by_name',
+                  'hospital_name', 'provider_name', 'original_name']
+        read_only_fields = ['id', 'booking', 'created', 'original_name']
 
     def get_download_url(self, obj):
         return f'/api/bookings/{obj.booking_id}/reports/{obj.id}/download/'

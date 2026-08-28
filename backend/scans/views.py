@@ -208,6 +208,29 @@ def _notify_report_ready_async(report):
 
 
 
+# What a provider is allowed to hand a patient. An allow-list rather than a
+# block-list because this is a trust boundary: the file is stored under our
+# domain and handed back to a phone that will open it. .html and .svg execute in
+# a WebView, and an Office macro executes on a laptop — none of them are things
+# a hospital needs to send.
+ALLOWED_UPLOAD_EXTS = {
+    '.pdf', '.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif',
+}
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024      # 15 MB — a chest CT PDF is ~5 MB
+
+
+def _reject_file(upload):
+    """Return an error string if this upload is not something we will store."""
+    name = (getattr(upload, 'name', '') or '').lower()
+    ext  = name[name.rfind('.'):] if '.' in name else ''
+    if ext not in ALLOWED_UPLOAD_EXTS:
+        return ('Only PDF and image files can be shared '
+                '(PDF, JPG, PNG, WEBP, HEIC).')
+    if (getattr(upload, 'size', 0) or 0) > MAX_UPLOAD_BYTES:
+        return 'The file is too large. Maximum size is 15 MB.'
+    return None
+
+
 def _may_see_report(user, booking):
     """Who is allowed anywhere near a scan report.
 
@@ -273,18 +296,22 @@ class ScanReportListCreateView(APIView):
         if not _is_centre_staff(request.user, booking):
             return Response({'message': 'Not found.'}, status=404)
 
-        if booking.scan_id is None:
-            return Response(
-                {'message': 'Reports can only be attached to a scan booking.'},
-                status=400)
+        # Any provider may share a document against a booking they own — a
+        # hospital's discharge summary is the same object as a centre's scan
+        # PDF, and gating on scan_id only ever meant "we shipped centres first".
 
         upload = request.FILES.get('file')
         if not upload:
             return Response({'message': 'A file is required.'}, status=400)
 
+        err = _reject_file(upload)
+        if err:
+            return Response({'message': err}, status=400)
+
         report = ScanReport.objects.create(
-            booking     = booking,
-            file        = upload,
+            booking       = booking,
+            file          = upload,
+            original_name = (getattr(upload, 'name', '') or '')[:255],
             title       = (request.data.get('title') or '').strip()[:200],
             notes       = (request.data.get('notes') or '').strip(),
             uploaded_by = request.user,
@@ -298,6 +325,30 @@ class ScanReportListCreateView(APIView):
         logger.info('Scan report %s uploaded for booking %s by user %s',
                     report.id, booking.id, request.user.id)
         return Response(ScanReportSerializer(report).data, status=201)
+
+
+    def delete(self, request, pk, report_id):
+        """Only the provider that published it may unpublish it — the
+        wrong-file-uploaded case. A patient may read their own report but never
+        remove it; it is the provider's record of what they issued."""
+        booking = self._booking(pk)
+        if not _is_centre_staff(request.user, booking):
+            return Response({'message': 'Not found.'}, status=404)
+        report = get_object_or_404(ScanReport, pk=report_id, booking=booking)
+        report.file.delete(save=False)   # drop the blob too, not just the row
+        report.delete()
+        logger.info('Report %s deleted from booking %s by user %s',
+                    report_id, booking.id, request.user.id)
+        return Response(status=204)
+
+
+class ScanReportDetailView(ScanReportListCreateView):
+    """DELETE /api/bookings/<pk>/reports/<report_id>/ — and nothing else.
+
+    A subclass purely so GET/POST on the detail URL 405 instead of hitting the
+    list handlers, which take no report_id.
+    """
+    http_method_names = ['delete', 'options']
 
 
 class ScanReportDownloadView(APIView):
@@ -323,5 +374,24 @@ class ScanReportDownloadView(APIView):
             logger.exception('Scan report %s file could not be opened', report.id)
             return Response({'message': 'The report file is unavailable.'}, status=502)
 
-        filename = (report.file.name or 'report').rsplit('/', 1)[-1]
+        filename = report.original_name or (report.file.name or 'report').rsplit('/', 1)[-1]
         return FileResponse(fh, as_attachment=True, filename=filename)
+
+
+class MyReportsView(APIView):
+    """GET /api/bookings/reports/mine/ — every document shared with me.
+
+    The profile-level view of the same rows the booking cards show. Filtering by
+    `booking__user` is the whole ownership check: a report is only reachable
+    here through a booking that is already the caller's, so there is no id to
+    guess and nothing extra to authorise.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = (ScanReport.objects
+              .filter(booking__user=request.user)
+              .select_related('booking', 'booking__hospital', 'booking__doctor',
+                              'booking__scan', 'uploaded_by')
+              .order_by('-created'))
+        return Response(ScanReportSerializer(qs, many=True).data)
