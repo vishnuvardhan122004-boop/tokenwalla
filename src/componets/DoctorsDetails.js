@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router';
 import API from '../services/api';
 import { isTestHospital } from '../services/testHospitals';
 import ProviderAboutPanel from './ProviderAboutPanel';
+import { providerLabel } from '../services/providerLabel';
 
 // Local YYYY-MM-DD — must NOT use toISOString() (that converts to UTC and
 // for IST users at night shifts the date back a day, making every slot look
@@ -170,7 +171,7 @@ export default function DoctorDetails() {
   const buildShare = () => {
     const url  = window.location.href;
     const text = [
-      `👨‍⚕️ ${doctor.name}`,
+      `👨‍⚕️ ${providerLabel(doctor.name)}`,
       doctor.specialization ? `🩺 ${doctor.specialization}` : null,
       doctor.hospital_name  ? `🏥 ${doctor.hospital_name}`  : null,
       doctor.city           ? `📍 ${doctor.city}`           : null,
@@ -942,12 +943,12 @@ export default function DoctorDetails() {
           {/* ── PROFILE ── */}
           <div className="dd-profile-card">
             {doctor.image && !doctor.image.includes('placehold')
-              ? <img className="dd-doctor-avatar" src={doctor.image} alt={`Dr. ${doctor.name}`} />
+              ? <img className="dd-doctor-avatar" src={doctor.image} alt={providerLabel(doctor.name)} />
               : <div className="dd-doctor-avatar-placeholder"><i className="bi bi-clipboard-pulse me-1" /></div>
             }
             <div className="dd-profile-info">
               <span className="dd-spec-badge">{doctor.specialization}</span>
-              <div className="dd-doctor-name">{doctor.name}</div>
+              <div className="dd-doctor-name">{providerLabel(doctor.name)}</div>
               <div className="dd-profile-pills">
                 <span className="dd-pill"><i className="bi bi-geo-alt me-1" />{doctor.city}</span>
                 <span className="dd-pill"><i className="bi bi-hourglass-split me-1" />{doctor.experience} yrs exp</span>
@@ -1190,7 +1191,7 @@ export default function DoctorDetails() {
                 <div className="dd-booking-body">
                   <div className="dd-summary-row">
                     <span className="dd-summary-label">Doctor</span>
-                    <span className="dd-summary-value">{doctor.name}</span>
+                    <span className="dd-summary-value">{providerLabel(doctor.name)}</span>
                   </div>
                   {!walkIn && (
                     <>

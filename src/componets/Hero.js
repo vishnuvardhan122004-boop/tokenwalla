@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import API from '../services/api';
 import { filterTestDoctors } from '../services/testHospitals';
 import SEO from './SEO';
+import { providerLabel } from '../services/providerLabel';
 
 const STEP_ICONS = ['bi-search', 'bi-calendar-check', 'bi-credit-card', 'bi-hospital'];
 const FEATURE_ICONS = ['bi-geo-alt', 'bi-shield-lock', 'bi-hospital', 'bi-arrow-repeat', 'bi-clipboard-pulse', 'bi-phone'];
@@ -667,7 +668,7 @@ API.get('/doctors/').then(({ data }) => {
                     }
                     <div className="doc-info">
                       <div className="doc-spec">{doc.specialization}</div>
-                      <div className="doc-name">{doc.name}</div>
+                      <div className="doc-name">{providerLabel(doc.name)}</div>
                       <div className="doc-meta">
                         <span><i className="bi bi-geo-alt me-1" />{doc.city}</span>
                         <span>{t('hero.doctorsPreview.yearsExp', { count: doc.experience })}</span>

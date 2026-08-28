@@ -5,6 +5,7 @@ import { useVisiblePolling } from '../services/useVisiblePolling';
 import { downloadBookingTicket } from '../services/downloadTicket';
 import { downloadReport as fetchReportFile } from '../services/downloadReport';
 import BookingQR from './BookingQR';
+import { providerLabel } from '../services/providerLabel';
 
 const STATUS_MAP = {
   CONFIRMED:   { label: 'Confirmed',       cls: 'badge-amber',  pulse: true  },
@@ -136,7 +137,7 @@ export default function MyBookings() {
     try {
       await downloadBookingTicket({
         token:       booking.token,
-        doctorName:  booking.doctor_name,
+        doctorName:  providerLabel(booking.doctor_name, booking.provider_kind),
         hospital:    booking.hospital_name,
         patientName,
         date:        booking.date,
@@ -151,7 +152,7 @@ export default function MyBookings() {
   };
 
   const handleCancel = async (booking) => {
-    if (!window.confirm(`Cancel appointment with ${booking.doctor_name}?\n\nRefunds are processed within 5–7 business days.`)) return;
+    if (!window.confirm(`Cancel appointment with ${providerLabel(booking.doctor_name, booking.provider_kind)}?\n\nRefunds are processed within 5–7 business days.`)) return;
     setCancelling(booking.id);
     try {
       await API.patch(`/bookings/cancel/${booking.id}/`);
@@ -470,7 +471,7 @@ export default function MyBookings() {
                             {st.label}
                           </span>
                         </div>
-                        <div className="mb-doctor-name">{booking.doctor_name || '—'}</div>
+                        <div className="mb-doctor-name">{providerLabel(booking.doctor_name, booking.provider_kind) || '—'}</div>
                         <div className="mb-hospital-name"><i className="bi bi-hospital me-1" />{booking.hospital_name || '—'}</div>
                         {booking.is_for_other && (
                           <div className="mb-for-other"><i className="bi bi-people me-1" />For {booking.patient_name}</div>
@@ -548,7 +549,7 @@ export default function MyBookings() {
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                           <BookingQR
                             token={booking.token}
-                            doctorName={booking.doctor_name}
+                            doctorName={providerLabel(booking.doctor_name, booking.provider_kind)}
                             hospital={booking.hospital_name}
                             date={booking.date}
                             slot={booking.slot}
@@ -569,7 +570,7 @@ export default function MyBookings() {
                     {/* ── DOCTOR-UNAVAILABLE BANNER ── */}
                     {booking.status === 'CONFIRMED' && booking.free_reschedule && (
                       <div className="mb-unavail-banner">
-                        <i className="bi bi-exclamation-triangle me-1" />{booking.doctor_name} is unavailable. Reschedule below at no charge.
+                        <i className="bi bi-exclamation-triangle me-1" />{providerLabel(booking.doctor_name, booking.provider_kind)} is unavailable. Reschedule below at no charge.
                       </div>
                     )}
 
@@ -623,7 +624,7 @@ export default function MyBookings() {
         <div className="mb-modal-overlay" onClick={e => { if (e.target === e.currentTarget && !rescheduling) setRescheduleBooking(null); }}>
           <div className="mb-modal">
             <div className="mb-modal-title"><i className="bi bi-calendar-event me-1" />Reschedule Appointment</div>
-            <div className="mb-modal-sub">{rescheduleBooking.doctor_name} · {rescheduleBooking.hospital_name}</div>
+            <div className="mb-modal-sub">{providerLabel(rescheduleBooking.doctor_name, rescheduleBooking.provider_kind)} · {rescheduleBooking.hospital_name}</div>
             <label className="mb-modal-label">Select New Date</label>
             <input
               type="date" className="mb-modal-input" min={today} value={newDate}

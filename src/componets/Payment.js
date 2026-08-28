@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import API from '../services/api';
 import { computeFeeBreakdown } from '../services/fees';
+import { providerLabel } from '../services/providerLabel';
 
 const inr = (n) => Number(n).toFixed(2);
 
@@ -21,6 +22,11 @@ export default function Payment() {
   const isScan       = !!scanId;
   const providerId   = isScan ? scanId : doctorId;
   const providerName = isScan ? scanName : doctorName;
+  // What the patient reads. Kept separate from `doctorName`, which is sent
+  // verbatim to /payment/verify/ — labelling that would put "Dr. " into the
+  // API payload.
+  const providerKind    = isScan ? 'SCAN' : 'DOCTOR';
+  const providerDisplay = providerLabel(providerName, providerKind);
 
   // The itemised bill comes from the SERVER (doctor.fee_breakdown, computed by
   // payments/fees.py — the same code that prices the order). We don't recompute
@@ -119,7 +125,7 @@ export default function Payment() {
             navigate('/booking-token', {
               state: {
                 token:        verifyData.token,
-                doctorName,
+                doctorName:   providerDisplay,
                 hospital,
                 doctorMobile: location.state?.doctorMobile,
                 date, slot,
@@ -158,7 +164,7 @@ export default function Payment() {
         currency: orderData.currency || 'INR',
         order_id: orderData.order_id,
         name:     'TokenWalla',
-        description: `Consultation with ${providerName}`,
+        description: `${isScan ? 'Test' : 'Consultation'} — ${providerDisplay}`,
         prefill: {
           name:     bookedForName || user?.name || user?.username,
           contact:  user?.mobile || '',
@@ -369,8 +375,8 @@ export default function Payment() {
             </div>
             <div className="pay-rows">
               <div className="pay-row">
-                <span className="pay-row-label">Doctor</span>
-                <span className="pay-row-value">{providerName}</span>
+                <span className="pay-row-label">{isScan ? 'Test' : 'Doctor'}</span>
+                <span className="pay-row-value">{providerDisplay}</span>
               </div>
               <div className="pay-row">
                 <span className="pay-row-label">Hospital</span>

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import API from '../services/api';
 import { filterTestDoctors } from '../services/testHospitals';
 import SEO from './SEO';
+import { providerLabel } from '../services/providerLabel';
 
 // Maps a hero specialty chip (and any typed word) to the substrings that may
 // appear in the free-text `specialization` field hospitals enter, so e.g. the
@@ -728,7 +729,7 @@ export default function AllDoctor() {
                   >
                     <div className="card-img-wrap">
                       {doc.image && !doc.image.includes('placehold')
-                        ? <img className="card-img" src={doc.image} alt={`Dr. ${doc.name}`} />
+                        ? <img className="card-img" src={doc.image} alt={providerLabel(doc.name)} />
                         : <div className="card-img-placeholder"><i className="bi bi-clipboard-pulse me-1" /></div>
                       }
                       <div className={`card-avail ${doc.available ? 'yes' : 'no'}`}>
@@ -740,7 +741,7 @@ export default function AllDoctor() {
 
                     <div className="card-body">
                       <div className="card-spec">{doc.specialization}</div>
-                      <div className="card-name">{doc.name}</div>
+                      <div className="card-name">{providerLabel(doc.name)}</div>
                       <div className="card-meta">
                         <div className="meta-item">
                           <div className="meta-icon"><i className="bi bi-geo-alt me-1" /></div>

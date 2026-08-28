@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import jsQR from 'jsqr';
 import API from '../services/api';
+import { providerLabel } from '../services/providerLabel';
 
 // ── Extract token from QR data ────────────────────────────────────────────────
 function extractToken(raw) {
@@ -460,7 +461,7 @@ export default function QRScanner() {
                   { label: 'Hospital',       value: `🏥 ${booking.hospital_name}`           },
                   { label: 'Patient',        value: `👤 ${booking.patient_name}`           },
                   { label: 'Mobile',         value: booking.patient_mobile, mono: true      },
-                  { label: 'Doctor',         value: booking.doctor_name                     },
+                  { label: 'Doctor',         value: providerLabel(booking.doctor_name, booking.provider_kind) },
                   { label: 'Specialization', value: booking.specialization                  },
                   { label: 'Date',           value: `📅 ${booking.date}`                   },
                   { label: 'Slot',           value: `🕐 ${booking.slot}`                   },
