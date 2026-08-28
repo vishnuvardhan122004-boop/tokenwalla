@@ -15,7 +15,7 @@ from hospitals.models import (
 )
 from payments.payout_utils import payout_target
 from tokenwalla.permissions import IsHospitalStaff, IsDoctorOwnerHospitalOrAdmin
-from tokenwalla.utils import is_slot_bookable
+from tokenwalla.utils import cutoff_hours_for, is_slot_bookable
 
 import logging
 import threading
@@ -213,7 +213,7 @@ class DoctorViewSet(viewsets.ModelViewSet):
         for slot in (doctor.slots or []):
             booked = booked_map.get(slot, 0)
             capacity_full = booked >= doctor.max_per_slot
-            too_soon = not is_slot_bookable(date, slot)
+            too_soon = not is_slot_bookable(date, slot, cutoff_hours_for(doctor))
             result[slot] = {
                 'booked': booked,
                 'max': doctor.max_per_slot,

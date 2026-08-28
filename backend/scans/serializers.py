@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from hospitals.models import Hospital
 
+from tokenwalla.utils import MAX_BOOKING_CUTOFF_HOURS
 from .models import Scan, ScanReport
 
 
@@ -20,6 +21,14 @@ class ScanSerializer(serializers.ModelSerializer):
     # settled at the centre and not online.
     fee_breakdown = serializers.SerializerMethodField()
 
+    # NULL = "use the platform default". Bounded here rather than on the model
+    # so an out-of-range value is a 400 the centre's dashboard can show.
+    booking_cutoff_hours = serializers.IntegerField(
+        required=False, allow_null=True,
+        min_value=0, max_value=MAX_BOOKING_CUTOFF_HOURS,
+        help_text='Hours of notice needed before a slot starts. Blank = platform default (2h).',
+    )
+
     slots = serializers.ListField(child=serializers.CharField(), default=list, required=False)
     days  = serializers.ListField(child=serializers.CharField(), default=list, required=False)
 
@@ -30,6 +39,7 @@ class ScanSerializer(serializers.ModelSerializer):
             'prep_instructions',
             'price', 'duration_minutes',
             'available', 'slots', 'days', 'max_per_slot',
+            'booking_cutoff_hours',
             'view_count',
             'payment_collection_mode', 'fee_breakdown',
             'image', 'image_url',

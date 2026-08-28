@@ -26,6 +26,16 @@ class Doctor(models.Model):
     # Available days of the week, e.g. ["Mon", "Tue", "Wed"]
     days           = models.JSONField(default=list, blank=True)
     max_per_slot   = models.IntegerField(default=10)
+
+    # ── Booking lead time ─────────────────────────────────────────────────────
+    # How much notice this doctor needs before a slot starts. NULL means "use
+    # the platform default" (tokenwalla.utils.BOOKING_CUTOFF_HOURS, 2h) — the
+    # field is nullable rather than defaulting to 2 because 0 is a legitimate
+    # setting, and a plain integer default could not tell "wants zero notice"
+    # from "never chose". Resolve it through utils.cutoff_hours_for(), never by
+    # reading this attribute directly.
+    booking_cutoff_hours = models.PositiveSmallIntegerField(null=True, blank=True)
+
     # How many times a patient has opened this doctor's page. Feeds the
     # "popular first" ordering — see DoctorViewSet.record_view. Deliberately a
     # plain counter and not per-user analytics: we only need a ranking signal,

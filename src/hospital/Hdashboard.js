@@ -6,6 +6,7 @@ import QRScanner from './QRScanner';
 import HPayments from './HPayments';
 import SPECIALIZATION_OPTIONS from '../services/specializations';
 import { useVisiblePolling } from '../services/useVisiblePolling';
+import BookingNoticePicker from './BookingNoticePicker';
 
 // Icon stylesheet, pulled in dynamically so its ~14 kB gzip stays out of the
 // bundle every patient downloads. See the longer note in Hprofile.js.
@@ -42,6 +43,7 @@ const LANDLINE_RE = /^0[1-9][0-9]{1,3}[- ]?[0-9]{6,8}$/;
 const EMPTY_DOCTOR = {
   name: "", specialization: "", keywords: "", experience: "",
   mobile: "", landline: "", available: true, fee: "", slots: [], days: [], max_per_slot: 10,
+  booking_cutoff_hours: "",   // "" = use the platform default (2h)
 };
 
 const EMPTY_ERRORS = {
@@ -230,6 +232,10 @@ const Hdashboard = () => {
       price: Number(scanForm.price) || 0,
       duration_minutes: Number(scanForm.duration_minutes) || 15,
       max_per_slot: Number(scanForm.max_per_slot) || 1,
+      // null, not omitted: clearing the box must reset the override.
+      booking_cutoff_hours: String(scanForm.booking_cutoff_hours ?? "").trim() === ""
+        ? null
+        : Number(scanForm.booking_cutoff_hours),
       prep_instructions: scanForm.prep_instructions || '',
       available: scanForm.available !== false,
       payment_collection_mode:
@@ -401,6 +407,7 @@ const Hdashboard = () => {
       slots:          doctor.slots          || [],
       days:           doctor.days           || [],
       max_per_slot:   doctor.max_per_slot   || 10,
+      booking_cutoff_hours: doctor.booking_cutoff_hours == null ? "" : String(doctor.booking_cutoff_hours),
     });
     setErrors(EMPTY_ERRORS);
     setDoctorImagePreview(doctor.image          || null);
@@ -453,6 +460,10 @@ const Hdashboard = () => {
       fd.append("available",      formData.available);
       fd.append("fee",            Number(formData.fee) || 0);
       fd.append("max_per_slot",   Number(formData.max_per_slot) || 10);
+      // Send it empty when blank so DRF writes NULL. Omitting the key would
+      // leave a previously-set override in place, so clearing the box would
+      // appear to do nothing.
+      fd.append("booking_cutoff_hours", String(formData.booking_cutoff_hours ?? "").trim());
       fd.append("slots",          JSON.stringify(formData.slots));
       fd.append("days",           JSON.stringify(formData.days));
 
@@ -998,7 +1009,7 @@ const Hdashboard = () => {
                 className="btn btn-primary btn-sm"
                 onClick={() => setScanForm({
                   name: '', modality: '', price: '', duration_minutes: 15,
-                  max_per_slot: 1, prep_instructions: '', available: true,
+                  max_per_slot: 1, booking_cutoff_hours: '', prep_instructions: '', available: true,
                   slotsText: '', daysText: '',
                   // Never default to FULL: that would have us holding a centre's
                   // money before anyone chose it, with no payout account on file.
@@ -1042,6 +1053,13 @@ const Hdashboard = () => {
                       value={scanForm.max_per_slot}
                       onChange={e => setScanForm(f => ({ ...f, max_per_slot: e.target.value }))} />
                     <small className="text-muted">Usually 1 — one machine, one patient.</small>
+                  </div>
+                  <div className="col-md-6">
+                    <BookingNoticePicker
+                      value={scanForm.booking_cutoff_hours ?? ''}
+                      onChange={v => setScanForm(f => ({ ...f, booking_cutoff_hours: v }))}
+                      label="Booking notice"
+                    />
                   </div>
                   <div className="col-md-6">
                     <label className="form-label small fw-semibold">Days</label>
@@ -1319,6 +1337,14 @@ const Hdashboard = () => {
                         onChange={e => handleChange("max_per_slot", e.target.value)}
                       />
                       <FieldError msg={errors.max_per_slot} />
+                    </div>
+
+                    <div className="col-md-4">
+                      <BookingNoticePicker
+                        value={formData.booking_cutoff_hours}
+                        onChange={v => handleChange("booking_cutoff_hours", v)}
+                        label="Booking Notice"
+                      />
                     </div>
 
                     <div className="col-12">

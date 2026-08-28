@@ -54,6 +54,16 @@ class Scan(models.Model):
     days         = models.JSONField(default=list, blank=True)
     max_per_slot = models.IntegerField(default=1)
 
+    # ── Booking lead time ─────────────────────────────────────────────────────
+    # How much notice this service needs before a slot starts. NULL means "use
+    # the platform default" (tokenwalla.utils.BOOKING_CUTOFF_HOURS, 2h) — the
+    # field is nullable rather than defaulting to 2 because 0 is a legitimate
+    # setting, and a plain integer default could not tell "wants zero notice"
+    # from "never chose". Resolve it through utils.cutoff_hours_for(), never by
+    # reading this attribute directly.
+    booking_cutoff_hours = models.PositiveSmallIntegerField(null=True, blank=True)
+
+
     # Ranking signal for popular-first ordering, mirroring Doctor.view_count.
     # A plain counter, never per-user analytics — we only need the ranking.
     view_count   = models.PositiveIntegerField(default=0, db_index=True)

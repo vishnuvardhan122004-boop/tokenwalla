@@ -23,7 +23,7 @@ import logging
 
 from django.db import transaction
 
-from tokenwalla.utils import is_slot_bookable
+from tokenwalla.utils import cutoff_hours_for, is_slot_bookable
 
 logger = logging.getLogger('tokenwalla')
 
@@ -89,7 +89,7 @@ def check_slot_available(provider, date_val, slot_val, *, exclude_pk=None):
         raise SlotUnavailable(
             f'Invalid slot for this {noun}.', reason='invalid_slot')
 
-    if not is_slot_bookable(date_val, slot_val):
+    if not is_slot_bookable(date_val, slot_val, cutoff_hours_for(provider)):
         raise SlotUnavailable(
             f'Slot "{slot_val}" is no longer bookable — it starts too soon. '
             f'Please pick a later slot.',

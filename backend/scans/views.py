@@ -23,7 +23,7 @@ from hospitals.models import (
     Hospital, exclude_test_hospitals, show_test_hospitals_to,
 )
 from tokenwalla.permissions import IsHospitalStaff, IsScanOwnerCenterOrAdmin
-from tokenwalla.utils import is_slot_bookable
+from tokenwalla.utils import cutoff_hours_for, is_slot_bookable
 
 from .models import Scan, ScanReport
 from .serializers import ScanReportSerializer, ScanSerializer
@@ -137,7 +137,7 @@ class ScanViewSet(viewsets.ModelViewSet):
         for slot in (scan.slots or []):
             booked = booked_map.get(slot, 0)
             capacity_full = booked >= scan.max_per_slot
-            too_soon = not is_slot_bookable(date, slot)
+            too_soon = not is_slot_bookable(date, slot, cutoff_hours_for(scan))
             result[slot] = {
                 'booked': booked,
                 'max': scan.max_per_slot,

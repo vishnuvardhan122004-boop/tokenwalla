@@ -33,7 +33,23 @@ def check_password_strength(password, user=None):
     return None
 
 SLOT_TIME_FORMAT = '%I:%M %p'   # e.g. "09:00 AM", "12:30 PM"
-BOOKING_CUTOFF_HOURS = 2        # slots within this window of "now" cannot be booked
+BOOKING_CUTOFF_HOURS = 2        # fallback lead time, when a provider sets none
+# Nobody sensibly needs more than a week of notice, and the cap is what stops a
+# typo ("240" for 24) from making a doctor quietly unbookable forever.
+MAX_BOOKING_CUTOFF_HOURS = 24 * 7
+
+
+def cutoff_hours_for(provider):
+    """How much notice this provider needs, in hours.
+
+    A Doctor or a Scan may set its own `booking_cutoff_hours`. NULL means "use
+    the platform default" — which is why the field is nullable rather than
+    defaulting to 2: 0 is a legitimate setting (a walk-in clinic that wants the
+    slot bookable until it starts), and a plain integer default could not tell
+    "wants zero" from "never chose".
+    """
+    hours = getattr(provider, 'booking_cutoff_hours', None)
+    return BOOKING_CUTOFF_HOURS if hours is None else hours
 
 # ── Phone numbers ────────────────────────────────────────────────────────────
 # A mobile is the only thing SMS/WhatsApp can reach, so it stays strict and is

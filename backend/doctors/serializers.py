@@ -2,7 +2,9 @@ import re
 
 from rest_framework import serializers
 
-from tokenwalla.utils import is_valid_landline, is_valid_mobile
+from tokenwalla.utils import (
+    MAX_BOOKING_CUTOFF_HOURS, is_valid_landline, is_valid_mobile,
+)
 
 from .models import Doctor
 
@@ -35,11 +37,20 @@ class DoctorSerializer(serializers.ModelSerializer):
         required=False,
     )
 
+    # NULL = "use the platform default". Bounded here rather than on the model
+    # so an out-of-range value is a 400 the dashboard can show, not a 500.
+    booking_cutoff_hours = serializers.IntegerField(
+        required=False, allow_null=True,
+        min_value=0, max_value=MAX_BOOKING_CUTOFF_HOURS,
+        help_text='Hours of notice needed before a slot starts. Blank = platform default (2h).',
+    )
+
     class Meta:
         model  = Doctor
         fields = [
             "id", "name", "specialization", "keywords", "experience",
             "mobile", "landline", "available", "fee", "slots", "days", "max_per_slot",
+            "booking_cutoff_hours",
             "view_count",
             "payment_collection_mode", "fee_breakdown",
             "image", "hospital_image",
