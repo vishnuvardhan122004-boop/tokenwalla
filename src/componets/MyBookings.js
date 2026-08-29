@@ -70,7 +70,6 @@ export default function MyBookings() {
   const [rescheduling,      setRescheduling]      = useState(false);
   const [payingReschedule,  setPayingReschedule]  = useState(false);
   const [doctorSlots,       setDoctorSlots]       = useState([]);
-  const [waOptIn,           setWaOptIn]           = useState(true);
   // { [bookingId]: report[] }. Fetched only for completed SCAN bookings —
   // a consultation has no report, and asking for one on every card would be a
   // request per booking for nothing.
@@ -106,21 +105,6 @@ export default function MyBookings() {
   // Auto-refresh only when there are active bookings, pauses when tab hidden
   const hasActive = bookings.some(b => b.status === 'CONFIRMED' || b.status === 'IN_PROGRESS');
   useVisiblePolling(() => fetchBookings(true), 15000, hasActive);
-
-  useEffect(() => {
-    API.get('/auth/me/').then(({ data }) => setWaOptIn(data.whatsapp_opt_in ?? true)).catch(() => {});
-  }, []);
-
-  const toggleWaOptIn = async () => {
-    const next = !waOptIn;
-    setWaOptIn(next);
-    try {
-      await API.patch('/auth/me/whatsapp-opt-in/', { whatsapp_opt_in: next });
-    } catch {
-      setWaOptIn(!next);
-      showToast('Failed to update WhatsApp preference.', 'error');
-    }
-  };
 
   const handleDownload = async (booking) => {
     // Prefer the booking's patient name (the beneficiary when booked for

@@ -24,12 +24,9 @@ const Contact = () => {
     setLoading(true);
     setStatus(null);
     try {
-      // Send via WhatsApp deep-link as primary channel
-      // (Replace with real email API e.g. EmailJS / backend endpoint when available)
-      const text = encodeURIComponent(
-        `*TokenWalla Support Request*\n\nName: ${form.name}\nMobile: ${form.mobile}\nSubject: ${form.subject || 'General'}\n\n${form.message}`
-      );
-      // Silently attempt a mailto fallback for non-mobile
+      // mailto is the only channel. A WhatsApp deep-link body used to be built
+      // here and never sent — the comment called it "primary" for months.
+      // (Replace with a real email API e.g. EmailJS / backend endpoint when available)
       const mailSubject = encodeURIComponent(`[TokenWalla] ${form.subject || 'Support Request'}`);
       const mailBody = encodeURIComponent(
         `Name: ${form.name}\nMobile: ${form.mobile}\n\n${form.message}`

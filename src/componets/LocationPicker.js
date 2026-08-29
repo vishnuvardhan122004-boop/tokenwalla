@@ -93,6 +93,11 @@ export default function LocationPicker({ open, initial, onClose, onPick }) {
 
     return () => {
       if (revRef.current) clearTimeout(revRef.current);
+      // Reading the LIVE value is the point: bumping the sequence invalidates
+      // any reverse-geocode still in flight. The rule wants a snapshot copied
+      // inside the effect, which would increment a stale number and invalidate
+      // nothing.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       seqRef.current++;
       ro.disconnect();
       map.remove();

@@ -34,7 +34,6 @@ const Reports = () => {
   }, []);
 
   const bookingsArr = data.bookings;
-  const inProgress  = bookingsArr.filter(b => b.status === 'IN_PROGRESS').length;
   const revenue     = bookingsArr.reduce((a, b) => a + (b.amount || 0), 0);
 
   const filtered = bookingsArr.filter(b => {

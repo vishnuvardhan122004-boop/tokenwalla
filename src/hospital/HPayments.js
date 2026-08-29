@@ -63,7 +63,7 @@ const validateDetails = (f) => {
   if (f.payout_to_hospital) return e;
   if (f.payment_method === "UPI") {
     if (!f.upi_id.trim()) e.upi_id = "UPI ID is required for a UPI payout.";
-    else if (!/^[\w.\-]{2,256}@[a-zA-Z]{2,64}$/.test(f.upi_id.trim()))
+    else if (!/^[\w.-]{2,256}@[a-zA-Z]{2,64}$/.test(f.upi_id.trim()))
       e.upi_id = "Enter a valid UPI ID (e.g. name@bank).";
   }
   if (f.payment_method === "BANK") {
