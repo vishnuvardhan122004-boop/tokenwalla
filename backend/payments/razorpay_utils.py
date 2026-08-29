@@ -25,9 +25,11 @@ This module imports no app models, so it is safe to import from any app
 without risking a circular import.
 """
 import logging
+import os
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 
 import razorpay
 
@@ -53,9 +55,26 @@ _client = None
 
 
 def get_client():
-    """Lazily build and reuse a single Razorpay client across requests."""
+    """Lazily build and reuse a single Razorpay client across requests.
+
+    Refuses to build a LIVE client while DEBUG is on. Razorpay has no sandbox
+    for live credentials, so a local checkout against an `rzp_live_` key
+    charges a real card — and local testing is the normal way this repo gets
+    exercised. Every real gateway call routes through here, so this one guard
+    covers order creation, confirmation and refunds alike. Set
+    ALLOW_LIVE_RAZORPAY=1 to override deliberately.
+    """
     global _client
     if _client is None:
+        if (settings.DEBUG
+                and settings.RAZORPAY_KEY_ID.startswith('rzp_live_')
+                and os.environ.get('ALLOW_LIVE_RAZORPAY') != '1'):
+            raise ImproperlyConfigured(
+                'Refusing to use a LIVE Razorpay key with DEBUG=True — a local '
+                'checkout would charge a real card. Put the rzp_test_ pair in '
+                'backend/.env (then `touch tokenwalla/settings.py`), or set '
+                'ALLOW_LIVE_RAZORPAY=1 if you really mean it.'
+            )
         _client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
     return _client
 

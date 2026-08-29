@@ -3,12 +3,14 @@ Tests for the fee-split / refund / payout / invoice / receipt feature.
 
 Run:  python manage.py test payments
 """
+import os
 from datetime import timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -313,3 +315,38 @@ class ReceiptEndpointTests(BaseDataMixin, TestCase):
         client.force_authenticate(stranger)
         r = client.get(f'/api/payment/receipt/{self.booking.id}/')
         self.assertEqual(r.status_code, 403)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Live Razorpay key must never be usable from a DEBUG machine
+# ─────────────────────────────────────────────────────────────────────────────
+class LiveKeyGuardTests(TestCase):
+    """A local checkout against an `rzp_live_` key charges a real card — there
+    is no Razorpay sandbox for live credentials. get_client() is the single
+    chokepoint every gateway call goes through."""
+
+    def setUp(self):
+        import payments.razorpay_utils as ru
+        ru._client = None                       # the module caches one client
+        self.addCleanup(setattr, ru, '_client', None)
+        self.ru = ru
+
+    @override_settings(DEBUG=True, RAZORPAY_KEY_ID='rzp_live_abc', RAZORPAY_KEY_SECRET='x')
+    def test_live_key_with_debug_is_refused(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('ALLOW_LIVE_RAZORPAY', None)
+            with self.assertRaises(ImproperlyConfigured):
+                self.ru.get_client()
+
+    @override_settings(DEBUG=True, RAZORPAY_KEY_ID='rzp_test_abc', RAZORPAY_KEY_SECRET='x')
+    def test_test_key_with_debug_is_fine(self):
+        self.assertIsNotNone(self.ru.get_client())
+
+    @override_settings(DEBUG=False, RAZORPAY_KEY_ID='rzp_live_abc', RAZORPAY_KEY_SECRET='x')
+    def test_live_key_in_production_is_fine(self):
+        self.assertIsNotNone(self.ru.get_client())
+
+    @override_settings(DEBUG=True, RAZORPAY_KEY_ID='rzp_live_abc', RAZORPAY_KEY_SECRET='x')
+    def test_escape_hatch(self):
+        with mock.patch.dict(os.environ, {'ALLOW_LIVE_RAZORPAY': '1'}):
+            self.assertIsNotNone(self.ru.get_client())
