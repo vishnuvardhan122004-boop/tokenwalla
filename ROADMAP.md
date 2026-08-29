@@ -1126,7 +1126,17 @@ Verify after approval:
 python manage.py send_test_whatsapp <mobile> --template scan_report_ready
 ```
 
-### 12. The website has no WhatsApp opt-out control 🟡 — found 2026-08-29
+### ~~12. The website has no WhatsApp opt-out control~~ ✅ 2026-08-29 — SHIPPED
+
+**Closed the same day it was opened** (`06ad7aa`, live). The switch sits on My
+Bookings — the website has no profile page — reads the flag from `/auth/me/`
+rather than the cached user, renders nothing at all if that read fails, and
+rolls back on a failed PATCH. A native checkbox, so it is keyboard-reachable
+and labelled without a line of ARIA. 5 tests. The two products now agree.
+
+The original item follows.
+
+### 12-history. The gap, as found 2026-08-29
 
 `MyBookings.js` fetched `/auth/me/` on **every mount** and kept a `waOptIn`
 state plus a `toggleWaOptIn` handler that **nothing rendered**. Found by

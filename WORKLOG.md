@@ -40,6 +40,7 @@ pushed; the app repo is untouched today beyond v1.4.0.
 | 2 | `DISABLE_ESLINT_PLUGIN=true` dropped from the production build | `0d6c428` | ✅ live |
 | 3 | The six lint errors that dropping it exposed | `f88b9de` | ✅ live |
 | 4 | `centre_payout`, `centre_new_booking`, `appointment_prep` — text + senders | `371220e` | ⏳ inert until Meta approves |
+| 5 | The patient WhatsApp opt-out the website had been missing | `06ad7aa` | ✅ live |
 
 **Worth keeping:**
 
