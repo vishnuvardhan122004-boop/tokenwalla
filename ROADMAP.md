@@ -1094,12 +1094,15 @@ Payouts stay **manual**, per the standing decision. No payout API.
 
 ---
 
-### 9. Four WhatsApp templates are waiting on a form 🟡
+### 9. Three WhatsApp templates are waiting on a form 🟡
 
-> **Widened 2026-08-29.** This item used to be `scan_report_ready` alone. That
-> one was submitted on 08-27 and was last seen **"In review"** — check WhatsApp
-> Manager rather than resubmitting. Three more were written on 08-29 for
-> scanning and blood centres and are **not submitted**:
+> **Widened 2026-08-29, then narrowed the same day.** ✅ **`scan_report_ready`
+> is APPROVED** — verified in WhatsApp Manager: status **Active**, last edited
+> 28 Aug 2026, and its rendered body is *"Hello Rahul, your report for MRI Brain
+> at City Scan Centre is ready. Booking reference TW-2026-0142…"*, which is §11
+> word for word with the same four variables `send_scan_report_ready` sends. It
+> needs nothing. Three templates were written on 08-29 for scanning and blood
+> centres and remain **not submitted**:
 >
 > | Template | Doc | Why it exists |
 > |---|---|---|
@@ -1120,7 +1123,20 @@ Payouts stay **manual**, per the standing decision. No payout API.
 >
 > The rule below applies to all four: **do not try to automate the submission.**
 
-### 9a. Submit `scan_report_ready` to Meta 🟡
+### ~~9a. Submit `scan_report_ready` to Meta~~ ✅ 2026-08-29 — APPROVED AND ACTIVE
+
+**Checked in WhatsApp Manager, not inferred.** The WABA holds **12 active
+templates** (11 ours + Meta's `hello_world`), every one Utility, English and
+green. `scan_report_ready` is among them, last edited 28 Aug — so the submission
+that looked uncertain on 08-27 did land, and it took roughly a day to approve.
+
+Its body matched the code's four params on sight, which is the check that
+matters: an approved template with the wrong param count fails at send time, in
+production (item 4b). Still unproven is an actual delivery — that happens on the
+next real scan-report upload, or on a deliberate
+`send_test_whatsapp <mobile> --template scan_report_ready`.
+
+The submission notes below still apply to §12–14 and are kept for them.
 
 **The last unfinished piece of item 8, and it is a form, not code.** The backend
 already reads this exact template name, so nothing needs redeploying once it is

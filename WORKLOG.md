@@ -42,6 +42,7 @@ pushed; the app repo is untouched today beyond v1.4.0.
 | 4 | `centre_payout`, `centre_new_booking`, `appointment_prep` — text + senders | `371220e` | ⏳ inert until Meta approves |
 | 5 | The patient WhatsApp opt-out the website had been missing | `06ad7aa` | ✅ live |
 | 6 | **v1.4.0 shipped to the Play Store** (build `7c4a4644`, versionCode 40) | app `2e9e716` | ✅ live on phones |
+| 7 | `scan_report_ready` confirmed approved in WhatsApp Manager — 12 active templates, body matches the code's 4 params | — | ✅ checked, not code |
 
 **Worth keeping:**
 
