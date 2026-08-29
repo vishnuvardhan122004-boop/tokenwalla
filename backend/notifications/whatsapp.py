@@ -18,6 +18,25 @@ def _graph_url():
     return f'https://graph.facebook.com/{version}/{phone_id}/messages'
 
 
+def one_line(text: str, limit: int = 220) -> str:
+    """Squeeze free text into something Meta will accept as a template param.
+
+    Meta rejects a body parameter containing a newline, a tab or four
+    consecutive spaces, so any operator-typed field has to be flattened before
+    it can be sent. `Scan.prep_instructions` is a TextField a centre fills in
+    by hand — multi-line is the normal case there, not the edge case.
+
+    Also ends the text with a sentence stop, because it sits mid-body in
+    §14 and runs straight into the next sentence otherwise.
+    """
+    flat = ' '.join(str(text).split())
+    if len(flat) > limit:
+        flat = flat[:limit - 1].rstrip() + '…'
+    if flat and flat[-1] not in '.!?…':
+        flat += '.'
+    return flat
+
+
 def send_template(to_mobile: str, template_name: str, params: list) -> dict:
     """
     Sends an approved WhatsApp template message.
@@ -167,9 +186,15 @@ def send_hospital_new_booking(booking):
     # Show the hospital who the appointment is *for* (the beneficiary when the
     # booking was made for someone else), and the best contact number for them.
     patient_name = booking.patient_display_name
+    # Same seven params either way; only the sentence around them differs.
+    # Branch on the BOOKING, not on hospital.kind — a hospital with an in-house
+    # scanning wing (kind=HOSPITAL, svc_scans=True) takes scan bookings too, and
+    # it is the booking that decides whether {{4}} is a doctor or a test.
+    template = (settings.WHATSAPP_TEMPLATE_CENTRE_NEW_BOOKING if booking.is_scan
+                else settings.WHATSAPP_TEMPLATE_HOSPITAL_NEW_BOOKING)
     result = send_template(
         to_mobile=hospital.mobile,
-        template_name=settings.WHATSAPP_TEMPLATE_HOSPITAL_NEW_BOOKING,
+        template_name=template,
         params=[
             hospital.name,
             patient_name,
@@ -182,7 +207,7 @@ def send_hospital_new_booking(booking):
     )
     WhatsAppLog.objects.create(
         booking=booking,
-        event_type='hospital_new_booking',
+        event_type='centre_new_booking' if booking.is_scan else 'hospital_new_booking',
         status='sent' if result['success'] else 'failed',
         wa_message_id=result.get('message_id') or '',
         error=result.get('error') or '',
@@ -348,6 +373,110 @@ def send_doctor_payout_paid(batch):
     WhatsAppLog.objects.create(
         booking=None,
         event_type='doctor_payout',
+        status='sent' if result['success'] else 'failed',
+        wa_message_id=result.get('message_id') or '',
+        error=result.get('error') or '',
+    )
+
+
+def send_centre_payout_paid(batch):
+    """Tell a scanning or blood centre on WhatsApp that its balance was paid.
+
+    batch: a PayoutBatch with `center` set, just marked PROCESSED by
+    payments.views.MarkPayoutPaidView. Until this template existed the centre
+    half of that view was push-only — `send_doctor_payout_paid` bails out on a
+    centre batch because its body names a doctor AND their hospital, and Meta
+    approves a template by its exact wording, so reusing it would have sent an
+    approved template with meaningless params.
+
+    A centre is its own business, so there is no third party to name: three
+    params against the doctor template's four.
+
+    Goes to the centre's own number, so no patient opt-in gate applies.
+
+    Template body (see notifications/WHATSAPP_TEMPLATES.md §12) params:
+      {{1}} centre name  {{2}} amount  {{3}} reference
+    """
+    from .models import WhatsAppLog
+
+    centre = batch.center
+    if centre is None:
+        logger.info('[notifications] batch %s is a doctor payout — not a centre WhatsApp', batch.id)
+        return
+    if not centre.mobile:
+        logger.info('[notifications] centre %s has no mobile — skipping payout WhatsApp', centre.id)
+        return
+
+    # Meta rejects blank template params, so an absent UTR needs a placeholder.
+    reference = (batch.razorpay_payout_id or '').strip() or 'NA'
+
+    result = send_template(
+        to_mobile=centre.mobile,
+        template_name=settings.WHATSAPP_TEMPLATE_CENTRE_PAYOUT,
+        params=[
+            centre.name,
+            f'{batch.total_amount:.2f}',
+            reference,
+        ],
+    )
+    WhatsAppLog.objects.create(
+        booking=None,
+        event_type='centre_payout',
+        status='sent' if result['success'] else 'failed',
+        wa_message_id=result.get('message_id') or '',
+        error=result.get('error') or '',
+    )
+
+
+def send_appointment_prep(booking):
+    """Send the centre's own preparation instructions to the patient.
+
+    `Scan.prep_instructions` has been captured, stored and serialised since
+    scanning centres shipped, and has never reached a patient on any channel.
+    For a blood centre that is the message that matters most: somebody who eats
+    breakfast before a fasting panel loses the slot, the sample and the trip.
+
+    Sent at BOOKING time rather than with the ~2h reminder on purpose — "fast
+    for 8 hours" is useless two hours out. The cost is that a booking made three
+    weeks ahead gets its prep three weeks ahead; a day-before pass would be the
+    fix, and it needs a second cron window rather than a second template.
+
+    No-ops when the provider left prep blank, which is most consultations and
+    plenty of scans — an empty param would be rejected by Meta anyway.
+
+    Template body (see notifications/WHATSAPP_TEMPLATES.md §14) params:
+      {{1}} patient  {{2}} service  {{3}} centre  {{4}} date
+      {{5}} prep instructions  {{6}} booking reference
+    """
+    from .models import WhatsAppLog
+
+    if not booking.is_scan:
+        return
+
+    prep = one_line(getattr(booking.scan, 'prep_instructions', '') or '')
+    if not prep:
+        return
+
+    user = booking.user
+    if not getattr(user, 'whatsapp_opt_in', True):
+        return
+
+    patient_name = user.first_name or user.username
+    result = send_template(
+        to_mobile=user.mobile,
+        template_name=settings.WHATSAPP_TEMPLATE_APPOINTMENT_PREP,
+        params=[
+            patient_name,
+            booking.provider_name,
+            booking.hospital.name,
+            str(booking.date),
+            prep,
+            booking.token,
+        ],
+    )
+    WhatsAppLog.objects.create(
+        booking=booking,
+        event_type='appointment_prep',
         status='sent' if result['success'] else 'failed',
         wa_message_id=result.get('message_id') or '',
         error=result.get('error') or '',

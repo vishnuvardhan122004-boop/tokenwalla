@@ -21,8 +21,9 @@ order** by the `params` list in `notifications/whatsapp.py`.
 > all confirmed to match what `notifications/whatsapp.py` sends. Those seven need
 > **no** submitting; treat them as a record of what was approved.
 >
-> **§11 (`scan_report_ready`) is ⏳ NOT SUBMITTED — added 2026-08-18 with scan
-> reports. §1–10 are all ✅.**
+> **§11 (`scan_report_ready`) was submitted 2026-08-27 and was last seen "In
+> review" — check WhatsApp Manager rather than resubmitting. §12–14 are ⏳ NOT
+> SUBMITTED, added 2026-08-29 for scanning and blood centres. §1–10 are all ✅.**
 > Any section marked ⏳ SUBMIT THIS is NOT approved yet and does need
 > submitting. Templates get added whenever a new sender is written, so this block
 > deliberately does not name a total — check the per-section marker, which is the
@@ -466,6 +467,160 @@ python manage.py send_test_whatsapp <mobile> --template scan_report_ready
 ```
 
 Sample params are built into the command.
+
+## 12. `centre_payout`  ⏳ SUBMIT THIS (added 2026-08-29, not yet submitted)
+
+Sent to a **scanning or blood centre** (`center.mobile`) when admin staff mark
+its balance paid — the centre-shaped twin of §5. Sender:
+`notifications.whatsapp.send_centre_payout_paid(batch)`.
+
+**Why §5 cannot be reused.** `doctor_payout` reads "…your payout … at {{3}}",
+where {{3}} is the doctor's hospital. A centre has no such third party — it is
+the business being paid. Meta approves a template by its exact body, so sending
+the doctor body with a centre's name in {{3}} would deliver a sentence that
+names the payee twice. Until this is approved a centre payout is push-only, and
+`send_doctor_payout_paid` returns early rather than faking it.
+
+| Field | Value |
+|-------|-------|
+| **Name** | `centre_payout` |
+| **Category** | **Utility** (transactional) |
+| **Language** | English (`en`) |
+| **Header** | None |
+| **Footer** | `TokenWalla` |
+| **Buttons** | None |
+
+**Body** (paste exactly):
+
+```
+Hello {{1}}, your TokenWalla payout of Rs {{2}} has been sent. Payment reference {{3}}.
+
+Open the TokenWalla dashboard to see the bookings it covers.
+```
+
+| Placeholder | Meaning | Sample value for review |
+|-------------|---------|-------------------------|
+| `{{1}}` | Centre name | Vijaya Diagnostics |
+| `{{2}}` | Amount paid | 4250.00 |
+| `{{3}}` | UTR / reference, or `NA` | NA |
+
+> **"Rs", not "₹".** The rupee sign is fine in a body, but keeping the currency
+> in the static text (and out of the variable) is what stops the amount reading
+> as a bare number to Meta's classifier.
+
+> Three params, not four. Passing four to a three-variable template fails at
+> send time, in production — that is ROADMAP item 4b's whole lesson.
+
+---
+
+## 13. `centre_new_booking`  ⏳ SUBMIT THIS (added 2026-08-29, not yet submitted)
+
+Sent to the **centre's own number** when a scan or blood-test booking is paid
+and confirmed. The scan-shaped twin of §2, and it takes the **same seven params
+in the same order** — only the sentence around them changes. Sender:
+`notifications.whatsapp.send_hospital_new_booking(booking)`, which picks this
+name when `booking.is_scan`.
+
+**Why the split.** §2 says the patient "has booked an appointment with {{4}}",
+which is right for a doctor and reads as nonsense for a lab: *"has booked an
+appointment with Complete Blood Count"*. The params were already provider-
+agnostic (`booking.provider_name`), so nothing but the wording had to change.
+
+**The branch is on the BOOKING, not on `hospital.kind`** — a hospital with an
+in-house scanning wing (`kind=HOSPITAL`, `svc_scans=True`) takes scan bookings
+too, and it is the booking that decides whether {{4}} is a person or a test.
+
+| Field | Value |
+|-------|-------|
+| **Name** | `centre_new_booking` |
+| **Category** | **Utility** (transactional) |
+| **Language** | English (`en`) |
+| **Header** | None |
+| **Footer** | `TokenWalla` |
+| **Buttons** | None |
+
+**Body** (paste exactly):
+
+```
+New booking at {{1}}.
+
+{{2}} (mobile {{3}}) has booked {{4}} on {{5}} at {{6}}. Booking reference {{7}}.
+
+Open the TokenWalla dashboard to see the day's list.
+```
+
+| Placeholder | Meaning | Sample value for review |
+|-------------|---------|-------------------------|
+| `{{1}}` | Centre name | Vijaya Diagnostics |
+| `{{2}}` | Patient name | Rahul |
+| `{{3}}` | Patient mobile | 9876543210 |
+| `{{4}}` | Test or scan name | Complete Blood Count |
+| `{{5}}` | Appointment date | 2026-09-02 |
+| `{{6}}` | Slot | 08:00 AM |
+| `{{7}}` | Booking reference | TW-TEST-0001 |
+
+> Not gated on `whatsapp_opt_in` — that flag is the patient's, and the centre
+> always wants to hear about a booking. No `mobile` on file, no send.
+
+---
+
+## 14. `appointment_prep`  ⏳ SUBMIT THIS (added 2026-08-29, not yet submitted)
+
+Sends the centre's **own preparation instructions** to the patient at booking
+time. Sender: `notifications.whatsapp.send_appointment_prep(booking)`.
+
+**This closes a field that has never been delivered.** `Scan.prep_instructions`
+has been captured, stored and serialised since scanning centres shipped, and no
+channel has ever put it in front of a patient. For a blood centre it is the
+message that matters most: somebody who eats breakfast before a fasting panel
+loses the slot, the sample and the trip.
+
+**Sent at booking time, not with the ~2h reminder.** "Fast for 8 hours" is
+useless two hours out. The cost: a booking made three weeks ahead gets its prep
+three weeks ahead. A day-before pass is the real fix and it needs a second cron
+window, not a second template.
+
+| Field | Value |
+|-------|-------|
+| **Name** | `appointment_prep` |
+| **Category** | **Utility** (transactional) |
+| **Language** | English (`en`) |
+| **Header** | None |
+| **Footer** | `TokenWalla` |
+| **Buttons** | None |
+
+**Body** (paste exactly):
+
+```
+Hello {{1}}, your {{2}} at {{3}} is booked for {{4}}.
+
+Please prepare: {{5}}
+
+Booking reference {{6}}. Contact the centre if anything is unclear.
+```
+
+| Placeholder | Meaning | Sample value for review |
+|-------------|---------|-------------------------|
+| `{{1}}` | Patient name | Rahul |
+| `{{2}}` | Test or scan name | Complete Blood Count |
+| `{{3}}` | Centre name | Vijaya Diagnostics |
+| `{{4}}` | Appointment date | 2026-09-02 |
+| `{{5}}` | Prep instructions, flattened | Fast for 8 hours. Water is fine. |
+| `{{6}}` | Booking reference | TW-TEST-0001 |
+
+> **{{5}} is operator-typed free text and MUST be flattened before sending.**
+> Meta rejects a body parameter containing a newline, a tab or four consecutive
+> spaces, and `prep_instructions` is a `TextField` a centre fills in by hand —
+> multi-line is the normal case there. `notifications.whatsapp.one_line()` does
+> the squeeze, caps it at 220 characters and gives it a full stop, because the
+> variable runs straight into the next sentence otherwise.
+
+> The sender no-ops when prep is blank (most consultations, plenty of scans).
+> An empty param would be rejected by Meta anyway.
+
+> This one IS gated on the patient's `whatsapp_opt_in`, unlike §12 and §13.
+
+---
 
 ## Submission checklist
 

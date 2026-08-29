@@ -44,6 +44,14 @@ SAMPLE_PARAMS = {
     'doctor_payout':        ['Anita Rao', '500.00', 'City Care Clinic', 'NA'],
     # {{1}} patient {{2}} scan {{3}} centre {{4}} booking reference
     'scan_report_ready':    ['Rahul', 'MRI Brain', 'Vijaya Diagnostics', 'TW-TEST-0001'],
+    # {{1}} centre {{2}} amount {{3}} reference   — THREE, not four; see §12
+    'centre_payout':        ['Vijaya Diagnostics', '4250.00', 'NA'],
+    # {{1}} centre {{2}} patient {{3}} mobile {{4}} test {{5}} date {{6}} slot {{7}} ref
+    'centre_new_booking':   ['Vijaya Diagnostics', 'Rahul', '9876543210',
+                             'Complete Blood Count', '2026-09-02', '08:00 AM', 'TW-TEST-0001'],
+    # {{1}} patient {{2}} test {{3}} centre {{4}} date {{5}} prep {{6}} ref
+    'appointment_prep':     ['Rahul', 'Complete Blood Count', 'Vijaya Diagnostics',
+                             '2026-09-02', 'Fast for 8 hours. Water is fine.', 'TW-TEST-0001'],
 }
 
 

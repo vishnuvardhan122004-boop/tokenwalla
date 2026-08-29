@@ -324,6 +324,15 @@ WHATSAPP_TEMPLATE_HOSPITAL_CANCELLED = config('WHATSAPP_TEMPLATE_HOSPITAL_CANCEL
 # name is APPROVED, send_template logs a warning and returns, so the paired push
 # still fires and the patient is still told. Inert, never broken.
 WHATSAPP_TEMPLATE_SCAN_REPORT    = config('WHATSAPP_TEMPLATE_SCAN_REPORT', default='scan_report_ready')
+
+# Centre-shaped templates. A scanning or blood centre sells a Scan, not a
+# consultation, so three of the doctor-shaped bodies read wrong for one — see
+# notifications/WHATSAPP_TEMPLATES.md sections 12-14. Params are deliberately
+# identical to their doctor counterparts where one exists, so the sender picks
+# a NAME and nothing else changes.
+WHATSAPP_TEMPLATE_CENTRE_NEW_BOOKING = config('WHATSAPP_TEMPLATE_CENTRE_NEW_BOOKING', default='centre_new_booking')
+WHATSAPP_TEMPLATE_CENTRE_PAYOUT  = config('WHATSAPP_TEMPLATE_CENTRE_PAYOUT', default='centre_payout')
+WHATSAPP_TEMPLATE_APPOINTMENT_PREP = config('WHATSAPP_TEMPLATE_APPOINTMENT_PREP', default='appointment_prep')
 WHATSAPP_TEMPLATE_LANG           = config('WHATSAPP_TEMPLATE_LANG', default='en')
 ADMIN_SETUP_KEY = config('ADMIN_SETUP_KEY', default='')
 

@@ -38,8 +38,9 @@ class BookingConfirmedPairingTests(TestCase):
     @mock.patch('payments.views.send_hospital_new_booking')
     @mock.patch('payments.views.push_booking_confirmed')
     @mock.patch('payments.views.send_booking_confirmation')
+    @mock.patch('payments.views.send_appointment_prep')
     def test_confirmation_fires_whatsapp_and_push(
-        self, wa_confirm, push_confirm, wa_hosp, push_hosp, thread, conn,
+        self, wa_prep, wa_confirm, push_confirm, wa_hosp, push_hosp, thread, conn,
     ):
         from payments.views import _dispatch_booking_notifications
 
@@ -50,6 +51,7 @@ class BookingConfirmedPairingTests(TestCase):
         push_confirm.assert_called_once_with(booking)  # patient, in-app  ← the gap
         wa_hosp.assert_called_once_with(booking)       # hospital, WhatsApp
         push_hosp.assert_called_once_with(booking)     # hospital, in-app
+        wa_prep.assert_called_once_with(booking)       # patient, prep (no-ops itself)
 
     @mock.patch('payments.views.connection')
     @mock.patch('payments.views.threading.Thread', side_effect=_run_inline)
@@ -57,8 +59,9 @@ class BookingConfirmedPairingTests(TestCase):
     @mock.patch('payments.views.send_hospital_new_booking')
     @mock.patch('payments.views.push_booking_confirmed')
     @mock.patch('payments.views.send_booking_confirmation')
+    @mock.patch('payments.views.send_appointment_prep')
     def test_whatsapp_failure_does_not_cost_the_push(
-        self, wa_confirm, push_confirm, wa_hosp, push_hosp, thread, conn,
+        self, wa_prep, wa_confirm, push_confirm, wa_hosp, push_hosp, thread, conn,
     ):
         # Each sender is in its own try/except; a dead WhatsApp token must not
         # silently take the in-app notification down with it.

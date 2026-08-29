@@ -20,7 +20,9 @@ import logging
 import threading
 
 from datetime import datetime
-from notifications.whatsapp import send_booking_confirmation, send_hospital_new_booking
+from notifications.whatsapp import (
+    send_booking_confirmation, send_hospital_new_booking, send_appointment_prep,
+)
 from notifications.push import push_booking_confirmed, push_new_booking_to_hospital
 from django.conf import settings
 from django.db import transaction, IntegrityError, connection
@@ -190,6 +192,14 @@ def _dispatch_booking_notifications(booking):
                 push_new_booking_to_hospital(booking)
             except Exception as exc:
                 logger.warning('Push new-booking alert failed for booking %s: %s', booking.id, exc)
+            try:
+                # Fasting, metal, clothing — whatever the centre wrote against
+                # this test. No-ops for a consultation and for a scan with no
+                # prep on file. Sent now rather than with the 2h reminder: an
+                # 8-hour fast cannot be started two hours out.
+                send_appointment_prep(booking)
+            except Exception as exc:
+                logger.warning('WhatsApp prep instructions failed for booking %s: %s', booking.id, exc)
         finally:
             # Threads get their own DB connection; close it so we don't leak.
             connection.close()
@@ -207,7 +217,7 @@ def _notify_doctor_payout_async(batch):
     or slow WhatsApp call is logged and never surfaces to the admin.
     """
     from notifications.push import push_payout_to_hospital
-    from notifications.whatsapp import send_doctor_payout_paid
+    from notifications.whatsapp import send_doctor_payout_paid, send_centre_payout_paid
 
     def _run():
         try:
@@ -217,9 +227,16 @@ def _notify_doctor_payout_async(batch):
         except Exception as exc:
             logger.warning('Hospital payout push failed for batch %s: %s', batch.id, exc)
         try:
+            # Exactly one of these two does anything — each returns early on the
+            # payee it is not for. A centre used to get the push and nothing
+            # else, because the doctor body names a doctor and their hospital.
             send_doctor_payout_paid(batch)
         except Exception as exc:
             logger.warning('Doctor payout WhatsApp failed for batch %s: %s', batch.id, exc)
+        try:
+            send_centre_payout_paid(batch)
+        except Exception as exc:
+            logger.warning('Centre payout WhatsApp failed for batch %s: %s', batch.id, exc)
         finally:
             connection.close()
 
