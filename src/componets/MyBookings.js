@@ -56,6 +56,55 @@ const today = (() => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 })();
 
+/**
+ * The patient's WhatsApp opt-out. Lives here because the website has no profile
+ * page; the app carries the same switch on its profile screen, against the same
+ * endpoint, so the two products must not disagree about the wording or the
+ * default.
+ *
+ * Reads the flag from the server rather than the cached user, because the same
+ * account can flip it in the app — and a switch showing the wrong state is
+ * worse than no switch. If that read fails, this renders NOTHING for the same
+ * reason: better absent than lying.
+ */
+export function WhatsAppOptIn({ onError }) {
+  const [optIn, setOptIn] = useState(null);   // null = not known yet
+
+  useEffect(() => {
+    let alive = true;
+    API.get('/auth/me/')
+      .then(({ data }) => { if (alive) setOptIn(data.whatsapp_opt_in ?? true); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  if (optIn === null) return null;
+
+  // Optimistic so the switch moves under the finger, rolled back if the PATCH
+  // fails — otherwise the UI claims a preference the server never stored.
+  const change = async (next) => {
+    setOptIn(next);
+    try {
+      await API.patch('/auth/me/whatsapp-opt-in/', { whatsapp_opt_in: next });
+    } catch {
+      setOptIn(!next);
+      onError?.('Could not update your WhatsApp preference.');
+    }
+  };
+
+  return (
+    <label className="mb-wa">
+      <input
+        type="checkbox"
+        checked={optIn}
+        onChange={(e) => change(e.target.checked)}
+      />
+      WhatsApp updates
+    </label>
+  );
+}
+
+
 export default function MyBookings() {
   const navigate = useNavigate();
   const [bookings,          setBookings]          = useState([]);
@@ -310,6 +359,9 @@ export default function MyBookings() {
         .mb-tab.active { background: #fff; color: var(--blue-700); font-weight: 600; box-shadow: var(--shadow-sm); }
         .mb-tab:hover:not(.active) { color: var(--blue-600); }
         .mb-tab-badge { display: inline-block; margin-left: 6px; background: var(--blue-100); color: var(--blue-700); font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 100px; }
+        .mb-wa { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--blue-100); border-radius: 10px; padding: 8px 14px; font-size: 13px; color: var(--gray-500); cursor: pointer; user-select: none; }
+        .mb-wa:hover { border-color: var(--blue-300); color: var(--blue-700); }
+        .mb-wa input { accent-color: var(--blue-600); width: 15px; height: 15px; cursor: pointer; margin: 0; }
         .mb-refresh { display: flex; align-items: center; gap: 7px; background: #fff; border: 1px solid var(--blue-100); border-radius: 10px; padding: 8px 14px; font-family: var(--font-body); font-size: 13px; color: var(--gray-500); cursor: pointer; transition: all 0.15s; }
         .mb-refresh:hover { border-color: var(--blue-300); color: var(--blue-700); }
         .mb-refresh.spinning svg { animation: mbSpin 0.9s linear infinite; }
@@ -406,6 +458,8 @@ export default function MyBookings() {
                 </button>
               ))}
             </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <WhatsAppOptIn onError={(msg) => showToast(msg, 'error')} />
             <button className={`mb-refresh ${refreshing ? 'spinning' : ''}`} onClick={() => fetchBookings(true)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M23 4v6h-6M1 20v-6h6"/>
@@ -413,6 +467,7 @@ export default function MyBookings() {
               </svg>
               {refreshing ? 'Refreshing…' : 'Refresh'}
             </button>
+            </div>
           </div>
 
           {loading && (
