@@ -5,7 +5,7 @@ Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** `main` on both repos, everything pushed, nothing in flight. Fully-merged local branches that can be deleted: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf` (its remote is already gone). **Do NOT delete** `develop` (deploys to staging), `website-cleanup-eslint-deadDep` or `chore/eslint-dead-dep` (both hold unmerged work).
 - **Latest commit at last update:** `3435cc9` main (web/backend — **pushed, so Railway and the web host have both shipped it**) · `2e9e716` main (app, **v1.4.0 — pushed, NOT built**; Play is still on 1.3.0, so 1.3.1, 1.3.2 and 1.4.0 have never reached a handset)
-- **Last updated:** 2026-08-29 — **two feature sessions since the security review, both live on the web and both unbuilt on the app.** 2026-08-26: blood centres as a second centre kind, and one account that can sell consultations + scans + blood tests. 2026-08-28→29: documents from any provider, a per-provider booking notice, centre pages at parity with the doctor page, and the "Dr." prefix finally consistent across web and app. Verified today: **371 backend tests OK (2 skipped) · 30 frontend · `makemigrations --check` clean.** The one thing that has not moved in three weeks is the **app build** — see ROADMAP 5b.
+- **Last updated:** 2026-08-29 (evening) — **`main` on web/backend is 2 commits ahead of `origin` and unpushed** (Razorpay live-key guard + eslint back on; see the top entry). Earlier today: **two feature sessions since the security review, both live on the web and both unbuilt on the app.** 2026-08-26: blood centres as a second centre kind, and one account that can sell consultations + scans + blood tests. 2026-08-28→29: documents from any provider, a per-provider booking notice, centre pages at parity with the doctor page, and the "Dr." prefix finally consistent across web and app. Verified today: **371 backend tests OK (2 skipped) · 30 frontend · `makemigrations --check` clean.** The one thing that has not moved in three weeks is the **app build** — see ROADMAP 5b.
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -27,6 +27,42 @@ Newest entry on top. Update the **Status** columns as things land.
 - Keep entries short — one line per change, link the commit hash so it's traceable.
 
 ---
+
+## 2026-08-29 (evening) — The live Razorpay key can no longer bite, and eslint is back on
+
+**Local only — `main` is 2 commits ahead of `origin/main` and NOT pushed.**
+Pushing deploys the website and the API, so it waits for a "deploy".
+
+| # | Change | Commit | Status |
+|---|---|---|---|
+| 1 | `get_client()` refuses an `rzp_live_` key while `DEBUG=True` | `dc865e9` | ✅ local |
+| 2 | `DISABLE_ESLINT_PLUGIN=true` dropped from the production build | `0d6c428` | ✅ local |
+
+**Worth keeping:**
+
+- **The guard went in `get_client()`, not settings.** Every gateway call —
+  order create, confirm, refund — builds its client there, so one check covers
+  all of them and there is no caller left to forget. A settings-level raise
+  would also have blocked `manage.py` entirely, which is hostile when the only
+  thing wrong is a key you cannot swap without the dashboard.
+  `ALLOW_LIVE_RAZORPAY=1` is the deliberate override. Production is untouched:
+  `DEBUG` is False there. Four tests pin the matrix.
+- **ROADMAP 4c is only half closed by this.** The live key is still sitting in
+  `backend/.env`; the guard means it can no longer charge a card by accident,
+  but `./stress_test.sh --checkout` still cannot run, because that needs a real
+  `rzp_test_` pair from the Razorpay dashboard. Swapping it is still a manual
+  step only Vishnu can do.
+- **Both eslint branches were dead, and one had gone actively dangerous.** They
+  date from 2026-07-20. `website-cleanup-eslint-deadDep`'s diff against today's
+  main reads as removing `i18next`, `react-i18next` and `leaflet` — which main
+  has since started using in six files — plus a 1,700-line lockfile churn. Its
+  one real contribution, dropping `react-native-razorpay`, has already happened
+  on main (zero hits in the lockfile). What was left of either branch was a
+  single line, so it was applied directly and both locals were deleted;
+  `origin` still has all three branches if anyone wants the history.
+- **The build is clean under `CI=true`** (warnings-as-errors, which is how the
+  host builds it) — so re-enabling eslint hid nothing and breaks nothing.
+- 375 backend tests (2 skipped) · 30 frontend · `makemigrations --check` clean.
 
 ## 2026-08-28 (into 08-29) — Documents from any provider, a booking notice per provider, and centre pages that finally match the doctor page
 

@@ -20,8 +20,12 @@ the things that can lose money or break a live booking come first.
   **The oldest open item has not moved and is now three weeks old: 5b step 3 —
   nothing merged into the app has ever run on a handset, and three releases
   (1.3.1, 1.3.2, 1.4.0) have never been built.** Play is still on 1.3.0.
-  **4c** (live Razorpay key in local `backend/.env`) and **9** (submit
-  `scan_report_ready` to Meta) are also still open and unchanged.
+  **4c** (live Razorpay key in local `backend/.env`) is now **guarded in code**
+  — a DEBUG machine refuses to build a live Razorpay client — but the live pair
+  is still in the file, so the item is amber, not closed. **9** (submit
+  `scan_report_ready` to Meta) was submitted 2026-08-27 and was last seen "In
+  review"; it needs a look at WhatsApp Manager, not a resubmit. Web/backend
+  `main` is now **2 commits ahead of `origin` and unpushed** — pushing deploys.
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -337,6 +341,21 @@ unaffected throughout.
 already in the environment that needs it. Run the command where the credential
 already lives (the Railway container) instead of moving the credential to the
 command.
+
+### 4c. A live-mode Razorpay key is sitting in local `backend/.env` 🟡 — de-fanged 2026-08-29, not closed
+
+**Guarded in `dc865e9` (local, unpushed).** `payments.razorpay_utils.get_client()`
+now raises `ImproperlyConfigured` when `DEBUG=True` and `RAZORPAY_KEY_ID` starts
+`rzp_live_`, so a local checkout fails loudly instead of charging a real card.
+It is the single chokepoint for order creation, confirmation and refunds alike.
+`ALLOW_LIVE_RAZORPAY=1` overrides it; production is unaffected (`DEBUG` False).
+
+**Still open, and still only Vishnu can do it:** the live pair is *in the file*.
+Swap it for the `rzp_test_` pair from the Razorpay dashboard — the guard stops
+an accident, it does not give the load test a key to use. Until then
+`./stress_test.sh --checkout` still cannot run its happy path.
+
+The original item follows.
 
 ### 4c. A live-mode Razorpay key is sitting in local `backend/.env` 🔴
 
