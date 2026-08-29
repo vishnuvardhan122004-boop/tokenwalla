@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `main` on both repos, everything pushed, nothing in flight. Fully-merged local branches that can be deleted: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf` (its remote is already gone). **Do NOT delete** `develop` (deploys to staging), `website-cleanup-eslint-deadDep` or `chore/eslint-dead-dep` (both hold unmerged work).
-- **Latest commit at last update:** `3435cc9` main (web/backend — **pushed, so Railway and the web host have both shipped it**) · `2e9e716` main (app, **v1.4.0 — pushed, NOT built**; Play is still on 1.3.0, so 1.3.1, 1.3.2 and 1.4.0 have never reached a handset)
-- **Last updated:** 2026-08-29 (evening) — **`main` on web/backend is 2 commits ahead of `origin` and unpushed** (Razorpay live-key guard + eslint back on; see the top entry). Earlier today: **two feature sessions since the security review, both live on the web and both unbuilt on the app.** 2026-08-26: blood centres as a second centre kind, and one account that can sell consultations + scans + blood tests. 2026-08-28→29: documents from any provider, a per-provider booking notice, centre pages at parity with the doctor page, and the "Dr." prefix finally consistent across web and app. Verified today: **371 backend tests OK (2 skipped) · 30 frontend · `makemigrations --check` clean.** The one thing that has not moved in three weeks is the **app build** — see ROADMAP 5b.
+- **Branch:** `main` on both repos, everything pushed, nothing in flight. Web locals are now just `main` and `develop` — the docs branch was merged and the two eslint branches deleted on 2026-08-29 (all three still on `origin` as the undo). **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
+- **Latest commit at last update:** `371220e` main (web/backend — **pushed and verified live**: `/health/` reports `371220ef`, Vercel READY for the same SHA) · `2e9e716` main (app, **v1.4.0 — pushed, NOT built**; Play is still on 1.3.0, so 1.3.1, 1.3.2 and 1.4.0 have never reached a handset)
+- **Last updated:** 2026-08-29 (evening) — **four commits shipped and verified live** (see the top entry): a guard so a `rzp_live_` key cannot be used from a `DEBUG` machine, eslint re-enabled in the web build plus the six errors that exposed, and three centre-shaped WhatsApp templates whose senders are deployed but inert until Meta approves them. **The first push broke the Vercel build** — the local check that cleared it was reading a gitignored `.env`; the entry says how to reproduce a host build properly. Earlier today: documents from any provider, a per-provider booking notice, centre pages at parity with the doctor page, the "Dr." sweep. **387 backend tests OK (2 skipped) · 30 frontend · `makemigrations --check` clean.** The one thing that has not moved in three weeks is the **app build** — see ROADMAP 5b.
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -28,41 +28,91 @@ Newest entry on top. Update the **Status** columns as things land.
 
 ---
 
-## 2026-08-29 (evening) — The live Razorpay key can no longer bite, and eslint is back on
+## 2026-08-29 (evening) — A guard on the live Razorpay key, eslint back on, and three centre-shaped WhatsApp templates
 
-**Local only — `main` is 2 commits ahead of `origin/main` and NOT pushed.**
-Pushing deploys the website and the API, so it waits for a "deploy".
+**All deployed and verified.** Railway `/health/` reports `371220ef`, which is
+`main`. Vercel's production deployment for the same SHA is READY. Both repos
+pushed; the app repo is untouched today beyond v1.4.0.
 
 | # | Change | Commit | Status |
 |---|---|---|---|
-| 1 | `get_client()` refuses an `rzp_live_` key while `DEBUG=True` | `dc865e9` | ✅ local |
-| 2 | `DISABLE_ESLINT_PLUGIN=true` dropped from the production build | `0d6c428` | ✅ local |
+| 1 | `get_client()` refuses an `rzp_live_` key while `DEBUG=True` | `dc865e9` | ✅ live |
+| 2 | `DISABLE_ESLINT_PLUGIN=true` dropped from the production build | `0d6c428` | ✅ live |
+| 3 | The six lint errors that dropping it exposed | `f88b9de` | ✅ live |
+| 4 | `centre_payout`, `centre_new_booking`, `appointment_prep` — text + senders | `371220e` | ⏳ inert until Meta approves |
 
 **Worth keeping:**
 
-- **The guard went in `get_client()`, not settings.** Every gateway call —
-  order create, confirm, refund — builds its client there, so one check covers
-  all of them and there is no caller left to forget. A settings-level raise
-  would also have blocked `manage.py` entirely, which is hostile when the only
-  thing wrong is a key you cannot swap without the dashboard.
-  `ALLOW_LIVE_RAZORPAY=1` is the deliberate override. Production is untouched:
-  `DEBUG` is False there. Four tests pin the matrix.
-- **ROADMAP 4c is only half closed by this.** The live key is still sitting in
-  `backend/.env`; the guard means it can no longer charge a card by accident,
-  but `./stress_test.sh --checkout` still cannot run, because that needs a real
-  `rzp_test_` pair from the Razorpay dashboard. Swapping it is still a manual
-  step only Vishnu can do.
+- **THE DEPLOY BROKE ON THE FIRST PUSH, AND THE LOCAL CHECK THAT CLEARED IT WAS
+  WORTHLESS.** `CI=true npm run build` was run locally, said "Compiled
+  successfully", and proved nothing: local `.env` carries
+  `DISABLE_ESLINT_PLUGIN=true`, and `.env` is gitignored. So the flag existed on
+  one machine and nowhere else — removing it from `package.json` changed nothing
+  locally and everything on the host, which failed with six eslint errors.
+  ⚠️ **The bullet in the previous version of this entry claiming "the build is
+  clean under CI=true" was wrong.** Two lessons, both cheap: a gitignored `.env`
+  can silently disagree with the host about what the build even does, and
+  `react-scripts` reads `DISABLE_ESLINT_PLUGIN` as `=== 'true'`, so
+  `DISABLE_ESLINT_PLUGIN=false CI=true npm run build` is the command that
+  actually reproduces a Vercel build. The line is now gone from the local `.env`
+  too. **Nobody saw a broken site** — a failed Vercel build keeps the last READY
+  deployment serving.
+- **The Razorpay guard went in `get_client()`, not settings.** Every gateway
+  call — order create, confirm, refund — builds its client there, so one check
+  covers all of them and there is no caller left to forget. A settings-level
+  raise would also have blocked `manage.py` entirely, which is hostile when the
+  only thing wrong is a key you cannot swap without the dashboard.
+  `ALLOW_LIVE_RAZORPAY=1` is the deliberate override; production is untouched
+  because `DEBUG` is False there. Four tests pin the matrix.
+- **ROADMAP 4c is only half closed by it.** The live pair is still in
+  `backend/.env`. The guard stops an accident; it does not give
+  `./stress_test.sh --checkout` a key to run against. Swapping it is a Razorpay
+  dashboard step only Vishnu can do.
 - **Both eslint branches were dead, and one had gone actively dangerous.** They
   date from 2026-07-20. `website-cleanup-eslint-deadDep`'s diff against today's
   main reads as removing `i18next`, `react-i18next` and `leaflet` — which main
-  has since started using in six files — plus a 1,700-line lockfile churn. Its
-  one real contribution, dropping `react-native-razorpay`, has already happened
-  on main (zero hits in the lockfile). What was left of either branch was a
-  single line, so it was applied directly and both locals were deleted;
-  `origin` still has all three branches if anyone wants the history.
-- **The build is clean under `CI=true`** (warnings-as-errors, which is how the
-  host builds it) — so re-enabling eslint hid nothing and breaks nothing.
-- 375 backend tests (2 skipped) · 30 frontend · `makemigrations --check` clean.
+  has since started using in six files — plus 1,700 lines of lockfile churn. Its
+  one real contribution, dropping `react-native-razorpay`, already happened on
+  main (zero hits in the lockfile). A single line was left of either, so it was
+  applied directly and both locals deleted; `origin` still holds all three
+  branches (incl. `docs/worklog-roadmap-2026-08-29`) as the undo.
+- **Five of the six lint errors were dead code, not style.** A computed-and-
+  never-rendered `inProgress`; a WhatsApp deep-link body built in `Contact.jsx`
+  and never sent, under a comment calling WhatsApp the "primary channel"; two
+  hyphens escaped inside a character class where they are already literal; and
+  `MyBookings` fetching `/auth/me/` on **every mount** to drive a WhatsApp
+  opt-in toggle **that is not rendered anywhere**. ⚠️ **So the website has no
+  WhatsApp opt-out control** — the app does. The orphan was deleted rather than
+  UI invented; wiring the toggle is a real, open, small piece of work.
+  The sixth is a false positive, suppressed with its reason: `LocationPicker`'s
+  cleanup increments `seqRef.current` on purpose, and the rule's advice —
+  snapshot it inside the effect — would bump a stale number and stop
+  invalidating in-flight reverse-geocodes.
+- **The three new templates each close a gap the code already had, not a guess.**
+  `send_doctor_payout_paid` *already returned early* on a centre batch, so a
+  centre payout has been push-only; `hospital_new_booking` told a lab that
+  someone "has booked an appointment with Complete Blood Count"; and
+  `Scan.prep_instructions` had been captured, stored and serialised since
+  centres shipped **without ever reaching a patient on any channel**.
+- **`centre_new_booking` branches on `booking.is_scan`, NOT `hospital.kind`.**
+  A hospital with an in-house scanning wing (`kind=HOSPITAL`, `svc_scans=True`)
+  takes scan bookings too — the booking decides whether `{{4}}` is a person or a
+  test. Same seven params as §2, so only the name changes at the call site.
+- **`one_line()` is load-bearing, not tidiness.** Meta rejects a body parameter
+  containing a newline, a tab or four consecutive spaces, and
+  `prep_instructions` is a `TextField` a centre types by hand — multi-line is
+  the normal case. Without the flatten, the first real prep message would have
+  failed in production.
+- **Prep sends at booking time, not with the ~2h reminder**, because "fast for 8
+  hours" is useless two hours out. The cost is that a booking made three weeks
+  ahead gets its prep three weeks ahead; a day-before pass is the fix and needs
+  a second cron window, not a second template.
+- **`centre_payout` takes THREE params, not the doctor template's four.** A
+  centre is its own business; there is no hospital to name. Sending four to a
+  three-variable body fails at send time, in production — ROADMAP 4b's lesson.
+- 387 backend tests (2 skipped) · 30 frontend · `makemigrations --check` clean.
+  The two existing pairing tests needed the new sender patched; without it they
+  ran the real one against a `Mock` booking.
 
 ## 2026-08-28 (into 08-29) — Documents from any provider, a booking notice per provider, and centre pages that finally match the doctor page
 

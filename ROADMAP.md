@@ -7,25 +7,31 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-29 — **two feature sessions landed since the last
-  update, both live on the web, neither on a phone.** 2026-08-26 (**item 10**):
+- **Last updated:** 2026-08-29 — **two feature sessions and a short evening one
+  landed since the last update; the features are live on the web and none of it
+  is on a phone.** 2026-08-26 (**item 10**):
   blood centres as a second diagnostic-centre kind, and `svc_*` capabilities so
   one account can sell consultations, scans and blood tests without registering
   three times. 2026-08-28 into 08-29 (**item 11**): documents from any provider
   plus a patient `/my-documents` page, a per-doctor / per-service booking
   notice, centre pages at parity with the doctor page, and one shared "Dr." rule
-  across both products. Web/backend `main` is `3435cc9` and pushed, so the API
-  and website are serving all of it; the app is `2e9e716` (**v1.4.0, pushed and
-  NOT built**). 371 backend tests, 30 frontend, `makemigrations --check` clean.
+  across both products. The evening session then shipped four commits: the
+  Razorpay live-key guard (**4c**), eslint re-enabled in the web build plus the
+  six errors that exposed, and three centre-shaped WhatsApp templates
+  (**item 9**). Web/backend `main` is `371220e`, **pushed and verified live** —
+  `/health/` reports `371220ef` and Vercel is READY for the same SHA; the app is
+  `2e9e716` (**v1.4.0, pushed and NOT built**). 387 backend tests, 30 frontend,
+  `makemigrations --check` clean.
   **The oldest open item has not moved and is now three weeks old: 5b step 3 —
   nothing merged into the app has ever run on a handset, and three releases
   (1.3.1, 1.3.2, 1.4.0) have never been built.** Play is still on 1.3.0.
-  **4c** (live Razorpay key in local `backend/.env`) is now **guarded in code**
-  — a DEBUG machine refuses to build a live Razorpay client — but the live pair
-  is still in the file, so the item is amber, not closed. **9** (submit
-  `scan_report_ready` to Meta) was submitted 2026-08-27 and was last seen "In
-  review"; it needs a look at WhatsApp Manager, not a resubmit. Web/backend
-  `main` is now **2 commits ahead of `origin` and unpushed** — pushing deploys.
+  **4c** is now **guarded in code** — a DEBUG machine refuses to build a live
+  Razorpay client — but the live pair is still in the file, so it is amber, not
+  closed. **9** is four templates now, not one: `scan_report_ready` (submitted
+  08-27, last seen "In review") plus `centre_payout`, `centre_new_booking` and
+  `appointment_prep`, written 08-29 and **not submitted**. All four are a form,
+  not code. **12** is new and small: the website has no WhatsApp opt-out
+  control, and the app has one.
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -1056,7 +1062,33 @@ Payouts stay **manual**, per the standing decision. No payout API.
 
 ---
 
-### 9. Submit `scan_report_ready` to Meta 🟡
+### 9. Four WhatsApp templates are waiting on a form 🟡
+
+> **Widened 2026-08-29.** This item used to be `scan_report_ready` alone. That
+> one was submitted on 08-27 and was last seen **"In review"** — check WhatsApp
+> Manager rather than resubmitting. Three more were written on 08-29 for
+> scanning and blood centres and are **not submitted**:
+>
+> | Template | Doc | Why it exists |
+> |---|---|---|
+> | `centre_payout` | §12 | `send_doctor_payout_paid` **already** bails out on a centre batch — the doctor body names the doctor *and* their hospital, and a centre has no such third party. Centre payouts have been push-only. **Three params, not four.** |
+> | `centre_new_booking` | §13 | §2 tells a lab a patient "has booked an appointment with Complete Blood Count". Same seven params, different sentence. Picked on `booking.is_scan`, **not** `hospital.kind` — a hospital with an in-house scanning wing takes scan bookings too. |
+> | `appointment_prep` | §14 | `Scan.prep_instructions` has been captured, stored and serialised since centres shipped and has **never reached a patient on any channel**. For a blood centre the fasting line decides whether the sample is usable. |
+>
+> Senders, settings and 12 tests are deployed (`371220e`). **An unapproved
+> template is inert, not broken** — `send_template` logs and returns and the
+> paired push still fires — so nothing needs redeploying once Meta approves.
+> Paste-ready bodies and sample params live in
+> `backend/notifications/WHATSAPP_TEMPLATES.md` §12–14: all Utility, English, no
+> header/footer/buttons.
+>
+> **`one_line()` is what makes the prep template possible at all** — Meta
+> rejects a body param containing a newline, a tab or four consecutive spaces,
+> and `prep_instructions` is a `TextField` a centre types by hand.
+>
+> The rule below applies to all four: **do not try to automate the submission.**
+
+### 9a. Submit `scan_report_ready` to Meta 🟡
 
 **The last unfinished piece of item 8, and it is a form, not code.** The backend
 already reads this exact template name, so nothing needs redeploying once it is
@@ -1093,6 +1125,23 @@ Verify after approval:
 ```bash
 python manage.py send_test_whatsapp <mobile> --template scan_report_ready
 ```
+
+### 12. The website has no WhatsApp opt-out control 🟡 — found 2026-08-29
+
+`MyBookings.js` fetched `/auth/me/` on **every mount** and kept a `waOptIn`
+state plus a `toggleWaOptIn` handler that **nothing rendered**. Found by
+re-enabling eslint, which flagged the handler as unused — it had been invisible
+for as long as the lint was switched off.
+
+The dead cluster was deleted rather than a toggle invented (`f88b9de`), so the
+gap is now honest instead of hidden: **the app lets a patient turn WhatsApp off,
+the website does not.** The backend half is live and proven —
+`PATCH /api/auth/me/whatsapp-opt-in/` works, and every patient-facing sender
+checks `whatsapp_opt_in`, with a test pinning exactly that.
+
+Small: render a toggle on the patient's own screen and call that endpoint. Worth
+doing before promotion — "stop messaging me" is the one request that should
+never need a reinstall.
 
 ### ~~10. Blood centres, and providers that sell more than one thing~~ ✅ 2026-08-26 — SHIPPED
 
