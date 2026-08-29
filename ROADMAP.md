@@ -22,9 +22,11 @@ the things that can lose money or break a live booking come first.
   `/health/` reports `371220ef` and Vercel is READY for the same SHA; the app is
   `2e9e716` (**v1.4.0, pushed and NOT built**). 387 backend tests, 30 frontend,
   `makemigrations --check` clean.
-  **The oldest open item has not moved and is now three weeks old: 5b step 3 —
-  nothing merged into the app has ever run on a handset, and three releases
-  (1.3.1, 1.3.2, 1.4.0) have never been built.** Play is still on 1.3.0.
+  **THE OLDEST OPEN ITEM IS CLOSED: v1.4.0 IS ON THE PLAY STORE** (build
+  `7c4a4644`, versionCode 40, listing updated 29 Aug 2026). Three weeks of
+  merged-but-unbuilt work — 1.3.1, 1.3.2 and 1.4.0 — reached phones in one
+  release. Items 5 and 5b are struck through; **13** is what it makes newly
+  worth doing (the update prompt is still blanked).
   **4c** is now **guarded in code** — a DEBUG machine refuses to build a live
   Razorpay client — but the live pair is still in the file, so it is amber, not
   closed. **9** is four templates now, not one: `scan_report_ready` (submitted
@@ -363,7 +365,7 @@ an accident, it does not give the load test a key to use. Until then
 
 The original item follows.
 
-### 4c. A live-mode Razorpay key is sitting in local `backend/.env` 🔴
+### 4c-history. The item as first written 2026-08-18
 
 **Found 2026-08-18 by the checkout load test refusing to run.** The local
 `RAZORPAY_KEY_ID` is non-empty, begins `rzp_`, and is **not** the test prefix.
@@ -547,7 +549,7 @@ things to settle first:
 Existing passwords keep working either way — validators run on set, not on
 login. Nobody is locked out by this.
 
-### 5. Ship the mobile app — two of three gates cleared 🟠
+### ~~5. Ship the mobile app~~ ✅ 2026-08-29 — **v1.4.0 IS ON THE PLAY STORE**
 
 **Status end of 2026-08-14: findings 1 and 2 are CLOSED, 3 is half closed.**
 A preview build was made, installed on a real device, and **push notifications
@@ -676,16 +678,27 @@ What closed here: the five open PRs (all merged), the preview-build gate (three
 builds run, five bugs found and fixed on a real device), and the deploy
 verification gap (`/health/` now reports `RAILWAY_GIT_COMMIT_SHA`).
 
-### 5b. What is actually left 🟠 — down to a store release
+### ~~5b. What is actually left~~ ✅ 2026-08-29 — SHIPPED TO THE STORE
 
-> ⚠️ **Re-read 2026-08-29 — this item is now three weeks old and the backlog
-> behind it has tripled.** The app repo is on **v1.4.0** (`2e9e716`) and Play is
-> still on **1.3.0**: 1.3.1, 1.3.2 and 1.4.0 have all been merged and pushed and
-> **none has been built**. Everything from items 10 and 11 — multi-capability
-> providers, documents, the booking notice, centre parity, the "Dr." fix — is
-> live for a patient on the website and invisible to every patient on a phone.
-> The list of what to exercise on-device below is still correct; it is just
-> longer now.
+> ✅ **CLOSED 2026-08-29, after three weeks as the oldest open item in this
+> file.** EAS build `7c4a4644` (profile `production`, **v1.4.0 / versionCode
+> 40**, commit `2e9e716`) finished at 01:16 and the Play listing now reads
+> **1.4.0, updated 29 Aug 2026**. Verified two ways: `eas build:list` and the
+> public store page, not by assuming the submit worked.
+>
+> Everything from items 10 and 11 — multi-capability providers, documents, the
+> booking notice, centre parity, the "Dr." fix — **is finally on phones**, along
+> with 1.3.1 and 1.3.2, which never shipped on their own.
+>
+> **One thing this makes newly worth doing:** `/api/app-version/` still serves
+> blank `min_version` / `latest_version`. It was deliberately blanked on 08-17
+> because pointing 1.1.3 installs at a store that only had 1.1.3 is a prompt
+> nobody can satisfy. That reasoning has now expired — the store has something
+> newer than what most installs are running, so setting `latest_version=1.4.0`
+> would actually move people onto it. See item 13.
+>
+> The on-device pass below is still worth doing against the shipped build, but
+> it is no longer a release blocker. The original item follows.
 
 **Steps 0, 1 and 2 all closed 2026-08-17.** Nothing is wrong in production and
 there is no outstanding security work. What remains is **one preview build and
@@ -777,6 +790,25 @@ blocks every install with no way out.
 crashes arrive minified). It needs `SENTRY_AUTH_TOKEN` in EAS secrets *before*
 the flag comes off, and changing build config immediately before a release is
 how you lose a build. Do it in the release **after** 1.2.0.
+
+### 13. Turn the update prompt back on 🟡 — newly actionable 2026-08-29
+
+`/api/app-version/` serves blank `min_version` and `latest_version` today:
+
+```bash
+curl -s https://tokenwalla-production.up.railway.app/api/app-version/
+# {"min_version": "", "latest_version": "", "store_url": "…", "message": ""}
+```
+
+They were blanked on 2026-08-17 for a good reason that has now expired — the
+store held nothing newer than the installs, so the nag was unsatisfiable. With
+**1.4.0 live on Play**, every 1.3.x install is a version behind, and the prompt
+is the only thing that will tell them.
+
+Set `latest_version` to `1.4.0`. Leave `min_version` blank unless a release is
+genuinely unusable — that one is a hard gate, not a nag. The prompt itself is
+proven: it was watched firing on 08-17, and "Not now" survived a
+background/reopen.
 
 ### 6. Watch the first day live 🟡
 
