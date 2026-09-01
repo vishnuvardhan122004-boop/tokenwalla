@@ -673,7 +673,11 @@ export default function MyBookings() {
                       <div className="mb-action-panel">
                         <div>
                           <div className="mb-action-title"><i className="bi bi-x-circle me-1" />Cancel Appointment</div>
-                          <div className="mb-action-desc">Cancel before your turn · Refund in 5–7 days</div>
+                          <div className="mb-action-desc">
+                            {booking.uses_pass
+                              ? 'Cancel before your turn · the visit goes back on your pass'
+                              : 'Cancel before your turn · Refund in 5–7 days'}
+                          </div>
                         </div>
                         <button
                           className="mb-cancel-btn"

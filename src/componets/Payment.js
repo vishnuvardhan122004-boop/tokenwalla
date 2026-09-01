@@ -685,7 +685,9 @@ export default function Payment() {
             )}
           </div>
 
-          {/* Secure badge */}
+          {/* Secure badge — nothing is being charged on a pass visit, so a
+              "Secured by Razorpay · UPI · Cards" panel is just noise there. */}
+          {!canRedeem && (
           <div className="pay-secure">
             <div className="pay-secure-icon"><i className="bi bi-shield-lock me-1" /></div>
             <div>
@@ -698,6 +700,7 @@ export default function Payment() {
               </div>
             </div>
           </div>
+          )}
 
           {/* Pay button */}
           <button
