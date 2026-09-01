@@ -17,6 +17,7 @@ from tokenwalla.permissions import IsAdmin, IsHospitalStaff
 from payments.refunds import (
     process_cancellation_refund, record_absence_refund, RefundNotAllowed,
 )
+from payments.pass_utils import on_booking_cancelled
 from notifications.push import (
     push_booking_cancelled,
     push_booking_in_progress,
@@ -325,6 +326,17 @@ class CancelBookingView(APIView):
         booking.save(update_fields=['status'])
         logger.info('Booking %s cancelled by user %s (refund: %s)', pk, request.user.id, refund_info)
 
+        # Settle the Appointment Pass, if one is involved: a cancelled visit
+        # that SPENT a credit gets it back, and cancelling the booking that
+        # BOUGHT the pass voids the rest of it (the money is being refunded).
+        # After the cancellation is committed and best-effort, like the
+        # notifications below — a pass hiccup must not fail a cancellation.
+        try:
+            pass_result = on_booking_cancelled(booking)
+        except Exception as exc:
+            pass_result = None
+            logger.exception('Pass settlement failed for cancelled booking %s: %s', pk, exc)
+
         # All best-effort: the cancellation + refund are already committed, so a
         # notification failure must never turn a successful cancellation into an
         # error. Pushes are local and cheap; the WhatsApp call is threaded.
@@ -336,6 +348,7 @@ class CancelBookingView(APIView):
         return Response({
             'message': 'Booking cancelled successfully.',
             'refund':  refund_info,
+            'pass':    pass_result,
             'booking': BookingSerializer(booking, context={'request': request}).data,
         })
 

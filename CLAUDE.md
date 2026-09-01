@@ -143,6 +143,15 @@ salaried doctor's money goes to their hospital) and *on which rail*
   (Exception: `/verify/` still falls back to `FULL` for an order whose tags
   predate the field, so a legacy in-flight order reconciles instead of being
   rejected after capture.)
+- **The Appointment Pass** (`PASS_ENABLED`, ₹35 / 2 visits / 30 days) waives the
+  SERVICE fee only, never a consultation fee, and is sold and spent **only where
+  `pass_eligible(collection_mode)` is true** (i.e. not `FULL`). That restriction
+  is what makes a redemption a ₹0 booking with no gateway call and no payout
+  owed — widening it to `FULL` doctors means a second, *paid* redemption path.
+  A credit is taken inside the booking transaction under `select_for_update()`,
+  never before it. Cancelling a redeemed visit returns the credit; cancelling
+  the booking that BOUGHT the pass voids the remaining credits, because that
+  money is refunded — remove that and the pass is free money.
 - Gateway fee and GST are **never refunded** (the gateway doesn't return them).
 - Idempotency and locking on the money paths are load-bearing. `Payment` has a
   partial unique index on non-blank `payment_id`; refunds, absence adjustments,
@@ -151,10 +160,10 @@ salaried doctor's money goes to their hospital) and *on which rail*
 
 ## Testing
 
-`cd backend && python manage.py test` (371 tests, 2 skipped) and `CI=true npx
-react-scripts test --watchAll=false` (30) — baseline measured 2026-08-29.
-Payment changes must keep `payments/tests_payments.py`
-and `payments/tests_integration.py` green — they cover the fee math, refund
+`cd backend && python manage.py test` (419 tests, 2 skipped) and `CI=true npx
+react-scripts test --watchAll=false` (44) — baseline measured 2026-09-01.
+Payment changes must keep `payments/tests_payments.py`,
+`payments/tests_pass.py` and `payments/tests_integration.py` green — they cover the fee math, refund
 tiers, the manual-payout flow, and the order-binding/idempotency regressions.
 
 CI (`.github/workflows/deploy.yml`) runs **tests only** and runs on
