@@ -1439,11 +1439,28 @@ below isn't settled — that is exactly what the switch is for.
   (`select_for_update` inside the booking transaction) but proving it needs
   Postgres, like every other row-lock guarantee in this repo.
 
-**Not verified in a browser.** The backend is covered by 32 tests and the web
-checkout by 6 render tests, but nobody has clicked through the real screen: the
-local `.env` read needed to start the dev server tripped the production guard,
-and routing around it is exactly what that guard exists to prevent. **First
-move next session: run it locally and look at the three checkout states.**
+**Verified locally, 2026-09-01.** All three checkout states clicked through on
+`localhost:3000` against a real backend, as patient `9999900000` at Dr. Test
+Reddy (`SERVICE_ONLY`, ₹120): the offer (single visit selected by default,
+"Appointment Pass — ₹35.00 · save ₹15.74"), the same screen repriced to ₹35
+with one pass line replacing the three fee lines, and — holding a pass — a ₹0
+"Use your pass" confirmation that booked `TW-185901-ADBD7F` with **no gateway
+call at all**. Cancelling it returned the credit (`2/2` → `1/2`) with an empty
+`razorpay_refund_id`, and the banner came back.
+
+Three things that only running it could have found:
+
+1. **The local dev DB had never been migrated** — `/api/payment/pass/` 500'd
+   with `no such table: payments_appointmentpass` until `manage.py migrate`.
+   Tests build their own DB, so nothing caught it.
+2. **A ₹0 visit still showed "Secured by Razorpay · UPI · Cards"** and
+   "Refund in 5–7 days" on the cancel card — both describing a payment that
+   does not happen. Fixed in `34a75cb`.
+3. **The paid buy-flow could not be exercised locally**, and correctly so: the
+   live key in `.env` (item 4c) made `create-order` return 502 via the
+   `get_client()` guard rather than open a real checkout. The ₹35 order and its
+   `pass=buy` tag are covered by tests, not by a click — **that is the one path
+   still unproven against the real gateway.**
 
 **Still open, both for Vishnu:** the −₹11.84 promo budget above, and whether the
 CA needs to answer GST on a pass sold as an advance (invoice raised in full at
