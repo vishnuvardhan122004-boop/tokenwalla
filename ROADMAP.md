@@ -1462,6 +1462,22 @@ Three things that only running it could have found:
    `pass=buy` tag are covered by tests, not by a click — **that is the one path
    still unproven against the real gateway.**
 
+**The app half was verified the same way, on Expo web.** `npx expo start --web`
+on `:8092` against the same local backend (the `tokenwalla-app-web` launch entry
+already existed and the backend entry already whitelists that origin for CORS —
+`API_BASE_URL` must be overridden or **the app talks to production by default**).
+All three states render: the offer (`Appointment Pass — ₹35`, save ₹15.74), the
+reprice to ₹35 with one pass line, and the ₹0 "Use your pass" confirmation,
+which booked `TW-190700-15FA11` — `GET /payment/pass/` 200, `POST
+/payment/pass/redeem/` 200, **no create-order and no Razorpay call at all**.
+
+**What that run does NOT prove: the native build.** This was react-native-web —
+the same component code, a different renderer. A real simulator run is blocked
+on this machine: `xcode-select -p` is `/Library/Developer/CommandLineTools`, so
+there is no `xcodebuild` or `simctl` for a device build, and pointing it at a
+full Xcode needs Vishnu's password. **Before the app half ships, run it once on
+a device or emulator** — the pass card is the only new layout in that screen.
+
 **Still open, both for Vishnu:** the −₹11.84 promo budget above, and whether the
 CA needs to answer GST on a pass sold as an advance (invoice raised in full at
 purchase, the second service delivered up to 30 days later). The build assumes
