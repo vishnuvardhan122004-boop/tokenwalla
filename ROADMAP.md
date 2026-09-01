@@ -34,6 +34,10 @@ the things that can lose money or break a live booking come first.
   `appointment_prep`, written 08-29 and **not submitted**. All four are a form,
   not code. **12** is new and small: the website has no WhatsApp opt-out
   control, and the app has one.
+  **2026-09-01:** no code today — **item 14** (the ₹35 Appointment Pass) is
+  planned and written up at the BOTTOM of Now. It is the first item here that
+  is a demand lever rather than hardening, and it is four slices, so it does
+  not start until the two pricing/GST questions at the end of it are answered.
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -1273,6 +1277,142 @@ Migrations, all additive and safe to run before the code: `doctors.0014`,
 
 **What this does NOT close:** every one of these has an app half that is merged
 and unbuilt. See 5b.
+
+### 14. The Appointment Pass — ₹35 for two visits, 30 days 🟢 — planned 2026-09-01, not started
+
+**A demand lever, not a feature request — this exists to answer item 7.** The
+patient picks it at checkout instead of paying a single service fee:
+
+| | Pays now | Covers |
+|---|---|---|
+| Single visit | ₹25.37 | this booking |
+| **Pass** | **₹35.00** | this booking **+ 1 more free within 30 days** |
+
+Three product decisions, agreed 2026-09-01 and load-bearing for everything
+below: the free visit is redeemable at **any** doctor (one wallet of two
+service-fee credits, not a per-doctor follow-up); **v1 is SERVICE_ONLY doctors
+only**, for both buying and redeeming; and the pass is bought **at checkout as
+an upgrade**, not from a separate plans page.
+
+**The money, and the number to decide before this ships.** ₹35 is
+GST-inclusive, reverse-split so it sums exactly:
+
+```
+taxable 29.66  =  platform 28.16 + gateway 1.50
+GST     5.34   =  35.00 − 29.66        # remainder, NOT 29.66 × 0.18, so it always sums to 35.00
+```
+
+Two separate bookings cost the patient ₹50.74, so the pass saves them ₹15.74
+and TokenWalla takes 28.16 instead of 40.00 — **−₹11.84 per fully-redeemed
+pass**, **+₹8.16 on one that expires unused**. Only ONE gateway fee is
+charged across the two visits, which is the whole reason ₹35 clears cost.
+Break-even: the pass makes money if **under ~41%** of buyers would have
+booked a second time anyway. It has to *create* second visits, not discount
+the ones already happening. That is a pricing call, not a code call — make it
+consciously before session 1.
+
+**Why SERVICE_ONLY-only is the simplifying decision.** The pass waives the
+service fee, never the consultation fee. Restricted to SERVICE_ONLY, a
+redemption is always a ₹0 booking: no Razorpay order, no capture, no split to
+verify, and `doctor_fee = 0` so the payout ledger is never touched. Allowing
+FULL doctors would add a second redemption path that still opens checkout for
+the consultation fee alone — roughly double the backend and test surface, for
+doctors where **no real doctor has opted into `FULL` at all** (item 7).
+
+#### Backend
+
+`payments/fees.py` keeps deciding all money, one function:
+
+```python
+PASS_PRICE, PASS_BOOKINGS, PASS_DAYS = Decimal('35.00'), 2, 30
+compute_fee_breakdown(doctor_fee, collection_mode, pass_action=None)
+#   'BUY'    → platform/gateway/gst replaced by the pass split  → final = 35.00
+#   'REDEEM' → platform/gateway/gst = 0                         → final =  0.00
+```
+
+`payments/models.py` — one model, plus one nullable FK on `Booking`. Both
+additive, safe to migrate before the code that reads them:
+
+```python
+class AppointmentPass:      # price/total/days are COLUMNS, not constants read at
+    user, payment (O2O)     # display time — a future price change must not
+    price, total_bookings   # retro-alter a pass someone already bought
+    used_bookings, expires_at, created
+Booking.appointment_pass = FK(AppointmentPass, null=True, blank=True)
+```
+
+Endpoints, all additive — **installed app builds are unaffected**, they never
+send `buyPass` and never call redeem, so they keep paying per booking:
+
+- `create-order/` accepts optional `buyPass: true` → amount 35, order tag `pass=buy`
+- `verify/` sees the tag → creates the pass (`used_bookings=1`) inside the
+  booking's transaction, returns an additive `pass: {remaining, expires_at}`
+- `GET /api/payment/pass/` → the active pass, or `null`
+- `POST /api/payment/pass/redeem/` → ₹0 booking; returns **the same payload as
+  `/verify/`** so both clients reuse one success screen
+
+One refactor: `_handle_new_booking` becomes a module-level function so redeem
+reuses it. The capacity backstop, token generation and notification dispatch
+must stay single-copy — they are the three things in that file that most need
+not to drift. Dedent plus two call sites, no logic change.
+
+**The edges, which are where this either holds or leaks:**
+
+- redeem takes `select_for_update()` on the pass row and re-checks
+  `used < total` and expiry **inside** the transaction that creates the
+  booking — same discipline as mark-paid
+- a redeemed booking writes a `Payment` row with `payment_id=''` and all splits
+  0, so receipts and reports don't hit a missing OneToOne. The partial unique
+  index already tolerates blank payment ids
+- **cancel a redeemed booking** → restore the credit if the pass hasn't
+  expired, and never call Razorpay. `refunds.py` needs an explicit
+  `final_amount == 0` early return, not arithmetic that happens to yield 0
+- **cancel the booking that BOUGHT the pass** → money refunds on the normal
+  tier and the remaining credits are **voided**. Without this: buy, cancel,
+  collect ₹28 back, keep a free visit
+- doctor is `FULL` → the pass is neither offered nor redeemable (400)
+- `PASS_ENABLED` env var, default off, set on Railway. One `if` in two views.
+  A live promo needs an off switch that isn't a deploy
+
+#### Web (`src/`)
+
+`Payment.js` carries the whole change: a two-option toggle above the pay
+button, sending `buyPass`. If an active pass exists and the doctor is
+eligible, the button becomes "Use your pass — Free", calls `/pass/redeem/`
+instead of opening Razorpay, and lands on the same `/booking-token` screen.
+The itemised receipt gets an "Appointment Pass (2 visits)" line. Pass status
+is one line on `MyBookings` — no new page.
+
+#### App (separate repo, own release cycle)
+
+The same three touch points, then an EAS build and a store submission. Until
+that build lands the app simply doesn't offer the pass, and nothing about it
+breaks — which is the entire point of keeping every endpoint change additive.
+
+#### Sequencing — four slices, each merges
+
+1. **Backend, dark:** fees + model + migration + buy path + tests. Nothing
+   user-visible ships.
+2. **Backend, redeem:** `GET /pass/`, `POST /pass/redeem/`, the cancel /
+   refund / receipt interactions above, tests.
+3. **Web:** checkout toggle, redeem path, pass badge.
+4. **App:** same three touch points, then build and submit.
+
+#### Tests — `payments/tests_pass.py`
+
+The pass split sums to exactly 35.00 · buy creates a pass with
+`used_bookings=1` and expiry +30d · redeem creates a ₹0 CONFIRMED booking and
+decrements · a second redeem is rejected · an expired pass is rejected (patch
+`tokenwalla.utils.timezone.now`, never a date literal — trap 2) · cancelling a
+redeemed booking restores the credit and calls no gateway · cancelling the
+buying booking voids the credits · a FULL doctor is rejected. Every one patches
+`payments.views._dispatch_booking_notifications` (trap 1). True-concurrency
+redeem is Postgres-only `skipUnless`, like the existing row-lock tests.
+
+**Open before session 1, both for Vishnu:** the −₹11.84 promo budget above,
+and whether the CA needs to answer GST on a pass sold as an advance (invoice
+raised in full at purchase, the second service delivered up to 30 days later).
+This plan assumes invoice-at-purchase.
 
 ---
 
