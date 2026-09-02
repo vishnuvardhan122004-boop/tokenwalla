@@ -194,6 +194,13 @@ OTP_MAX_SENDS_PER_IP_PER_DAY = config('OTP_MAX_SENDS_PER_IP_PER_DAY', default=20
 # it without a deploy.
 ANON_RATE = config('ANON_RATE', default='300/minute')
 
+# ── The Appointment Pass (₹35, 2 visits, 30 days) ────────────────────────────
+# A promotion that costs real revenue on every redeemed pass, so it needs an
+# off switch that isn't a deploy. Set PASS_ENABLED=False on Railway to stop
+# selling and stop redeeming immediately; passes already sold keep their data
+# and simply can't be spent until it is switched back on.
+PASS_ENABLED = config('PASS_ENABLED', default=True, cast=bool)
+
 # ── REST Framework ────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [

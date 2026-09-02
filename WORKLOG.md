@@ -4,8 +4,8 @@ A running record of changes so we can cross-check what's done and what's pending
 Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** `main` on both repos, everything pushed, nothing in flight. Web locals are now just `main` and `develop` — the docs branch was merged and the two eslint branches deleted on 2026-08-29 (all three still on `origin` as the undo). **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
-- **Latest commit at last update:** `371220e` main (web/backend — **pushed and verified live**: `/health/` reports `371220ef`, Vercel READY for the same SHA) · `2e9e716` main (app, **v1.4.0 — pushed, NOT built**; Play is still on 1.3.0, so 1.3.1, 1.3.2 and 1.4.0 have never reached a handset)
-- **Last updated:** 2026-08-29 (evening) — **four commits shipped and verified live** (see the top entry): a guard so a `rzp_live_` key cannot be used from a `DEBUG` machine, eslint re-enabled in the web build plus the six errors that exposed, and three centre-shaped WhatsApp templates whose senders are deployed but inert until Meta approves them. **The first push broke the Vercel build** — the local check that cleared it was reading a gitignored `.env`; the entry says how to reproduce a host build properly. Earlier today: documents from any provider, a per-provider booking notice, centre pages at parity with the doctor page, the "Dr." sweep. **387 backend tests OK (2 skipped) · 30 frontend · `makemigrations --check` clean.** The one thing that has not moved in three weeks is the **app build** — see ROADMAP 5b.
+- **Latest commit at last update:** `371220e` main (web/backend — **pushed and verified live**: `/health/` reports `371220ef`, Vercel READY for the same SHA) · `2e9e716` main (app, **v1.4.0 — BUILT AND ON THE PLAY STORE**, versionCode 40, listing updated 29 Aug 2026)
+- **Last updated:** 2026-08-29 (evening) — **four commits shipped and verified live** (see the top entry): a guard so a `rzp_live_` key cannot be used from a `DEBUG` machine, eslint re-enabled in the web build plus the six errors that exposed, and three centre-shaped WhatsApp templates whose senders are deployed but inert until Meta approves them. **The first push broke the Vercel build** — the local check that cleared it was reading a gitignored `.env`; the entry says how to reproduce a host build properly. Earlier today: documents from any provider, a per-provider booking notice, centre pages at parity with the doctor page, the "Dr." sweep. **387 backend tests OK (2 skipped) · 30 frontend · `makemigrations --check` clean.** **The app build finally happened**: v1.4.0 is live on Play, closing ROADMAP 5 and 5b after three weeks. What that makes newly worth doing is ROADMAP 13 — `/api/app-version/` still serves a blank `latest_version`, so nobody on 1.3.x is being told there is an update.
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -41,6 +41,8 @@ pushed; the app repo is untouched today beyond v1.4.0.
 | 3 | The six lint errors that dropping it exposed | `f88b9de` | ✅ live |
 | 4 | `centre_payout`, `centre_new_booking`, `appointment_prep` — text + senders | `371220e` | ⏳ inert until Meta approves |
 | 5 | The patient WhatsApp opt-out the website had been missing | `06ad7aa` | ✅ live |
+| 6 | **v1.4.0 shipped to the Play Store** (build `7c4a4644`, versionCode 40) | app `2e9e716` | ✅ live on phones |
+| 7 | `scan_report_ready` confirmed approved in WhatsApp Manager — 12 active templates, body matches the code's 4 params | — | ✅ checked, not code |
 
 **Worth keeping:**
 

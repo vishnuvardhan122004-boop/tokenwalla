@@ -80,6 +80,14 @@ class Booking(models.Model):
     order_id     = models.CharField(max_length=100, blank=True)
     amount       = models.IntegerField(default=0)
     queue_access = models.BooleanField(default=False)
+    # Set when an Appointment Pass paid for this booking's service fee — both on
+    # the booking that bought the pass (it spends the first credit) and on the
+    # free one redeemed against it later. A string reference, not an import:
+    # payments.models already imports this module.
+    appointment_pass = models.ForeignKey(
+        'payments.AppointmentPass', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='bookings',
+    )
     # Payment for a *queue-access upgrade* on an already-created booking. Kept
     # separate from payment_id/order_id (the original booking payment) so an
     # upgrade never clobbers that record. The partial unique constraint below

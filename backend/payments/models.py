@@ -1,6 +1,12 @@
+from datetime import timedelta
+
+from django.conf import settings
 from django.db import models
+from django.utils import timezone
+
 from bookings.models import Booking
 from doctors.models import Doctor
+from payments.fees import PASS_BOOKINGS, PASS_DAYS, PASS_PRICE
 
 class Payment(models.Model):
     # Lifecycle of the patient checkout payment.
@@ -52,6 +58,61 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.payment_id} — ₹{self.final_amount} [{self.status}]"
+
+
+class AppointmentPass(models.Model):
+    """₹35, two visits, 30 days — a prepaid wallet of SERVICE-fee credits.
+
+    Bought as an upgrade at checkout: the patient pays ₹35 instead of that one
+    booking's ₹25.37 service fee, and the second visit's service fee is already
+    paid for. It never covers a doctor's consultation fee, so v1 only sells and
+    spends it where nothing else is charged online (fees.pass_eligible) — which
+    makes every redemption a ₹0 booking: no gateway call, no split to verify and
+    no payout owed.
+
+    price / total_bookings / expires_at are COLUMNS, not constants read back at
+    display time. Changing the price or the window later must not retroactively
+    rewrite what somebody already bought.
+    """
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             related_name='appointment_passes')
+    # The booking whose checkout bought this pass. It also consumes the first
+    # credit, so it appears in `bookings` too — this field is what tells the two
+    # apart when it is cancelled (see pass_utils.on_booking_cancelled).
+    source_booking = models.OneToOneField(Booking, on_delete=models.SET_NULL,
+                                          null=True, blank=True,
+                                          related_name='pass_purchased')
+    price          = models.DecimalField(max_digits=10, decimal_places=2, default=PASS_PRICE)
+    total_bookings = models.PositiveSmallIntegerField(default=PASS_BOOKINGS)
+    used_bookings  = models.PositiveSmallIntegerField(default=0)
+    expires_at     = models.DateTimeField()
+    # Set when the purchasing booking is cancelled and refunded: the money went
+    # back, so the unused credits must not survive. Voiding rather than deleting
+    # keeps the history readable.
+    voided_at      = models.DateTimeField(null=True, blank=True)
+    created        = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created']
+
+    @staticmethod
+    def default_expiry():
+        return timezone.now() + timedelta(days=PASS_DAYS)
+
+    @property
+    def remaining(self) -> int:
+        return max(0, self.total_bookings - self.used_bookings)
+
+    def is_active(self) -> bool:
+        """Spendable right now. Checked again under select_for_update before a
+        credit is actually taken — this is the cheap read, not the guarantee."""
+        return (self.voided_at is None
+                and self.remaining > 0
+                and self.expires_at > timezone.now())
+
+    def __str__(self):
+        return (f'Pass#{self.pk} user={self.user_id} '
+                f'{self.used_bookings}/{self.total_bookings} → {self.expires_at:%Y-%m-%d}')
 
 
 class ReschedulePayment(models.Model):

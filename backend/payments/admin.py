@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Payment, ReschedulePayment, Refund, DoctorLedger, PayoutBatch,
+    AppointmentPass, Payment, ReschedulePayment, Refund, DoctorLedger, PayoutBatch,
 )
 
 
@@ -10,6 +10,19 @@ class PaymentAdmin(admin.ModelAdmin):
                     'platform_fee', 'gst_amount', 'status', 'created')
     list_filter  = ('status',)
     search_fields = ('payment_id', 'order_id')
+
+
+@admin.register(AppointmentPass)
+class AppointmentPassAdmin(admin.ModelAdmin):
+    """Read-mostly. Editing used_bookings by hand hands out free visits, so the
+    counters are display-only — cancel the booking instead, which settles the
+    pass through the same code path a patient's cancellation does."""
+    list_display  = ('id', 'user', 'used_bookings', 'total_bookings',
+                     'price', 'expires_at', 'voided_at', 'created')
+    list_filter   = ('voided_at',)
+    search_fields = ('user__username', 'user__mobile')
+    readonly_fields = ('used_bookings', 'total_bookings', 'price',
+                       'source_booking', 'created')
 
 
 @admin.register(ReschedulePayment)

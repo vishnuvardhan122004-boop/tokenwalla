@@ -46,7 +46,12 @@ from payments.razorpay_utils import (
     refund_payment,
 )
 # Server-side fee math — the client is never trusted for booking amounts.
-from payments.fees import compute_fee_breakdown, SAC_CODE, GST_RATE
+from payments.fees import (
+    compute_fee_breakdown, pass_eligible,
+    SAC_CODE, GST_RATE, PASS_PRICE, PASS_BOOKINGS, PASS_DAYS,
+    PASS_BUY, PASS_REDEEM,
+)
+from payments.pass_utils import PassUnavailable, active_pass, serialize_pass
 
 logger = logging.getLogger('tokenwalla')
 
@@ -124,6 +129,7 @@ def _serialize_breakdown(b):
         'final_amount':  str(b['final_amount']),
         'gst_rate':      str(b['gst_rate']),
         'sac_code':      b['sac_code'],
+        'pass_action':   b.get('pass_action', ''),
     }
 
 
@@ -411,7 +417,23 @@ class CreateOrderView(APIView):
                 return Response({'message': exc.message}, status=409)
 
         collection_mode = doctor.payment_collection_mode
-        breakdown = compute_fee_breakdown(doctor.fee, collection_mode)
+
+        # Appointment Pass upgrade: ₹35 in place of this visit's service fee,
+        # buying a second visit's service fee inside 30 days. Opt-in per
+        # checkout — an older client that never sends the flag is unaffected.
+        buy_pass = bool(request.data.get('buyPass') or request.data.get('buy_pass'))
+        if buy_pass:
+            if not settings.PASS_ENABLED:
+                return Response({'message': 'The Appointment Pass is not on sale right now.'},
+                                status=400)
+            if not pass_eligible(collection_mode):
+                return Response(
+                    {'message': 'The Appointment Pass covers the service fee only, so it '
+                                'is not available for this doctor.'},
+                    status=400)
+
+        breakdown = compute_fee_breakdown(doctor.fee, collection_mode,
+                                          PASS_BUY if buy_pass else None)
         order_id  = f'tw_{uuid.uuid4().hex}'
         try:
             order = create_order(
@@ -422,6 +444,9 @@ class CreateOrderView(APIView):
                     'user_id':    str(request.user.id),
                     'plan':       'booking',
                     'doctor_id':  str(doctor.id),
+                    # Server-written, like every other tag here: verify reads
+                    # the pass off the ORDER, never off what the client re-sends.
+                    'pass':       'buy' if buy_pass else '',
                     # The full consultation fee (verify re-derives the online vs
                     # offline split from `collection_mode`, so store the raw fee).
                     'doctor_fee': str(doctor.fee),
@@ -580,9 +605,12 @@ class VerifyPaymentView(APIView):
                              'message': 'Payment does not match the selected scan.'},
                             status=400)
 
+        # The pass, like the doctor and the payer, is whatever the ORDER says.
+        buy_pass  = (tags.get('pass') == 'buy')
         breakdown = compute_fee_breakdown(
             tags.get('doctor_fee') or 0,
             tags.get('collection_mode') or 'FULL',
+            PASS_BUY if buy_pass else None,
         )
         # The amount actually captured must match the split we computed —
         # otherwise the doctor's fee changed mid-checkout or the amount was
@@ -598,15 +626,24 @@ class VerifyPaymentView(APIView):
             amount_inr=int(round(float(breakdown['final_amount']))),
             # Every booking now includes live queue access — it's part of the
             # service fee, not a separate ₹15 upgrade any more.
-            queue_access=True, breakdown=breakdown,
+            queue_access=True, breakdown=breakdown, buy_pass=buy_pass,
         )
 
     # ── Handler: new appointment booking ─────────────────────────────────────
 
     def _handle_new_booking(self, request, booking_data, payment_id, order_id,
-                            amount_inr, queue_access, breakdown):
+                            amount_inr, queue_access, breakdown,
+                            buy_pass=False, appointment_pass=None):
+        """Create the booking (and its Payment) for a captured payment.
+
+        `buy_pass` mints an Appointment Pass from this checkout;
+        `appointment_pass` spends a credit from an existing one (RedeemPassView).
+        Both happen INSIDE the booking's transaction on purpose — a pass minted
+        or spent against a booking that then rolls back would leave the patient
+        holding credits for a visit they never got, or short one they paid for.
+        """
         from doctors.models import Doctor
-        from payments.models import Payment
+        from payments.models import AppointmentPass, Payment
         from scans.models import Scan
 
         # One handler for both providers. Duplicating it would mean two copies
@@ -659,6 +696,19 @@ class VerifyPaymentView(APIView):
                     provider = check_slot_available_locked(provider.id, date_val, slot_val)
                     hospital = provider.hospital
 
+                # Spend the credit under a row lock, and re-check what the
+                # cheap is_active() read said outside the transaction — two
+                # tabs redeeming the last visit at once must not both win.
+                if appointment_pass is not None:
+                    appointment_pass = (AppointmentPass.objects
+                                        .select_for_update()
+                                        .get(pk=appointment_pass.pk))
+                    if not appointment_pass.is_active():
+                        raise PassUnavailable(
+                            'This pass has no visits left, or it has expired.')
+                    appointment_pass.used_bookings += 1
+                    appointment_pass.save(update_fields=['used_bookings'])
+
                 token = _generate_token()
 
                 new_booking = Booking.objects.create(
@@ -676,7 +726,24 @@ class VerifyPaymentView(APIView):
                     queue_access = queue_access,
                     booked_for_name   = booked_for_name,
                     booked_for_mobile = booked_for_mobile,
+                    appointment_pass  = appointment_pass,
                 )
+
+                # Buying one. The purchasing booking spends the first credit,
+                # so `used_bookings` starts at 1 and the FK points both ways:
+                # source_booking says which booking paid for the pass, and
+                # booking.appointment_pass says which pass paid for the booking.
+                if buy_pass:
+                    appointment_pass = AppointmentPass.objects.create(
+                        user           = request.user,
+                        source_booking = new_booking,
+                        price          = PASS_PRICE,
+                        total_bookings = PASS_BOOKINGS,
+                        used_bookings  = 1,
+                        expires_at     = AppointmentPass.default_expiry(),
+                    )
+                    new_booking.appointment_pass = appointment_pass
+                    new_booking.save(update_fields=['appointment_pass'])
 
                 # Payment has a OneToOneField → booking, so one record per booking.
                 # Store the exact component split for a full-fee booking; a legacy
@@ -739,12 +806,29 @@ class VerifyPaymentView(APIView):
                     # Itemised fee split for the receipt (None for legacy flat bookings).
                     'breakdown':        _serialize_breakdown(breakdown) if breakdown else None,
                 },
+                # Additive: the pass this checkout bought, or the one it spent
+                # a credit from. Absent for every ordinary booking, and ignored
+                # by app builds that predate it.
+                'pass': serialize_pass(appointment_pass),
             })
 
+        except PassUnavailable as exc:
+            # Only reachable from RedeemPassView: nothing was captured for a
+            # redemption, so there is nothing to refund. Must be caught above
+            # the generic handler, and never routed to the refund path.
+            logger.info('Pass redemption refused for user %s: %s', request.user.id, exc.message)
+            return Response({'success': False, 'message': exc.message}, status=409)
         except SlotUnavailable as exc:
-            # We took the patient's money and cannot give them the appointment.
-            # Nothing was created (the atomic block rolled back), so refund and
-            # say so plainly. Must be caught before the generic handler below.
+            # A pass redemption captured nothing, so there is nothing to give
+            # back — and routing it through the refund path would log an
+            # `oversold_refund FAILED … REFUND THIS BY HAND` alarm for a rupee
+            # that was never taken. The rolled-back transaction already handed
+            # the credit back.
+            if not payment_id:
+                return Response({'success': False, 'message': exc.message}, status=409)
+            # Otherwise we took the patient's money and cannot give them the
+            # appointment. Nothing was created (the atomic block rolled back),
+            # so refund and say so plainly.
             return _refund_unfulfillable_booking(
                 payment_id=payment_id,
                 amount_inr=amount_inr,
@@ -882,6 +966,99 @@ class VerifyPaymentView(APIView):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# The Appointment Pass — what the patient holds, and spending it
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PassView(APIView):
+    """Everything checkout needs to render the pass, in one call.
+
+    Returns the offer (price, visits, window, whether it is on sale at all) as
+    well as the pass the patient is currently holding, so a client never has to
+    hard-code ₹35 — change the price here and both products follow.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({
+            'enabled':  bool(settings.PASS_ENABLED),
+            'price':    str(PASS_PRICE),
+            'bookings': PASS_BOOKINGS,
+            'days':     PASS_DAYS,
+            'pass':     serialize_pass(active_pass(request.user)),
+        })
+
+
+class RedeemPassView(VerifyPaymentView):
+    """Book a visit against a pass credit. No money moves.
+
+    Subclasses VerifyPaymentView for ONE reason: _handle_new_booking. That
+    method holds the capacity backstop, token generation, the idempotency
+    guards and the notification dispatch, and a second copy of it would be the
+    single most dangerous duplication in this repo. `post` is fully overridden —
+    nothing of the payment path runs here.
+
+    Eligibility is re-checked server-side (pass active, doctor service-only,
+    feature on). The client's opinion decides nothing.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from doctors.models import Doctor
+
+        if not settings.PASS_ENABLED:
+            return Response({'success': False,
+                             'message': 'The Appointment Pass is not available right now.'},
+                            status=400)
+
+        booking_data = request.data.get('booking', request.data) or {}
+        doctor_id    = booking_data.get('doctorId') or booking_data.get('doctor_id')
+        if not doctor_id:
+            return Response({'success': False, 'message': 'doctorId is required.'}, status=400)
+
+        try:
+            doctor = Doctor.objects.get(pk=doctor_id)
+        except (Doctor.DoesNotExist, ValueError, TypeError):
+            return Response({'success': False, 'message': 'Doctor not found.'}, status=404)
+
+        # A pass covers the SERVICE fee only. At a FULL doctor the consultation
+        # fee would still be payable, which is a paid checkout, not a redemption.
+        if not pass_eligible(doctor.payment_collection_mode):
+            return Response(
+                {'success': False,
+                 'message': 'This doctor collects the consultation fee online, so a pass '
+                            'visit cannot be used here.'},
+                status=400)
+
+        ap = active_pass(request.user)
+        if ap is None:
+            return Response({'success': False,
+                             'message': 'You have no visits left on an Appointment Pass.'},
+                            status=409)
+
+        breakdown = compute_fee_breakdown(
+            doctor.fee, doctor.payment_collection_mode, PASS_REDEEM)
+
+        # Belt and braces: a redemption must never be worth money. If this ever
+        # trips, something has changed in the fee engine and a booking is about
+        # to be created for a bill nobody paid.
+        if breakdown['final_amount'] != 0:
+            logger.error('Pass redemption for doctor %s priced at ₹%s — refusing.',
+                         doctor.id, breakdown['final_amount'])
+            return Response({'success': False,
+                             'message': 'This visit cannot be covered by a pass.'}, status=400)
+
+        # payment_id is deliberately blank: no Razorpay payment exists. The
+        # partial unique index on Payment.payment_id only covers non-blank
+        # values, so any number of redeemed bookings can carry it.
+        return self._handle_new_booking(
+            request, {**booking_data, 'doctorId': str(doctor.id), 'scanId': None},
+            payment_id='', order_id='',
+            amount_inr=0, queue_access=True, breakdown=breakdown,
+            appointment_pass=ap,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # AdminReportsView  — unchanged
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -933,7 +1110,8 @@ class BookingReceiptView(APIView):
 
     def get(self, request, pk):
         booking = (Booking.objects
-                   .select_related('doctor', 'hospital', 'user', 'payment')
+                   .select_related('doctor', 'hospital', 'user', 'payment',
+                                   'appointment_pass')
                    .filter(pk=pk).first())
         if booking is None:
             return Response({'message': 'Booking not found.'}, status=404)
@@ -952,6 +1130,13 @@ class BookingReceiptView(APIView):
         if payment is None:
             return Response({'message': 'No payment on this booking.'}, status=404)
 
+        # An Appointment Pass shows up on two receipts: the one that BOUGHT it
+        # (where ₹35 replaces the service fee) and each free visit redeemed
+        # against it (where the service fee is ₹0 and was paid for earlier).
+        ap        = booking.appointment_pass
+        bought    = ap is not None and ap.source_booking_id == booking.id
+        redeemed  = ap is not None and not bought
+
         gst_pct = f'{(GST_RATE * 100).normalize()}%'
         taxable = payment.platform_fee + payment.gateway_fee
         line_items = [
@@ -964,7 +1149,9 @@ class BookingReceiptView(APIView):
                 'note':          'Healthcare service — GST exempt',
             },
             {
-                'description':   'Platform Fee',
+                'description':   (f'Appointment Pass — {ap.total_bookings} visits, '
+                                  f'valid to {ap.expires_at:%d %b %Y}') if bought
+                                 else 'Platform Fee',
                 'sac_code':      SAC_CODE,
                 'taxable_value': str(payment.platform_fee),
                 'gst_rate':      gst_pct,
@@ -999,6 +1186,13 @@ class BookingReceiptView(APIView):
                 'patient':   booking.patient_display_name,
             },
             'line_items':    line_items,
+            # Which side of a pass this receipt is. `redeemed` is why a ₹0.00
+            # total is legitimate rather than a broken payment.
+            'pass':          ({**serialize_pass(ap),
+                               'role': 'purchase' if bought else 'redeemed'}
+                              if ap else None),
+            'note':          ('Service fee already paid on Appointment Pass '
+                              f'#{ap.id}.') if redeemed else '',
             'taxable_value': str(taxable),          # GST-taxable portion (platform + gateway)
             'gst': {
                 'rate':   gst_pct,

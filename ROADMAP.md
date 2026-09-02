@@ -22,9 +22,11 @@ the things that can lose money or break a live booking come first.
   `/health/` reports `371220ef` and Vercel is READY for the same SHA; the app is
   `2e9e716` (**v1.4.0, pushed and NOT built**). 387 backend tests, 30 frontend,
   `makemigrations --check` clean.
-  **The oldest open item has not moved and is now three weeks old: 5b step 3 —
-  nothing merged into the app has ever run on a handset, and three releases
-  (1.3.1, 1.3.2, 1.4.0) have never been built.** Play is still on 1.3.0.
+  **THE OLDEST OPEN ITEM IS CLOSED: v1.4.0 IS ON THE PLAY STORE** (build
+  `7c4a4644`, versionCode 40, listing updated 29 Aug 2026). Three weeks of
+  merged-but-unbuilt work — 1.3.1, 1.3.2 and 1.4.0 — reached phones in one
+  release. Items 5 and 5b are struck through; **13** is what it makes newly
+  worth doing (the update prompt is still blanked).
   **4c** is now **guarded in code** — a DEBUG machine refuses to build a live
   Razorpay client — but the live pair is still in the file, so it is amber, not
   closed. **9** is four templates now, not one: `scan_report_ready` (submitted
@@ -32,6 +34,11 @@ the things that can lose money or break a live booking come first.
   `appointment_prep`, written 08-29 and **not submitted**. All four are a form,
   not code. **12** is new and small: the website has no WhatsApp opt-out
   control, and the app has one.
+  **2026-09-01:** **item 14** (the ₹35 Appointment Pass) was planned and then
+  built the same day, web + app + backend, on `feat/appointment-pass`. It is at
+  the BOTTOM of Now. Unmerged, unbuilt for phones, unclicked in a browser — and
+  `PASS_ENABLED` defaults to `True`, so **merging starts the promotion**. The
+  two pricing/GST questions at the end of the item are still open.
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -363,7 +370,7 @@ an accident, it does not give the load test a key to use. Until then
 
 The original item follows.
 
-### 4c. A live-mode Razorpay key is sitting in local `backend/.env` 🔴
+### 4c-history. The item as first written 2026-08-18
 
 **Found 2026-08-18 by the checkout load test refusing to run.** The local
 `RAZORPAY_KEY_ID` is non-empty, begins `rzp_`, and is **not** the test prefix.
@@ -547,7 +554,7 @@ things to settle first:
 Existing passwords keep working either way — validators run on set, not on
 login. Nobody is locked out by this.
 
-### 5. Ship the mobile app — two of three gates cleared 🟠
+### ~~5. Ship the mobile app~~ ✅ 2026-08-29 — **v1.4.0 IS ON THE PLAY STORE**
 
 **Status end of 2026-08-14: findings 1 and 2 are CLOSED, 3 is half closed.**
 A preview build was made, installed on a real device, and **push notifications
@@ -676,16 +683,27 @@ What closed here: the five open PRs (all merged), the preview-build gate (three
 builds run, five bugs found and fixed on a real device), and the deploy
 verification gap (`/health/` now reports `RAILWAY_GIT_COMMIT_SHA`).
 
-### 5b. What is actually left 🟠 — down to a store release
+### ~~5b. What is actually left~~ ✅ 2026-08-29 — SHIPPED TO THE STORE
 
-> ⚠️ **Re-read 2026-08-29 — this item is now three weeks old and the backlog
-> behind it has tripled.** The app repo is on **v1.4.0** (`2e9e716`) and Play is
-> still on **1.3.0**: 1.3.1, 1.3.2 and 1.4.0 have all been merged and pushed and
-> **none has been built**. Everything from items 10 and 11 — multi-capability
-> providers, documents, the booking notice, centre parity, the "Dr." fix — is
-> live for a patient on the website and invisible to every patient on a phone.
-> The list of what to exercise on-device below is still correct; it is just
-> longer now.
+> ✅ **CLOSED 2026-08-29, after three weeks as the oldest open item in this
+> file.** EAS build `7c4a4644` (profile `production`, **v1.4.0 / versionCode
+> 40**, commit `2e9e716`) finished at 01:16 and the Play listing now reads
+> **1.4.0, updated 29 Aug 2026**. Verified two ways: `eas build:list` and the
+> public store page, not by assuming the submit worked.
+>
+> Everything from items 10 and 11 — multi-capability providers, documents, the
+> booking notice, centre parity, the "Dr." fix — **is finally on phones**, along
+> with 1.3.1 and 1.3.2, which never shipped on their own.
+>
+> **One thing this makes newly worth doing:** `/api/app-version/` still serves
+> blank `min_version` / `latest_version`. It was deliberately blanked on 08-17
+> because pointing 1.1.3 installs at a store that only had 1.1.3 is a prompt
+> nobody can satisfy. That reasoning has now expired — the store has something
+> newer than what most installs are running, so setting `latest_version=1.4.0`
+> would actually move people onto it. See item 13.
+>
+> The on-device pass below is still worth doing against the shipped build, but
+> it is no longer a release blocker. The original item follows.
 
 **Steps 0, 1 and 2 all closed 2026-08-17.** Nothing is wrong in production and
 there is no outstanding security work. What remains is **one preview build and
@@ -777,6 +795,25 @@ blocks every install with no way out.
 crashes arrive minified). It needs `SENTRY_AUTH_TOKEN` in EAS secrets *before*
 the flag comes off, and changing build config immediately before a release is
 how you lose a build. Do it in the release **after** 1.2.0.
+
+### 13. Turn the update prompt back on 🟡 — newly actionable 2026-08-29
+
+`/api/app-version/` serves blank `min_version` and `latest_version` today:
+
+```bash
+curl -s https://tokenwalla-production.up.railway.app/api/app-version/
+# {"min_version": "", "latest_version": "", "store_url": "…", "message": ""}
+```
+
+They were blanked on 2026-08-17 for a good reason that has now expired — the
+store held nothing newer than the installs, so the nag was unsatisfiable. With
+**1.4.0 live on Play**, every 1.3.x install is a version behind, and the prompt
+is the only thing that will tell them.
+
+Set `latest_version` to `1.4.0`. Leave `min_version` blank unless a release is
+genuinely unusable — that one is a hard gate, not a nag. The prompt itself is
+proven: it was watched firing on 08-17, and "Not now" survived a
+background/reopen.
 
 ### 6. Watch the first day live 🟡
 
@@ -1062,12 +1099,15 @@ Payouts stay **manual**, per the standing decision. No payout API.
 
 ---
 
-### 9. Four WhatsApp templates are waiting on a form 🟡
+### 9. Three WhatsApp templates are waiting on a form 🟡
 
-> **Widened 2026-08-29.** This item used to be `scan_report_ready` alone. That
-> one was submitted on 08-27 and was last seen **"In review"** — check WhatsApp
-> Manager rather than resubmitting. Three more were written on 08-29 for
-> scanning and blood centres and are **not submitted**:
+> **Widened 2026-08-29, then narrowed the same day.** ✅ **`scan_report_ready`
+> is APPROVED** — verified in WhatsApp Manager: status **Active**, last edited
+> 28 Aug 2026, and its rendered body is *"Hello Rahul, your report for MRI Brain
+> at City Scan Centre is ready. Booking reference TW-2026-0142…"*, which is §11
+> word for word with the same four variables `send_scan_report_ready` sends. It
+> needs nothing. Three templates were written on 08-29 for scanning and blood
+> centres and remain **not submitted**:
 >
 > | Template | Doc | Why it exists |
 > |---|---|---|
@@ -1088,7 +1128,20 @@ Payouts stay **manual**, per the standing decision. No payout API.
 >
 > The rule below applies to all four: **do not try to automate the submission.**
 
-### 9a. Submit `scan_report_ready` to Meta 🟡
+### ~~9a. Submit `scan_report_ready` to Meta~~ ✅ 2026-08-29 — APPROVED AND ACTIVE
+
+**Checked in WhatsApp Manager, not inferred.** The WABA holds **12 active
+templates** (11 ours + Meta's `hello_world`), every one Utility, English and
+green. `scan_report_ready` is among them, last edited 28 Aug — so the submission
+that looked uncertain on 08-27 did land, and it took roughly a day to approve.
+
+Its body matched the code's four params on sight, which is the check that
+matters: an approved template with the wrong param count fails at send time, in
+production (item 4b). Still unproven is an actual delivery — that happens on the
+next real scan-report upload, or on a deliberate
+`send_test_whatsapp <mobile> --template scan_report_ready`.
+
+The submission notes below still apply to §12–14 and are kept for them.
 
 **The last unfinished piece of item 8, and it is a form, not code.** The backend
 already reads this exact template name, so nothing needs redeploying once it is
@@ -1225,6 +1278,210 @@ Migrations, all additive and safe to run before the code: `doctors.0014`,
 
 **What this does NOT close:** every one of these has an app half that is merged
 and unbuilt. See 5b.
+
+### 14. The Appointment Pass — ₹35 for two visits, 30 days 🟡 — BUILT 2026-09-01, unmerged and switched on by default
+
+**A demand lever, not a feature request — this exists to answer item 7.** The
+patient picks it at checkout instead of paying a single service fee:
+
+| | Pays now | Covers |
+|---|---|---|
+| Single visit | ₹25.37 | this booking |
+| **Pass** | **₹35.00** | this booking **+ 1 more free within 30 days** |
+
+Three product decisions, agreed 2026-09-01 and load-bearing for everything
+below: the free visit is redeemable at **any** doctor (one wallet of two
+service-fee credits, not a per-doctor follow-up); **v1 is SERVICE_ONLY doctors
+only**, for both buying and redeeming; and the pass is bought **at checkout as
+an upgrade**, not from a separate plans page.
+
+**The money, and the number to decide before this ships.** ₹35 is
+GST-inclusive, reverse-split so it sums exactly:
+
+```
+taxable 29.66  =  platform 28.16 + gateway 1.50
+GST     5.34   =  35.00 − 29.66        # remainder, NOT 29.66 × 0.18, so it always sums to 35.00
+```
+
+Two separate bookings cost the patient ₹50.74, so the pass saves them ₹15.74
+and TokenWalla takes 28.16 instead of 40.00 — **−₹11.84 per fully-redeemed
+pass**, **+₹8.16 on one that expires unused**. Only ONE gateway fee is
+charged across the two visits, which is the whole reason ₹35 clears cost.
+Break-even: the pass makes money if **under ~41%** of buyers would have
+booked a second time anyway. It has to *create* second visits, not discount
+the ones already happening. That is a pricing call, not a code call — make it
+consciously before session 1.
+
+**Why SERVICE_ONLY-only is the simplifying decision.** The pass waives the
+service fee, never the consultation fee. Restricted to SERVICE_ONLY, a
+redemption is always a ₹0 booking: no Razorpay order, no capture, no split to
+verify, and `doctor_fee = 0` so the payout ledger is never touched. Allowing
+FULL doctors would add a second redemption path that still opens checkout for
+the consultation fee alone — roughly double the backend and test surface, for
+doctors where **no real doctor has opted into `FULL` at all** (item 7).
+
+#### Backend
+
+`payments/fees.py` keeps deciding all money, one function:
+
+```python
+PASS_PRICE, PASS_BOOKINGS, PASS_DAYS = Decimal('35.00'), 2, 30
+compute_fee_breakdown(doctor_fee, collection_mode, pass_action=None)
+#   'BUY'    → platform/gateway/gst replaced by the pass split  → final = 35.00
+#   'REDEEM' → platform/gateway/gst = 0                         → final =  0.00
+```
+
+`payments/models.py` — one model, plus one nullable FK on `Booking`. Both
+additive, safe to migrate before the code that reads them:
+
+```python
+class AppointmentPass:      # price/total/days are COLUMNS, not constants read at
+    user, payment (O2O)     # display time — a future price change must not
+    price, total_bookings   # retro-alter a pass someone already bought
+    used_bookings, expires_at, created
+Booking.appointment_pass = FK(AppointmentPass, null=True, blank=True)
+```
+
+Endpoints, all additive — **installed app builds are unaffected**, they never
+send `buyPass` and never call redeem, so they keep paying per booking:
+
+- `create-order/` accepts optional `buyPass: true` → amount 35, order tag `pass=buy`
+- `verify/` sees the tag → creates the pass (`used_bookings=1`) inside the
+  booking's transaction, returns an additive `pass: {remaining, expires_at}`
+- `GET /api/payment/pass/` → the active pass, or `null`
+- `POST /api/payment/pass/redeem/` → ₹0 booking; returns **the same payload as
+  `/verify/`** so both clients reuse one success screen
+
+One refactor: `_handle_new_booking` becomes a module-level function so redeem
+reuses it. The capacity backstop, token generation and notification dispatch
+must stay single-copy — they are the three things in that file that most need
+not to drift. Dedent plus two call sites, no logic change.
+
+**The edges, which are where this either holds or leaks:**
+
+- redeem takes `select_for_update()` on the pass row and re-checks
+  `used < total` and expiry **inside** the transaction that creates the
+  booking — same discipline as mark-paid
+- a redeemed booking writes a `Payment` row with `payment_id=''` and all splits
+  0, so receipts and reports don't hit a missing OneToOne. The partial unique
+  index already tolerates blank payment ids
+- **cancel a redeemed booking** → restore the credit if the pass hasn't
+  expired, and never call Razorpay. `refunds.py` needs an explicit
+  `final_amount == 0` early return, not arithmetic that happens to yield 0
+- **cancel the booking that BOUGHT the pass** → money refunds on the normal
+  tier and the remaining credits are **voided**. Without this: buy, cancel,
+  collect ₹28 back, keep a free visit
+- doctor is `FULL` → the pass is neither offered nor redeemable (400)
+- `PASS_ENABLED` env var, default off, set on Railway. One `if` in two views.
+  A live promo needs an off switch that isn't a deploy
+
+#### Web (`src/`)
+
+`Payment.js` carries the whole change: a two-option toggle above the pay
+button, sending `buyPass`. If an active pass exists and the doctor is
+eligible, the button becomes "Use your pass — Free", calls `/pass/redeem/`
+instead of opening Razorpay, and lands on the same `/booking-token` screen.
+The itemised receipt gets an "Appointment Pass (2 visits)" line. Pass status
+is one line on `MyBookings` — no new page.
+
+#### App (separate repo, own release cycle)
+
+The same three touch points, then an EAS build and a store submission. Until
+that build lands the app simply doesn't offer the pass, and nothing about it
+breaks — which is the entire point of keeping every endpoint change additive.
+
+#### Sequencing — four slices, each merges
+
+1. **Backend, dark:** fees + model + migration + buy path + tests. Nothing
+   user-visible ships.
+2. **Backend, redeem:** `GET /pass/`, `POST /pass/redeem/`, the cancel /
+   refund / receipt interactions above, tests.
+3. **Web:** checkout toggle, redeem path, pass badge.
+4. **App:** same three touch points, then build and submit.
+
+#### Tests — `payments/tests_pass.py`
+
+The pass split sums to exactly 35.00 · buy creates a pass with
+`used_bookings=1` and expiry +30d · redeem creates a ₹0 CONFIRMED booking and
+decrements · a second redeem is rejected · an expired pass is rejected (patch
+`tokenwalla.utils.timezone.now`, never a date literal — trap 2) · cancelling a
+redeemed booking restores the credit and calls no gateway · cancelling the
+buying booking voids the credits · a FULL doctor is rejected. Every one patches
+`payments.views._dispatch_booking_notifications` (trap 1). True-concurrency
+redeem is Postgres-only `skipUnless`, like the existing row-lock tests.
+
+#### What actually shipped — `feat/appointment-pass`, 2026-09-01
+
+All four slices were built in one session rather than four, web and app
+together. **Nothing is merged and nothing is on a phone.**
+
+| | |
+|---|---|
+| Backend | `payments/fees.py` (`PASS_PRICE`, `compute_pass_split`, `pass_action`, `pass_eligible`), `AppointmentPass` + `Booking.appointment_pass`, `payments/pass_utils.py`, `GET /api/payment/pass/`, `POST /api/payment/pass/redeem/`, `buyPass` on create-order, the mint inside `/verify/`, the pass block on the receipt, admin registration |
+| Web | checkout offer + redeem (`Payment.js`), pass banner and honest cancel copy (`MyBookings.js`), "visits left" on the ticket (`BookingToken.js`) |
+| App | checkout offer + redeem (`app/(patient)/payment.tsx`), `collection_mode` in the fee mirror |
+| Migrations | `payments.0012` (new table), `bookings.0013` (new nullable column) — both additive, both safe to run before the code |
+| Tests | 419 backend (was 387; `payments/tests_pass.py` is 32 of them), 44 web (was 35), 160 app. `makemigrations --check` clean, zero `graph.facebook.com` lines under `-v 2`, `tsc --noEmit` clean, CRA build +1.66 kB |
+
+**`PASS_ENABLED` defaults to `True`.** Merging therefore starts the promotion.
+Set `PASS_ENABLED=False` on Railway *before* merging if the −₹11.84 question
+below isn't settled — that is exactly what the switch is for.
+
+**Deliberately left out of v1**, each a decision rather than an oversight:
+
+- **`FULL` doctors can't buy or spend a pass.** Named in the eligibility check
+  and covered by tests. Widening it means a second, *paid* redemption path.
+- **Scans and blood tests are out.** The scan checkout is untouched.
+- **No pass note on the app's ticket screen.** That screen is translated into
+  four languages and the checkout screen isn't; machine-translating money copy
+  onto a live ticket is worse than the checkout screen already saying it.
+- **No concurrency test for two simultaneous redemptions.** The lock is there
+  (`select_for_update` inside the booking transaction) but proving it needs
+  Postgres, like every other row-lock guarantee in this repo.
+
+**Verified locally, 2026-09-01.** All three checkout states clicked through on
+`localhost:3000` against a real backend, as patient `9999900000` at Dr. Test
+Reddy (`SERVICE_ONLY`, ₹120): the offer (single visit selected by default,
+"Appointment Pass — ₹35.00 · save ₹15.74"), the same screen repriced to ₹35
+with one pass line replacing the three fee lines, and — holding a pass — a ₹0
+"Use your pass" confirmation that booked `TW-185901-ADBD7F` with **no gateway
+call at all**. Cancelling it returned the credit (`2/2` → `1/2`) with an empty
+`razorpay_refund_id`, and the banner came back.
+
+Three things that only running it could have found:
+
+1. **The local dev DB had never been migrated** — `/api/payment/pass/` 500'd
+   with `no such table: payments_appointmentpass` until `manage.py migrate`.
+   Tests build their own DB, so nothing caught it.
+2. **A ₹0 visit still showed "Secured by Razorpay · UPI · Cards"** and
+   "Refund in 5–7 days" on the cancel card — both describing a payment that
+   does not happen. Fixed in `34a75cb`.
+3. **The paid buy-flow could not be exercised locally**, and correctly so: the
+   live key in `.env` (item 4c) made `create-order` return 502 via the
+   `get_client()` guard rather than open a real checkout. The ₹35 order and its
+   `pass=buy` tag are covered by tests, not by a click — **that is the one path
+   still unproven against the real gateway.**
+
+**The app half was verified the same way, on Expo web.** `npx expo start --web`
+on `:8092` against the same local backend (the `tokenwalla-app-web` launch entry
+already existed and the backend entry already whitelists that origin for CORS —
+`API_BASE_URL` must be overridden or **the app talks to production by default**).
+All three states render: the offer (`Appointment Pass — ₹35`, save ₹15.74), the
+reprice to ₹35 with one pass line, and the ₹0 "Use your pass" confirmation,
+which booked `TW-190700-15FA11` — `GET /payment/pass/` 200, `POST
+/payment/pass/redeem/` 200, **no create-order and no Razorpay call at all**.
+
+**What that run does NOT prove: the native build.** This was react-native-web —
+the same component code, a different renderer. A real simulator run is blocked
+on this machine: `xcode-select -p` is `/Library/Developer/CommandLineTools`, so
+there is no `xcodebuild` or `simctl` for a device build, and pointing it at a
+full Xcode needs Vishnu's password. **Before the app half ships, run it once on
+a device or emulator** — the pass card is the only new layout in that screen.
+
+**Still open, both for Vishnu:** the −₹11.84 promo budget above, and whether the
+CA needs to answer GST on a pass sold as an advance (invoice raised in full at
+purchase, the second service delivered up to 30 days later). The build assumes
+invoice-at-purchase.
 
 ---
 

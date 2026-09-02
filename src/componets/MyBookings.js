@@ -122,6 +122,7 @@ export default function MyBookings() {
   // { [bookingId]: report[] }. Fetched only for completed SCAN bookings —
   // a consultation has no report, and asking for one on every card would be a
   // request per booking for nothing.
+  const [passData,          setPassData]          = useState(null);
   const [reports,           setReports]           = useState({});
   const [downloading,       setDownloading]       = useState(null);
   const [downloadingId,     setDownloadingId]     = useState(null);
@@ -150,6 +151,15 @@ export default function MyBookings() {
   }, []);
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
+
+  // The Appointment Pass, if this patient is holding one. A backend without the
+  // endpoint just means no banner — never a broken page.
+  const fetchPass = useCallback(() => (
+    API.get('/payment/pass/')
+      .then(({ data }) => setPassData(data))
+      .catch(() => setPassData(null))
+  ), []);
+  useEffect(() => { fetchPass(); }, [fetchPass]);
 
   // Auto-refresh only when there are active bookings, pauses when tab hidden
   const hasActive = bookings.some(b => b.status === 'CONFIRMED' || b.status === 'IN_PROGRESS');
@@ -185,12 +195,22 @@ export default function MyBookings() {
   };
 
   const handleCancel = async (booking) => {
-    if (!window.confirm(`Cancel appointment with ${providerLabel(booking.doctor_name, booking.provider_kind)}?\n\nRefunds are processed within 5–7 business days.`)) return;
+    const consequence = booking.uses_pass
+      ? 'The visit goes back on your Appointment Pass.'
+      : 'Refunds are processed within 5–7 business days.';
+    if (!window.confirm(`Cancel appointment with ${providerLabel(booking.doctor_name, booking.provider_kind)}?\n\n${consequence}`)) return;
     setCancelling(booking.id);
     try {
-      await API.patch(`/bookings/cancel/${booking.id}/`);
+      const { data } = await API.patch(`/bookings/cancel/${booking.id}/`);
       await fetchBookings(true);
-      showToast('Appointment cancelled. Refund will be processed in 5–7 days.');
+      fetchPass();
+      showToast(
+        data?.pass === 'credit_restored'
+          ? 'Appointment cancelled. The visit is back on your Appointment Pass.'
+          : data?.pass === 'voided'
+            ? 'Appointment cancelled. Your Appointment Pass ended with it — the payment is refunded in 5–7 days.'
+            : 'Appointment cancelled. Refund will be processed in 5–7 days.'
+      );
     } catch (err) {
       showToast(err?.response?.data?.message || 'Failed to cancel booking.', 'error');
     } finally {
@@ -362,6 +382,8 @@ export default function MyBookings() {
         .mb-wa { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--blue-100); border-radius: 10px; padding: 8px 14px; font-size: 13px; color: var(--gray-500); cursor: pointer; user-select: none; }
         .mb-wa:hover { border-color: var(--blue-300); color: var(--blue-700); }
         .mb-wa input { accent-color: var(--blue-600); width: 15px; height: 15px; cursor: pointer; margin: 0; }
+        .mb-pass { display: flex; align-items: center; gap: 10px; background: var(--blue-50); border: 1px solid var(--blue-100); border-radius: 14px; padding: 12px 16px; margin-bottom: 22px; font-size: 13px; color: var(--gray-700); }
+        .mb-pass b { color: var(--blue-700); }
         .mb-refresh { display: flex; align-items: center; gap: 7px; background: #fff; border: 1px solid var(--blue-100); border-radius: 10px; padding: 8px 14px; font-family: var(--font-body); font-size: 13px; color: var(--gray-500); cursor: pointer; transition: all 0.15s; }
         .mb-refresh:hover { border-color: var(--blue-300); color: var(--blue-700); }
         .mb-refresh.spinning svg { animation: mbSpin 0.9s linear infinite; }
@@ -469,6 +491,19 @@ export default function MyBookings() {
             </button>
             </div>
           </div>
+
+          {passData?.pass?.remaining > 0 && (
+            <div className="mb-pass">
+              🎟️
+              <span>
+                <b>Appointment Pass — {passData.pass.remaining} free{' '}
+                {passData.pass.remaining === 1 ? 'visit' : 'visits'} left.</b>{' '}
+                Valid to {new Date(passData.pass.expires_at).toLocaleDateString('en-IN',
+                  { day: 'numeric', month: 'short', year: 'numeric' })}. Book any
+                doctor and the service fee is already paid.
+              </span>
+            </div>
+          )}
 
           {loading && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -638,7 +673,11 @@ export default function MyBookings() {
                       <div className="mb-action-panel">
                         <div>
                           <div className="mb-action-title"><i className="bi bi-x-circle me-1" />Cancel Appointment</div>
-                          <div className="mb-action-desc">Cancel before your turn · Refund in 5–7 days</div>
+                          <div className="mb-action-desc">
+                            {booking.uses_pass
+                              ? 'Cancel before your turn · the visit goes back on your pass'
+                              : 'Cancel before your turn · Refund in 5–7 days'}
+                          </div>
                         </div>
                         <button
                           className="mb-cancel-btn"

@@ -10,7 +10,7 @@ export default function BookingToken() {
   const navigate  = useNavigate();
   const {
     token, doctorName, hospital, date, slot,
-    paymentId, userName, queue_access, offlineDoctorFee,
+    paymentId, userName, queue_access, offlineDoctorFee, passRemaining,
   } = location.state || {};
 
   // Only a SERVICE_ONLY booking leaves the consultation fee due at the desk.
@@ -270,6 +270,14 @@ export default function BookingToken() {
                 {payAtClinic && (
                   <div className="bt-qr-note">
                     ℹ️ You have paid only for the service to Tokenwalla. The doctor's consultation fee (₹{Number(offlineDoctorFee).toFixed(2)}) is to be paid separately at the hospital.
+                  </div>
+                )}
+                {/* Only set when an Appointment Pass was bought or spent. */}
+                {passRemaining !== null && passRemaining !== undefined && (
+                  <div className="bt-qr-note">
+                    🎟️ {passRemaining > 0
+                      ? `Appointment Pass: ${passRemaining} free ${passRemaining === 1 ? 'visit' : 'visits'} left — book it from any doctor's page.`
+                      : 'That was the last visit on your Appointment Pass.'}
                   </div>
                 )}
               </div>

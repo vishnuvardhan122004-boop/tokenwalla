@@ -40,6 +40,13 @@ export default function Payment() {
   const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // The Appointment Pass. `passData` is the server's offer AND whatever the
+  // patient is already holding ({enabled, price, bookings, days, pass}), so the
+  // price is never hard-coded here — change it in payments/fees.py and this
+  // screen follows. Doctors only: the pass doesn't cover scans in v1.
+  const [passData, setPassData] = useState(null);
+  const [buyPass,  setBuyPass]  = useState(false);
+
   // "Book for someone else" — when on, the appointment is for another person
   // (name + mobile). Notifications still go to the logged-in account holder.
   const [forOther,    setForOther]    = useState(false);
@@ -76,6 +83,80 @@ export default function Payment() {
     return () => { cancelled = true; };
   }, [providerId, isScan, scanId, doctorId, navigate]);
 
+  useEffect(() => {
+    if (isScan) return;                     // scans can't use a pass in v1
+    let cancelled = false;
+    API.get('/payment/pass/')
+      .then(({ data }) => { if (!cancelled) setPassData(data); })
+      // A backend without the endpoint, or an offline moment, simply means no
+      // pass on offer — never a blocked checkout.
+      .catch(() => { if (!cancelled) setPassData(null); });
+    return () => { cancelled = true; };
+  }, [isScan]);
+
+  // The pass waives the SERVICE fee only, so it applies where nothing else is
+  // charged online. `collection_mode` is the server's own verdict, not a guess
+  // from the numbers.
+  const passOffered  = !!passData?.enabled && !isScan
+                       && breakdown?.collection_mode === 'SERVICE_ONLY';
+  const creditsLeft  = passData?.pass?.remaining || 0;
+  // Holding one → spend it. Otherwise → offer to buy one.
+  const canRedeem    = passOffered && creditsLeft > 0;
+  const canBuy       = passOffered && creditsLeft === 0;
+  const passSelected = canBuy && buyPass;
+  const passExpiry   = passData?.pass?.expires_at
+    ? new Date(passData.pass.expires_at).toLocaleDateString('en-IN',
+        { day: 'numeric', month: 'short', year: 'numeric' })
+    : '';
+
+  // What the patient is actually charged now. A redemption is free; a pass
+  // purchase is the server's quoted price; everything else is the usual bill.
+  const payable = canRedeem ? 0 : passSelected ? Number(passData.price) : total;
+
+  const goToToken = (verifyData, extra = {}) => navigate('/booking-token', {
+    state: {
+      token:        verifyData.token,
+      doctorName:   providerDisplay,
+      hospital,
+      doctorMobile: location.state?.doctorMobile,
+      date, slot,
+      paymentId:    verifyData.booking?.paymentId,
+      userName:     bookedForName || user?.name || user?.username,
+      queue_access,
+      // >0 only for a SERVICE_ONLY doctor — the token page shows the
+      // "pay the consultation fee at the hospital" note off this.
+      // The verify response is authoritative; the checkout preview
+      // covers the idempotent replay, which omits the breakdown.
+      offlineDoctorFee: Number(
+        verifyData.booking?.breakdown?.offline_doctor_fee
+        ?? breakdown?.offline_doctor_fee ?? 0
+      ),
+      // Visits left on the pass after this booking, when one was involved.
+      passRemaining: verifyData.pass?.remaining ?? null,
+      ...extra,
+    }
+  });
+
+  // Spending a credit: no gateway, no order, no Checkout. The server re-checks
+  // the pass, the doctor and the slot — this button only asks.
+  const handleRedeem = async () => {
+    if (forOther) {
+      if (bookedForName.length < 2) { alert("Please enter the other person's name."); return; }
+      if (!/^[6-9]\d{9}$/.test(bookedForMobile)) { alert("Please enter a valid 10-digit mobile number for the other person."); return; }
+    }
+    setLoading(true);
+    try {
+      const { data } = await API.post('/payment/pass/redeem/', {
+        doctorId, hospital, date, slot, bookedForName, bookedForMobile,
+      });
+      if (data.success) goToToken(data);
+      else { alert(data.message || 'Could not use your pass.'); setLoading(false); }
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Could not use your pass. Please try again.');
+      setLoading(false);
+    }
+  };
+
   const loadScript = () => new Promise((resolve) => {
     if (window.Razorpay) return resolve(true);
     const existing = document.getElementById('razorpay-sdk');
@@ -110,6 +191,9 @@ export default function Payment() {
       // charge-then-refund. The server re-checks after capture regardless.
       const { data: orderData } = await API.post('/payment/create-order/', {
         ...(isScan ? { scanId } : { doctorId }), date, slot,
+        // Opt-in per checkout. The server prices and tags the order — this flag
+        // only asks for the upgrade, it never says what it costs.
+        ...(passSelected ? { buyPass: true } : {}),
       });
 
       const verify = async () => {
@@ -122,26 +206,7 @@ export default function Payment() {
             },
           });
           if (verifyData.success) {
-            navigate('/booking-token', {
-              state: {
-                token:        verifyData.token,
-                doctorName:   providerDisplay,
-                hospital,
-                doctorMobile: location.state?.doctorMobile,
-                date, slot,
-                paymentId:    verifyData.booking?.paymentId,
-                userName:     bookedForName || user?.name || user?.username,
-                queue_access,
-                // >0 only for a SERVICE_ONLY doctor — the token page shows the
-                // "pay the consultation fee at the hospital" note off this.
-                // The verify response is authoritative; the checkout preview
-                // covers the idempotent replay, which omits the breakdown.
-                offlineDoctorFee: Number(
-                  verifyData.booking?.breakdown?.offline_doctor_fee
-                  ?? breakdown?.offline_doctor_fee ?? 0
-                ),
-              }
-            });
+            goToToken(verifyData);
           } else {
             alert(verifyData.message || 'Verification failed. Contact support.');
             setLoading(false);
@@ -281,6 +346,42 @@ export default function Payment() {
 
         /* Book for someone else */
         .pay-other-card { animation: payUp 0.5s 0.08s ease both; }
+
+        /* ── Appointment Pass ─────────────────────────────────────────────── */
+        .pay-pass-card { animation: payUp 0.5s 0.06s ease both; padding: 16px 22px 6px; }
+        .pay-pass-card.pay-pass-active {
+          padding-bottom: 18px;
+          border: 1px solid var(--blue-100); background: var(--blue-50);
+        }
+        .pay-pass-badge {
+          display: inline-block; margin-bottom: 10px; padding: 3px 10px;
+          background: var(--blue-600); border-radius: 100px;
+          font-size: 11px; font-weight: 700; letter-spacing: 0.02em; color: #fff;
+        }
+        .pay-pass-title {
+          font-family: var(--font-display); font-size: 15px; font-weight: 700;
+          color: var(--gray-900); margin-bottom: 4px;
+        }
+        .pay-pass-desc { font-size: 12px; color: var(--gray-600); line-height: 1.5; }
+        .pay-pass-free { color: var(--blue-600); }
+        .pay-pass-option {
+          display: flex; align-items: flex-start; gap: 12px; cursor: pointer;
+          padding: 12px 14px; margin-bottom: 10px;
+          border: 1px solid var(--gray-200); border-radius: 12px;
+          transition: border-color 0.15s ease, background 0.15s ease;
+        }
+        .pay-pass-option input { margin-top: 3px; accent-color: var(--blue-600); cursor: pointer; flex-shrink: 0; }
+        .pay-pass-option.pay-pass-chosen { border-color: var(--blue-600); background: var(--blue-50); }
+        .pay-pass-option-title {
+          font-family: var(--font-display); font-size: 14px; font-weight: 700;
+          color: var(--gray-900); margin-bottom: 2px;
+        }
+        .pay-pass-option-desc { font-size: 12px; color: var(--gray-600); line-height: 1.5; }
+        .pay-pass-save {
+          display: inline-block; margin-left: 8px; padding: 2px 8px;
+          background: #E8F7EE; border: 1px solid #BFE6CE; border-radius: 100px;
+          font-size: 11px; font-weight: 700; color: #1B7F45; vertical-align: middle;
+        }
         .pay-for-tag {
           display: inline-block; margin-left: 8px; padding: 2px 8px;
           background: var(--blue-50); border: 1px solid var(--blue-100); border-radius: 100px;
@@ -435,25 +536,107 @@ export default function Payment() {
                     <span className="pay-row-value">₹{inr(breakdown.doctor_fee)}</span>
                   </div>
                 )}
-                <div className="pay-row">
-                  <span className="pay-row-label">Platform Fee</span>
-                  <span className="pay-row-value">₹{inr(breakdown.platform_fee)}</span>
-                </div>
-                <div className="pay-row">
-                  <span className="pay-row-label">Payment Gateway Fee</span>
-                  <span className="pay-row-value">₹{inr(breakdown.gateway_fee)}</span>
-                </div>
-                <div className="pay-row">
-                  <span className="pay-row-label">GST (18%)</span>
-                  <span className="pay-row-value">₹{inr(breakdown.gst_amount)}</span>
-                </div>
+                {/* A pass replaces the three service-fee lines with one. The
+                    GST split of ₹35 is computed server-side and itemised on the
+                    receipt — this screen never does money math. */}
+                {canRedeem ? (
+                  <div className="pay-row">
+                    <span className="pay-row-label">
+                      Service Fee
+                      <span className="pay-for-tag">paid by your pass</span>
+                    </span>
+                    <span className="pay-row-value pay-pass-free">₹0.00</span>
+                  </div>
+                ) : passSelected ? (
+                  <div className="pay-row">
+                    <span className="pay-row-label">
+                      Appointment Pass
+                      <span className="pay-for-tag">
+                        {passData.bookings} visits · {passData.days} days
+                      </span>
+                    </span>
+                    <span className="pay-row-value">₹{inr(passData.price)}</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="pay-row">
+                      <span className="pay-row-label">Platform Fee</span>
+                      <span className="pay-row-value">₹{inr(breakdown.platform_fee)}</span>
+                    </div>
+                    <div className="pay-row">
+                      <span className="pay-row-label">Payment Gateway Fee</span>
+                      <span className="pay-row-value">₹{inr(breakdown.gateway_fee)}</span>
+                    </div>
+                    <div className="pay-row">
+                      <span className="pay-row-label">GST (18%)</span>
+                      <span className="pay-row-value">₹{inr(breakdown.gst_amount)}</span>
+                    </div>
+                  </>
+                )}
               </div>
             )}
             <div className="pay-total-row">
               <span className="pay-total-label">Total Payable Now</span>
-              <span className="pay-total-amount">{total === null ? '—' : `₹${inr(total)}`}</span>
+              <span className="pay-total-amount">
+                {payable === null ? '—' : `₹${inr(payable)}`}
+              </span>
             </div>
           </div>
+
+          {/* The Appointment Pass — either spend one or buy one, never both. */}
+          {canRedeem && (
+            <div className="pay-card pay-pass-card pay-pass-active">
+              <div className="pay-pass-badge"><i className="bi bi-ticket-perforated me-1" />
+                Appointment Pass
+              </div>
+              <div className="pay-pass-title">
+                This visit is covered — no payment needed.
+              </div>
+              <div className="pay-pass-desc">
+                {creditsLeft === 1
+                  ? 'This is the last visit on your pass'
+                  : `${creditsLeft} visits left on your pass`}
+                {passExpiry && ` · valid to ${passExpiry}`}
+                {Number(breakdown?.offline_doctor_fee) > 0
+                  && ` · the ₹${inr(breakdown.offline_doctor_fee)} consultation fee is still paid at the clinic`}
+              </div>
+            </div>
+          )}
+
+          {canBuy && (
+            <div className="pay-card pay-pass-card">
+              <div className="pay-pass-badge"><i className="bi bi-ticket-perforated me-1" />
+                Save on your next visit
+              </div>
+              <label className={`pay-pass-option${!buyPass ? ' pay-pass-chosen' : ''}`}>
+                <input type="radio" name="pay-pass" checked={!buyPass}
+                       onChange={() => setBuyPass(false)} />
+                <div>
+                  <div className="pay-pass-option-title">
+                    Just this visit — ₹{inr(total)}
+                  </div>
+                  <div className="pay-pass-option-desc">The usual service fee.</div>
+                </div>
+              </label>
+              <label className={`pay-pass-option${buyPass ? ' pay-pass-chosen' : ''}`}>
+                <input type="radio" name="pay-pass" checked={buyPass}
+                       onChange={() => setBuyPass(true)} />
+                <div>
+                  <div className="pay-pass-option-title">
+                    Appointment Pass — ₹{inr(passData.price)}
+                    <span className="pay-pass-save">
+                      save ₹{inr(Number(total) * passData.bookings - Number(passData.price))}
+                    </span>
+                  </div>
+                  <div className="pay-pass-option-desc">
+                    This visit plus {passData.bookings - 1} more, at any doctor,
+                    within {passData.days} days. Service fee only — consultation
+                    fees are still paid at the clinic.
+                  </div>
+                </div>
+              </label>
+            </div>
+          )}
 
           {/* Book for someone else */}
           <div className="pay-card pay-other-card">
@@ -502,7 +685,9 @@ export default function Payment() {
             )}
           </div>
 
-          {/* Secure badge */}
+          {/* Secure badge — nothing is being charged on a pass visit, so a
+              "Secured by Razorpay · UPI · Cards" panel is just noise there. */}
+          {!canRedeem && (
           <div className="pay-secure">
             <div className="pay-secure-icon"><i className="bi bi-shield-lock me-1" /></div>
             <div>
@@ -515,20 +700,30 @@ export default function Payment() {
               </div>
             </div>
           </div>
+          )}
 
           {/* Pay button */}
-          <button className="pay-btn" onClick={handlePayment} disabled={loading || !breakdown}>
+          <button
+            className="pay-btn"
+            onClick={canRedeem ? handleRedeem : handlePayment}
+            disabled={loading || !breakdown}
+          >
             {loading
-              ? <><div className="pay-spinner" /> Opening Payment Gateway…</>
+              ? <><div className="pay-spinner" />
+                  {canRedeem ? ' Confirming…' : ' Opening Payment Gateway…'}</>
               : !breakdown
                 ? <>{feeError ? 'Fee details unavailable' : 'Loading…'}</>
-                : <><i className="bi bi-credit-card me-1" />Pay ₹{inr(total)} & Confirm Appointment</>
+                : canRedeem
+                  ? <><i className="bi bi-ticket-perforated me-1" />Use your pass — Confirm Appointment</>
+                  : <><i className="bi bi-credit-card me-1" />Pay ₹{inr(payable)} & Confirm Appointment</>
             }
           </button>
 
           <p className="pay-note">
             By paying, you agree to our Terms & Conditions.<br />
-            Refundable if cancelled at least 2 hours before your slot.
+            {canRedeem
+              ? 'Cancel at least 2 hours before your slot and the visit goes back on your pass.'
+              : 'Refundable if cancelled at least 2 hours before your slot.'}
           </p>
         </div>
       </div>

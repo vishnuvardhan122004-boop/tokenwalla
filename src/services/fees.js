@@ -36,6 +36,9 @@ export function computeFeeBreakdown(doctorFee, collectionMode = "SERVICE_ONLY") 
   const final_amount = round2(doctor_fee + platform_fee + gateway_fee + gst_amount);
   return {
     doctor_fee, offline_doctor_fee, platform_fee, gateway_fee,
+    // Canonical, like the backend: a blank/unknown mode reports as SERVICE_ONLY.
+    // Checkout reads this to decide whether an Appointment Pass applies.
+    collection_mode: serviceOnly ? "SERVICE_ONLY" : "FULL",
     taxable_value: taxable, gst_amount, final_amount,
     // What TokenWalla charges the patient on top of the consultation fee.
     // Never deducted from the doctor — they receive their fee in full.
