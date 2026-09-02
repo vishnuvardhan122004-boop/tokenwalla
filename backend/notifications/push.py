@@ -244,25 +244,37 @@ def push_new_booking_to_hospital(booking):
         logger.warning('[push] new-booking push failed for booking %s: %s', booking.id, exc)
 
 
-def push_booking_cancelled(booking, refund_info=None):
+def push_booking_cancelled(booking, refund_info=None, pass_result=None):
     """Patient alert after they cancel — names the refund so the tiered
     percentage isn't a surprise they only discover on their bank statement.
 
     refund_info is the dict from payments.refunds.process_cancellation_refund:
     {'refunded': bool, 'percentage': str, 'amount': str}.
+
+    pass_result is payments.pass_utils.on_booking_cancelled's dict. A pass visit
+    costs ₹0, so the refund line alone would read "No refund was due" and never
+    mention the credit going back — money-true and use-wrong.
     """
+    from payments.pass_utils import cancellation_line
+
     try:
         info = refund_info or {}
+        pass_line = cancellation_line(pass_result)
         if info.get('refunded'):
             money = f'A refund of ₹{info.get("amount", "0")} is on its way — allow 5-7 working days.'
+        elif pass_line:
+            # Nothing was charged for this visit, so silence about money is
+            # correct — the pass line below carries the real news.
+            money = ''
         else:
             # No pool to refund (e.g. service-only booking, or cancelled too late
             # for the tier to pay out). Say so rather than implying money is coming.
             money = 'No refund was due on this booking.'
+        tail = ' '.join(x for x in (money, pass_line) if x)
         push_to_user(
             booking.user,
             title='Booking cancelled',
-            body=f'Token {booking.token} with {booking.provider_name} is cancelled. {money}',
+            body=f'Token {booking.token} with {booking.provider_name} is cancelled. {tail}'.strip(),
             data={
                 'screen': 'my-bookings',
                 'type': 'booking_cancelled',
@@ -274,6 +286,35 @@ def push_booking_cancelled(booking, refund_info=None):
         )
     except Exception as exc:
         logger.warning('[push] cancelled push failed for booking %s: %s', booking.id, exc)
+
+
+def push_pass_expiring(appointment_pass):
+    """Nudge a patient sitting on an unused Appointment Pass visit.
+
+    Push only, deliberately: WhatsApp would need a new Meta template, which is a
+    manual submission and review, and this nudge is worth shipping now rather
+    than in three weeks. The trade-off is that a patient without the app, or
+    with notifications off, hears nothing — see item 14 in ROADMAP.md.
+    """
+    try:
+        left   = appointment_pass.remaining
+        visits = 'visit' if left == 1 else 'visits'
+        push_to_user(
+            appointment_pass.user,
+            title='Your Appointment Pass expires soon',
+            body=(f'{left} free {visits} left — book by '
+                  f'{appointment_pass.expires_at:%d %b} and the service fee is already paid.'),
+            data={
+                'screen': 'doctors',
+                'type': 'pass_expiring',
+                'appId': f'pass-expiry-{appointment_pass.id}',
+                'audience': 'patient',
+            },
+            role='patient',
+        )
+    except Exception as exc:
+        logger.warning('[push] pass-expiry push failed for pass %s: %s',
+                       appointment_pass.id, exc)
 
 
 def push_booking_on_hold(booking):

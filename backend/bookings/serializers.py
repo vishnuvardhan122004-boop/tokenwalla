@@ -22,9 +22,13 @@ class BookingSerializer(serializers.ModelSerializer):
     user_mobile   = serializers.CharField(source='user.mobile',     read_only=True)
     # True when this booking was made on behalf of another person.
     is_for_other  = serializers.SerializerMethodField()
-    # True when an Appointment Pass paid for this booking's service fee — the
-    # cancel dialog promises a credit back rather than a refund off this.
+    # True when an Appointment Pass paid for this booking's service fee.
     uses_pass     = serializers.SerializerMethodField()
+    # Which SIDE of the pass this booking is: 'purchase' (the checkout that
+    # bought it — cancelling ends the pass) or 'redeemed' (a free visit —
+    # cancelling hands the credit back). The two need opposite cancel copy, so
+    # `uses_pass` alone is not enough to write it.
+    pass_role     = serializers.SerializerMethodField()
     queue_position = serializers.SerializerMethodField()
 
     class Meta:
@@ -37,7 +41,7 @@ class BookingSerializer(serializers.ModelSerializer):
             'hospital', 'hospital_name', 'hospital_mobile',
             'user', 'user_name', 'patient_name', 'patient_mobile', 'user_mobile',
             'booked_for_name', 'booked_for_mobile', 'is_for_other',
-            'uses_pass',
+            'uses_pass', 'pass_role',
         ]
 
     def get_provider_kind(self, obj):
@@ -48,6 +52,12 @@ class BookingSerializer(serializers.ModelSerializer):
 
     def get_uses_pass(self, obj):
         return obj.appointment_pass_id is not None
+
+    def get_pass_role(self, obj):
+        if obj.appointment_pass_id is None:
+            return None
+        ap = obj.appointment_pass
+        return 'purchase' if ap and ap.source_booking_id == obj.id else 'redeemed'
 
     def get_queue_position(self, obj):
         """

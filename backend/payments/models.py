@@ -90,6 +90,14 @@ class AppointmentPass(models.Model):
     # back, so the unused credits must not survive. Voiding rather than deleting
     # keeps the history readable.
     voided_at      = models.DateTimeField(null=True, blank=True)
+    # The 3-days-before nudge has been sent. A flag rather than a log query so
+    # the cron can run every hour without ever sending twice.
+    expiry_reminder_sent = models.BooleanField(default=False)
+    # Cancelling a visit after the pass has lapsed hands the credit back and
+    # reopens the window once (pass_utils.on_booking_cancelled). Stamped so it
+    # can happen at most once — otherwise book-and-cancel keeps a pass alive
+    # forever, which is exactly the expiry the promo's economics rely on.
+    expiry_extended_at = models.DateTimeField(null=True, blank=True)
     created        = models.DateTimeField(auto_now_add=True)
 
     class Meta:

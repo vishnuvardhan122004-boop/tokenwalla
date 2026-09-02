@@ -152,6 +152,16 @@ salaried doctor's money goes to their hospital) and *on which rail*
   never before it. Cancelling a redeemed visit returns the credit; cancelling
   the booking that BOUGHT the pass voids the remaining credits, because that
   money is refunded — remove that and the pass is free money.
+- **A pass purchase only refunds what nobody has spent** (`refunds.
+  unused_pass_share`). ₹35 buys two visits' service fee, so refunding the whole
+  tier while the free visit still stands pays back money for a visit we are
+  still going to deliver — buy, redeem, cancel the paid one, keep the free one.
+  The pool scales by `unused ÷ total_bookings`; a CANCELLED sibling is not
+  consumed, a NO_SHOW is. Don't "simplify" this back to the flat platform fee.
+- **A pass visit costs ₹0, so the refund line alone is never the whole story.**
+  Cancellation push and WhatsApp both take `pass_result` and render
+  `pass_utils.cancellation_line` — without it the patient is told "No refund was
+  due on this booking" and nothing about the credit going back.
 - Gateway fee and GST are **never refunded** (the gateway doesn't return them).
 - Idempotency and locking on the money paths are load-bearing. `Payment` has a
   partial unique index on non-blank `payment_id`; refunds, absence adjustments,

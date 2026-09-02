@@ -54,17 +54,53 @@ def get_refund_percentage(booking) -> Decimal:
     return Decimal('0.00')
 
 
-def compute_refund_split(payment, refund_pct) -> dict:
+def unused_pass_share(booking) -> Decimal:
+    """Fraction of an Appointment Pass still unspent when `booking` is cancelled.
+
+    Only meaningful on the booking that BOUGHT a pass. ₹35 buys the service fee
+    for two visits, so refunding the whole tier on it while the free visit is
+    already in the calendar hands back money for a visit we are still going to
+    deliver — buy, redeem, cancel the paid one, keep the free one and pocket the
+    difference. Scaling the refundable pool by what is genuinely unused closes
+    that without punishing someone who cancels having used nothing.
+
+        unused = total_bookings − (this pass's other bookings that still stand)
+
+    A cancelled sibling doesn't count as consumed — nothing was delivered — but
+    a NO_SHOW does, because the slot was held and lost.
+
+    Returns 1 for every ordinary booking, so nothing else changes.
+    """
+    from bookings.models import Booking
+
+    ap = getattr(booking, 'appointment_pass', None)
+    if ap is None or ap.source_booking_id != booking.id or not ap.total_bookings:
+        return Decimal('1')
+    consumed = (ap.bookings
+                .exclude(pk=booking.pk)
+                .exclude(status=Booking.CANCELLED)
+                .count())
+    unused = max(0, ap.total_bookings - consumed)
+    return Decimal(unused) / Decimal(ap.total_bookings)
+
+
+def compute_refund_split(payment, refund_pct, pass_share=Decimal('1')) -> dict:
     """Split the refunded pool proportionally between doctor and platform.
 
         refund_pool   = refund_pct × (doctor_fee + platform_fee)
         doctor_loss   = refund_pool × doctor_fee   / (doctor_fee + platform_fee)
         platform_loss = refund_pool × platform_fee / (doctor_fee + platform_fee)
 
+    `pass_share` (see unused_pass_share) shrinks the PLATFORM side only, and only
+    for a pass purchase: that fee bought more than the one visit being cancelled.
+    A pass is sold service-fee-only, so doctor_fee is 0 there and the doctor's
+    share is untouched either way.
+
     Legacy payments with no component split (base = 0) yield a zero pool.
     """
-    refund_pct = Decimal(refund_pct)
-    base = _q(payment.doctor_fee) + _q(payment.platform_fee)
+    refund_pct   = Decimal(refund_pct)
+    platform_fee = _q(_q(payment.platform_fee) * Decimal(pass_share))
+    base = _q(payment.doctor_fee) + platform_fee
     if base <= 0:
         return {'refund_pool': Decimal('0.00'),
                 'doctor_loss': Decimal('0.00'),
@@ -117,7 +153,8 @@ def process_cancellation_refund(booking):
                               'amount': str(existing.refund_amount)}
 
         pct   = get_refund_percentage(booking)
-        split = compute_refund_split(payment, pct)
+        # A pass purchase only refunds the part of the pass nobody has spent.
+        split = compute_refund_split(payment, pct, unused_pass_share(booking))
         pool  = split['refund_pool']
 
         razorpay_refund_id = ''

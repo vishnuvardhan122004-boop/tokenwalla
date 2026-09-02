@@ -336,19 +336,27 @@ class CancelBookingView(APIView):
         except Exception as exc:
             pass_result = None
             logger.exception('Pass settlement failed for cancelled booking %s: %s', pk, exc)
+        # Settled BEFORE the notifications on purpose: both of them tell the
+        # patient what happened to the pass, and a ₹0 visit has nothing else
+        # worth saying.
+        pass_outcome = (pass_result or {}).get('result')
 
         # All best-effort: the cancellation + refund are already committed, so a
         # notification failure must never turn a successful cancellation into an
         # error. Pushes are local and cheap; the WhatsApp call is threaded.
-        push_booking_cancelled(booking, refund_info)   # patient: what was refunded
+        push_booking_cancelled(booking, refund_info, pass_result)   # patient: money + pass
         push_cancellation_to_hospital(booking)         # hospital: slot is free again
         _whatsapp_async(
-            lambda b: send_booking_cancelled(b, refund_info), booking, 'cancellation')
+            lambda b: send_booking_cancelled(b, refund_info, pass_result),
+            booking, 'cancellation')
         _whatsapp_async(send_hospital_cancellation, booking, 'hospital-cancellation')
         return Response({
             'message': 'Booking cancelled successfully.',
             'refund':  refund_info,
-            'pass':    pass_result,
+            # Kept as the bare string the web client already switches on, with
+            # the detail alongside it for anything that wants the numbers.
+            'pass':        pass_outcome,
+            'pass_detail': pass_result,
             'booking': BookingSerializer(booking, context={'request': request}).data,
         })
 
