@@ -1,14 +1,24 @@
 """
-Run hourly via Railway Cron Schedule:
-    python manage.py send_pass_expiry_reminders
+Runs off the EXISTING reminders cron, every 10 minutes — see
+backend/railway.cron.json:
+
+    python manage.py send_appointment_reminders; python manage.py send_pass_expiry_reminders
+
+It rides along rather than having its own cron service on purpose. Railway
+closed config-as-code to new services on 2026-08-28, so a dedicated service
+could only be configured by hand in the dashboard, where the start command and
+schedule live nowhere the repo can see them. Sharing a cron that is already
+declared in this repo keeps the whole schedule reviewable in a PR.
+
+`;` and not `&&`: a failure in the reminders run must not stop the nudge, and
+both commands log their own completion line so the logs still say which ran.
 
 Nudges patients holding an unused Appointment Pass visit three days before the
 pass lapses. Push only — a WhatsApp version needs a new Meta template, which is
 a manual submission (see ROADMAP item 14).
 
-Idempotent through `expiry_reminder_sent`, so the schedule can be as frequent
-as you like without a patient ever being nudged twice. Runs in one query and
-touches nothing but that flag.
+Idempotent through `expiry_reminder_sent`, so running every 10 minutes never
+nudges a patient twice. One narrow query, and it writes nothing but that flag.
 """
 import logging
 from datetime import timedelta
