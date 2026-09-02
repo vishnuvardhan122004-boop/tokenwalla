@@ -1504,13 +1504,49 @@ on its own. All four are fixed on `feat/pass-refund-fairness`.
    `expiry_extended_at` so it happens **once** — otherwise book-and-cancel keeps
    a pass alive forever and the expiry the promo earns on never comes.
 
-**Also added:** an expiry nudge 3 days out (`send_pass_expiry_reminders`, hourly,
+**Also added:** an expiry nudge 3 days out (`send_pass_expiry_reminders`,
 idempotent through `expiry_reminder_sent`) — **push only**, because WhatsApp
 needs a new Meta template and that is a manual submission. A patient without the
 app, or with notifications off, hears nothing; a template is the follow-up.
-**The cron is NOT wired yet** — `railway.pass-expiry.cron.json` is in the repo,
-but a Railway cron service still has to be created for it, the same way
-`payouts.cron` was.
+
+**It rides on the EXISTING reminders cron, every 10 minutes**, rather than
+having its own service — `backend/railway.cron.json` now runs
+`send_appointment_reminders; send_pass_expiry_reminders`. `;` not `&&`, so a
+failure in one cannot stop the other, and both log their own completion line.
+
+**Why not its own cron service:** Railway **closed config-as-code to new
+services on 2026-08-28**. A dedicated `pass-expiry.cron` could only be
+configured by hand in the dashboard, with its start command and schedule living
+nowhere the repo can see them. Sharing a cron that is already declared in this
+repo keeps the whole schedule reviewable in a PR. A half-created service
+(`invigorating-light`) was discarded rather than left staged.
+
+### 14b. Config-as-code dies on 2026-12-01 🔴 — found 2026-09-02, not started
+
+Railway's service settings now carry: *"Config as Code is deprecated… Existing
+config files keep working until **2026-12-01**. Starting 2026-08-28, services
+that have never used Config as Code cannot opt in."*
+
+**Both cron services are configured entirely from config files** —
+`backend/railway.cron.json` (`send_appointment_reminders`, every 10 min, and now
+the pass nudge with it) and `backend/railway.payouts.cron.json`
+(`run_daily_payouts`, 15:00 UTC). After 2026-12-01 those files stop being read.
+What happens then is not documented as "keeps the last value" — assume the
+schedule and start command need to exist somewhere else before that date.
+
+**Before December:** move both crons to whatever Railway's Infrastructure-as-Code
+replacement is, or record their settings in the dashboard and delete the files
+so nothing looks configured by a file that is no longer read. Whichever way it
+goes, **the settings must not end up only in a dashboard nobody can diff** —
+that is how a payout cron silently stops running. The exact values today:
+
+| Service | Root | Start command | Schedule |
+|---|---|---|---|
+| `send_appointment_reminders` | `/backend` | `python manage.py send_appointment_reminders; python manage.py send_pass_expiry_reminders` | `*/10 * * * *` |
+| `payouts.cron` | `/backend` | `python manage.py run_daily_payouts` | `0 15 * * *` |
+
+Both: repo `vishnuvardhan122004-boop/tokenwalla`, branch `main`, region
+Southeast Asia (Singapore), restart policy Never, all 18 shared variables.
 
 Four product decisions behind these, agreed 2026-09-02: refund only the unused
 part · push-only nudge · reopen for 7 days on a late cancel · the free visit
