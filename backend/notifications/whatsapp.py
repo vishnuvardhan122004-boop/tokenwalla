@@ -246,7 +246,7 @@ def send_appointment_reminder(booking):
         booking.save(update_fields=['reminder_sent'])
 
 
-def send_booking_cancelled(booking, refund_info=None):
+def send_booking_cancelled(booking, refund_info=None, pass_result=None):
     """Confirm a cancellation to the patient, in writing, with the refund amount.
 
     Money moved on this one and the tiered percentage is rarely 100%, so the
@@ -267,9 +267,20 @@ def send_booking_cancelled(booking, refund_info=None):
     if not getattr(user, 'whatsapp_opt_in', True):
         return
 
+    # {{6}} is pre-rendered free text, so the pass sentence rides along without
+    # needing a second Meta template — see payments.pass_utils.cancellation_line.
+    from payments.pass_utils import cancellation_line
+
     info = refund_info or {}
+    pass_line = cancellation_line(pass_result).rstrip('.')
     if info.get('refunded'):
         refund_line = f'A refund of ₹{info.get("amount", "0")} will reach you in 5-7 working days'
+        if pass_line:
+            refund_line += f'. {pass_line}'
+    elif pass_line:
+        # A pass visit costs ₹0 — "no refund was due" would be the only thing
+        # this message said, and the patient would think the visit was lost.
+        refund_line = pass_line
     else:
         refund_line = 'No refund was due on this booking'
 

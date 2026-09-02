@@ -195,9 +195,15 @@ export default function MyBookings() {
   };
 
   const handleCancel = async (booking) => {
-    const consequence = booking.uses_pass
+    // The two sides of a pass need opposite warnings: cancelling a free visit
+    // hands the credit back, cancelling the booking that BOUGHT the pass ends
+    // the pass and refunds only the part nobody has spent.
+    const consequence = booking.pass_role === 'redeemed'
       ? 'The visit goes back on your Appointment Pass.'
-      : 'Refunds are processed within 5–7 business days.';
+      : booking.pass_role === 'purchase'
+        ? 'This ends your Appointment Pass — any unused free visit goes with it, '
+          + 'and only the unused part is refunded.'
+        : 'Refunds are processed within 5–7 business days.';
     if (!window.confirm(`Cancel appointment with ${providerLabel(booking.doctor_name, booking.provider_kind)}?\n\n${consequence}`)) return;
     setCancelling(booking.id);
     try {
@@ -674,9 +680,11 @@ export default function MyBookings() {
                         <div>
                           <div className="mb-action-title"><i className="bi bi-x-circle me-1" />Cancel Appointment</div>
                           <div className="mb-action-desc">
-                            {booking.uses_pass
+                            {booking.pass_role === 'redeemed'
                               ? 'Cancel before your turn · the visit goes back on your pass'
-                              : 'Cancel before your turn · Refund in 5–7 days'}
+                              : booking.pass_role === 'purchase'
+                                ? 'Cancel before your turn · this ends your pass'
+                                : 'Cancel before your turn · Refund in 5–7 days'}
                           </div>
                         </div>
                         <button

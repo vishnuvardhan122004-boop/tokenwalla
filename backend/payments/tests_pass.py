@@ -419,3 +419,180 @@ class PassCancellationTests(PassWorldMixin, TestCase):
             r = self.client.patch(f'/api/bookings/cancel/{b.id}/', {}, format='json')
         self.assertEqual(r.status_code, 200)
         mock_refund.assert_not_called()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Refunding a pass purchase — only what nobody has spent
+# ─────────────────────────────────────────────────────────────────────────────
+@override_settings(PASS_ENABLED=True)
+@mock.patch('bookings.views._whatsapp_async', lambda fn, b, label: None)
+@mock.patch('payments.views._dispatch_booking_notifications', lambda b: None)
+class PassRefundShareTests(PassWorldMixin, TestCase):
+    """₹35 buys two visits' service fee. Refunding the whole tier on the paid
+    booking while the free visit still stands pays for a visit we are going to
+    deliver — buy, redeem, cancel, keep the free one, pocket the difference."""
+
+    def setUp(self):
+        self.make_actors(fee=120)
+
+    def _buy(self, slot='09:00 AM'):
+        with mock.patch('payments.views.confirm_order_paid') as confirm:
+            confirm.return_value = (True, 'rzp_buy', Decimal('35.00'),
+                                    {'plan': 'booking', 'doctor_fee': '120',
+                                     'user_id': str(self.user.id),
+                                     'collection_mode': 'SERVICE_ONLY', 'pass': 'buy'})
+            r = self.client.post('/api/payment/verify/', {
+                'order_id': 'o1',
+                'booking': {'doctorId': self.doctor.id, 'date': FUTURE_DATE, 'slot': slot},
+            }, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        return Booking.objects.get(payment_id='rzp_buy')
+
+    def _cancel(self, booking):
+        with mock.patch('payments.razorpay_utils.refund_payment',
+                        return_value={'id': 'rf'}) as refund:
+            r = self.client.patch(f'/api/bookings/cancel/{booking.id}/', {}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        return r.json(), refund
+
+    def test_nothing_spent_refunds_the_whole_tier(self):
+        purchase = self._cancel(self._buy())
+        body, refund = purchase
+        # 70% of the full ₹28.16 platform share.
+        self.assertEqual(refund.call_args.kwargs['amount_rupees'], Decimal('19.71'))
+
+    def test_free_visit_already_booked_halves_the_refund(self):
+        purchase = self._buy()
+        r = self.client.post('/api/payment/pass/redeem/',
+                             {'doctorId': self.doctor.id, 'date': FUTURE_DATE,
+                              'slot': '10:00 AM'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        free = Booking.objects.exclude(pk=purchase.pk).get()
+
+        _, refund = self._cancel(purchase)
+        # One of two visits is still going to be delivered, so only the other
+        # half of the pass fee is refundable: 70% × (28.16 ÷ 2).
+        self.assertEqual(refund.call_args.kwargs['amount_rupees'], Decimal('9.86'))
+
+        # The free booking is untouched — the patient keeps the visit they have.
+        free.refresh_from_db()
+        self.assertEqual(free.status, 'CONFIRMED')
+        # Net ₹25.14 for one visit, against ₹25.37 for a single booking: the
+        # arbitrage that made this worth doing is gone.
+        self.assertAlmostEqual(Decimal('35.00') - Decimal('9.86'), Decimal('25.14'))
+
+    def test_a_cancelled_sibling_does_not_count_as_spent(self):
+        purchase = self._buy()
+        self.client.post('/api/payment/pass/redeem/',
+                         {'doctorId': self.doctor.id, 'date': FUTURE_DATE,
+                          'slot': '10:00 AM'}, format='json')
+        free = Booking.objects.exclude(pk=purchase.pk).get()
+        self._cancel(free)                       # nothing was delivered
+        _, refund = self._cancel(purchase)
+        self.assertEqual(refund.call_args.kwargs['amount_rupees'], Decimal('19.71'))
+
+    def test_an_ordinary_booking_refund_is_unchanged(self):
+        b = Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate() + timedelta(days=3), slot='09:00 AM',
+            token='TW-PLAIN2', status='CONFIRMED', amount=25)
+        Payment.objects.create(booking=b, order_id='o', payment_id='p', amount=25,
+                               status=Payment.PAID, final_amount=Decimal('25.37'),
+                               platform_fee=Decimal('20.00'))
+        _, refund = self._cancel(b)
+        self.assertEqual(refund.call_args.kwargs['amount_rupees'], Decimal('14.00'))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# What the patient is actually told, and the late-cancel window
+# ─────────────────────────────────────────────────────────────────────────────
+@override_settings(PASS_ENABLED=True)
+@mock.patch('bookings.views._whatsapp_async', lambda fn, b, label: None)
+@mock.patch('payments.views._dispatch_booking_notifications', lambda b: None)
+class PassCancellationMessageTests(PassWorldMixin, TestCase):
+    def setUp(self):
+        self.make_actors()
+
+    def _pass_booking(self, ap):
+        b = Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate() + timedelta(days=3), slot='09:00 AM',
+            token=f'TW-M{Booking.objects.count()}', status='CONFIRMED',
+            amount=0, appointment_pass=ap)
+        Payment.objects.create(booking=b, order_id='', payment_id='', amount=0,
+                               status=Payment.PAID, final_amount=Decimal('0.00'))
+        return b
+
+    def test_a_free_visit_is_never_told_no_refund_was_due(self):
+        ap = self.give_pass(used=2)
+        b  = self._pass_booking(ap)
+        with mock.patch('notifications.push.push_to_user') as push:
+            self.client.patch(f'/api/bookings/cancel/{b.id}/', {}, format='json')
+        body = push.call_args_list[0].kwargs['body']
+        self.assertNotIn('No refund was due', body)
+        self.assertIn('back on your Appointment Pass', body)
+        self.assertIn('1 visit left', body)
+
+    def test_cancelling_the_purchase_says_the_pass_ended(self):
+        ap = self.give_pass(used=1)
+        b  = self._pass_booking(ap)
+        ap.source_booking = b
+        ap.save(update_fields=['source_booking'])
+        with mock.patch('notifications.push.push_to_user') as push:
+            self.client.patch(f'/api/bookings/cancel/{b.id}/', {}, format='json')
+        self.assertIn('no longer available', push.call_args_list[0].kwargs['body'])
+
+    def test_a_late_cancel_reopens_the_window_once(self):
+        ap = self.give_pass(used=2, days=-1)          # already lapsed
+        b  = self._pass_booking(ap)
+        r  = self.client.patch(f'/api/bookings/cancel/{b.id}/', {}, format='json')
+        ap.refresh_from_db()
+
+        self.assertEqual(r.json()['pass'], 'credit_restored')
+        self.assertTrue(ap.is_active(), 'the credit came back into a dead pass')
+        self.assertGreater(ap.expires_at, timezone.now() + timedelta(days=6))
+        self.assertIsNotNone(ap.expiry_extended_at)
+
+        # Second time round it must NOT reopen again, or book-and-cancel keeps a
+        # pass alive forever and the expiry the promo relies on never happens.
+        ap.expires_at = timezone.now() - timedelta(minutes=1)
+        ap.used_bookings = 2
+        ap.save()
+        b2 = self._pass_booking(ap)
+        self.client.patch(f'/api/bookings/cancel/{b2.id}/', {}, format='json')
+        ap.refresh_from_db()
+        self.assertFalse(ap.is_active())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The expiry nudge
+# ─────────────────────────────────────────────────────────────────────────────
+class PassExpiryReminderTests(PassWorldMixin, TestCase):
+    def setUp(self):
+        self.make_actors()
+
+    def _run(self):
+        from django.core.management import call_command
+        with mock.patch('payments.management.commands.send_pass_expiry_reminders'
+                        '.push_pass_expiring') as push:
+            call_command('send_pass_expiry_reminders')
+        return push
+
+    def test_nudges_an_unused_visit_three_days_out(self):
+        ap = self.give_pass(used=1, days=2)
+        push = self._run()
+        push.assert_called_once()
+        ap.refresh_from_db()
+        self.assertTrue(ap.expiry_reminder_sent)
+
+    def test_never_nudges_twice(self):
+        self.give_pass(used=1, days=2)
+        self._run()
+        self.assertFalse(self._run().called)
+
+    def test_leaves_alone_what_it_should(self):
+        self.give_pass(used=2, days=2)                 # nothing left to spend
+        self.give_pass(used=1, days=20)                # not close enough yet
+        self.give_pass(used=1, days=-1)                # already lapsed
+        self.give_pass(used=1, days=2, voided=True)    # voided
+        self.assertFalse(self._run().called)

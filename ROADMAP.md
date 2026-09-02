@@ -1478,6 +1478,48 @@ there is no `xcodebuild` or `simctl` for a device build, and pointing it at a
 full Xcode needs Vishnu's password. **Before the app half ships, run it once on
 a device or emulator** — the pass card is the only new layout in that screen.
 
+#### 14a. The refund path — four holes found and closed, 2026-09-02
+
+Found by reading the refund path against the pass rather than testing the pass
+on its own. All four are fixed on `feat/pass-refund-fairness`.
+
+1. **A money hole.** Buy the pass, redeem the free visit, cancel the *paid*
+   booking ≥24h out: ₹19.71 back and the free booking still standing — ₹15.29
+   for a ₹25.37 visit, repeatable. Voiding the pass only blocks *future*
+   redemptions; it can't reach a booking already made.
+   **Fixed:** `refunds.unused_pass_share` scales the refundable platform fee by
+   `unused ÷ total_bookings`, so that case now refunds ₹9.86 — a net ₹25.14
+   against ₹25.37 for a single visit. Nothing spent still refunds the full
+   ₹19.71, and a cancelled sibling doesn't count as consumed.
+2. **A ₹0 visit was told "No refund was due on this booking."** True about the
+   money, silent about the credit going back. **Fixed:** both push and WhatsApp
+   render `pass_utils.cancellation_line`. No new Meta template — the WhatsApp
+   refund line is a pre-rendered free-text param.
+3. **Cancelling the purchase silently killed the remaining free visit.**
+   **Fixed:** the same line says the pass ended, and `pass_role` on the booking
+   serializer lets the web dialog warn *before* the click — `uses_pass` alone
+   was true for both sides and promised a credit back either way.
+4. **A credit returned into a lapsed pass was dead on arrival.**
+   **Fixed:** a late cancellation reopens the window for 7 days, stamped in
+   `expiry_extended_at` so it happens **once** — otherwise book-and-cancel keeps
+   a pass alive forever and the expiry the promo earns on never comes.
+
+**Also added:** an expiry nudge 3 days out (`send_pass_expiry_reminders`, hourly,
+idempotent through `expiry_reminder_sent`) — **push only**, because WhatsApp
+needs a new Meta template and that is a manual submission. A patient without the
+app, or with notifications off, hears nothing; a template is the follow-up.
+**The cron is NOT wired yet** — `railway.pass-expiry.cron.json` is in the repo,
+but a Railway cron service still has to be created for it, the same way
+`payouts.cron` was.
+
+Four product decisions behind these, agreed 2026-09-02: refund only the unused
+part · push-only nudge · reopen for 7 days on a late cancel · the free visit
+stays usable immediately (the refund fix removes the abuse, so the family
+use-case survives).
+
+Migration `payments.0013` adds two columns, both nullable/defaulted. 429 backend
+tests (42 in `tests_pass.py`), 44 web.
+
 **Still open, both for Vishnu:** the −₹11.84 promo budget above, and whether the
 CA needs to answer GST on a pass sold as an advance (invoice raised in full at
 purchase, the second service delivered up to 30 days later). The build assumes
