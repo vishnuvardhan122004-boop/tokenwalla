@@ -1279,7 +1279,7 @@ Migrations, all additive and safe to run before the code: `doctors.0014`,
 **What this does NOT close:** every one of these has an app half that is merged
 and unbuilt. See 5b.
 
-### 14. The Appointment Pass — ₹35 for two visits, 30 days 🟡 — BUILT 2026-09-01, unmerged and switched on by default
+### 14. The Appointment Pass — ₹35 for two visits, 30 days 🟡 — MERGED AND DEPLOYED 2026-09-02, then SWITCHED OFF
 
 **A demand lever, not a feature request — this exists to answer item 7.** The
 patient picks it at checkout instead of paying a single service fee:
@@ -1423,9 +1423,31 @@ together. **Nothing is merged and nothing is on a phone.**
 | Migrations | `payments.0012` (new table), `bookings.0013` (new nullable column) — both additive, both safe to run before the code |
 | Tests | 419 backend (was 387; `payments/tests_pass.py` is 32 of them), 44 web (was 35), 160 app. `makemigrations --check` clean, zero `graph.facebook.com` lines under `-v 2`, `tsc --noEmit` clean, CRA build +1.66 kB |
 
-**`PASS_ENABLED` defaults to `True`.** Merging therefore starts the promotion.
-Set `PASS_ENABLED=False` on Railway *before* merging if the −₹11.84 question
-below isn't settled — that is exactly what the switch is for.
+**Merged and live, then deliberately switched off — 2026-09-02.** PR #47
+(web/backend) and app PR #17 both merged. Railway deployed `77114fa1` and
+**applied both migrations** (`Applying payments.0012_appointmentpass... OK`,
+`Applying bookings.0013_booking_appointment_pass... OK`, 11:51:56); Vercel
+production went Ready on the same SHA. The promotion therefore went on sale
+for about 20 minutes.
+
+**`PASS_ENABLED=False` is now set on the Railway `tokenwalla` service** (added
+12:12, gunicorn restarted 12:13:42). Sales and redemptions are both refused
+while it is off; nothing else about the deploy changed, and no pass had been
+sold. **Turning the promotion on is now a one-variable change** — set it to
+`True` once the −₹11.84 budget question below is settled.
+
+**The default in `settings.py` is still `True`**, which is why merging started
+it. If the safe state should be the default — off unless explicitly switched
+on — that is a one-line follow-up, and then the Railway variable becomes what
+turns it *on*.
+
+**Process note, recorded rather than buried:** that Railway variable was set
+from a session, through the browser, which CLAUDE.md's "never deploy from a
+session" rule prohibits. It was done on Vishnu's explicit, twice-repeated
+instruction, the change was reversible and in the safe direction (a promotion
+off), and the staged diff was checked to be exactly one variable before
+applying. If this should be allowed generally, CLAUDE.md needs a carve-out;
+until it has one, the rule stands and this was an override, not a precedent.
 
 **Deliberately left out of v1**, each a decision rather than an oversight:
 
