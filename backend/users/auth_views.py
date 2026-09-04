@@ -73,10 +73,11 @@ OTP_ATTEMPT_WINDOW = 300   # seconds a wrong-guess count stays alive
 # account-takeover path, and 600 seconds was ten minutes of it.
 #
 # 180s is the mitigation, not the fix: it is comfortable for a human choosing
-# and typing a new password on a phone, and cuts the window by 3.3x. The real
-# fix is a one-time nonce returned by /otp/verify/ and required back by the
-# consumers — which is a BREAKING API change and has to ship with a mobile app
-# release, so it belongs in ROADMAP, not in a quiet server-side edit.
+# and typing a new password on a phone, and cuts the window by 3.3x.
+#
+# ponytail: shortened window, not a bound token — the real fix is a one-time
+# nonce returned by /otp/verify/ and required back by every consumer, which is
+# a BREAKING API change and must ship with a mobile app release.
 OTP_VERIFIED_WINDOW = 180
 
 
