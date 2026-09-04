@@ -306,7 +306,12 @@ class AllBookingsView(APIView):
             .order_by('-created')
         )
         page       = paginator.paginate_queryset(qs, request)
-        serializer = BookingSerializer(page, many=True, context={'request': request})
+        # Without the map this took get_queue_position's slow path — one query
+        # per CONFIRMED booking on the page, so up to 50 extra per request.
+        serializer = BookingSerializer(
+            page, many=True,
+            context={'request': request, 'queue_map': build_queue_map(page)},
+        )
         return paginator.get_paginated_response(serializer.data)
 
 

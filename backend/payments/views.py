@@ -31,7 +31,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
 from bookings.models import Booking
-from bookings.serializers import BookingSerializer
+from bookings.serializers import BookingSerializer, build_queue_map
 # One definition of "can this slot take another booking", shared with the
 # read-only availability endpoint. See CAPACITY.md §1 for why this has to be
 # enforced here and not just in the UI.
@@ -317,6 +317,17 @@ class CreateOrderView(APIView):
                           .get(pk=int(resched_id), user=request.user))
             except (Booking.DoesNotExist, ValueError, TypeError):
                 return Response({'message': 'Booking not found.'}, status=404)
+            # Mirror EVERY precondition _handle_reschedule enforces, not just
+            # the slot. Checking capacity but not status let a patient pay ₹5 to
+            # reschedule a CANCELLED or COMPLETED booking and be refused after
+            # capture — the exact charge-then-refuse shape this pre-check exists
+            # to prevent, reintroduced through the door left open.
+            if target.status != 'CONFIRMED':
+                return Response(
+                    {'message': f'Cannot reschedule a booking with status '
+                                f'"{target.status}". Only confirmed bookings can '
+                                f'be rescheduled.'},
+                    status=400)
             provider = target.provider
             if provider is None:
                 return Response({'message': 'This booking cannot be rescheduled.'},
@@ -1158,7 +1169,14 @@ class AdminReportsView(APIView):
         waiting   = all_b.filter(status='CONFIRMED').count()
 
         recent   = all_b[:500]
-        bookings = BookingSerializer(recent, many=True, context={'request': request}).data
+        # The map matters most here: 500 rows with no map meant up to 500
+        # extra queries from get_queue_position's slow path. build_queue_map
+        # takes a sliced queryset now (it used to try to re-filter its input,
+        # which is why this call site passed nothing).
+        bookings = BookingSerializer(
+            recent, many=True,
+            context={'request': request, 'queue_map': build_queue_map(recent)},
+        ).data
 
         return Response({
             'total':     total,

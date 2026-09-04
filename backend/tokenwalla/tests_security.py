@@ -665,3 +665,72 @@ class LoginBruteForceTests(TestCase):
                                   {'mobile': mobile, 'password': 'H0spital-Str0ng-2026'},
                                   format='json')
         self.assertEqual(locked.status_code, 429)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The throttle key must not be forgeable
+# ─────────────────────────────────────────────────────────────────────────────
+@override_settings(CACHES=LOCMEM_CACHE)
+class ThrottleIdentSpoofTests(TestCase):
+    """Every per-IP limit keys on BaseThrottle.get_ident.
+
+    NUM_PROXIES was never set, and DRF's default of None makes get_ident return
+    the WHOLE X-Forwarded-For header — which the client controls. A new header
+    value per request meant a new bucket per request, so the OTP send burst, the
+    2000/day paid-SMS ceiling, the anon rate and the ADMIN_SETUP_KEY brute-force
+    guard were all bypassable by anyone who could set a header.
+
+    These pin the identity, not the rate: the rates are tuned elsewhere and
+    change, but a forgeable key makes all of them decorative.
+    """
+
+    def setUp(self):
+        cache.clear()
+        from users.auth_views import OTPRateThrottle
+        self.throttle = OTPRateThrottle()
+        self.factory = __import__('rest_framework.test', fromlist=['APIRequestFactory']).APIRequestFactory()
+
+    def _ident(self, xff, remote='203.0.113.9'):
+        req = self.factory.post('/api/auth/otp/request/', {}, format='json')
+        req.META['REMOTE_ADDR'] = remote
+        if xff is not None:
+            req.META['HTTP_X_FORWARDED_FOR'] = xff
+        return self.throttle.get_ident(req)
+
+    def test_a_spoofed_prefix_cannot_mint_a_new_bucket(self):
+        # Railway appends the real address; the attacker chooses the prefix.
+        real = '198.51.100.7'
+        idents = {self._ident(f'{fake}, {real}') for fake in
+                  ('10.0.0.1', '10.0.0.2', '10.0.0.3', 'not-an-ip', '')}
+        self.assertEqual(
+            idents, {real},
+            'Every spoofed prefix must collapse to the address Railway appended '
+            '— otherwise one host gets unlimited buckets.')
+
+    def test_two_genuinely_different_clients_still_separate(self):
+        # The fix must not over-group: real clients need their own buckets, or
+        # one abuser 429s the whole platform.
+        self.assertNotEqual(self._ident('198.51.100.7'), self._ident('198.51.100.8'))
+
+    def test_no_forwarded_header_falls_back_to_the_socket(self):
+        # Local dev and any direct connection.
+        self.assertEqual(self._ident(None, remote='127.0.0.1'), '127.0.0.1')
+
+    def test_the_daily_sms_ceiling_keys_on_the_unforgeable_ident(self):
+        # _reserve_otp_send_for_ip reuses get_ident, so it inherits the fix.
+        # Same real client behind different spoofed prefixes must share ONE
+        # counter, which is the whole point of the ceiling.
+        from users.auth_views import _reserve_otp_send_for_ip
+
+        def req(fake):
+            r = self.factory.post('/api/auth/otp/request/', {}, format='json')
+            r.META['REMOTE_ADDR'] = '203.0.113.9'
+            r.META['HTTP_X_FORWARDED_FOR'] = f'{fake}, 198.51.100.7'
+            return r
+
+        with override_settings(OTP_MAX_SENDS_PER_IP_PER_DAY=3):
+            self.assertTrue(_reserve_otp_send_for_ip(req('10.0.0.1')))
+            self.assertTrue(_reserve_otp_send_for_ip(req('10.0.0.2')))
+            self.assertTrue(_reserve_otp_send_for_ip(req('10.0.0.3')))
+            # Fourth send from the SAME real client, fourth different spoof.
+            self.assertFalse(_reserve_otp_send_for_ip(req('10.0.0.4')))

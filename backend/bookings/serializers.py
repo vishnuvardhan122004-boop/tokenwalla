@@ -93,45 +93,65 @@ class BookingSerializer(serializers.ModelSerializer):
             return None
 
 
-def build_queue_map(bookings_qs):
+def build_queue_map(bookings):
     """
-    Build {booking_id: position} for all bookings in a queryset
-    using a single extra DB query instead of N queries.
+    Build {booking_id: position} for a set of bookings in ONE query, instead of
+    the one-query-per-row slow path in BookingSerializer.get_queue_position.
 
-    Call this in views before passing to the serializer context:
+    Accepts anything iterable of Booking objects — a QuerySet, a paginator page,
+    or an already-sliced queryset.
+
+    That tolerance is the whole point. This used to require a QuerySet it could
+    re-filter (`.values_list(...)`, `.filter(status=...)`), which quietly
+    excluded the two callers that most needed it: AllBookingsView hands the
+    serializer a paginator PAGE (a list — `.values_list` raises AttributeError)
+    and AdminReportsView hands it `qs[:500]` (a slice — filtering after slicing
+    raises "Cannot filter a query once a slice has been taken"). Neither could
+    call this, so both silently fell back to a query per row — 50 and 500 of
+    them respectively. Deriving the provider ids and the in-progress ids from
+    the rows in memory removes the constraint and drops 3 queries to 1.
+
+    Call it in the view and pass the result through the serializer context:
         queue_map = build_queue_map(bookings)
         BookingSerializer(bookings, many=True, context={'queue_map': queue_map})
     """
+    rows = list(bookings)          # evaluate once, whatever shape it arrived in
+    if not rows:
+        return {}
+
     # Group by PROVIDER — (doctor_id, scan_id) — not doctor alone. Keying on
     # doctor_id only would give every scan booking the key (None, date) and
     # queue patients at unrelated centres into one another's positions.
-    provider_ids = bookings_qs.values_list('doctor_id', 'scan_id').distinct()
-    doctor_ids = {d for d, _ in provider_ids if d is not None}
-    scan_ids   = {s for _, s in provider_ids if s is not None}
-
-    # Fetch all waiting bookings for those providers, ordered for queue position
-    active = list(
-        Booking.objects
-        .filter(
-            Q(doctor_id__in=doctor_ids) | Q(scan_id__in=scan_ids),
-            status='CONFIRMED',
-        )
-        .order_by('doctor_id', 'scan_id', 'date', 'created')
-        .values('id', 'doctor_id', 'scan_id', 'date')
-    )
+    doctor_ids = {b.doctor_id for b in rows if b.doctor_id is not None}
+    scan_ids   = {b.scan_id   for b in rows if b.scan_id   is not None}
 
     queue_map = {}
 
-    # Build position counters per (provider, date) group
-    counters = {}
-    for row in active:
-        key = (row['doctor_id'], row['scan_id'], str(row['date']))
-        counters[key] = counters.get(key, 0) + 1
-        queue_map[row['id']] = counters[key]
+    # Every CONFIRMED booking for those providers — not just the ones in `rows`.
+    # A patient's position depends on everyone ahead of them, including
+    # bookings that fall outside the current page.
+    if doctor_ids or scan_ids:
+        active = (
+            Booking.objects
+            .filter(
+                Q(doctor_id__in=doctor_ids) | Q(scan_id__in=scan_ids),
+                status='CONFIRMED',
+            )
+            .order_by('doctor_id', 'scan_id', 'date', 'created')
+            .values('id', 'doctor_id', 'scan_id', 'date')
+        )
 
-    # in_progress bookings → position 0
-    in_prog_ids = bookings_qs.filter(status='IN_PROGRESS').values_list('id', flat=True)
-    for bid in in_prog_ids:
-        queue_map[bid] = 0
+        # Position counters per (provider, date) group
+        counters = {}
+        for row in active:
+            key = (row['doctor_id'], row['scan_id'], str(row['date']))
+            counters[key] = counters.get(key, 0) + 1
+            queue_map[row['id']] = counters[key]
+
+    # in_progress bookings → position 0. Read off the rows we already hold
+    # rather than asking the database a second time.
+    for b in rows:
+        if b.status == 'IN_PROGRESS':
+            queue_map[b.id] = 0
 
     return queue_map
