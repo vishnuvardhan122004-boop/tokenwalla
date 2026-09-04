@@ -734,3 +734,21 @@ class ThrottleIdentSpoofTests(TestCase):
             self.assertTrue(_reserve_otp_send_for_ip(req('10.0.0.3')))
             # Fourth send from the SAME real client, fourth different spoof.
             self.assertFalse(_reserve_otp_send_for_ip(req('10.0.0.4')))
+
+    def test_health_reports_the_resolved_ident_for_verification(self):
+        # NUM_PROXIES cannot be verified from the code — it depends on the real
+        # deployment. /health/ echoes back what the throttles resolved so the
+        # setting can be confirmed against production instead of assumed.
+        res = self.client.get(
+            '/health/', HTTP_X_FORWARDED_FOR='10.0.0.1, 198.51.100.7')
+        self.assertEqual(res.status_code, 200)
+        proxy = res.json()['proxy']
+        self.assertEqual(proxy['resolved_ident'], '198.51.100.7')
+        self.assertEqual(proxy['chain_length'], 2)
+        self.assertEqual(proxy['num_proxies'], 1)
+
+    def test_health_does_not_echo_the_raw_forwarded_header(self):
+        # The count diagnoses the setting; the chain itself is not echoed.
+        res = self.client.get(
+            '/health/', HTTP_X_FORWARDED_FOR='10.0.0.1, 198.51.100.7')
+        self.assertNotIn('10.0.0.1', res.content.decode())
