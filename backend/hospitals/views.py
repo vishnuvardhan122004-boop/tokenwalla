@@ -75,7 +75,11 @@ class HospitalListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        hospitals = Hospital.objects.filter(status='active').order_by('name')
+        # prefetch photos: HospitalSerializer.get_gallery reads obj.photos.all(),
+        # which without this is one query PER HOSPITAL on the public browse
+        # path — the list every patient loads before booking anything.
+        hospitals = (Hospital.objects.filter(status='active')
+                     .prefetch_related('photos').order_by('name'))
 
         # Unknown/absent value ⇒ hospitals. An old client sends nothing; a typo
         # must not silently widen the list, so only the exact opt-in counts.
@@ -621,7 +625,9 @@ class HospitalAdminListView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
-        hospitals = Hospital.objects.all().order_by('name')
+        # Same gallery N+1, and this one is unpaginated and includes pending
+        # and rejected rows, so N is strictly larger than the public list's.
+        hospitals = Hospital.objects.all().prefetch_related('photos').order_by('name')
         return Response(HospitalSerializer(hospitals, many=True).data)
 
 
