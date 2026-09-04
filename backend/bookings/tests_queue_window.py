@@ -119,3 +119,51 @@ class QueueWindowTests(TestCase):
             name='Other', city='Hyd', mobile='9000000009', password='x')
         res = self.client.get(f'/api/bookings/queue/{other.id}/')
         self.assertEqual(res.status_code, 403)
+
+
+class QueueQueryCountTests(QueueWindowTests):
+    QUERY_BUDGET = 7
+    """The queue must cost a FLAT number of queries, not one per patient.
+
+    This endpoint is polled every 10 seconds by every reception desk that has
+    the dashboard open, which makes it the busiest read in the product
+    (CAPACITY.md §2). It was serialising without a `queue_map`, so
+    BookingSerializer.get_queue_position took its slow path — one query per
+    waiting patient — and `select_related` omitted hospital / scan /
+    appointment_pass, which the serializer reads on every row.
+
+    The assertion that matters is not the absolute number, it is that adding
+    patients does not add queries. If this starts failing after a serializer
+    change, the fix is to feed the new field through select_related — not to
+    raise the number.
+    """
+
+    def test_query_count_does_not_grow_with_the_queue(self):
+        for _ in range(3):
+            self.book(days=0)
+        with self.assertNumQueries(self.QUERY_BUDGET):
+            self.get_queue()
+
+        # Four times the patients, same query count.
+        for _ in range(9):
+            self.book(days=0)
+        with self.assertNumQueries(self.QUERY_BUDGET):
+            self.get_queue()
+
+    def test_a_scan_booking_costs_no_extra_queries(self):
+        from scans.models import Scan
+        centre = Hospital.objects.create(
+            name='Centre', city='Hyd', mobile='9000000077', password='x',
+            status='active', kind=Hospital.SCAN_CENTER)
+        scan = Scan.objects.create(
+            center=centre, name='MRI Brain', modality='MRI', price=2000,
+            slots=['09:00 AM'], days=['Mon'])
+        for i in range(3):
+            self._n += 1
+            Booking.objects.create(
+                user=self.patient, doctor=None, scan=scan,
+                hospital=self.hospital, date=self.today, slot='09:00 AM',
+                token=f'TW-QS{self._n}', status=Booking.CONFIRMED, amount=2000)
+
+        with self.assertNumQueries(self.QUERY_BUDGET):
+            self.get_queue()

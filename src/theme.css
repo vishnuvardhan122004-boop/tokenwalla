@@ -11,6 +11,14 @@
  * break pages. Only surface treatment: radius, shadow, colour, transition.
  *
  * Loaded once from App.js, after Bootstrap so it wins on specificity ties.
+ *
+ * This file is the SOURCE for the tokens it declares. index.css used to declare
+ * its own blue, shadows and radii too, which made it a second polish layer and
+ * put two "primary" blues on the same page (Bootstrap components rendered these
+ * values, hand-rolled ones rendered those). Its --blue-600/700, --gray-600,
+ * --color-border, --shadow-sm/md and --radius-md/lg now alias the --tw-* names
+ * below. Change a value HERE and both halves of the site follow; adding a new
+ * shared token means adding it here and aliasing it there, never the reverse.
  */
 
 :root {

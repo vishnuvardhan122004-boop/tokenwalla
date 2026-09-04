@@ -337,6 +337,100 @@ class VerifyRescheduleTests(WorldMixin, TestCase):
         self.assertTrue(r.json()['success'])
         self.assertEqual(ReschedulePayment.objects.filter(payment_id='rzp_rs_1').count(), 1)
 
+    # ── Capacity + cutoff on the PAID reschedule ─────────────────────────────
+    # This path validated only `slot in doctor.slots`, so ₹5 bought a seat in a
+    # slot that was already full, or one that had already started. The free
+    # reschedule (bookings.views.RescheduleBookingView) always checked capacity;
+    # this one never did, and nothing covered it.
+
+    def _reschedule(self, date, slot, ref='rzp_rs_new'):
+        with mock.patch('payments.views.confirm_order_paid') as m:
+            m.return_value = (True, ref, Decimal('5.00'), {'plan': 'reschedule'})
+            return self.client.post('/api/payment/verify/', {
+                'order_id': 'order_rs_new',
+                'booking': {'booking_id': self.booking.id, 'date': date, 'slot': slot},
+            }, format='json')
+
+    def test_reschedule_into_a_full_slot_is_refused(self):
+        self.doctor.max_per_slot = 1
+        self.doctor.save(update_fields=['max_per_slot'])
+        # Someone else already holds the only seat at 10:00 AM.
+        Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=FUTURE_DATE, slot='10:00 AM', token='TW-RS-FULL',
+            status='CONFIRMED')
+
+        r = self._reschedule(FUTURE_DATE, '10:00 AM')
+
+        self.assertEqual(r.status_code, 409)
+        self.assertFalse(r.json()['success'])
+        # The booking keeps its ORIGINAL slot — nothing was moved.
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.slot, '09:00 AM')
+        # And no ReschedulePayment was written, so the SAME order_id can be
+        # redeemed again against a different slot. That is what makes the
+        # ₹5 a retryable credit rather than a loss.
+        self.assertFalse(ReschedulePayment.objects.filter(payment_id='rzp_rs_new').exists())
+
+    def test_refused_reschedule_can_be_retried_free_on_the_same_order(self):
+        self.doctor.max_per_slot = 1
+        self.doctor.save(update_fields=['max_per_slot'])
+        Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=FUTURE_DATE, slot='10:00 AM', token='TW-RS-FULL2',
+            status='CONFIRMED')
+
+        self.assertEqual(self._reschedule(FUTURE_DATE, '10:00 AM').status_code, 409)
+        # Same order, different slot — no second payment involved.
+        r = self._reschedule(FUTURE_DATE, '09:00 AM')
+
+        self.assertEqual(r.status_code, 200)
+        self.booking.refresh_from_db()
+        self.assertEqual((str(self.booking.date), self.booking.slot),
+                         (FUTURE_DATE, '09:00 AM'))
+        self.assertEqual(ReschedulePayment.objects.filter(payment_id='rzp_rs_new').count(), 1)
+
+    def test_reschedule_into_a_past_date_is_refused(self):
+        r = self._reschedule(str(timezone.localdate() - timedelta(days=1)), '10:00 AM')
+
+        self.assertEqual(r.status_code, 409)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.slot, '09:00 AM')
+
+    def test_reschedule_onto_the_bookings_own_slot_is_allowed(self):
+        # max_per_slot=1 and the booking itself occupies 09:00 AM. Without
+        # exclude_pk it would count itself and refuse its own slot.
+        self.doctor.max_per_slot = 1
+        self.doctor.save(update_fields=['max_per_slot'])
+        self.booking.date = FUTURE_DATE
+        self.booking.save(update_fields=['date'])
+
+        r = self._reschedule(FUTURE_DATE, '09:00 AM')
+
+        self.assertEqual(r.status_code, 200)
+
+    def test_rescheduling_a_scan_booking_does_not_crash(self):
+        # Reading `.doctor.slots` on a scan booking raised AttributeError
+        # (doctor is None) and 500'd AFTER the ₹5 was captured.
+        from scans.models import Scan
+        centre = Hospital.objects.create(
+            name='Centre', city='Hyd', mobile='9000000009', password='x',
+            status='active', kind=Hospital.SCAN_CENTER)
+        scan = Scan.objects.create(
+            center=centre, name='MRI Brain', modality='MRI', price=2000,
+            slots=['09:00 AM', '10:00 AM'], max_per_slot=1,
+            days=['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+        self.booking.doctor = None
+        self.booking.scan = scan
+        self.booking.hospital = centre
+        self.booking.save(update_fields=['doctor', 'scan', 'hospital'])
+
+        r = self._reschedule(FUTURE_DATE, '10:00 AM')
+
+        self.assertEqual(r.status_code, 200)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.slot, '10:00 AM')
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Salaried doctors — the payout goes to the HOSPITAL's account

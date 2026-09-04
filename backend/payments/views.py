@@ -893,7 +893,7 @@ class VerifyPaymentView(APIView):
 
         # Fetch the booking — must belong to the requesting user
         try:
-            existing_booking = Booking.objects.select_related('doctor', 'hospital').get(
+            existing_booking = Booking.objects.select_related('doctor', 'scan', 'hospital').get(
                 pk=int(booking_id),
                 user=request.user,
             )
@@ -913,16 +913,27 @@ class VerifyPaymentView(APIView):
                 status=400,
             )
 
-        # Validate the new slot against the doctor's configured slots
-        doctor_slots = existing_booking.doctor.slots or []
-        if new_slot not in doctor_slots:
-            return Response(
-                {'success': False, 'message': f'Slot "{new_slot}" is not available for this doctor.'},
-                status=400,
-            )
-
         try:
             with transaction.atomic():
+                # Same capacity + cutoff guard the new-booking path and the free
+                # reschedule already run. This path used to check only
+                # `new_slot in doctor.slots`, so ₹5 bought a seat in a slot that
+                # was already full, or one that had already started — the two
+                # things check_slot_available exists to refuse.
+                #
+                # Locked, and `exclude_pk` so re-picking the booking's current
+                # slot doesn't count it against itself. A scan booking reaches
+                # here too: reading `.doctor.slots` on one raised AttributeError
+                # (doctor is None) and 500'd AFTER the fee was captured.
+                if existing_booking.is_scan:
+                    check_scan_slot_available_locked(
+                        existing_booking.scan_id, new_date, new_slot,
+                        exclude_pk=existing_booking.pk)
+                else:
+                    check_slot_available_locked(
+                        existing_booking.doctor_id, new_date, new_slot,
+                        exclude_pk=existing_booking.pk)
+
                 # Update the booking dates
                 existing_booking.date = new_date
                 existing_booking.slot = new_slot
@@ -960,6 +971,26 @@ class VerifyPaymentView(APIView):
                 },
             })
 
+        except SlotUnavailable as exc:
+            # The ₹5 is captured and stays captured — deliberately. Nothing was
+            # written (the atomic block rolled back), so the booking still holds
+            # its ORIGINAL slot and the patient has lost nothing.
+            #
+            # Crucially, no ReschedulePayment row was created, so this order_id
+            # is still unredeemed: the client can call /verify/ again with the
+            # same order_id and a different slot, and the idempotency check at
+            # the top of post() lets it straight through. The retry is free.
+            # Refunding ₹5 instead would cost more in gateway fees than it
+            # returns, and would leave the patient with no reschedule at all.
+            logger.info('Reschedule of booking %s refused (%s); order %s left '
+                        'unredeemed so the patient can retry free.',
+                        existing_booking.id, exc.reason, order_id)
+            return Response({
+                'success': False,
+                'message': f'{exc.message} Your ₹{plan_info["fee"]} reschedule fee '
+                           f'is still credited — pick another slot to use it.',
+                'retryable': True,
+            }, status=409)
         except Exception as exc:
             logger.exception('Unexpected error in _handle_reschedule: %s', exc)
             return Response({'success': False, 'message': 'Internal error during reschedule.'}, status=500)
@@ -1075,7 +1106,7 @@ class AdminReportsView(APIView):
         all_b = (
             Booking.objects
             .all()
-            .select_related('doctor', 'hospital', 'user')
+            .select_related('doctor', 'scan', 'hospital', 'user', 'appointment_pass')
             .order_by('-created')
         )
 

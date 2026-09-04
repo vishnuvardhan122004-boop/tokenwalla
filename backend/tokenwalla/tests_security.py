@@ -577,3 +577,91 @@ class PasswordStrengthTests(TestCase):
         self.assertEqual(res.status_code, 400)
         self.assertFalse(Hospital.objects.filter(mobile=mobile).exists())
         self.assertFalse(User.objects.filter(mobile=mobile).exists())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Password brute force — the door left unlocked next to the hardened OTP path
+# ─────────────────────────────────────────────────────────────────────────────
+@override_settings(CACHES=LOCMEM_CACHE)
+class LoginBruteForceTests(TestCase):
+    """Both logins capped the OTP path and nothing else.
+
+    AnonRateThrottle is deliberately loose (300/minute, for CGNAT), the password
+    minimum is 6 characters, and /auth/check-mobile/ confirms which numbers
+    exist — so the password path was brute-forceable online. The cap is counted
+    per MOBILE in the database (users.RateCounter), and it locks the PASSWORD
+    path only: an OTP still gets the real owner in.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        cache.clear()
+        self.mobile = '9333000001'
+        self.user = User.objects.create(
+            username=self.mobile, mobile=self.mobile, role='patient')
+        self.user.set_password('Pat1ent-Str0ng-2026')
+        self.user.save()
+
+    def _login(self, password):
+        return self.client.post(
+            '/api/auth/login/', {'mobile': self.mobile, 'password': password},
+            format='json')
+
+    def test_password_guessing_is_locked_out_after_the_cap(self):
+        from users.auth_views import LOGIN_MAX_ATTEMPTS
+
+        for _ in range(LOGIN_MAX_ATTEMPTS):
+            self.assertEqual(self._login('wrong-guess').status_code, 401)
+
+        # Past the cap the answer changes from "wrong" to "stop".
+        locked = self._login('wrong-guess')
+        self.assertEqual(locked.status_code, 429)
+
+        # And the CORRECT password is refused too — that is the whole point.
+        self.assertEqual(self._login('Pat1ent-Str0ng-2026').status_code, 429)
+
+    @override_settings(TWOFACTOR_API_KEY='')
+    def test_a_locked_account_can_still_log_in_with_an_otp(self):
+        from users.auth_views import LOGIN_MAX_ATTEMPTS
+
+        for _ in range(LOGIN_MAX_ATTEMPTS + 1):
+            self._login('wrong-guess')
+        self.assertEqual(self._login('Pat1ent-Str0ng-2026').status_code, 429)
+
+        # The owner requests an OTP and logs in with it. If this ever fails, the
+        # cap has become a way to lock someone out of their own account.
+        cache.set(f'otp_session:{self.mobile}', '654321', timeout=300)
+        ok = self._login('654321')
+        self.assertEqual(ok.status_code, 200)
+        self.assertIn('access', ok.json())
+
+    def test_a_successful_login_clears_the_counter(self):
+        from users.auth_views import LOGIN_MAX_ATTEMPTS
+
+        for _ in range(LOGIN_MAX_ATTEMPTS - 1):
+            self._login('wrong-guess')
+        self.assertEqual(self._login('Pat1ent-Str0ng-2026').status_code, 200)
+
+        # Counter reset — a fresh run of wrong guesses is needed to lock it.
+        for _ in range(LOGIN_MAX_ATTEMPTS - 1):
+            self.assertEqual(self._login('wrong-guess').status_code, 401)
+
+    def test_hospital_login_shares_the_same_cap(self):
+        from users.auth_views import LOGIN_MAX_ATTEMPTS
+        from django.contrib.auth.hashers import make_password
+
+        mobile = '9333000002'
+        Hospital.objects.create(
+            name='Locked Clinic', city='Hyd', mobile=mobile, status='active',
+            password=make_password('H0spital-Str0ng-2026'))
+
+        for _ in range(LOGIN_MAX_ATTEMPTS):
+            r = self.client.post('/api/hospitals/login/',
+                                 {'mobile': mobile, 'password': 'wrong'},
+                                 format='json')
+            self.assertEqual(r.status_code, 401)
+
+        locked = self.client.post('/api/hospitals/login/',
+                                  {'mobile': mobile, 'password': 'H0spital-Str0ng-2026'},
+                                  format='json')
+        self.assertEqual(locked.status_code, 429)

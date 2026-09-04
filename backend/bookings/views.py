@@ -85,7 +85,7 @@ class MyBookingsView(APIView):
         bookings = (
             Booking.objects
             .filter(user=request.user)
-            .select_related('doctor', 'hospital', 'user')
+            .select_related('doctor', 'scan', 'hospital', 'user', 'appointment_pass')
             .order_by('-created')
         )
         queue_map  = build_queue_map(bookings)
@@ -134,25 +134,40 @@ class HospitalQueueView(APIView):
             Booking.objects
             .filter(hospital_id=hospital_id,
                     date__gte=window_start, date__lte=window_end)
-            .select_related('doctor', 'user')
+            # `hospital`, `scan` and `appointment_pass` were missing, and the
+            # serializer reads all three (hospital_name/hospital_mobile,
+            # provider_name on a scan booking, pass_role). Each was a query per
+            # row on the endpoint every reception desk polls every 10 seconds.
+            .select_related('doctor', 'scan', 'hospital', 'user', 'appointment_pass')
         )
+
+        # Without this the serializer takes get_queue_position's SLOW path —
+        # one query per waiting patient, on every poll. build_queue_map answers
+        # the whole set in three queries flat, and MyBookingsView has always
+        # passed it; this endpoint never did. Only CONFIRMED/IN_PROGRESS rows
+        # carry a position, so the map is built from exactly those.
+        ctx = {
+            'request':   request,
+            'queue_map': build_queue_map(
+                base.filter(status__in=('CONFIRMED', 'IN_PROGRESS'))),
+        }
 
         return Response({
             'waiting':    BookingSerializer(
                 base.filter(status='CONFIRMED').order_by('created'),
-                many=True, context={'request': request}
+                many=True, context=ctx
             ).data,
             'onHold':     BookingSerializer(
                 base.filter(status='ON_HOLD').order_by('created'),
-                many=True, context={'request': request}
+                many=True, context=ctx
             ).data,
             'inProgress': BookingSerializer(
                 base.filter(status='IN_PROGRESS').order_by('created'),
-                many=True, context={'request': request}
+                many=True, context=ctx
             ).data,
             'completed':  BookingSerializer(
                 base.filter(status='COMPLETED').order_by('-created')[:50],
-                many=True, context={'request': request}
+                many=True, context=ctx
             ).data,
         })
 
@@ -287,7 +302,7 @@ class AllBookingsView(APIView):
         qs = (
             Booking.objects
             .all()
-            .select_related('doctor', 'hospital', 'user')
+            .select_related('doctor', 'scan', 'hospital', 'user', 'appointment_pass')
             .order_by('-created')
         )
         page       = paginator.paginate_queryset(qs, request)

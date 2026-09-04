@@ -1,14 +1,31 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Mono:wght@400;500&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=Noto+Sans+Telugu:wght@400;500;600;700;800&family=Noto+Sans+Kannada:wght@400;500;600;700;800&display=swap');
 
-/* ── Design tokens ─────────────────────────────────────────────────────── */
+/* ── Design tokens ───────────────────────────────────────────────────────
+ *
+ * theme.css is the SOURCE for the tokens the two files both have an opinion
+ * about — the brand blue, the muted grey, the hairline, the two shadows and the
+ * two radii. It was written deliberately as the single polish layer, and this
+ * file had quietly become a second one: two different blues (#185FA5 here vs
+ * #1D5FA8 there), two shadow scales and two radius scales, all meaning the same
+ * thing. Bootstrap components already rendered theme.css's values while
+ * hand-rolled components rendered these, so the same "primary" was two colours
+ * on one page.
+ *
+ * The aliases below point this file at theme.css instead. Each carries the
+ * literal it resolves to as a var() fallback, so this stylesheet is still
+ * correct on its own if theme.css ever fails to load. Everything WITHOUT a
+ * counterpart in theme.css — the rest of the blue ramp, the greys, the status
+ * palette, --shadow-lg, --radius-sm/xl — stays declared here, because theme.css
+ * has no opinion on those and inventing one would be a repaint, not a merge.
+ */
 :root {
-  /* Blues */
+  /* Blues — 600 and 700 defer to theme.css; the rest of the ramp lives here. */
   --blue-50:  #E6F1FB;
   --blue-100: #B5D4F4;
   --blue-200: #85B7EB;
   --blue-400: #378ADD;
-  --blue-600: #185FA5;
-  --blue-700: #125291;
+  --blue-600: var(--tw-blue-600, #1D5FA8);
+  --blue-700: var(--tw-blue-700, #174E8C);
   --blue-800: #0C447C;
   --blue-900: #042C53;
 
@@ -18,7 +35,8 @@
   --gray-200: #E2E8F0;
   --gray-400: #94A3B8;
   --gray-500: #7C8CA2;
-  --gray-600: #64748B;
+  /* Same value on both sides already — aliased so it can only ever be one. */
+  --gray-600: var(--tw-muted, #64748B);
   --gray-800: #1E293B;
   --gray-900: #0F172A;
 
@@ -26,7 +44,10 @@
   --color-primary:        var(--blue-600);
   --color-primary-hover:  var(--blue-800);
   --color-primary-light:  var(--blue-50);
-  --color-border:         var(--blue-100);
+  /* theme.css already forces `.border` to --tw-line with !important, so every
+     Bootstrap-bordered element renders that hairline today and hand-rolled
+     ones rendered --blue-100. Aliasing makes them agree. */
+  --color-border:         var(--tw-line, #E7ECF2);
   --color-surface:        #F4F9FF;
   --color-bg:             #FFFFFF;
   --color-text:           var(--gray-900);
@@ -47,15 +68,19 @@
   --color-info-text:    var(--blue-600);
   --color-info-border:  var(--blue-200);
 
-  /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(24,95,165,0.08), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 12px rgba(24,95,165,0.12), 0 2px 4px rgba(0,0,0,0.04);
+  /* Shadows — theme.css's two ("cards rest; things that lift use the second").
+     .card already renders --tw-shadow-sm with !important, so aliasing stops a
+     hand-rolled panel sitting next to a card at a different elevation.
+     --shadow-lg has no counterpart there and stays local. */
+  --shadow-sm: var(--tw-shadow-sm, 0 1px 2px rgba(16,27,42,.04), 0 1px 3px rgba(16,27,42,.05));
+  --shadow-md: var(--tw-shadow-md, 0 6px 16px rgba(16,27,42,.07), 0 2px 6px rgba(16,27,42,.04));
   --shadow-lg: 0 12px 32px rgba(24,95,165,0.14), 0 4px 8px rgba(0,0,0,0.04);
 
-  /* Radius */
+  /* Radius — md and lg were already 10px/14px on both sides. Aliased so a
+     future change to one cannot silently desync them again. */
   --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-md: var(--tw-radius-sm, 10px);
+  --radius-lg: var(--tw-radius, 14px);
   --radius-xl: 20px;
 
   /* Typography */

@@ -22,7 +22,7 @@ test('renders homepage with TokenWalla brand', () => {
   expect(brand.length).toBeGreaterThan(0);
 });
 
-test('unauthenticated user is redirected from /my-bookings to /login', () => {
+test('unauthenticated user is redirected from /my-bookings to /login', async () => {
   localStorage.clear();
   render(
     <MemoryRouter initialEntries={['/my-bookings']}>
@@ -32,5 +32,9 @@ test('unauthenticated user is redirected from /my-bookings to /login', () => {
   // Should be redirected — the login form's submit button is present. Matched by
   // role, not text: "sign in" also appears in the panel copy, and a bare text
   // query fails on the duplicate rather than on the thing being tested.
-  expect(screen.getByRole('button', { name: /sign in/i })).toBeTruthy();
+  //
+  // findByRole, not getByRole: routes are React.lazy'd now, so Login arrives on
+  // a later tick behind the Suspense fallback. The redirect itself is unchanged
+  // — only the moment the destination is mountable is.
+  expect(await screen.findByRole('button', { name: /sign in/i })).toBeTruthy();
 });

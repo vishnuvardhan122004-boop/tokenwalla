@@ -12,6 +12,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from tokenwalla.utils import check_password_strength, is_valid_landline
+# One counter for both logins — a partner account and a patient account are the
+# same brute-force target, and two copies of the cap would drift.
+from users.auth_views import login_password_allowed, clear_login_failures
 
 from .models import (
     Hospital, HospitalPhoto, in_segment, exclude_test_hospitals,
@@ -266,12 +269,26 @@ class HospitalLoginView(APIView):
                 status=403,
             )
 
-        password_ok = check_password(password, hospital.password)
+        # Same password brute-force cap as the patient login, and the same
+        # shared counter — see users.auth_views.login_password_allowed. A
+        # hospital account is the higher-value target of the two: it holds other
+        # people's patient records. The OTP branch still runs when locked, so
+        # reception is never shut out of its own dashboard.
+        unlocked = login_password_allowed(mobile)
+        password_ok = unlocked and check_password(password, hospital.password)
         otp_ok = _verify_otp(mobile, password)
 
         if not password_ok and not otp_ok:
             logger.warning('Failed hospital login for mobile ending ...%s', mobile[-4:])
+            if not unlocked:
+                return Response(
+                    {'message': 'Too many failed password attempts. Log in with an '
+                                'OTP instead, or try again later.'},
+                    status=429,
+                )
             return Response({'message': 'Invalid credentials.'}, status=401)
+
+        clear_login_failures(mobile)
 
         user, created = User.objects.get_or_create(
             mobile=mobile,

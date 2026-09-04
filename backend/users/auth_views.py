@@ -60,6 +60,25 @@ OTP_SEND_CAP_WINDOW   = 60 * 60 * 24  # seconds (24h)
 
 OTP_ATTEMPT_WINDOW = 300   # seconds a wrong-guess count stays alive
 
+# How long "this number proved it owns the OTP" stays true, for the endpoints
+# that consume it (register, reset-password, the mobile change, and the hospital
+# equivalents of all three).
+#
+# This flag is a BEARER token keyed on the phone number alone — it is not bound
+# to a session, a device or a request, because an anonymous caller has none of
+# those to bind to. So whoever calls /auth/reset-password/ first inside the
+# window wins, not necessarily the person who passed the OTP. An attacker cannot
+# create the flag (that still needs the code), so this is a race against a
+# legitimate flow rather than an independent attack — but it is the
+# account-takeover path, and 600 seconds was ten minutes of it.
+#
+# 180s is the mitigation, not the fix: it is comfortable for a human choosing
+# and typing a new password on a phone, and cuts the window by 3.3x. The real
+# fix is a one-time nonce returned by /otp/verify/ and required back by the
+# consumers — which is a BREAKING API change and has to ship with a mobile app
+# release, so it belongs in ROADMAP, not in a quiet server-side edit.
+OTP_VERIFIED_WINDOW = 180
+
 
 # Both caps below are counted in the DATABASE (users.RateCounter), not the
 # cache. They used to use cache.add + cache.incr, which is only atomic on Redis:
@@ -114,6 +133,51 @@ def _reserve_otp_send_for_ip(request):
     if not allowed:
         logger.warning('OTP daily send cap reached for ident %s (%s sends)', ident, sends)
     return allowed
+
+
+# ── Password brute-force cap ─────────────────────────────────────────────────
+# The OTP path is hardened to the teeth — 5 guesses per code, a per-number daily
+# send cap, a per-IP daily ceiling, a CSPRNG code — and the PASSWORD door beside
+# it had nothing at all. Both logins sat on the global AnonRateThrottle only,
+# which is 300/minute (deliberately loose, because CGNAT puts a neighbourhood
+# behind one address). With a 6-character minimum password and /auth/check-mobile/
+# confirming which numbers exist, that is a workable online brute force.
+#
+# Counted per MOBILE, not per IP — for the same CGNAT reason the throttles are
+# loose: an IP-keyed lockout would take out a whole carrier, and the thing under
+# attack is the account, not the address. Counted in the DATABASE for the same
+# reason the OTP caps are (users.RateCounter): cache.incr is only atomic on
+# Redis, and a security control must not weaken because an env var changed.
+#
+# This locks the PASSWORD path only. Both login views accept an OTP in the same
+# field, and that path keeps working — so a locked-out patient always has a way
+# in, and an attacker cannot use this to deny someone their own account.
+LOGIN_MAX_ATTEMPTS   = 5
+LOGIN_ATTEMPT_WINDOW = 60 * 30   # seconds (30 minutes, rolling from the first)
+
+
+def login_password_allowed(mobile):
+    """Count one login attempt. False once the password path is locked out.
+
+    Bumps on EVERY attempt and is cleared on success (`clear_login_failures`),
+    so a normal login leaves the counter at zero. The window rolls from the
+    first attempt, so hammering the endpoint cannot hold it open — same
+    behaviour as every other RateCounter cap here.
+    """
+    allowed, count = RateCounter.bump(
+        f'login_fails:{mobile}',
+        limit=LOGIN_MAX_ATTEMPTS,
+        window_seconds=LOGIN_ATTEMPT_WINDOW,
+    )
+    if not allowed:
+        logger.warning('Password login locked for mobile ...%s (%s attempts)',
+                       mobile[-4:], count)
+    return allowed
+
+
+def clear_login_failures(mobile):
+    """Successful login — the account is not under attack. Reset the counter."""
+    RateCounter.reset(f'login_fails:{mobile}')
 
 
 def _register_otp_failure(mobile):
@@ -323,15 +387,25 @@ class LoginView(APIView):
         if getattr(user, 'status', 'active') == 'blocked':
             return Response({'message': 'Account blocked. Contact support.'}, status=403)
 
-        password_ok = user.check_password(password)
+        # Locked accounts skip the password comparison entirely — but the OTP
+        # branch below still runs, so the real owner always has a way in.
+        unlocked    = login_password_allowed(mobile)
+        password_ok = unlocked and user.check_password(password)
         # register_failure=False: a wrong password must not consume the OTP
         # attempt cap (that would let anyone burn a victim's OTP via login).
         otp_ok      = verify_otp(mobile, password, register_failure=False)
 
         if not password_ok and not otp_ok:
             logger.warning('Failed login attempt for mobile ending ...%s', mobile[-4:])
+            if not unlocked:
+                return Response(
+                    {'message': 'Too many failed password attempts. Log in with an '
+                                'OTP instead, or try again later.'},
+                    status=429,
+                )
             return Response({'message': 'Invalid credentials.'}, status=401)
 
+        clear_login_failures(mobile)
         r = RefreshToken.for_user(user)
         user_data = UserSerializer(user).data
 
@@ -476,7 +550,7 @@ class VerifyOTPView(APIView):
             return Response({'message': 'Mobile and OTP are required.'}, status=400)
 
         if verify_otp(mobile, otp):
-            cache.set(f'otp_verified:{mobile}', True, timeout=600)
+            cache.set(f'otp_verified:{mobile}', True, timeout=OTP_VERIFIED_WINDOW)
             return Response({'message': 'OTP verified.', 'verified': True})
 
         return Response({'message': 'Invalid or expired OTP.', 'verified': False}, status=400)
