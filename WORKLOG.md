@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `main` on both repos, everything pushed, nothing in flight. Web locals are now just `main` and `develop` — the docs branch was merged and the two eslint branches deleted on 2026-08-29 (all three still on `origin` as the undo). **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
-- **Latest commit at last update:** `371220e` main (web/backend — **pushed and verified live**: `/health/` reports `371220ef`, Vercel READY for the same SHA) · `2e9e716` main (app, **v1.4.0 — BUILT AND ON THE PLAY STORE**, versionCode 40, listing updated 29 Aug 2026)
-- **Last updated:** 2026-08-29 (evening) — **four commits shipped and verified live** (see the top entry): a guard so a `rzp_live_` key cannot be used from a `DEBUG` machine, eslint re-enabled in the web build plus the six errors that exposed, and three centre-shaped WhatsApp templates whose senders are deployed but inert until Meta approves them. **The first push broke the Vercel build** — the local check that cleared it was reading a gitignored `.env`; the entry says how to reproduce a host build properly. Earlier today: documents from any provider, a per-provider booking notice, centre pages at parity with the doctor page, the "Dr." sweep. **387 backend tests OK (2 skipped) · 30 frontend · `makemigrations --check` clean.** **The app build finally happened**: v1.4.0 is live on Play, closing ROADMAP 5 and 5b after three weeks. What that makes newly worth doing is ROADMAP 13 — `/api/app-version/` still serves a blank `latest_version`, so nobody on 1.3.x is being told there is an update.
+- **Branch:** `main` on both repos, everything merged and pushed, nothing in flight. Today's five branches (`feat/appointment-pass`, `feat/pass-refund-fairness`, `chore/pass-expiry-on-the-existing-cron`, `docs/pass-switched-off` web; `feat/appointment-pass` app) are all merged and safe to delete locally and on `origin`. Web locals are now just `main` and `develop` — the docs branch was merged and the two eslint branches deleted on 2026-08-29 (all three still on `origin` as the undo). **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
+- **Latest commit at last update:** `386538a` main (web/backend — merged and deployed; production served `12359b04`, migrations 0012/0013 applied, `PASS_ENABLED=False`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass)
+- **Last updated:** 2026-09-02 — **the Appointment Pass shipped and was switched off the same day.** Five web PRs (#47–#50) plus app #17, all merged. The day's real find was a refund hole — buy, redeem the free visit, cancel the paid one, keep both the money and the visit — closed in #48 with three UX holes alongside it. **429 backend tests (2 skipped) · 44 web · 160 app.** `PASS_ENABLED=False` on Railway, so nothing is on sale; turning it on is one variable once the −₹11.84 budget question is answered. **One loose end:** the expiry nudge has never been observed running (ROADMAP 14c). **Two deadlines found:** config-as-code dies 2026-12-01 and takes both cron services with it (14b), and the app half is merged but unbuilt.
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -25,6 +25,64 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-02 — The Appointment Pass: shipped, a refund hole closed, then switched off
+
+**Live and deliberately off.** Web `main` `386538a`, app `main` `0dbe505`,
+production served `12359b04`. `PASS_ENABLED=False` on the Railway `tokenwalla`
+service (set 12:12, gunicorn restarted 12:13:42), so nothing is on sale.
+It was live for ~20 minutes and sold nothing.
+
+| # | Change | Commit / PR | Status |
+|---|---|---|---|
+| 1 | The pass itself — `fees.py` split, `AppointmentPass`, `Booking.appointment_pass`, `GET /payment/pass/`, `POST /payment/pass/redeem/`, `buyPass` on create-order, receipt block, admin | #47 `ffa4c17` | ✅ |
+| 2 | Web checkout: offer, reprice, ₹0 redeem, pass banner, ticket line | #47 | ✅ |
+| 3 | App checkout: same three states, `collection_mode` in the fee mirror | app #17 `a33a031` | ✅ |
+| 4 | **Refund hole**: a pass purchase now refunds only the unspent share (`refunds.unused_pass_share`) | #48 `7e90ddb` | ✅ |
+| 5 | Honest cancellation copy — push + WhatsApp render `pass_utils.cancellation_line`; `pass_role` warns before the click | #48 | ✅ |
+| 6 | Late cancel reopens a lapsed pass for 7 days, stamped once | #48 | ✅ |
+| 7 | Expiry nudge folded onto the existing reminders cron (`;` not `&&`) | #49 `08aa8e5` | 🕒 never seen to run — ROADMAP 14c |
+| 8 | ₹0-visit polish found by running it: no gateway panel, no "refund in 5–7 days" | #47 `34a75cb` | ✅ |
+
+**What the refund fix actually fixed.** Buy the ₹35 pass → redeem the free visit
+→ cancel the paid booking ≥24h out returned **₹19.71 and left the free booking
+standing** — ₹15.29 for a ₹25.37 visit, repeatable. Voiding the pass only blocks
+*future* redemptions; it cannot reach a booking already made. The refundable
+platform fee now scales by `unused ÷ total_bookings`, so that case refunds
+₹9.86 (net ₹25.14 against ₹25.37 for a single visit) and the arbitrage is gone.
+A CANCELLED sibling is not consumed; a NO_SHOW is.
+
+**Tests:** 429 backend (2 skipped, 42 in `payments/tests_pass.py`) · 44 web ·
+160 app. `makemigrations --check` clean. Zero `graph.facebook.com` lines under
+`manage.py test -v 2`. `tsc --noEmit` clean, app lint 0 errors, CRA build
+compiled (+1.66 kB).
+
+**Migrations applied to production:** `payments.0012` 11:51:56, `bookings.0013`
+11:51:56, `payments.0013` 12:32:22 — all additive, all confirmed in the logs.
+
+**Proven by clicking, not inferred:** all three checkout states on the website
+and on the app (Expo web) against a real backend; a ₹0 redemption that booked
+`TW-185901-ADBD7F` with no gateway call; a cancellation that returned the credit
+(`2/2 → 1/2`) with an empty `razorpay_refund_id`.
+
+**Three things running it locally caught that tests did not:** the local dev DB
+had never been migrated (`no such table: payments_appointmentpass`); a ₹0 visit
+still showed "Secured by Razorpay" and "Refund in 5–7 days"; and the cancel
+dialog promised a credit back even when cancelling the purchase, because
+`uses_pass` was true for both sides.
+
+**Two dead ends worth remembering.** A dedicated `pass-expiry.cron` service is
+impossible: Railway **closed config-as-code to new services on 2026-08-28**, so
+it could only be configured by hand in a dashboard nobody can diff. And the same
+notice kills the config files for **both existing crons on 2026-12-01** — see
+ROADMAP **14b**; that includes the daily payout run.
+
+**Not proven, and named rather than buried:** the paid ₹35 order against the
+real gateway (the live-key guard correctly refuses it locally), the native app
+renderer (no full Xcode here — this was react-native-web), and the expiry nudge
+actually executing (**14c**).
 
 ---
 
