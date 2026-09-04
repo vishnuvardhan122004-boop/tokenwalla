@@ -7,7 +7,8 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-08-29 — **two feature sessions and a short evening one
+- **Last updated:** 2026-09-02 — see the 2026-09-01/02 note at the end of this
+  block for the Appointment Pass. Before that: **two feature sessions and a short evening one
   landed since the last update; the features are live on the web and none of it
   is on a phone.** 2026-08-26 (**item 10**):
   blood centres as a second diagnostic-centre kind, and `svc_*` capabilities so
@@ -34,11 +35,19 @@ the things that can lose money or break a live booking come first.
   `appointment_prep`, written 08-29 and **not submitted**. All four are a form,
   not code. **12** is new and small: the website has no WhatsApp opt-out
   control, and the app has one.
-  **2026-09-01:** **item 14** (the ₹35 Appointment Pass) was planned and then
-  built the same day, web + app + backend, on `feat/appointment-pass`. It is at
-  the BOTTOM of Now. Unmerged, unbuilt for phones, unclicked in a browser — and
-  `PASS_ENABLED` defaults to `True`, so **merging starts the promotion**. The
-  two pricing/GST questions at the end of the item are still open.
+  **2026-09-01 → 09-02: item 14, the ₹35 Appointment Pass — planned, built,
+  reviewed, shipped and switched off.** Five web PRs (**#47–#50**) plus app
+  **#17**, all merged. Web `main` `386538a`, app `main` `0dbe505`, production
+  served `12359b04`, three additive migrations applied. **The promotion is OFF**
+  (`PASS_ENABLED=False` on Railway) and sold nothing in the ~20 minutes it was
+  live. The day's real find was a **refund hole** — buy, redeem the free visit,
+  cancel the paid one, keep both the money and the visit — closed in #48 along
+  with three UX holes in what the patient is told. **Item 14 is at the BOTTOM of
+  Now**, with **14b** (config-as-code dies 2026-12-01, takes both crons with it)
+  and **14c** (the expiry nudge has never been seen to run) as what's left.
+  Still open for Vishnu: the −₹11.84 promo budget and the CA's GST answer.
+  **The app half is merged but NOT built**, so no patient on a phone has any of
+  this.
 - **Phase:** pre-promotion hardening (live, promotion starting — traffic expected)
 - **Rule of thumb:** correctness → safety → capacity → features
 
@@ -1279,7 +1288,20 @@ Migrations, all additive and safe to run before the code: `doctors.0014`,
 **What this does NOT close:** every one of these has an app half that is merged
 and unbuilt. See 5b.
 
-### 14. The Appointment Pass — ₹35 for two visits, 30 days 🟡 — MERGED AND DEPLOYED 2026-09-02, then SWITCHED OFF
+### 14. The Appointment Pass — ₹35 for two visits, 30 days 🟡 — SHIPPED AND SWITCHED OFF 2026-09-02
+
+**Where it stands, end of 2026-09-02.** Built, reviewed, merged and deployed —
+then deliberately turned off. Web PRs **#47, #48, #49, #50** and app PR **#17**
+are all merged; `origin/main` is `386538a`, production served `12359b04`, and
+migrations `payments.0012`, `payments.0013` and `bookings.0013` all applied.
+`PASS_ENABLED=False` is set on the Railway `tokenwalla` service, so **nothing
+is on sale and nothing can be redeemed**. Turning the promotion on is now a
+one-variable change once the budget question at the bottom is answered.
+
+**The one thing not proven: the expiry nudge has never been seen to run.** The
+cron service reads the new two-command start line (confirmed in its Deploy
+panel), but every run observed in the logs predated that rebuild, and the
+browser session died before a later tick could be read. See 14c.
 
 **A demand lever, not a feature request — this exists to answer item 7.** The
 patient picks it at checkout instead of paying a single service fee:
@@ -1578,10 +1600,36 @@ use-case survives).
 Migration `payments.0013` adds two columns, both nullable/defaulted. 429 backend
 tests (42 in `tests_pass.py`), 44 web.
 
+#### 14c. Prove the expiry nudge actually runs 🟡 — the only loose end, 2026-09-02
+
+**Everything up to the run is verified; the run itself is not.** `main` carries
+the two-command start line, the cron service's Deploy panel shows it reading
+`/backend/railway.cron.json`, and the service reports *Last run succeeded*. But
+the only runs visible in the logs (12:40, 12:50) happened **before** that
+rebuild, so they show `Reminder run complete` and nothing else — which is
+exactly what a broken chain would also look like.
+
+**First move next session, it is two minutes:** Railway → project → Logs,
+filter `complete`, look at any run after 13:00 on 2026-09-02:
+
+    Reminder run complete. Sent 0 reminder(s).
+    Pass expiry run complete. Nudged 0 pass(es).
+
+Both lines → close this item. **Only the first line → the `;` chain is not
+running the second command**, and that is a real bug: the nudge would be dead
+code that looks configured. `Nudged 0` is the correct number either way — no
+pass exists in production — so this proves wiring, not delivery. A push has
+still never been sent to a real device, and cannot be until the promo is on.
+
 **Still open, both for Vishnu:** the −₹11.84 promo budget above, and whether the
 CA needs to answer GST on a pass sold as an advance (invoice raised in full at
 purchase, the second service delivered up to 30 days later). The build assumes
 invoice-at-purchase.
+
+**Also deferred, and worth naming:** the nudge is **push-only**, so a patient
+without the app or with notifications off is never told their pass is about to
+lapse. A WhatsApp version needs a new Meta template — a manual submission, same
+queue as item 9.
 
 ---
 
@@ -1745,6 +1793,35 @@ Resolved and deliberately removed, so they don't get re-added:
 ---
 
 ## Done
+
+- **2026-09-02** — **Item 14 shipped and switched off: the Appointment Pass.**
+  ₹35 buys the service fee for two visits inside 30 days, at any service-fee-only
+  doctor. Web `main` `386538a`, app `main` `0dbe505`, production served
+  `12359b04`. Five PRs in one day: **#47** the feature (backend + web), **#48**
+  the refund fairness fix, **#49** the cron wiring, **#50** the switch-off
+  record, app **#17** the checkout half.
+  **Three migrations applied to production**: `payments.0012` (the pass table),
+  `payments.0013` (expiry reminder + extension stamps), `bookings.0013`
+  (`Booking.appointment_pass`). All additive.
+  **The promotion is OFF** — `PASS_ENABLED=False` on Railway, set 12:12, gunicorn
+  restarted 12:13:42. It was live for about 20 minutes and sold nothing.
+  **The refund hole was the day's real find**, and it only showed up because the
+  refund path was read *against* the pass rather than the pass being tested on
+  its own: buy → redeem the free visit → cancel the paid booking returned ₹19.71
+  and left the free booking standing, ₹15.29 for a ₹25.37 visit, repeatable.
+  `refunds.unused_pass_share` now scales the refundable platform fee by what
+  nobody has spent. Three UX holes went with it — a ₹0 visit told "No refund was
+  due", cancelling the purchase silently killing the free visit, and a credit
+  returned into a lapsed pass.
+  **429 backend tests (2 skipped) · 44 web · 160 app**, `makemigrations --check`
+  clean, zero `graph.facebook.com` lines under `-v 2`.
+  **Verified by clicking, not by inference**: all three checkout states on the
+  website and on the app (Expo web), a real ₹0 redemption booking
+  `TW-185901-ADBD7F`, and a cancellation that returned the credit with an empty
+  `razorpay_refund_id`. **Not proven:** the paid ₹35 order against the real
+  gateway (the live-key guard correctly refuses it locally), the native app
+  renderer (no full Xcode on this machine), and the expiry nudge actually
+  running (item **14c**).
 
 > **Caveat, rewritten 2026-08-16:** the merge backlog is gone and **the backend
 > is now live** — Railway deployed the 4-day backlog on 2026-08-16 (item 0), so
