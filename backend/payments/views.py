@@ -293,6 +293,42 @@ class CreateOrderView(APIView):
                 status=400,
             )
 
+        # Reject a full or expired slot BEFORE the ₹5 is taken.
+        #
+        # This branch never checked capacity, so the fee was captured and the
+        # slot validated afterwards. That is not a rare race — it is EVERY
+        # reschedule into a full slot. Adding the locked backstop in verify
+        # (see _handle_reschedule) closed the overselling but turned the common
+        # case into "charged ₹5, then refused", which is worse for the patient.
+        #
+        # `booking_id`/`date`/`slot` are OPTIONAL, exactly as they are in
+        # _create_booking_order: the mobile app ships on its own release cycle
+        # and sends none of them, so an older client is unaffected and simply
+        # falls through to the verify-side backstop. A client that DOES send
+        # them turns nearly every collision into a clean rejection with no
+        # money involved.
+        resched_id = request.data.get('booking_id') or request.data.get('bookingId')
+        date_val   = str(request.data.get('date', '') or '').strip()
+        slot_val   = str(request.data.get('slot', '') or '').strip()
+        if plan_info['plan'] == 'reschedule' and resched_id and date_val and slot_val:
+            try:
+                target = (Booking.objects
+                          .select_related('doctor', 'scan')
+                          .get(pk=int(resched_id), user=request.user))
+            except (Booking.DoesNotExist, ValueError, TypeError):
+                return Response({'message': 'Booking not found.'}, status=404)
+            provider = target.provider
+            if provider is None:
+                return Response({'message': 'This booking cannot be rescheduled.'},
+                                status=400)
+            try:
+                # exclude_pk: re-picking the booking's own slot is a no-op, not
+                # a collision with itself.
+                check_slot_available(provider, date_val, slot_val,
+                                     exclude_pk=target.pk)
+            except SlotUnavailable as exc:
+                return Response({'message': exc.message}, status=409)
+
         order_id = f'tw_{uuid.uuid4().hex}'
         try:
             order = create_order(
@@ -983,13 +1019,20 @@ class VerifyPaymentView(APIView):
             # Refunding ₹5 instead would cost more in gateway fees than it
             # returns, and would leave the patient with no reschedule at all.
             logger.info('Reschedule of booking %s refused (%s); order %s left '
-                        'unredeemed so the patient can retry free.',
+                        'unredeemed so it can be retried on the same fee.',
                         existing_booking.id, exc.reason, order_id)
             return Response({
                 'success': False,
-                'message': f'{exc.message} Your ₹{plan_info["fee"]} reschedule fee '
-                           f'is still credited — pick another slot to use it.',
+                # Deliberately does NOT promise a free retry. Reusing the order
+                # is something the CLIENT has to do (re-POST /verify/ with the
+                # same order_id and a different slot) and only the website does
+                # it today — the app mints a fresh ₹5 order on retry until its
+                # next release. Saying "still credited" here would be a promise
+                # the app cannot keep. `order_id` is echoed back so a client
+                # that knows how to reuse it has it to hand.
+                'message': f'{exc.message} Your reschedule fee has not been used.',
                 'retryable': True,
+                'order_id': order_id,
             }, status=409)
         except Exception as exc:
             logger.exception('Unexpected error in _handle_reschedule: %s', exc)

@@ -609,6 +609,9 @@ class HospitalResetPasswordView(APIView):
             pass
 
         cache.delete(f'otp_verified:{mobile}')
+        # Same as the patient reset — an OTP-verified reset must not leave the
+        # account still locked out by the password cap.
+        clear_login_failures(mobile)
         logger.info('Hospital password reset for mobile ending ...%s', mobile[-4:])
         return Response({'message': 'Password reset successfully.'})
 

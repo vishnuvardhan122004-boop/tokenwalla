@@ -40,6 +40,21 @@ export default function Payment() {
   const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // Every message on this screen used a native alert(). On the one page where a
+  // patient decides whether to hand over money, an unstyled OS dialog is the
+  // wrong signal — and every other screen in the product (MyBookings, the admin
+  // pages) already uses this toast. Same pattern, same tokens.
+  //
+  // `sticky` keeps the one thing alert() was actually good at. Two of these
+  // fire AFTER the card is charged ("verification failed, contact support"),
+  // and a message that vanishes in four seconds is worse than a blocking dialog
+  // when the patient's money has already moved. Those stay until dismissed.
+  const [toast, setToast] = useState(null);
+  const showToast = (msg, type = 'error', sticky = false) => {
+    setToast({ msg, type, sticky });
+    if (!sticky) setTimeout(() => setToast(null), 4000);
+  };
+
   // The Appointment Pass. `passData` is the server's offer AND whatever the
   // patient is already holding ({enabled, price, bookings, days, pass}), so the
   // price is never hard-coded here — change it in payments/fees.py and this
@@ -141,8 +156,8 @@ export default function Payment() {
   // the pass, the doctor and the slot — this button only asks.
   const handleRedeem = async () => {
     if (forOther) {
-      if (bookedForName.length < 2) { alert("Please enter the other person's name."); return; }
-      if (!/^[6-9]\d{9}$/.test(bookedForMobile)) { alert("Please enter a valid 10-digit mobile number for the other person."); return; }
+      if (bookedForName.length < 2) { showToast("Please enter the other person's name."); return; }
+      if (!/^[6-9]\d{9}$/.test(bookedForMobile)) { showToast("Please enter a valid 10-digit mobile number for the other person."); return; }
     }
     setLoading(true);
     try {
@@ -150,9 +165,9 @@ export default function Payment() {
         doctorId, hospital, date, slot, bookedForName, bookedForMobile,
       });
       if (data.success) goToToken(data);
-      else { alert(data.message || 'Could not use your pass.'); setLoading(false); }
+      else { showToast(data.message || 'Could not use your pass.'); setLoading(false); }
     } catch (err) {
-      alert(err?.response?.data?.message || 'Could not use your pass. Please try again.');
+      showToast(err?.response?.data?.message || 'Could not use your pass. Please try again.');
       setLoading(false);
     }
   };
@@ -175,13 +190,13 @@ export default function Payment() {
   const handlePayment = async () => {
     // Validate the "book for someone else" details before charging.
     if (forOther) {
-      if (bookedForName.length < 2) { alert("Please enter the other person's name."); return; }
-      if (!/^[6-9]\d{9}$/.test(bookedForMobile)) { alert("Please enter a valid 10-digit mobile number for the other person."); return; }
+      if (bookedForName.length < 2) { showToast("Please enter the other person's name."); return; }
+      if (!/^[6-9]\d{9}$/.test(bookedForMobile)) { showToast("Please enter a valid 10-digit mobile number for the other person."); return; }
     }
     setLoading(true);
     try {
       const ready = await loadScript();
-      if (!ready || !window.Razorpay) { alert('Razorpay SDK failed. Check internet.'); setLoading(false); return; }
+      if (!ready || !window.Razorpay) { showToast('Razorpay SDK failed. Check internet.'); setLoading(false); return; }
 
       // Server computes the full fee from the doctor's consultation fee — we
       // send only doctorId, never an amount. It returns a Razorpay order_id +
@@ -208,11 +223,11 @@ export default function Payment() {
           if (verifyData.success) {
             goToToken(verifyData);
           } else {
-            alert(verifyData.message || 'Verification failed. Contact support.');
+            showToast(verifyData.message || 'Verification failed. Contact support.', 'error', true);
             setLoading(false);
           }
         } catch {
-          alert('Verification error. Contact support.');
+          showToast('Verification error. Contact support.', 'error', true);
           setLoading(false);
         }
       };
@@ -241,12 +256,12 @@ export default function Payment() {
         },
       });
       rzp.on('payment.failed', (resp) => {
-        alert(resp?.error?.description || 'Payment was not completed.');
+        showToast(resp?.error?.description || 'Payment was not completed.');
         setLoading(false);
       });
       rzp.open();
     } catch (err) {
-      alert(err?.response?.data?.message || 'Could not initiate payment.');
+      showToast(err?.response?.data?.message || 'Could not initiate payment.');
       setLoading(false);
     }
   };
@@ -256,6 +271,37 @@ export default function Payment() {
   return (
     <>
       <style>{`
+        /* Toast — replaces the native alert() dialogs. Uses the shared status
+           tokens so it reads the same as the toast on every other screen, and
+           sits above the Razorpay overlay (z-index 9999) since two of these
+           fire while checkout is still on screen. */
+        .pay-toast {
+          position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+          display: flex; align-items: center; gap: 4px;
+          max-width: min(92vw, 520px); padding: 12px 18px;
+          border-radius: var(--radius-md); border: 1px solid transparent;
+          font-size: 14px; font-weight: 500; line-height: 1.45;
+          box-shadow: var(--shadow-lg); z-index: 10000; cursor: pointer;
+          animation: pay-toast-in 180ms cubic-bezier(.4,0,.2,1);
+        }
+        .pay-toast.error {
+          background: var(--color-error-bg); color: var(--color-error-text);
+          border-color: var(--color-error-border);
+        }
+        .pay-toast.success {
+          background: var(--color-success-bg); color: var(--color-success-text);
+          border-color: var(--color-success-border);
+        }
+        .pay-toast-x {
+          background: none; border: 0; padding: 0 0 0 10px; margin-left: auto;
+          font-size: 20px; line-height: 1; color: inherit; opacity: .65; cursor: pointer;
+        }
+        .pay-toast-x:hover { opacity: 1; }
+        @keyframes pay-toast-in {
+          from { opacity: 0; transform: translate(-50%, 8px); }
+          to   { opacity: 1; transform: translate(-50%, 0); }
+        }
+        @media (prefers-reduced-motion: reduce) { .pay-toast { animation: none; } }
         /* Fonts + reset come from the global design system (index.css). */
         .pay-root {
           font-family: var(--font-body);
@@ -727,6 +773,28 @@ export default function Payment() {
           </p>
         </div>
       </div>
+
+      {toast && (
+        <div
+          className={`pay-toast ${toast.type}`}
+          role="alert"
+          aria-live="assertive"
+          onClick={() => setToast(null)}
+        >
+          <i className={`bi ${toast.type === 'success' ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill'} me-2`} />
+          <span>{toast.msg}</span>
+          {toast.sticky && (
+            <button
+              type="button"
+              className="pay-toast-x"
+              aria-label="Dismiss"
+              onClick={() => setToast(null)}
+            >
+              &times;
+            </button>
+          )}
+        </div>
+      )}
     </>
   );
 }

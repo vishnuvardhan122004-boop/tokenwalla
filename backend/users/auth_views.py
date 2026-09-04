@@ -585,6 +585,11 @@ class ResetPasswordView(APIView):
         user.set_password(password)
         user.save(update_fields=['password'])
         cache.delete(f'otp_verified:{mobile}')
+        # Whoever got here proved they own the number via OTP, which is a
+        # stronger signal than the successful password login that already
+        # clears this. Without it a locked-out user resets their password and
+        # is still locked, with nothing on screen explaining why.
+        clear_login_failures(mobile)
         logger.info('Password reset for user %s', user.id)
         return Response({'message': 'Password reset successfully.'})
     

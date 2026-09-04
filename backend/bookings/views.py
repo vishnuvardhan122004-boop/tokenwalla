@@ -562,7 +562,10 @@ class ScanQRView(APIView):
         try:
             return (
                 Booking.objects
-                .select_related('user', 'doctor', 'hospital')
+                # 'scan' included: _serialize_booking reads provider_name /
+                # provider_detail / provider_fee, all of which touch .scan on a
+                # scan booking.
+                .select_related('user', 'doctor', 'scan', 'hospital')
                 .get(token=token)
             ), None
         except Booking.DoesNotExist:

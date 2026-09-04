@@ -567,3 +567,81 @@ class ChooseModeTests(WorldMixin, TestCase):
         self.doctor.bank_account_number = ''
         self.doctor.ifsc = ''
         self.assertIsNone(choose_mode(self.doctor))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Reschedule: refuse a full slot BEFORE the ₹5 is taken
+# ─────────────────────────────────────────────────────────────────────────────
+class RescheduleCreateOrderTests(WorldMixin, TestCase):
+    """The fee must not be captured for a slot that will then be refused.
+
+    The reschedule branch of create-order never checked capacity, so the ₹5 was
+    taken and the slot validated afterwards. That is not a rare race — it is
+    EVERY reschedule into a full slot. Adding the locked backstop in verify
+    closed the overselling but turned the common case into "charged, then
+    refused", which is worse for the patient than the bug it fixed.
+
+    booking_id/date/slot are OPTIONAL (the mobile app sends none of them and
+    keeps working), so both shapes are pinned here.
+    """
+
+    def setUp(self):
+        self.make_actors()
+        self.booking = Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate(), slot='09:00 AM', token='TW-RC-1',
+            status='CONFIRMED')
+
+    def _order(self, **extra):
+        return self.client.post('/api/payment/create-order/',
+                                {'amount': 5, **extra}, format='json')
+
+    @mock.patch('payments.views.create_order')
+    def test_full_slot_is_refused_before_any_order_is_created(self, mock_create):
+        self.doctor.max_per_slot = 1
+        self.doctor.save(update_fields=['max_per_slot'])
+        Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=FUTURE_DATE, slot='10:00 AM', token='TW-RC-FULL',
+            status='CONFIRMED')
+
+        r = self._order(booking_id=self.booking.id, date=FUTURE_DATE, slot='10:00 AM')
+
+        self.assertEqual(r.status_code, 409)
+        # The whole point: the gateway was never called, so nothing was charged.
+        mock_create.assert_not_called()
+
+    @mock.patch('payments.views.create_order')
+    def test_past_slot_is_refused_before_any_order_is_created(self, mock_create):
+        r = self._order(booking_id=self.booking.id,
+                        date=str(timezone.localdate() - timedelta(days=1)),
+                        slot='10:00 AM')
+        self.assertEqual(r.status_code, 409)
+        mock_create.assert_not_called()
+
+    @mock.patch('payments.views.create_order')
+    def test_an_open_slot_still_creates_the_order(self, mock_create):
+        mock_create.return_value = {'order_id': 'ord_ok', 'key': 'rzp_test_x'}
+        r = self._order(booking_id=self.booking.id, date=FUTURE_DATE, slot='10:00 AM')
+        self.assertEqual(r.status_code, 200)
+        mock_create.assert_called_once()
+
+    @mock.patch('payments.views.create_order')
+    def test_a_client_that_sends_no_slot_is_unaffected(self, mock_create):
+        # The installed mobile app posts {amount: 5} and nothing else. It must
+        # keep working exactly as before and fall through to the verify backstop.
+        mock_create.return_value = {'order_id': 'ord_legacy', 'key': 'rzp_test_x'}
+        r = self._order()
+        self.assertEqual(r.status_code, 200)
+        mock_create.assert_called_once()
+
+    @mock.patch('payments.views.create_order')
+    def test_another_users_booking_is_not_addressable(self, mock_create):
+        other = User.objects.create(username='other', mobile='9000000456', role='patient')
+        theirs = Booking.objects.create(
+            user=other, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate(), slot='09:00 AM', token='TW-RC-OTHER',
+            status='CONFIRMED')
+        r = self._order(booking_id=theirs.id, date=FUTURE_DATE, slot='10:00 AM')
+        self.assertEqual(r.status_code, 404)
+        mock_create.assert_not_called()

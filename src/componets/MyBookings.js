@@ -118,6 +118,12 @@ export default function MyBookings() {
   const [newSlot,           setNewSlot]           = useState('');
   const [rescheduling,      setRescheduling]      = useState(false);
   const [payingReschedule,  setPayingReschedule]  = useState(false);
+  // A ₹5 order that was PAID but whose reschedule was refused (the slot filled
+  // between checkout opening and verify landing). The server writes no
+  // ReschedulePayment row in that case, so the order stays redeemable — holding
+  // it here lets the next attempt re-verify instead of minting a second order
+  // and charging the patient twice for one reschedule.
+  const [unusedOrderId,     setUnusedOrderId]     = useState(null);
   const [doctorSlots,       setDoctorSlots]       = useState([]);
   // { [bookingId]: report[] }. Fetched only for completed SCAN bookings —
   // a consultation has no report, and asking for one on every card would be a
@@ -224,6 +230,16 @@ export default function MyBookings() {
     }
   };
 
+  // A held ₹5 order belongs to the booking it was paid for, but the server's
+  // order tags bind only the USER and the plan — nothing stops one being
+  // redeemed against a different booking. So drop it the moment the modal
+  // targets anything else (including closing). One guard here rather than at
+  // each of the five setRescheduleBooking call sites, which is where a future
+  // sixth would quietly reintroduce a free reschedule.
+  useEffect(() => {
+    setUnusedOrderId(null);
+  }, [rescheduleBooking?.id]);
+
   const openReschedule = async (booking) => {
     setRescheduleBooking(booking);
     setNewDate('');
@@ -233,6 +249,47 @@ export default function MyBookings() {
       setDoctorSlots(data.slots || []);
     } catch {
       setDoctorSlots([]);
+    }
+  };
+
+  // Redeem a PAID ₹5 order against the currently chosen date/slot.
+  //
+  // Shared by the fresh-payment path and the retry path so there is exactly one
+  // place that reads the verify response. A 409 means the slot was taken and
+  // the server wrote no ReschedulePayment — so the order is still redeemable
+  // and we keep it for the next attempt instead of charging again.
+  const confirmReschedule = async (orderId) => {
+    try {
+      const { data } = await API.post('/payment/verify/', {
+        order_id: orderId,
+        booking: {
+          booking_id: rescheduleBooking.id,
+          date:       newDate,
+          slot:       newSlot,
+        },
+      });
+
+      if (data.success) {
+        setUnusedOrderId(null);
+        setRescheduleBooking(null);
+        await fetchBookings(true);
+        showToast('Appointment rescheduled successfully!');
+      } else {
+        showToast(data.message || 'Reschedule verification failed. Contact support.', 'error');
+      }
+    } catch (err) {
+      const res = err?.response;
+      if (res?.status === 409 && res.data?.retryable) {
+        // Keep the modal open with the picker: choosing another slot re-verifies
+        // this same order at no extra charge.
+        setUnusedOrderId(res.data.order_id || orderId);
+        showToast(
+          `${res.data.message || 'That slot is no longer available.'} Pick another slot — you will not be charged again.`,
+          'error',
+        );
+        return;
+      }
+      showToast(res?.data?.message || 'Verification error. Contact support.', 'error');
     }
   };
 
@@ -262,6 +319,20 @@ export default function MyBookings() {
       return;
     }
 
+    // ── Already paid, not yet redeemed ──────────────────────────────────────
+    // A previous attempt was refused because the slot was full, so the ₹5 was
+    // captured but no reschedule was recorded and the order is still good.
+    // Re-verify it against the newly chosen slot rather than charging again.
+    if (unusedOrderId) {
+      setRescheduling(true);
+      try {
+        await confirmReschedule(unusedOrderId);
+      } finally {
+        setRescheduling(false);
+      }
+      return;
+    }
+
     setRescheduling(true);
     try {
       const loaded = await loadRazorpayScript();
@@ -272,8 +343,13 @@ export default function MyBookings() {
       }
 
       // Step 1: create the ₹5 order (amount in rupees now).
+      // booking_id/date/slot let the server refuse a full or expired slot
+      // BEFORE taking the fee — without them it can only refuse after capture.
       const { data: order } = await API.post('/payment/create-order/', {
-        amount: RESCHEDULE_AMOUNT,
+        amount:     RESCHEDULE_AMOUNT,
+        booking_id: rescheduleBooking.id,
+        date:       newDate,
+        slot:       newSlot,
       });
       if (!order?.order_id) throw new Error('No order returned from server.');
 
@@ -292,24 +368,7 @@ export default function MyBookings() {
         theme: { color: '#185FA5' },
         handler: async () => {
           try {
-            const { data } = await API.post('/payment/verify/', {
-              order_id: order.order_id,
-              booking: {
-                booking_id: rescheduleBooking.id,
-                date:       newDate,
-                slot:       newSlot,
-              },
-            });
-
-            if (data.success) {
-              setRescheduleBooking(null);
-              await fetchBookings(true);
-              showToast('Appointment rescheduled successfully!');
-            } else {
-              showToast(data.message || 'Reschedule verification failed. Contact support.', 'error');
-            }
-          } catch (err) {
-            showToast(err?.response?.data?.message || 'Verification error. Contact support.', 'error');
+            await confirmReschedule(order.order_id);
           } finally {
             finish();
           }

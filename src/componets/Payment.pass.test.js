@@ -73,8 +73,7 @@ test('choosing the pass repriced the button to ₹35', async () => {
   show();
   const option = await screen.findByRole('radio', { checked: false });
   await userEvent.click(option);
-  await waitFor(() =>
-    expect(screen.getByRole('button', { name: /Pay ₹35.00/ })).toBeInTheDocument());
+  expect(await screen.findByRole('button', { name: /Pay ₹35.00/ })).toBeInTheDocument();
 });
 
 test('a doctor who collects the full fee online is never offered one', async () => {
