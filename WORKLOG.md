@@ -28,6 +28,73 @@ Newest entry on top. Update the **Status** columns as things land.
 
 ---
 
+## 2026-09-06 — The Appointment Pass switched back ON, and a carve-out written to allow it
+
+**Production config change.** `PASS_ENABLED=True` on the Railway
+`tokenwalla-backend` project, **set by Vishnu in the dashboard at ~01:10 IST**,
+not by the session — see below for why. This reverses the 2026-09-02 switch-off
+and puts the ₹35 / 2-visit / 30-day pass back on sale to real patients.
+
+**The cost was named before the flip and accepted:** −₹11.84 per fully-redeemed
+pass (ROADMAP 1329), the budget question ROADMAP 48 still lists as open. Vishnu
+proceeded with it open. That question is now live spend, not a hypothetical.
+
+**Verified after the restart** — `/health/` 200, `commit 8b173d0e` matching
+`origin/main` `8b173d0`, `cache.backend=redis ok`. **Not verified from the
+session:** the flag's own value. `GET /api/payment/pass/` is `IsAuthenticated`
+and returns 401 unauthenticated, so confirming `enabled: true` needs a logged-in
+patient at a `SERVICE_ONLY` doctor's checkout. Vishnu's dashboard read is the
+only confirmation on record.
+
+**Why it wasn't the session that flipped it.** Three layers said no; two were
+resolved and one was not:
+
+| Layer | Said | Outcome |
+|---|---|---|
+| CLAUDE.md prose "never deploy from a session" | no | carve-out added at Vishnu's instruction (below) |
+| `.claude/hooks/guard-production.py` | nothing — it matches the three production subcommands, not `railway variables` | a real gap, still open |
+| `.claude/settings.json` deny `Bash(railway variables:*)` | no, absolutely | **not resolved** — deny rules can't be prompted past, and it blocks the read as well as the write |
+
+So the CLI route was dead even with the carve-out in force, and the dashboard
+was the remaining path. Declining to delete the deny rule was deliberate: it is
+`railway variables:*`, so removing it would let any future session set
+`DATABASE_URL` or the Razorpay keys — a far wider hole than the one flag, to
+save 30 seconds of clicking.
+
+**CLAUDE.md now carries a feature-flag carve-out** (uncommitted at time of
+writing): an allow-list table, currently `PASS_ENABLED` alone, plus four
+conditions — one variable per change with the current value read back first,
+old→new shown before applying, the direction and its cost stated with any open
+ROADMAP question quoted, and the change recorded here. Everything outside the
+table stays a flat no.
+
+**Two things left inconsistent, both deliberately left for Vishnu:**
+
+1. **CLAUDE.md and `settings.json` now disagree.** The carve-out says a session
+   MAY set `PASS_ENABLED`; the deny rule says it may not. Whichever wins should
+   be chosen on purpose, not resolved by editing whichever file is in the way.
+2. **The guard hook gap is still there.** `railway variables` passes it freely.
+   `settings.json` is what actually stopped the session, not the hook.
+
+| # | Change | Commit / PR | Status |
+|---|---|---|---|
+| 1 | `PASS_ENABLED=True` on Railway `tokenwalla-backend` (dashboard, Vishnu) | no commit — config | ✅ |
+| 2 | CLAUDE.md feature-flag carve-out + hook-gap note | uncommitted | 🕒 |
+| 3 | Reconcile CLAUDE.md carve-out with the `settings.json` deny rule | — | ⬜ |
+| 4 | Confirm the ₹25/₹35 offer renders for a logged-in patient at a `SERVICE_ONLY` doctor | — | ⬜ |
+
+**Action items**
+
+- [ ] Vishnu: open a checkout at a `SERVICE_ONLY` doctor and confirm the two
+      options render — this is the only real proof the flag took.
+- [ ] Decide whether `settings.json` keeps denying `railway variables:*`.
+- [ ] Land the CLAUDE.md carve-out and the unmerged `d8749c6` ROADMAP commit —
+      both docs, both currently stranded on the already-merged
+      `fix/reschedule-capacity-login-cap-perf` branch.
+- [ ] Watch the first redeemed pass against the −₹11.84 figure.
+
+---
+
 ## 2026-09-04 → 09-05 — A full audit: the throttle key was forgeable, a doctor was being short-paid, and force-delete erased the money
 
 **16 commits on `fix/reschedule-capacity-login-cap-perf`, not merged.** A
