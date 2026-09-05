@@ -3,9 +3,11 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `main` on both repos, everything merged and pushed, nothing in flight. Today's five branches (`feat/appointment-pass`, `feat/pass-refund-fairness`, `chore/pass-expiry-on-the-existing-cron`, `docs/pass-switched-off` web; `feat/appointment-pass` app) are all merged and safe to delete locally and on `origin`. Web locals are now just `main` and `develop` — the docs branch was merged and the two eslint branches deleted on 2026-08-29 (all three still on `origin` as the undo). **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
-- **Latest commit at last update:** `386538a` main (web/backend — merged and deployed; production served `12359b04`, migrations 0012/0013 applied, `PASS_ENABLED=False`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass)
-- **Last updated:** 2026-09-05 — **a full-codebase audit: 1 critical throttle bypass, a critical data-loss path in force-delete, and three money bugs.** 13 commits on `fix/reschedule-capacity-login-cap-perf` (`ee544ae`), **not merged**. 475 backend tests (2 skipped) · 47 web · no migrations. Three of the commits fix my own earlier work in the same session — see "What I got wrong". ⚠️ `NUM_PROXIES=1` cannot be verified from code; ROADMAP 16 has the check.\n- **Previously:** 2026-09-02 — **the Appointment Pass shipped and was switched off the same day.** Five web PRs (#47–#50) plus app #17, all merged. The day's real find was a refund hole — buy, redeem the free visit, cancel the paid one, keep both the money and the visit — closed in #48 with three UX holes alongside it. **429 backend tests (2 skipped) · 44 web · 160 app.** `PASS_ENABLED=False` on Railway, so nothing is on sale; turning it on is one variable once the −₹11.84 budget question is answered. **One loose end:** the expiry nudge has never been observed running (ROADMAP 14c). **Two deadlines found:** config-as-code dies 2026-12-01 and takes both cron services with it (14b), and the app half is merged but unbuilt.
+- **Branch:** `docs/prod-flag-carve-out` on web — **`9f48104` is pushed and needs a PR**; everything else is merged. `origin/main` is `f6a274e` (PR #54). The audit branch `fix/reschedule-capacity-login-cap-perf` merged as #53 and is safe to delete locally and on `origin`. **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
+- **Latest commit at last update:** `9f48104` `docs/prod-flag-carve-out` (web/backend — **not yet merged**; `origin/main` is `f6a274e`, deployed, `PASS_ENABLED=True`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass; every pass sold is bought on the web)
+- **Last updated:** 2026-09-06 — **the ₹35 pass is back on sale** (`PASS_ENABLED=True`, set by Vishnu in the Railway dashboard at ~01:10 IST, budget question knowingly still open), the 2026-09-04/05 audit branch merged as **#53**, and CLAUDE.md gained a **feature-flag carve-out** as **#54**. `/ship` then caught a regression the audit branch was about to ship and found **ROADMAP 21** 🔴 — pending/rejected facilities have every provider publicly listed and bookable. **477 backend tests (2 skipped) · 47 web**, both baselines refreshed in the same commit. **ROADMAP 14c went 🟡 → 🔴:** the flag being on means a real buyer now depends on an expiry nudge nobody has ever seen run.
+- **Previously:** 2026-09-05 — a full-codebase audit: 1 critical throttle bypass, a critical data-loss path in force-delete, and three money bugs. 13 commits, since merged. ⚠️ `NUM_PROXIES=1` still cannot be verified from code; ROADMAP 16 has the check.
+- **Previously:** 2026-09-02 — the Appointment Pass shipped and was switched off the same day. Five web PRs (#47–#50) plus app #17. The day's real find was a refund hole — buy, redeem the free visit, cancel the paid one, keep both the money and the visit — closed in #48.
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -91,11 +93,46 @@ table stays a flat no.
 
 - [x] Vishnu: open a checkout at a `SERVICE_ONLY` doctor and confirm the two
       options render — done, both showing. The pass is live.
-- [ ] Decide whether `settings.json` keeps denying `railway variables:*`.
-- [ ] Land the CLAUDE.md carve-out and the unmerged `d8749c6` ROADMAP commit —
-      both docs, both currently stranded on the already-merged
-      `fix/reschedule-capacity-login-cap-perf` branch.
+- [x] Land the CLAUDE.md carve-out and the stranded `d8749c6` ROADMAP commit —
+      both shipped as **PR #54**, `origin/main` now `f6a274e`.
+- [ ] Decide whether `settings.json` keeps denying `railway variables:*`. The
+      carve-out in CLAUDE.md now permits what the deny rule forbids, and a deny
+      rule cannot be prompted past — so today the prose and the config disagree.
+      It also blocks the **read**, which is step 1 of the carve-out's own
+      procedure.
 - [ ] Watch the first redeemed pass against the −₹11.84 figure.
+- [ ] **Prove the expiry nudge runs (ROADMAP 14c).** Now red, not amber: a real
+      patient can buy a real pass, so an unrun nudge is a patient never told
+      their pass is lapsing — and the +₹8.16 we keep looks like revenue.
+
+### Then `/ship` refused to let the audit branch out unchanged
+
+| Change | Commit | Status |
+|---|---|---|
+| Reverted the `/api/hospitals/<pk>/` 404 for non-active facilities; kept the `[TEST]` half | `9f48104` | ✅ |
+| Refreshed both stale test baselines — CLAUDE.md 419/44, `ship.md` 371/30 → **477/47** | `9f48104` | ✅ |
+| Recorded ROADMAP **21** — pending/rejected facilities' providers are publicly listed | `9f48104` | ✅ |
+| Open a PR for `9f48104` | — | ⬜ |
+
+**Why the 404 was worse than the bug.** The audit fix made the hospital detail
+endpoint 404 for `pending`/`rejected` facilities, to match what the list already
+hides. But **neither `DoctorViewSet` nor `ScanViewSet` filters on facility
+status at all**, so those providers are still publicly listed and still
+bookable — the detail page is reachable from a link the API itself handed out.
+404ing it stops no booking; it just breaks the page, and it breaks it hard on
+the centre screens, which fetch the facility inside a `Promise.all` and render a
+failure state (`ScanCenterDetails.js:72`, app `scan-center/[id].tsx:125` — and
+the app cannot be updated on our schedule). The doctor screens swallow it and
+merely lose the contact block. The real defect is **ROADMAP 21**, its own PR,
+because it has to answer what happens to bookings already taken against a
+facility that is no longer active.
+
+**A stale baseline defeats the check.** `/ship` compares the test count against
+the number written down; when the written number is 58 tests old it cannot tell
+a deleted test from a normal run. Both files now say 477/47, measured today.
+
+**Verified:** 477 backend OK (2 skipped), **0 `graph.facebook.com` lines under
+`-v 2`**, 47 web, eslint clean, `makemigrations --check` clean, no migrations.
 
 ---
 
