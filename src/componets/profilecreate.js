@@ -156,10 +156,10 @@ export default function Profilecreate() {
           <form onSubmit={submitHandler}>
 
             <div className="auth-field">
-              <label className="auth-field-label">Full Name</label>
+              <label htmlFor="signup-name" className="auth-field-label">Full Name</label>
               <div className="auth-input-wrap">
                 <span className="auth-input-icon"><i className="bi bi-person-circle me-1" /></span>
-                <input
+                <input id="signup-name"
                   className={`auth-input ${errors.name ? 'has-error' : ''}`}
                   type="text" name="name" placeholder="Your full name"
                   value={user.name} onChange={changeUser}
@@ -169,11 +169,11 @@ export default function Profilecreate() {
             </div>
 
             <div className="auth-field">
-              <label className="auth-field-label">Mobile Number</label>
+              <label htmlFor="signup-mobile" className="auth-field-label">Mobile Number</label>
               <div className="auth-otp-row">
                 <div className="auth-input-wrap">
                   <span className="auth-input-icon"><i className="bi bi-phone me-1" /></span>
-                  <input
+                  <input id="signup-mobile"
                     className={`auth-input ${errors.mobile ? 'has-error' : ''}`}
                     type="text" name="mobile" placeholder="10-digit mobile"
                     value={user.mobile} onChange={changeUser} maxLength={10}
@@ -223,10 +223,10 @@ export default function Profilecreate() {
             )}
 
             <div className="auth-field">
-              <label className="auth-field-label">Password</label>
+              <label htmlFor="signup-password" className="auth-field-label">Password</label>
               <div className="auth-input-wrap">
                 <span className="auth-input-icon"><i className="bi bi-key me-1" /></span>
-                <input
+                <input id="signup-password"
                   className={`auth-input has-eye ${errors.password ? 'has-error' : ''}`}
                   type={showPass ? 'text' : 'password'} name="password"
                   placeholder="Min 6 chars, letters + numbers"
@@ -244,10 +244,10 @@ export default function Profilecreate() {
             </div>
 
             <div className="auth-field">
-              <label className="auth-field-label">Confirm Password</label>
+              <label htmlFor="signup-confirmPassword" className="auth-field-label">Confirm Password</label>
               <div className="auth-input-wrap">
                 <span className="auth-input-icon"><i className="bi bi-lock me-1" /></span>
-                <input
+                <input id="signup-confirmPassword"
                   className={`auth-input has-eye ${errors.confirmPassword ? 'has-error' : ''}`}
                   type={showConfirm ? 'text' : 'password'} name="confirmPassword"
                   placeholder="Repeat your password"

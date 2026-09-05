@@ -39,3 +39,25 @@ class CustomUserAdmin(UserAdmin):
                                    'last_name')}),
     )
     readonly_fields = ('last_name',)
+
+    def has_delete_permission(self, request, obj=None):
+        """Refuse to delete a patient who has payment history.
+
+        `Booking.user` is CASCADE while `Booking.doctor` and `Booking.hospital`
+        are PROTECT, so deleting an account here silently takes that patient's
+        Payment, Refund and ReschedulePayment rows with it — and the GST charged
+        on them. Exactly the failure the force-delete endpoints were guarded
+        against (payments.models.financial_rows_for); this is the same hole with
+        an admin button in front of it instead of an API call.
+
+        Blocking rather than anonymising is the deliberate choice: it needs no
+        migration and is reversible. If a deletion request ever has to be
+        honoured, the answer is a nullable `Booking.user` with SET_NULL so the
+        money rows outlive the account — see ROADMAP.
+        """
+        if obj is None:
+            return super().has_delete_permission(request, obj)
+        from payments.models import financial_rows_for
+        if financial_rows_for(user=obj):
+            return False
+        return super().has_delete_permission(request, obj)

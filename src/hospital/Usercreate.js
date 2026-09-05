@@ -298,10 +298,10 @@ const Husercreate = () => {
 
             {/* Hospital name */}
             <div className="auth-field">
-              <label className="auth-field-label">{noun} Name</label>
+              <label htmlFor="hsignup-name" className="auth-field-label">{noun} Name</label>
               <div className="auth-input-wrap">
                 <span className="auth-input-icon">{isCentre ? '🔬' : '🏥'}</span>
-                <input
+                <input id="hsignup-name"
                   className={`auth-input ${errors.name ? 'has-error' : ''}`}
                   name="name"
                   placeholder={isBlood ? 'e.g. Lotus Pathology Lab'
@@ -384,8 +384,8 @@ const Husercreate = () => {
 
             {/* Address */}
             <div className="auth-field">
-              <label className="auth-field-label">Full Address</label>
-              <textarea
+              <label htmlFor="hsignup-address" className="auth-field-label">Full Address</label>
+              <textarea id="hsignup-address"
                 className={`auth-input ${errors.address ? 'has-error' : ''}`}
                 name="address" placeholder="Building, street, area, PIN code" rows="2"
                 style={{ paddingLeft: 14, resize: 'vertical' }}
@@ -396,10 +396,10 @@ const Husercreate = () => {
 
             {/* Maps location (optional) */}
             <div className="auth-field">
-              <label className="auth-field-label">Maps Location <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(optional)</span></label>
+              <label htmlFor="hsignup-location" className="auth-field-label">Maps Location <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(optional)</span></label>
               <div className="auth-input-wrap">
                 <span className="auth-input-icon">🔗</span>
-                <input
+                <input id="hsignup-location"
                   className="auth-input"
                   name="location" placeholder="Google Maps link or landmark"
                   value={hospital.location} onChange={handleChange}
@@ -412,11 +412,11 @@ const Husercreate = () => {
 
             {/* Mobile + OTP */}
             <div className="auth-field">
-              <label className="auth-field-label">Mobile Number</label>
+              <label htmlFor="hsignup-mobile" className="auth-field-label">Mobile Number</label>
               <div className="auth-otp-row">
                 <div className="auth-input-wrap">
                   <span className="auth-input-icon">📱</span>
-                  <input
+                  <input id="hsignup-mobile"
                     className={`auth-input ${errors.mobile ? 'has-error' : ''}`}
                     name="mobile" placeholder="10-digit mobile" maxLength={10} inputMode="numeric"
                     value={hospital.mobile} onChange={handleChange} disabled={otpVerified}
@@ -456,10 +456,10 @@ const Husercreate = () => {
 
             {/* Password */}
             <div className="auth-field">
-              <label className="auth-field-label">Set Password</label>
+              <label htmlFor="hsignup-password" className="auth-field-label">Set Password</label>
               <div className="auth-input-wrap">
                 <span className="auth-input-icon">🔑</span>
-                <input
+                <input id="hsignup-password"
                   className={`auth-input has-eye ${errors.password ? 'has-error' : ''}`}
                   type={showPass ? 'text' : 'password'} name="password" placeholder="Min 6 characters"
                   value={hospital.password} onChange={handleChange}
@@ -477,10 +477,10 @@ const Husercreate = () => {
 
             {/* Confirm password */}
             <div className="auth-field">
-              <label className="auth-field-label">Confirm Password</label>
+              <label htmlFor="hsignup-confirmPassword" className="auth-field-label">Confirm Password</label>
               <div className="auth-input-wrap">
                 <span className="auth-input-icon">🔒</span>
-                <input
+                <input id="hsignup-confirmPassword"
                   className={`auth-input has-eye ${errors.confirmPassword ? 'has-error' : ''}`}
                   type={showConfirm ? 'text' : 'password'} name="confirmPassword" placeholder="Re-enter password"
                   value={hospital.confirmPassword} onChange={handleChange}

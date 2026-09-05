@@ -148,13 +148,13 @@ export default function Navbar() {
         .nav-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
         .hosp-badge { display: flex; align-items: center; gap: 7px; padding: 5px 12px 5px 8px; background: var(--blue-50); border: 1px solid var(--blue-200); border-radius: 100px; font-size: 13px; color: var(--blue-800); white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
         .hosp-dot { width: 7px; height: 7px; border-radius: 50%; background: #3B6D11; flex-shrink: 0; animation: twPulse 2s ease-in-out infinite; }
-        .hosp-profile-trigger { display: flex; align-items: center; gap: 9px; padding: 5px 12px 5px 5px; background: #fff; border: 1px solid var(--blue-100); border-radius: 100px; cursor: pointer; transition: all 0.15s; }
+        .hosp-profile-trigger { font: inherit; color: inherit; text-align: left; display: flex; align-items: center; gap: 9px; padding: 5px 12px 5px 5px; background: #fff; border: 1px solid var(--blue-100); border-radius: 100px; cursor: pointer; transition: all 0.15s; }
         .hosp-profile-trigger:hover { border-color: var(--blue-300); background: var(--blue-50); }
         .hosp-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-600); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif; font-size: 11px; font-weight: 700; flex-shrink: 0; }
         .hosp-name { font-size: 13px; font-weight: 500; color: var(--gray-800); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .hosp-chevron { font-size: 9px; color: var(--gray-400); transition: transform 0.2s; }
         .hosp-chevron.open { transform: rotate(180deg); }
-        .user-trigger { display: flex; align-items: center; gap: 9px; padding: 5px 12px 5px 5px; background: #fff; border: 1px solid var(--blue-100); border-radius: 100px; cursor: pointer; transition: all 0.15s; }
+        .user-trigger { font: inherit; color: inherit; text-align: left; display: flex; align-items: center; gap: 9px; padding: 5px 12px 5px 5px; background: #fff; border: 1px solid var(--blue-100); border-radius: 100px; cursor: pointer; transition: all 0.15s; }
         .user-trigger:hover { border-color: var(--blue-300); background: var(--blue-50); }
         .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-600); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', sans-serif; font-size: 11px; font-weight: 700; flex-shrink: 0; }
         .user-name { font-size: 13px; font-weight: 500; color: var(--gray-800); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -242,11 +242,17 @@ export default function Navbar() {
                   <span className="hosp-dot" /><i className="bi bi-hospital me-1" />{hospName}
                 </div>
                 <div style={{ position: 'relative' }} ref={hospDropRef}>
-                  <div className="hosp-profile-trigger" onClick={() => setHospDrop(p => !p)}>
+                  <button
+                    type="button"
+                    className="hosp-profile-trigger"
+                    aria-haspopup="menu"
+                    aria-expanded={hospDrop}
+                    onClick={() => setHospDrop(p => !p)}
+                  >
                     <div className="hosp-avatar">{initials(hospName)}</div>
                     <span className="hosp-name">{hospName}</span>
                     <span className={`hosp-chevron ${hospDrop ? 'open' : ''}`}>▼</span>
-                  </div>
+                  </button>
                   {hospDrop && (
                     <div className="nav-dropdown">
                       <div className="nav-drop-header">
@@ -272,11 +278,17 @@ export default function Navbar() {
 
             {(isPatient || isAdmin) && (
               <div style={{ position: 'relative' }} ref={dropRef}>
-                <div className="user-trigger" onClick={() => setDropOpen(p => !p)}>
+                <button
+                  type="button"
+                  className="user-trigger"
+                  aria-haspopup="menu"
+                  aria-expanded={dropOpen}
+                  onClick={() => setDropOpen(p => !p)}
+                >
                   <div className="user-avatar">{initials(user.name || user.username)}</div>
                   <span className="user-name">{user.name || user.username}</span>
                   <span className={`user-chevron ${dropOpen ? 'open' : ''}`}>▼</span>
-                </div>
+                </button>
                 {dropOpen && (
                   <div className="nav-dropdown">
                     <div className="nav-drop-header">

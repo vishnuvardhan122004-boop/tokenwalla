@@ -710,10 +710,11 @@ export default function Payment() {
             {forOther && (
               <div className="pay-other-fields">
                 <div className="pay-other-field">
-                  <label className="pay-other-label">Patient's full name</label>
+                  <label className="pay-other-label" htmlFor="pay-other-name">Patient's full name</label>
                   <input
                     className="pay-other-input"
                     type="text"
+                    id="pay-other-name"
                     placeholder="e.g. Rahul Kumar"
                     value={otherName}
                     onChange={(e) => setOtherName(e.target.value)}
@@ -721,11 +722,12 @@ export default function Payment() {
                   />
                 </div>
                 <div className="pay-other-field">
-                  <label className="pay-other-label">Patient's mobile number</label>
+                  <label className="pay-other-label" htmlFor="pay-other-mobile">Patient's mobile number</label>
                   <input
                     className="pay-other-input"
                     type="tel"
                     inputMode="numeric"
+                    id="pay-other-mobile"
                     placeholder="10-digit mobile number"
                     value={otherMobile}
                     onChange={(e) => setOtherMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}

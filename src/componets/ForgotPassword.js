@@ -243,10 +243,10 @@ export default function ForgotPassword({ type = 'patient' }) {
               <div className="fp-sub">Enter your registered mobile. We'll send you an OTP.</div>
               {error && <div className="fp-error"><span><i className="bi bi-exclamation-triangle me-1" /></span> {error}</div>}
               <div className="fp-field">
-                <label>Mobile Number</label>
+                <label htmlFor="fp-mobile">Mobile Number</label>
                 <div className="fp-wrap">
                   <span className="fp-icon"><i className="bi bi-phone me-1" /></span>
-                  <input className="fp-input" type="text" placeholder="10-digit mobile number"
+                  <input className="fp-input" type="text" id="fp-mobile" placeholder="10-digit mobile number"
                     value={mobile} onChange={e => setMobile(e.target.value.replace(/\D/,'').slice(0,10))} maxLength={10} />
                 </div>
               </div>
@@ -268,10 +268,10 @@ export default function ForgotPassword({ type = 'patient' }) {
               {error   && <div className="fp-error"><span><i className="bi bi-exclamation-triangle me-1" /></span> {error}</div>}
               {success && <div className="fp-success">{success}</div>}
               <div className="fp-field">
-                <label>OTP from Text Message</label>
+                <label htmlFor="fp-otp">OTP from Text Message</label>
                 <div className="fp-wrap">
                   <span className="fp-icon"><i className="bi bi-123 me-1" /></span>
-                  <input className="fp-input" type="text" placeholder="Enter 4-digit OTP"
+                  <input className="fp-input" type="text" id="fp-otp" placeholder="Enter 4-digit OTP"
                     value={otp} onChange={e => setOtp(e.target.value.replace(/\D/,'').slice(0,6))} maxLength={6} />
                 </div>
               </div>
@@ -293,10 +293,10 @@ export default function ForgotPassword({ type = 'patient' }) {
               {error   && <div className="fp-error"><span><i className="bi bi-exclamation-triangle me-1" /></span> {error}</div>}
               {success && <div className="fp-success">{success}</div>}
               <div className="fp-field">
-                <label>New Password</label>
+                <label htmlFor="fp-password">New Password</label>
                 <div className="fp-wrap">
                   <span className="fp-icon"><i className="bi bi-key me-1" /></span>
-                  <input className="fp-input has-eye" type={showPass ? 'text' : 'password'} placeholder="Minimum 6 characters"
+                  <input className="fp-input has-eye" type={showPass ? 'text' : 'password'} id="fp-password" placeholder="Minimum 6 characters"
                     value={password} onChange={e => setPassword(e.target.value)} />
                   <button type="button" className="fp-eye" onClick={() => setShowPass(p => !p)}
                     aria-label={showPass ? 'Hide password' : 'Show password'}>
@@ -305,10 +305,10 @@ export default function ForgotPassword({ type = 'patient' }) {
                 </div>
               </div>
               <div className="fp-field">
-                <label>Confirm Password</label>
+                <label htmlFor="fp-confirm">Confirm Password</label>
                 <div className="fp-wrap">
                   <span className="fp-icon"><i className="bi bi-lock me-1" /></span>
-                  <input className="fp-input has-eye" type={showConfirm ? 'text' : 'password'} placeholder="Re-enter your new password"
+                  <input className="fp-input has-eye" type={showConfirm ? 'text' : 'password'} id="fp-confirm" placeholder="Re-enter your new password"
                     value={confirm} onChange={e => setConfirm(e.target.value)} />
                   <button type="button" className="fp-eye" onClick={() => setShowConfirm(p => !p)}
                     aria-label={showConfirm ? 'Hide password' : 'Show password'}>

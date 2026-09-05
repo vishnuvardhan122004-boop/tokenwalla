@@ -629,3 +629,34 @@ class ForceDeleteFinancialGuardTests(TestCase):
         res = self.admin.delete(f'/api/hospitals/{self.hospital.id}/force-delete/')
         self.assertEqual(res.status_code, 200, res.content)
         self.assertFalse(Hospital.objects.filter(pk=self.hospital.id).exists())
+
+    def test_a_patient_with_payments_cannot_be_deleted_from_the_admin(self):
+        from users.admin import CustomUserAdmin
+        from django.contrib.admin.sites import site
+        self._paid_booking()
+        admin_obj = CustomUserAdmin(type(self.patient), site)
+
+        class _Req:
+            def __init__(self, u): self.user = u
+        req = _Req(self.patient)
+        req.user.is_superuser = True
+
+        self.assertFalse(
+            admin_obj.has_delete_permission(req, self.patient),
+            'Booking.user is CASCADE, so deleting this account would destroy '
+            'its Payment and Refund rows and the GST charged on them')
+
+    def test_a_patient_with_no_payments_can_still_be_deleted(self):
+        from users.admin import CustomUserAdmin
+        from django.contrib.admin.sites import site
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        clean = User.objects.create(username='clean', mobile='9800000055', role='patient')
+        admin_obj = CustomUserAdmin(User, site)
+
+        class _Req:
+            def __init__(self, u): self.user = u
+        req = _Req(clean)
+        req.user.is_superuser = True
+
+        self.assertTrue(admin_obj.has_delete_permission(req, clean))
