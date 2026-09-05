@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import API from '../services/api';
 import { isTestHospital } from '../services/testHospitals';
@@ -30,7 +30,14 @@ function getNext7Days() {
   });
 }
 
-const DAYS = getNext7Days();
+// NOT computed at module load. `const DAYS = getNext7Days()` ran once when the
+// bundle was imported, so a tab left open across midnight kept labelling
+// yesterday "Today" — and `full` still held yesterday's date, so booking that
+// pill sent a date the server refuses as past. Recomputed per mount instead,
+// which is when the strip is actually rendered.
+function useNext7Days() {
+  return useMemo(() => getNext7Days(), []);
+}
 
 const mapBtn = {
   display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8,
@@ -61,6 +68,9 @@ export default function DoctorDetails() {
   const [user,         setUser]         = useState(null);
   const [slotAvail,    setSlotAvail]    = useState({});   // { "09:00 AM": { booked, max, full } }
   const [availLoading, setAvailLoading] = useState(false);
+
+  // Per mount, so a tab open across midnight relabels correctly.
+  const DAYS = useNext7Days();
 
   const [selectedDate, setSelectedDate] = useState(DAYS[0].full);
   const [selectedSlot, setSelectedSlot] = useState('');

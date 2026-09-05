@@ -64,6 +64,33 @@ def _whatsapp_async(send, booking, label):
     threading.Thread(target=_run, name=f'{label}-{booking.id}', daemon=True).start()
 
 
+def _claim_transition(booking, expected, new_status):
+    """Atomically move `booking` from one of `expected` into `new_status`.
+
+    Returns True only if THIS caller made the change.
+
+    Every status check in these views is an UNLOCKED read, so two requests can
+    both pass one and both write. The conditional UPDATE is the whole guard:
+    exactly one caller matches the expected status and gets a rowcount of 1.
+
+    The interleaving that matters is a patient cancelling while staff act on the
+    same booking. `process_cancellation_refund` holds a synchronous Razorpay
+    call inside its lock (deliberately — see refunds.py), so a cancel is in
+    flight for a second or more. Without this, a Complete landing in that window
+    wrote COMPLETED unconditionally: the refund still went out, the booking read
+    COMPLETED, the patient was told the cancel had failed, no pass credit came
+    back, and run_daily_payouts then skipped the booking forever because of its
+    `.exclude(payment__refunds__isnull=False)` guard — so the doctor was never
+    ledgered for a visit the hospital had marked done.
+    """
+    claimed = (Booking.objects
+               .filter(pk=booking.pk, status__in=expected)
+               .update(status=new_status))
+    if claimed:
+        booking.status = new_status      # keep the in-memory copy honest
+    return bool(claimed)
+
+
 class StandardPagination(PageNumberPagination):
     page_size             = 50
     page_size_query_param = 'page_size'
@@ -189,8 +216,11 @@ class CallNextView(APIView):
                 status=400
             )
 
-        booking.status = 'IN_PROGRESS'
-        booking.save(update_fields=['status'])
+        if not _claim_transition(booking, ('CONFIRMED',), 'IN_PROGRESS'):
+            return Response(
+                {'message': 'This booking was updated by someone else. Refresh and try again.'},
+                status=409
+            )
         logger.info('Booking %s called by hospital %s', pk, user_hospital_id)
         push_booking_in_progress(booking)  # patient "you're next" alert
         _whatsapp_async(send_queue_advance, booking, 'queue-advance')
@@ -214,8 +244,11 @@ class CompleteBookingView(APIView):
                 status=400
             )
 
-        booking.status = 'COMPLETED'
-        booking.save(update_fields=['status'])
+        if not _claim_transition(booking, ('CONFIRMED', 'IN_PROGRESS'), 'COMPLETED'):
+            return Response(
+                {'message': 'This booking was updated by someone else. Refresh and try again.'},
+                status=409
+            )
         logger.info('Booking %s completed by hospital %s', pk, user_hospital_id)
         return Response(BookingSerializer(booking, context={'request': request}).data)
 
@@ -245,8 +278,11 @@ class NoShowView(APIView):
                 status=400
             )
 
-        booking.status = Booking.NO_SHOW
-        booking.save(update_fields=['status'])
+        if not _claim_transition(booking, ('CONFIRMED', 'IN_PROGRESS'), Booking.NO_SHOW):
+            return Response(
+                {'message': 'This booking was updated by someone else. Refresh and try again.'},
+                status=409
+            )
         logger.info('Booking %s marked no-show by hospital %s', pk, user_hospital_id)
         push_booking_no_show(booking)
         _whatsapp_async(send_booking_no_show, booking, 'no-show')
@@ -273,6 +309,7 @@ class HoldBookingView(APIView):
         if user_hospital_id != booking.hospital_id and request.user.role != 'admin':
             return Response({'message': 'Access denied.'}, status=403)
 
+        previous = booking.status
         if booking.status == 'CONFIRMED':
             booking.status = 'ON_HOLD'
         elif booking.status == 'ON_HOLD':
@@ -283,7 +320,11 @@ class HoldBookingView(APIView):
                 status=400
             )
 
-        booking.save(update_fields=['status'])
+        if not _claim_transition(booking, (previous,), booking.status):
+            return Response(
+                {'message': 'This booking was updated by someone else. Refresh and try again.'},
+                status=409
+            )
         logger.info('Booking %s set to %s by hospital %s', pk, booking.status, user_hospital_id)
         # Only the hold direction needs an alert — a resume is followed by the
         # existing "you're next" push when staff actually call them.
@@ -357,13 +398,9 @@ class CancelBookingView(APIView):
         # A conditional UPDATE is the whole guard: exactly one caller matches
         # status='CONFIRMED' and gets a rowcount of 1; the loser gets 0 and
         # stops here, having changed nothing.
-        claimed = (Booking.objects
-                   .filter(pk=booking.pk, status='CONFIRMED')
-                   .update(status=Booking.CANCELLED))
-        if not claimed:
+        if not _claim_transition(booking, ('CONFIRMED',), Booking.CANCELLED):
             return Response(
                 {'message': 'This booking has already been cancelled.'}, status=400)
-        booking.status = Booking.CANCELLED   # keep the in-memory copy honest
         logger.info('Booking %s cancelled by user %s (refund: %s)', pk, request.user.id, refund_info)
 
         # Settle the Appointment Pass, if one is involved: a cancelled visit
@@ -691,8 +728,18 @@ class ScanQRView(APIView):
                             )
  
         # ── Mark as in_progress ──
-        booking.status = 'IN_PROGRESS'
-        booking.save(update_fields=['status'])
+        # Same atomic claim as the staff transitions. Losing the race here
+        # means someone else already advanced this booking, which is exactly
+        # what the already_done contract above describes — so reuse it rather
+        # than inventing a second shape for installed apps to learn.
+        if not _claim_transition(booking, ('CONFIRMED',), 'IN_PROGRESS'):
+            booking.refresh_from_db()
+            return Response({
+                'success':      False,
+                'already_done': True,
+                'message':      'This token was already scanned.',
+                'booking':      self._serialize_booking(booking),
+            }, status=409)
 
         logger.info(
             'QR scan: booking %s → in_progress by user %s (hospital %s)',

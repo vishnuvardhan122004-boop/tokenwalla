@@ -274,7 +274,7 @@ API.get('/doctors/').then(({ data }) => {
         }
         .hero-spec-icon {
           display: inline-flex; align-items: center; justify-content: center;
-          color: var(--blue-600, #2563eb);
+          color: var(--blue-600, #185FA5);
         }
         .hero-spec-icon svg { width: 17px; height: 17px; display: block; }
         .hero-spec-chip:hover .hero-spec-icon { color: var(--blue-700, #1d4ed8); }

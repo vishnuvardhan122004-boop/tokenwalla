@@ -219,26 +219,26 @@ const Contact = () => {
             <form onSubmit={submitHandler} noValidate>
               <div className="ct-row">
                 <div className="ct-field">
-                  <label>Your Name *</label>
-                  <input className="ct-input" name="name" type="text" placeholder="Full name"
+                  <label htmlFor="contact-name">Your Name *</label>
+                  <input id="contact-name" className="ct-input" name="name" type="text" placeholder="Full name"
                     value={form.name} onChange={handleChange} />
                 </div>
                 <div className="ct-field">
-                  <label>Mobile *</label>
-                  <input className="ct-input" name="mobile" type="tel" placeholder="10-digit number"
+                  <label htmlFor="contact-mobile">Mobile *</label>
+                  <input id="contact-mobile" className="ct-input" name="mobile" type="tel" placeholder="10-digit number"
                     value={form.mobile} onChange={handleChange} maxLength={10} />
                 </div>
               </div>
 
               <div className="ct-field">
-                <label>Subject</label>
-                <input className="ct-input" name="subject" type="text" placeholder="What is this about?"
+                <label htmlFor="contact-subject">Subject</label>
+                <input id="contact-subject" className="ct-input" name="subject" type="text" placeholder="What is this about?"
                   value={form.subject} onChange={handleChange} />
               </div>
 
               <div className="ct-field">
-                <label>Message *</label>
-                <textarea className="ct-input" name="message" rows={5} placeholder="Describe your issue or question..."
+                <label htmlFor="contact-message">Message *</label>
+                <textarea id="contact-message" className="ct-input" name="message" rows={5} placeholder="Describe your issue or question..."
                   value={form.message} onChange={handleChange}
                   style={{ resize: 'vertical', minHeight: 120 }}
                 />

@@ -565,3 +565,98 @@ class NoShowPayoutTests(TestCase):
         b = self._booking(Booking.CANCELLED)
         call_command('run_daily_payouts')
         self.assertFalse(DoctorLedger.objects.filter(booking=b).exists())
+
+
+class ForceDeleteFinancialGuardTests(TestCase):
+    """A hard delete must never take the money record with it.
+
+    Booking.doctor/hospital are PROTECT (bookings migration 0004) so a provider
+    delete cannot silently wipe patient history — but the force-delete endpoints
+    bypass that by deleting the Bookings first, and every money model behind a
+    Booking is still CASCADE. One admin click erased every Payment row (and the
+    GST charged on it), every Refund, and every PROCESSED PayoutBatch carrying a
+    hand-entered UTR, with a success response.
+    """
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIClient
+        from hospitals.models import Hospital
+        from doctors.models import Doctor
+        User = get_user_model()
+        self.patient = User.objects.create(username='p', mobile='9800000001', role='patient')
+        self.hospital = Hospital.objects.create(
+            name='Apollo', city='Hyd', mobile='9800000002', password='x')
+        self.doctor = Doctor.objects.create(
+            hospital=self.hospital, name='Rao', specialization='GP',
+            mobile='9800000003', fee=200, slots=['09:00 AM'])
+        admin = User.objects.create(
+            username='adm', mobile='9800000009', role='admin', is_staff=True)
+        self.admin = APIClient()
+        self.admin.force_authenticate(admin)
+
+    def _paid_booking(self):
+        b = Booking.objects.create(
+            user=self.patient, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate(), slot='09:00 AM', token='TW-FD1',
+            status=Booking.COMPLETED, amount=225)
+        Payment.objects.create(
+            booking=b, order_id='o1', payment_id='pay_fd1', amount=225,
+            doctor_fee=Decimal('200.00'), platform_fee=Decimal('20.00'),
+            gateway_fee=Decimal('1.50'), gst_amount=Decimal('3.87'),
+            final_amount=Decimal('225.37'), status=Payment.PAID)
+        return b
+
+    def test_hospital_force_delete_is_refused_when_payments_exist(self):
+        self._paid_booking()
+        res = self.admin.delete(f'/api/hospitals/{self.hospital.id}/force-delete/')
+        self.assertEqual(res.status_code, 409, res.content)
+        self.assertIn('payments', res.json()['blocking'])
+        # Nothing was destroyed.
+        self.assertEqual(Payment.objects.count(), 1)
+        self.assertTrue(Hospital.objects.filter(pk=self.hospital.id).exists())
+
+    def test_doctor_force_delete_is_refused_when_payments_exist(self):
+        self._paid_booking()
+        res = self.admin.delete(f'/api/doctors/{self.doctor.id}/force-delete/')
+        self.assertEqual(res.status_code, 409, res.content)
+        self.assertEqual(Payment.objects.count(), 1)
+
+    def test_a_provider_with_no_money_history_can_still_be_deleted(self):
+        # The case these endpoints actually exist for: a test fixture or an
+        # abandoned registration. Guarding must not break it.
+        from hospitals.models import Hospital
+        res = self.admin.delete(f'/api/hospitals/{self.hospital.id}/force-delete/')
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertFalse(Hospital.objects.filter(pk=self.hospital.id).exists())
+
+    def test_a_patient_with_payments_cannot_be_deleted_from_the_admin(self):
+        from users.admin import CustomUserAdmin
+        from django.contrib.admin.sites import site
+        self._paid_booking()
+        admin_obj = CustomUserAdmin(type(self.patient), site)
+
+        class _Req:
+            def __init__(self, u): self.user = u
+        req = _Req(self.patient)
+        req.user.is_superuser = True
+
+        self.assertFalse(
+            admin_obj.has_delete_permission(req, self.patient),
+            'Booking.user is CASCADE, so deleting this account would destroy '
+            'its Payment and Refund rows and the GST charged on them')
+
+    def test_a_patient_with_no_payments_can_still_be_deleted(self):
+        from users.admin import CustomUserAdmin
+        from django.contrib.admin.sites import site
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        clean = User.objects.create(username='clean', mobile='9800000055', role='patient')
+        admin_obj = CustomUserAdmin(User, site)
+
+        class _Req:
+            def __init__(self, u): self.user = u
+        req = _Req(clean)
+        req.user.is_superuser = True
+
+        self.assertTrue(admin_obj.has_delete_permission(req, clean))

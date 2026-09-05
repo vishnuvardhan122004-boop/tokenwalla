@@ -1671,6 +1671,118 @@ than "still credited". Do not reword it back without shipping the app half.
 
 ---
 
+### 16. `NUM_PROXIES=1` is a guess about the deployment 🔴 — set 2026-09-04, UNVERIFIED in production
+
+**One line decides whether every per-IP limit in the product works.** It was
+never set; DRF's default is `None`, which makes `BaseThrottle.get_ident` return
+the whole `X-Forwarded-For` header — a value the CLIENT controls. A new header
+per request meant a new throttle bucket per request, silently defeating
+`AnonRateThrottle`, the OTP send burst, the **10/hour brute-force guard on
+`ADMIN_SETUP_KEY`**, and the 2000/day paid-SMS ceiling (which reuses
+`get_ident` deliberately). Per-**number** caps were never affected.
+
+Fixed in `5a6f8c8` with `NUM_PROXIES = 1`, which takes `addrs[-1]` — the entry
+Railway itself appended, which a client cannot forge.
+
+**Why this is still open: 1 is correct for Railway fronting the app directly,
+and that has not been confirmed against the real deployment.** It fails safe in
+the security direction — the rightmost entry is always proxy-written at any hop
+count, so it can never be forged — but too low a value over-groups real users
+into one bucket and 429s them.
+
+**To close it,** once the branch is deployed, from a phone on mobile data:
+
+```bash
+curl -s https://<railway-domain>/health/ | python3 -m json.tool
+```
+
+Read `proxy.resolved_ident` (added in `4ade420` for exactly this). If it is that
+phone's public IP, the setting is right and this item closes. If it is a CDN
+egress or a private `10.x`, it is too low — raise `NUM_PROXIES` by one per
+extra hop. `/health/` echoes only the caller's own address; the raw header is
+deliberately not returned.
+
+---
+
+### 17. `otp_verified` is a bearer flag, and the real fix is breaking 🟡 — mitigated 2026-09-04
+
+`cache['otp_verified:<mobile>']` is keyed on the phone number alone and bound to
+no session or device, because an anonymous caller has none to bind to. So
+whoever calls `/auth/reset-password/` first inside the window wins — not
+necessarily the person who passed the OTP. An attacker cannot **create** the
+flag (that still needs the code), so this is a race against a legitimate flow
+rather than a standalone attack — but it is the account-takeover path.
+
+Mitigated by cutting the window 600s → 180s (`9257144`), which is comfortable
+for a human typing a new password and shrinks the window 3.3x. Marked
+`ponytail:` in `users/auth_views.py` so the debt ledger keeps it.
+
+**The real fix is a one-time nonce** returned by `/otp/verify/` and required
+back by every consumer (register, reset-password, the mobile change, and the
+three hospital equivalents). That is a **breaking API change** — installed apps
+call verify-then-reset with no nonce — so per the API-contract rule it needs
+either a versioned endpoint kept alive through an app rollout, or it ships with
+an app release. Not a quiet server-side edit.
+
+---
+
+### 18. The production guard false-positives on `main..HEAD` 🟢 — noticed 2026-09-04, cosmetic
+
+`.claude/hooks/guard-production.py` blocked a commit whose command chain ended
+`git log --oneline main..HEAD`. The actual push was to a feature branch —
+exactly what the guard's own message advises — but the literal `main` in a
+**revision range** tripped the push-to-deploying-branch rule.
+
+The guard did its job in the sense that it failed closed, and it was worked
+around by splitting the commands, not by rewording to slip past it. But it will
+keep firing on any `main..HEAD` diff or log, which is a normal thing to run.
+
+If it is worth tightening, match the push TARGET rather than the whole command
+string. **Its own commit, deliberately** — CLAUDE.md says so, and a guard edited
+in passing is a guard nobody trusts.
+
+---
+
+### 19. Audit coverage — which dimensions have actually had one 🟡 — 2026-09-04/05
+
+Four multi-agent audit runs, most of which died on session limits. What that
+means matters: **a dimension returning zero findings because its agent never ran
+is not a clean bill of health**, and the run summary renders both identically.
+
+| Dimension | Adversarial pass | Outcome |
+|---|---|---|
+| auth/security | ✅ done | 1 critical (`NUM_PROXIES`), fixed |
+| money | ✅ done | 2 high confirmed, both fixed |
+| tenancy / IDOR | ✅ done | 3 low fixed, 1 false positive |
+| perf | ✅ done | hospital-list N+1, RateCounter leak — fixed |
+| data / migrations | ✅ done | 1 critical + 2 high, all fixed |
+| frontend | ✅ done | 4 fixed; labels + blues closed later the same session |
+
+**Lesson worth keeping:** the runs that died used 25-26 agents against a
+configured guideline of under 5. The small runs completed. Size the fan-out to
+the guideline, not to ambition.
+
+Also: one finding in the money run arrived looking adversarially confirmed when
+two of its three verifiers had actually died — only the failure list revealed
+it. Any harness here must carry an explicit **UNVERIFIED** state rather than
+letting "no votes against" read as "confirmed".
+
+---
+
+### 20. `MyBookingsView` is the last unpaginated patient list 🟢 — noticed 2026-09-04
+
+`/api/bookings/my/` returns a patient's entire booking history with no
+pagination. It grows with one person's own usage rather than with platform
+traffic, so it is slow-burning rather than urgent — but it is the only
+patient-facing list left without a bound, and the queue endpoint has already
+taught this lesson once (CAPACITY.md §2).
+
+The query itself is now flat (`build_queue_map` + `select_related`, `cb88e1c`),
+so this is purely about response size. Paginating changes a response shape the
+mobile app reads, so it is additive-or-versioned, not a free change.
+
+---
+
 ## Next
 
 - **Slice 10 has no app half** — new 2026-08-19. The website ships scan-report

@@ -496,8 +496,8 @@ const Hprofile = () => {
                 <input type="file" accept="image/*" className="form-control" onChange={(e) => pickImage(e, "logo")} />
               </div>
 
-              <label className="form-label fw-semibold small">Hospital Name *</label>
-              <input className="form-control mb-3" value={form.name} onChange={e => setField("name", e.target.value)} placeholder="Hospital name" />
+              <label htmlFor="hp-hospital-name" className="form-label fw-semibold small">Hospital Name *</label>
+              <input id="hp-hospital-name" className="form-control mb-3" value={form.name} onChange={e => setField("name", e.target.value)} placeholder="Hospital name" />
 
               <label className="form-label fw-semibold small">City / Location</label>
               <LocationSearch
@@ -555,14 +555,14 @@ const Hprofile = () => {
                 </Suspense>
               )}
 
-              <label className="form-label fw-semibold small">Address</label>
-              <textarea className="form-control mb-3" rows={2} value={form.address} onChange={e => setField("address", e.target.value)} placeholder="Full address" />
+              <label htmlFor="hp-full-address" className="form-label fw-semibold small">Address</label>
+              <textarea id="hp-full-address" className="form-control mb-3" rows={2} value={form.address} onChange={e => setField("address", e.target.value)} placeholder="Full address" />
 
-              <label className="form-label fw-semibold small"><i className="bi bi-geo-alt me-1" />Maps Location (Google Maps link or landmark)</label>
-              <input className="form-control mb-3" value={form.location} onChange={e => setField("location", e.target.value)} placeholder="https://maps.google.com/… or landmark" />
+              <label htmlFor="hp-https-maps-google-com-or-l" className="form-label fw-semibold small"><i className="bi bi-geo-alt me-1" />Maps Location (Google Maps link or landmark)</label>
+              <input id="hp-https-maps-google-com-or-l" className="form-control mb-3" value={form.location} onChange={e => setField("location", e.target.value)} placeholder="https://maps.google.com/… or landmark" />
 
-              <label className="form-label fw-semibold small">Mobile Number</label>
-              <input
+              <label htmlFor="hp-10-digit-mobile" className="form-label fw-semibold small">Mobile Number</label>
+              <input id="hp-10-digit-mobile"
                 className="form-control mb-2" type="tel" maxLength={10}
                 value={form.mobile}
                 onChange={e => { setField("mobile", e.target.value.replace(/\D/g, "").slice(0, 10)); setOtpSent(false); setOtpVerified(false); }}
@@ -591,8 +591,8 @@ const Hprofile = () => {
               )}
               {mobileChanged && otpVerified && <div className="text-success fw-semibold small mb-3">✓ New mobile verified</div>}
 
-              <label className="form-label fw-semibold small"><i className="bi bi-telephone me-1" />Landline (optional)</label>
-              <input
+              <label htmlFor="hp-08812-234567" className="form-label fw-semibold small"><i className="bi bi-telephone me-1" />Landline (optional)</label>
+              <input id="hp-08812-234567"
                 className="form-control mb-1" type="tel" maxLength={15}
                 value={form.landline}
                 onChange={e => setField("landline", e.target.value.replace(/[^\d\-\s]/g, "").slice(0, 15))}
@@ -603,14 +603,14 @@ const Hprofile = () => {
                 where OTP and booking alerts arrive.
               </div>
 
-              <label className="form-label fw-semibold small"><i className="bi bi-info-circle me-1" />About the Hospital (shown to patients)</label>
-              <textarea className="form-control mb-3" rows={3} value={form.description} onChange={e => setField("description", e.target.value)} placeholder="Describe your hospital, specialities and what you provide…" />
+              <label htmlFor="hp-about-the-hospital-shown-t" className="form-label fw-semibold small"><i className="bi bi-info-circle me-1" />About the Hospital (shown to patients)</label>
+              <textarea id="hp-about-the-hospital-shown-t" className="form-control mb-3" rows={3} value={form.description} onChange={e => setField("description", e.target.value)} placeholder="Describe your hospital, specialities and what you provide…" />
 
-              <label className="form-label fw-semibold small"><i className="bi bi-megaphone me-1" />Announcement / Notice (shown to patients)</label>
-              <textarea className="form-control mb-2" rows={2} maxLength={300} value={form.announcement} onChange={e => setField("announcement", e.target.value)} placeholder="e.g. Closed for Sankranti 14–16 Jan · Free BP check this week" />
+              <label htmlFor="hp-f608" className="form-label fw-semibold small"><i className="bi bi-megaphone me-1" />Announcement / Notice (shown to patients)</label>
+              <textarea id="hp-f608" className="form-control mb-2" rows={2} maxLength={300} value={form.announcement} onChange={e => setField("announcement", e.target.value)} placeholder="e.g. Closed for Sankranti 14–16 Jan · Free BP check this week" />
               <div className="d-flex align-items-center gap-2 mb-3">
-                <label className="form-label small text-muted mb-0 flex-shrink-0">Show until</label>
-                <input
+                <label htmlFor="hp-show-until" className="form-label small text-muted mb-0 flex-shrink-0">Show until</label>
+                <input id="hp-show-until"
                   className="form-control form-control-sm" type="date"
                   value={form.announcement_until || ""}
                   onChange={e => setField("announcement_until", e.target.value)}
@@ -627,22 +627,22 @@ const Hprofile = () => {
                 with a date disappears by itself the day after.
               </div>
 
-              <label className="form-label fw-semibold small"><i className="bi bi-clock me-1" />Working Hours (24h, e.g. 09:00 – 18:00)</label>
+              <label htmlFor="hp-open-09-00" className="form-label fw-semibold small"><i className="bi bi-clock me-1" />Working Hours (24h, e.g. 09:00 – 18:00)</label>
               <div className="d-flex gap-2 mb-3">
-                <input className="form-control" maxLength={5} value={form.open_time} onChange={e => setField("open_time", e.target.value)} placeholder="Open 09:00" />
+                <input id="hp-open-09-00" className="form-control" maxLength={5} value={form.open_time} onChange={e => setField("open_time", e.target.value)} placeholder="Open 09:00" />
                 <input className="form-control" maxLength={5} value={form.close_time} onChange={e => setField("close_time", e.target.value)} placeholder="Close 18:00" />
               </div>
 
-              <label className="form-label fw-semibold small"><i className="bi bi-instagram me-1" />Instagram Link</label>
-              <input className="form-control mb-3" value={form.instagram} onChange={e => setField("instagram", e.target.value)} placeholder="https://instagram.com/yourhospital" />
-              <label className="form-label fw-semibold small"><i className="bi bi-youtube me-1" />YouTube Link</label>
-              <input className="form-control mb-3" value={form.youtube} onChange={e => setField("youtube", e.target.value)} placeholder="https://youtube.com/@yourhospital" />
-              <label className="form-label fw-semibold small"><i className="bi bi-facebook me-1" />Facebook Link</label>
-              <input className="form-control mb-3" value={form.facebook} onChange={e => setField("facebook", e.target.value)} placeholder="https://facebook.com/yourhospital" />
+              <label htmlFor="hp-https-instagram-com-yourho" className="form-label fw-semibold small"><i className="bi bi-instagram me-1" />Instagram Link</label>
+              <input id="hp-https-instagram-com-yourho" className="form-control mb-3" value={form.instagram} onChange={e => setField("instagram", e.target.value)} placeholder="https://instagram.com/yourhospital" />
+              <label htmlFor="hp-https-youtube-com-yourhosp" className="form-label fw-semibold small"><i className="bi bi-youtube me-1" />YouTube Link</label>
+              <input id="hp-https-youtube-com-yourhosp" className="form-control mb-3" value={form.youtube} onChange={e => setField("youtube", e.target.value)} placeholder="https://youtube.com/@yourhospital" />
+              <label htmlFor="hp-https-facebook-com-yourhos" className="form-label fw-semibold small"><i className="bi bi-facebook me-1" />Facebook Link</label>
+              <input id="hp-https-facebook-com-yourhos" className="form-control mb-3" value={form.facebook} onChange={e => setField("facebook", e.target.value)} placeholder="https://facebook.com/yourhospital" />
 
-              <label className="form-label fw-semibold small"><i className="bi bi-hospital me-1" />Services Offered</label>
+              <label htmlFor="hp-e-g-x-ray-pharmacy-icu" className="form-label fw-semibold small"><i className="bi bi-hospital me-1" />Services Offered</label>
               <div className="d-flex gap-2 mb-2">
-                <input
+                <input id="hp-e-g-x-ray-pharmacy-icu"
                   className="form-control" value={newService}
                   onChange={e => setNewService(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addService(); } }}
@@ -745,16 +745,16 @@ const Hprofile = () => {
 
           {payEditing ? (
             <>
-              <label className="form-label fw-semibold small">Payment Method</label>
-              <select className="form-select mb-3" value={payForm.payment_method}
+              <label htmlFor="hp-payment-method" className="form-label fw-semibold small">Payment Method</label>
+              <select id="hp-payment-method" className="form-select mb-3" value={payForm.payment_method}
                       onChange={e => setPayField("payment_method", e.target.value)}>
                 {PAY_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
 
               {payForm.payment_method === "UPI" && (
                 <>
-                  <label className="form-label fw-semibold small">UPI ID *</label>
-                  <input className={`form-control ${payErrors.upi_id ? "is-invalid" : "mb-1"}`}
+                  <label htmlFor="hp-hospital-okhdfc" className="form-label fw-semibold small">UPI ID *</label>
+                  <input id="hp-hospital-okhdfc" className={`form-control ${payErrors.upi_id ? "is-invalid" : "mb-1"}`}
                          placeholder="hospital@okhdfc" value={payForm.upi_id}
                          onChange={e => setPayField("upi_id", e.target.value)} />
                   {payErrors.upi_id
@@ -765,24 +765,24 @@ const Hprofile = () => {
 
               {payForm.payment_method === "BANK" && (
                 <>
-                  <label className="form-label fw-semibold small">Account Holder Name *</label>
-                  <input className={`form-control mb-3 ${payErrors.account_holder_name ? "is-invalid" : ""}`}
+                  <label htmlFor="hp-as-printed-on-the-passbook" className="form-label fw-semibold small">Account Holder Name *</label>
+                  <input id="hp-as-printed-on-the-passbook" className={`form-control mb-3 ${payErrors.account_holder_name ? "is-invalid" : ""}`}
                          placeholder="As printed on the passbook / cheque" value={payForm.account_holder_name}
                          onChange={e => setPayField("account_holder_name", e.target.value)} />
                   {payErrors.account_holder_name && <div className="invalid-feedback d-block mb-2">{payErrors.account_holder_name}</div>}
 
-                  <label className="form-label fw-semibold small">Bank Name</label>
-                  <input className="form-control mb-3" placeholder="e.g. HDFC Bank" value={payForm.bank_name}
+                  <label htmlFor="hp-e-g-hdfc-bank" className="form-label fw-semibold small">Bank Name</label>
+                  <input id="hp-e-g-hdfc-bank" className="form-control mb-3" placeholder="e.g. HDFC Bank" value={payForm.bank_name}
                          onChange={e => setPayField("bank_name", e.target.value)} />
 
-                  <label className="form-label fw-semibold small">Account Number *</label>
-                  <input className={`form-control mb-3 ${payErrors.account_number ? "is-invalid" : ""}`}
+                  <label htmlFor="hp-bank-account-number" className="form-label fw-semibold small">Account Number *</label>
+                  <input id="hp-bank-account-number" className={`form-control mb-3 ${payErrors.account_number ? "is-invalid" : ""}`}
                          placeholder="Bank account number" value={payForm.account_number}
                          onChange={e => setPayField("account_number", e.target.value.replace(/\s/g, ""))} />
                   {payErrors.account_number && <div className="invalid-feedback d-block mb-2">{payErrors.account_number}</div>}
 
-                  <label className="form-label fw-semibold small">IFSC Code *</label>
-                  <input className={`form-control text-uppercase ${payErrors.ifsc_code ? "is-invalid" : "mb-1"}`}
+                  <label htmlFor="hp-hdfc0001234" className="form-label fw-semibold small">IFSC Code *</label>
+                  <input id="hp-hdfc0001234" className={`form-control text-uppercase ${payErrors.ifsc_code ? "is-invalid" : "mb-1"}`}
                          placeholder="HDFC0001234" value={payForm.ifsc_code}
                          onChange={e => setPayField("ifsc_code", e.target.value)} />
                   {payErrors.ifsc_code
@@ -791,8 +791,8 @@ const Hprofile = () => {
                 </>
               )}
 
-              <label className="form-label fw-semibold small">Notes <span className="text-muted fw-normal">(optional)</span></label>
-              <textarea className="form-control mb-3" rows={2} value={payForm.payout_notes}
+              <label htmlFor="hp-f793" className="form-label fw-semibold small">Notes <span className="text-muted fw-normal">(optional)</span></label>
+              <textarea id="hp-f793" className="form-control mb-3" rows={2} value={payForm.payout_notes}
                         placeholder="e.g. Settle weekly; GST invoice to accounts@…"
                         onChange={e => setPayField("payout_notes", e.target.value)} />
 
@@ -838,9 +838,9 @@ const Hprofile = () => {
         <div className="card shadow-sm border-0 p-4 mb-4">
           <div className="d-flex justify-content-between align-items-center mb-3">
             <h6 className="fw-bold mb-0">Photo Gallery</h6>
-            <label className="btn btn-sm btn-outline-primary mb-0">
+            <label htmlFor="hp-f840" className="btn btn-sm btn-outline-primary mb-0">
               {photoBusy ? <span className="spinner-border spinner-border-sm" /> : "＋ Add Photo"}
-              <input type="file" accept="image/*" hidden onChange={addPhoto} disabled={photoBusy} />
+              <input id="hp-f840" type="file" accept="image/*" hidden onChange={addPhoto} disabled={photoBusy} />
             </label>
           </div>
           {gallery.length === 0 ? (

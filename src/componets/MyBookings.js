@@ -93,8 +93,8 @@ export function WhatsAppOptIn({ onError }) {
   };
 
   return (
-    <label className="mb-wa">
-      <input
+    <label htmlFor="mb-f95" className="mb-wa">
+      <input id="mb-f95"
         type="checkbox"
         checked={optIn}
         onChange={(e) => change(e.target.checked)}
@@ -398,6 +398,12 @@ export default function MyBookings() {
   // A scan's journey does not end at the visit: the report comes back hours or
   // days later. This is the only place in the product where something arrives
   // AFTER a booking is COMPLETED.
+  const completedIdsKey = bookings
+    .filter(b => b.status === 'COMPLETED')
+    .map(b => b.id)
+    .sort()
+    .join(',');
+
   useEffect(() => {
     // Any provider may share a document now — a hospital's discharge summary,
     // not just a centre's scan PDF — so this asks every completed booking.
@@ -412,7 +418,12 @@ export default function MyBookings() {
       if (!cancelled) setReports(Object.fromEntries(pairs));
     });
     return () => { cancelled = true; };
-  }, [bookings]);
+    // `bookings` is a NEW array on every 15s poll, so depending on it re-ran
+    // this whole fan-out every 15 seconds — one request per completed
+    // booking, forever, for data that changes maybe once a day. Depend on
+    // WHICH completed bookings exist instead, which is stable across polls.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedIdsKey]);
 
   const downloadReport = async (bookingId, report) => {
     setDownloading(report.id);
@@ -770,8 +781,8 @@ export default function MyBookings() {
           <div className="mb-modal">
             <div className="mb-modal-title"><i className="bi bi-calendar-event me-1" />Reschedule Appointment</div>
             <div className="mb-modal-sub">{providerLabel(rescheduleBooking.doctor_name, rescheduleBooking.provider_kind)} · {rescheduleBooking.hospital_name}</div>
-            <label className="mb-modal-label">Select New Date</label>
-            <input
+            <label htmlFor="mb-select-new-date" className="mb-modal-label">Select New Date</label>
+            <input id="mb-select-new-date"
               type="date" className="mb-modal-input" min={today} value={newDate}
               onChange={e => { setNewDate(e.target.value); setNewSlot(''); }}
               disabled={rescheduling}

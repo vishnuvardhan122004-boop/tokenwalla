@@ -141,10 +141,10 @@ export default function Hlogin() {
 
           <form onSubmit={submitHandler}>
             <div className="auth-field">
-              <label className="auth-field-label">Mobile Number</label>
+              <label htmlFor="hlogin-mobile" className="auth-field-label">Mobile Number</label>
               <div className="auth-input-wrap">
                 <span className="auth-input-icon">📱</span>
-                <input
+                <input id="hlogin-mobile"
                   className="auth-input"
                   type="text"
                   name="mobile"
@@ -157,11 +157,11 @@ export default function Hlogin() {
             </div>
 
             <div className="auth-field">
-              <label className="auth-field-label">Password / OTP</label>
+              <label htmlFor="hlogin-password" className="auth-field-label">Password / OTP</label>
               <div className="auth-otp-row">
                 <div className="auth-input-wrap">
                   <span className="auth-input-icon">🔑</span>
-                  <input
+                  <input id="hlogin-password"
                     className="auth-input has-eye"
                     type={showPass ? 'text' : 'password'}
                     name="password"

@@ -362,10 +362,10 @@ export default function Admin() {
 
                 <form onSubmit={handleLogin}>
                   <div className="al-field">
-                    <label>Mobile Number</label>
+                    <label htmlFor="adm-10-digit-mobile">Mobile Number</label>
                     <div className="al-wrap">
                       <span className="al-icon"><i className="bi bi-phone me-1" /></span>
-                      <input
+                      <input id="adm-10-digit-mobile"
                         className="al-input" type="text"
                         placeholder="10-digit mobile"
                         value={mobile}
@@ -376,10 +376,10 @@ export default function Admin() {
                   </div>
 
                   <div className="al-field">
-                    <label>Password</label>
+                    <label htmlFor="adm-admin-password">Password</label>
                     <div className="al-wrap">
                       <span className="al-icon"><i className="bi bi-key me-1" /></span>
-                      <input
+                      <input id="adm-admin-password"
                         className="al-input" type="password"
                         placeholder="Admin password"
                         value={password}
@@ -430,10 +430,10 @@ export default function Admin() {
                 {!createSuccess && (
                   <form onSubmit={handleCreate}>
                     <div className="al-field">
-                      <label>Setup Key <span style={{ color: '#A32D2D' }}>*</span></label>
+                      <label htmlFor="adm-your-admin-setup-key-value">Setup Key <span style={{ color: '#A32D2D' }}>*</span></label>
                       <div className="al-wrap">
                         <span className="al-icon"><i className="bi bi-lock me-1" /></span>
-                        <input
+                        <input id="adm-your-admin-setup-key-value"
                           className={`al-input ${showSetupKey ? '' : 'has-eye'}`}
                           type={showSetupKey ? 'text' : 'password'}
                           placeholder="Your ADMIN_SETUP_KEY value"
@@ -454,10 +454,10 @@ export default function Admin() {
                     <div className="al-divider">admin details</div>
 
                     <div className="al-field">
-                      <label>Full Name <span style={{ color: '#A32D2D' }}>*</span></label>
+                      <label htmlFor="adm-e-g-site-administrator">Full Name <span style={{ color: '#A32D2D' }}>*</span></label>
                       <div className="al-wrap">
                         <span className="al-icon"><i className="bi bi-person-circle me-1" /></span>
-                        <input
+                        <input id="adm-e-g-site-administrator"
                           className="al-input" type="text"
                           placeholder="e.g. Site Administrator"
                           value={newName}
@@ -467,10 +467,10 @@ export default function Admin() {
                     </div>
 
                     <div className="al-field">
-                      <label>Mobile Number <span style={{ color: '#A32D2D' }}>*</span></label>
+                      <label htmlFor="adm-10-digit-mobile-number">Mobile Number <span style={{ color: '#A32D2D' }}>*</span></label>
                       <div className="al-wrap">
                         <span className="al-icon"><i className="bi bi-phone me-1" /></span>
-                        <input
+                        <input id="adm-10-digit-mobile-number"
                           className="al-input" type="text"
                           placeholder="10-digit mobile number"
                           value={newMobile}
@@ -481,10 +481,10 @@ export default function Admin() {
                     </div>
 
                     <div className="al-field">
-                      <label>Password <span style={{ color: '#A32D2D' }}>*</span></label>
+                      <label htmlFor="adm-minimum-8-characters">Password <span style={{ color: '#A32D2D' }}>*</span></label>
                       <div className="al-wrap">
                         <span className="al-icon"><i className="bi bi-key me-1" /></span>
-                        <input
+                        <input id="adm-minimum-8-characters"
                           className={`al-input has-eye`}
                           type={showNewPass ? 'text' : 'password'}
                           placeholder="Minimum 8 characters"
@@ -518,10 +518,10 @@ export default function Admin() {
                     </div>
 
                     <div className="al-field">
-                      <label>Confirm Password <span style={{ color: '#A32D2D' }}>*</span></label>
+                      <label htmlFor="adm-re-enter-your-password">Confirm Password <span style={{ color: '#A32D2D' }}>*</span></label>
                       <div className="al-wrap">
                         <span className="al-icon"><i className="bi bi-lock me-1" /></span>
-                        <input
+                        <input id="adm-re-enter-your-password"
                           className="al-input" type="password"
                           placeholder="Re-enter your password"
                           value={confirmPass}

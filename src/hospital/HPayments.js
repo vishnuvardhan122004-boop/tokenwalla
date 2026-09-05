@@ -412,8 +412,8 @@ const HPayments = ({ hospital, showToast }) => {
               <>
                 {/* Collection mode */}
                 <div className="mb-3 mt-2">
-                  <label className="form-label fw-semibold small mb-1">Payment Collection Mode</label>
-                  <select className="form-select" value={form.payment_collection_mode}
+                  <label htmlFor="hpay-payment-collection-mode" className="form-label fw-semibold small mb-1">Payment Collection Mode</label>
+                  <select id="hpay-payment-collection-mode" className="form-select" value={form.payment_collection_mode}
                           onChange={(e) => setField("payment_collection_mode", e.target.value)}>
                     {COLLECTION_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select>
@@ -465,8 +465,8 @@ const HPayments = ({ hospital, showToast }) => {
 
                 {/* Where the money goes */}
                 <div className="mb-3">
-                  <label className="form-label fw-semibold small mb-1">Pay Fees To</label>
-                  <select className="form-select"
+                  <label htmlFor="hpay-pay-fees-to" className="form-label fw-semibold small mb-1">Pay Fees To</label>
+                  <select id="hpay-pay-fees-to" className="form-select"
                           value={form.payout_to_hospital ? "HOSPITAL" : "DOCTOR"}
                           onChange={(e) => setField("payout_to_hospital", e.target.value === "HOSPITAL")}>
                     {PAYOUT_DESTINATIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
@@ -486,8 +486,8 @@ const HPayments = ({ hospital, showToast }) => {
                 ) : (<>
                 {/* Method */}
                 <div className="mb-3">
-                  <label className="form-label fw-semibold small mb-1">Payment Method</label>
-                  <select className="form-select" value={form.payment_method}
+                  <label htmlFor="hpay-payment-method" className="form-label fw-semibold small mb-1">Payment Method</label>
+                  <select id="hpay-payment-method" className="form-select" value={form.payment_method}
                           onChange={(e) => setField("payment_method", e.target.value)}>
                     {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select>
@@ -496,8 +496,8 @@ const HPayments = ({ hospital, showToast }) => {
                 {/* UPI */}
                 {form.payment_method === "UPI" && (
                   <div className="mb-3">
-                    <label className="form-label fw-semibold small mb-1">UPI ID</label>
-                    <input className={`form-control ${formErrors.upi_id ? "is-invalid" : ""}`}
+                    <label htmlFor="hpay-clinic-okhdfc" className="form-label fw-semibold small mb-1">UPI ID</label>
+                    <input id="hpay-clinic-okhdfc" className={`form-control ${formErrors.upi_id ? "is-invalid" : ""}`}
                            placeholder="clinic@okhdfc" value={form.upi_id}
                            onChange={(e) => setField("upi_id", e.target.value)} />
                     {formErrors.upi_id && <div className="invalid-feedback">{formErrors.upi_id}</div>}
@@ -508,29 +508,29 @@ const HPayments = ({ hospital, showToast }) => {
                 {form.payment_method === "BANK" && (
                   <>
                     <div className="mb-3">
-                      <label className="form-label fw-semibold small mb-1">Account Holder Name</label>
-                      <input className={`form-control ${formErrors.account_holder_name ? "is-invalid" : ""}`}
+                      <label htmlFor="hpay-account-holder-name" className="form-label fw-semibold small mb-1">Account Holder Name</label>
+                      <input id="hpay-account-holder-name" className={`form-control ${formErrors.account_holder_name ? "is-invalid" : ""}`}
                              value={form.account_holder_name}
                              onChange={(e) => setField("account_holder_name", e.target.value)} />
                       {formErrors.account_holder_name && <div className="invalid-feedback">{formErrors.account_holder_name}</div>}
                     </div>
                     <div className="row g-2">
                       <div className="col-12 col-sm-6 mb-3">
-                        <label className="form-label fw-semibold small mb-1">Bank Name</label>
-                        <input className="form-control" value={form.bank_name}
+                        <label htmlFor="hpay-bank-name" className="form-label fw-semibold small mb-1">Bank Name</label>
+                        <input id="hpay-bank-name" className="form-control" value={form.bank_name}
                                onChange={(e) => setField("bank_name", e.target.value)} />
                       </div>
                       <div className="col-12 col-sm-6 mb-3">
-                        <label className="form-label fw-semibold small mb-1">Account Number</label>
-                        <input className={`form-control ${formErrors.account_number ? "is-invalid" : ""}`}
+                        <label htmlFor="hpay-account-number" className="form-label fw-semibold small mb-1">Account Number</label>
+                        <input id="hpay-account-number" className={`form-control ${formErrors.account_number ? "is-invalid" : ""}`}
                                value={form.account_number}
                                onChange={(e) => setField("account_number", e.target.value)} />
                         {formErrors.account_number && <div className="invalid-feedback">{formErrors.account_number}</div>}
                       </div>
                     </div>
                     <div className="mb-3">
-                      <label className="form-label fw-semibold small mb-1">IFSC Code</label>
-                      <input className={`form-control text-uppercase ${formErrors.ifsc_code ? "is-invalid" : ""}`}
+                      <label htmlFor="hpay-hdfc0001234" className="form-label fw-semibold small mb-1">IFSC Code</label>
+                      <input id="hpay-hdfc0001234" className={`form-control text-uppercase ${formErrors.ifsc_code ? "is-invalid" : ""}`}
                              placeholder="HDFC0001234" value={form.ifsc_code}
                              onChange={(e) => setField("ifsc_code", e.target.value)} />
                       {formErrors.ifsc_code && <div className="invalid-feedback">{formErrors.ifsc_code}</div>}
@@ -541,8 +541,8 @@ const HPayments = ({ hospital, showToast }) => {
 
                 {/* Notes */}
                 <div className="mb-3">
-                  <label className="form-label fw-semibold small mb-1">Notes <span className="text-muted fw-normal">(optional)</span></label>
-                  <textarea className="form-control" rows={2} value={form.payout_notes}
+                  <label htmlFor="hpay-f543" className="form-label fw-semibold small mb-1">Notes <span className="text-muted fw-normal">(optional)</span></label>
+                  <textarea id="hpay-f543" className="form-control" rows={2} value={form.payout_notes}
                             placeholder="e.g. Settle weekly, GST invoice to accounts@…"
                             onChange={(e) => setField("payout_notes", e.target.value)} />
                 </div>
@@ -595,7 +595,7 @@ const HPayments = ({ hospital, showToast }) => {
         .hp-empty__icon{font-size:30px;margin-bottom:6px;opacity:.7}
 
         .hp-badge{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
-        .hp-badge--blue{background:#e7f0ff;color:#0d6efd}
+        .hp-badge--blue{background:#e7f0ff;color:#185FA5}
         .hp-badge--amber{background:#fff3e0;color:#c2410c}
         .hp-badge--violet{background:#f3e8ff;color:#7c3aed}
         .hp-badge--slate{background:#eef2f6;color:#556170}

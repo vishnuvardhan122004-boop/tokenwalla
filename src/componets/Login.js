@@ -135,10 +135,10 @@ export default function Login() {
 
           <form onSubmit={submitHandler}>
             <div className="auth-field">
-              <label className="auth-field-label">Mobile Number</label>
+              <label htmlFor="login-mobile" className="auth-field-label">Mobile Number</label>
               <div className="auth-input-wrap">
                 <span className="auth-input-icon"><i className="bi bi-phone me-1" /></span>
-                <input
+                <input id="login-mobile"
                   className="auth-input"
                   type="text"
                   name="mobile"
@@ -151,11 +151,11 @@ export default function Login() {
             </div>
 
             <div className="auth-field">
-              <label className="auth-field-label">Password / OTP</label>
+              <label htmlFor="login-password" className="auth-field-label">Password / OTP</label>
               <div className="auth-otp-row">
                 <div className="auth-input-wrap">
                   <span className="auth-input-icon"><i className="bi bi-key me-1" /></span>
-                  <input
+                  <input id="login-password"
                     className="auth-input has-eye"
                     type={showPass ? 'text' : 'password'}
                     name="password"
