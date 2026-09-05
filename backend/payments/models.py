@@ -293,3 +293,46 @@ class DoctorLedger(models.Model):
     def __str__(self):
         payee = f'centre {self.center_id}' if self.center_id else f'doctor {self.doctor_id}'
         return f'{self.reason} ₹{self.amount} → {payee}'
+
+def financial_rows_for(*, hospital=None, doctor=None):
+    """Money records a HARD delete of this provider would destroy.
+
+    `Booking.doctor` and `Booking.hospital` are PROTECT (bookings migration
+    0004, whose own comment says it exists so "deleting a doctor/hospital
+    doesn't silently wipe patient booking history"). The force-delete endpoints
+    bypass that by deleting the Bookings first — and every money model behind a
+    Booking is still CASCADE:
+
+        Payment.booking             CASCADE
+        Refund.payment              CASCADE  (reached via Payment)
+        ReschedulePayment.booking   CASCADE
+        DoctorLedger.doctor/center  CASCADE
+        PayoutBatch.doctor/center   CASCADE
+
+    So one admin click erased every Payment row for that provider — including
+    the GST charged to patients on it — every Refund, and every PROCESSED
+    PayoutBatch carrying a hand-entered UTR. Silently, with a success response,
+    and with the admin reports and daily totals simply dropping by that amount.
+
+    Returns {label: count} for whatever is non-empty, so the caller can refuse
+    and name what it would have destroyed. Empty dict means the provider carries
+    no financial history and is safe to remove — which is the case the
+    force-delete endpoints actually exist for (test fixtures and abandoned
+    registrations).
+    """
+    if hospital is not None:
+        booking_q  = {'booking__hospital': hospital}
+        ledger_q   = {'center': hospital}
+    else:
+        booking_q  = {'booking__doctor': doctor}
+        ledger_q   = {'doctor': doctor}
+
+    counts = {
+        'payments':          Payment.objects.filter(**booking_q).count(),
+        'refunds':           Refund.objects.filter(
+                                 payment__in=Payment.objects.filter(**booking_q)).count(),
+        'reschedule fees':   ReschedulePayment.objects.filter(**booking_q).count(),
+        'ledger entries':    DoctorLedger.objects.filter(**ledger_q).count(),
+        'payout batches':    PayoutBatch.objects.filter(**ledger_q).count(),
+    }
+    return {k: v for k, v in counts.items() if v}

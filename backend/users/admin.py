@@ -20,6 +20,22 @@ class CustomUserAdmin(UserAdmin):
     list_filter   = ('role', 'status', 'whatsapp_opt_in')
     list_editable = ('whatsapp_opt_in',)
     search_fields = ('username', 'mobile')
-    fieldsets     = UserAdmin.fieldsets + (
-        ('TokenWalla', {'fields': ('mobile', 'role', 'status', 'whatsapp_opt_in')}),
+    # `last_name` is NOT a surname here — for a hospital account it holds the
+    # hospital id, and EVERY tenancy check in the backend resolves the caller's
+    # hospital by parsing it (permissions.IsDoctorOwnerHospitalOrAdmin,
+    # bookings._get_user_hospital_id, scans._may_see_report, notifications.push
+    # routing, and six others). Django's UserAdmin.fieldsets puts it on the
+    # change form as a plain "Last name" text box, so an admin tidying a record
+    # could type a surname there — silently 403ing that hospital out of its own
+    # queue — or mistype the number and hand the account another hospital's
+    # patient names, mobiles and scan reports.
+    #
+    # Shown (it is needed to diagnose exactly that) but not typeable.
+    fieldsets     = tuple(
+        (name, {**opts, 'fields': tuple(f for f in opts['fields'] if f != 'last_name')})
+        for name, opts in UserAdmin.fieldsets
+    ) + (
+        ('TokenWalla', {'fields': ('mobile', 'role', 'status', 'whatsapp_opt_in',
+                                   'last_name')}),
     )
+    readonly_fields = ('last_name',)

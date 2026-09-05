@@ -755,6 +755,7 @@ class HospitalForceDeleteView(APIView):
 
     def delete(self, request, pk):
         from bookings.models import Booking
+        from payments.models import financial_rows_for
 
         try:
             hospital = Hospital.objects.get(pk=pk)
@@ -762,6 +763,19 @@ class HospitalForceDeleteView(APIView):
             return Response({'message': 'Hospital not found.'}, status=404)
 
         name = hospital.name
+
+        blocking = financial_rows_for(hospital=hospital)
+        if blocking:
+            detail = ', '.join(f'{n} {label}' for label, n in blocking.items())
+            return Response({
+                'message': (
+                    f'Refusing to delete: this would destroy {detail}. '
+                    'Those rows are the record that money was collected, that '
+                    'GST was charged on it, and that payouts were wired — they '
+                    'must outlive the provider. Deactivate instead.'
+                ),
+                'blocking': blocking,
+            }, status=409)
 
         try:
             with transaction.atomic():

@@ -174,16 +174,24 @@ export default function Payment() {
 
   const loadScript = () => new Promise((resolve) => {
     if (window.Razorpay) return resolve(true);
+
+    // A tag can already be here from a load that FAILED (ad blocker, offline,
+    // CSP). Its load event fired — or never will — long before we could listen,
+    // so the old code's bare addEventListener('load') resolved nothing and the
+    // promise hung forever. handlePayment awaits this after setLoading(true),
+    // so the checkout button span permanently and the patient could not pay or
+    // recover without reloading the page. Dropping the dead tag makes the retry
+    // a genuine retry.
     const existing = document.getElementById('razorpay-sdk');
-    if (existing) {
-      existing.addEventListener('load', () => resolve(true), { once: true });
-      return;
-    }
+    if (existing) existing.remove();
+
     const s = document.createElement('script');
     s.id = 'razorpay-sdk';
     s.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    s.onload  = () => resolve(true);
-    s.onerror = () => resolve(false);
+    // Resolve on BOTH outcomes, and only once — a promise that never settles is
+    // worse than one that reports failure, because the caller can show an error.
+    s.onload  = () => resolve(Boolean(window.Razorpay));
+    s.onerror = () => { s.remove(); resolve(false); };
     document.body.appendChild(s);
   });
 
