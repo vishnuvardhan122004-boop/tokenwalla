@@ -792,12 +792,12 @@ const Hospitals = () => {
             <form onSubmit={submitEdit}>
               <div className="hp-modal-row">
                 <div className="hp-field">
-                  <label>Name *</label>
-                  <input value={editDoctor.name || ''} onChange={e => setEditDoctor(p => ({ ...p, name: e.target.value }))} placeholder="Doctor name" required />
+                  <label htmlFor="ahosp-doctor-name">Name *</label>
+                  <input id="ahosp-doctor-name" value={editDoctor.name || ''} onChange={e => setEditDoctor(p => ({ ...p, name: e.target.value }))} placeholder="Doctor name" required />
                 </div>
                 <div className="hp-field">
-                  <label>Specialization *</label>
-                  <input value={editDoctor.specialization || ''} onChange={e => setEditDoctor(p => ({ ...p, specialization: e.target.value }))} placeholder="Cardiologist" list="admin-specialization-options" required />
+                  <label htmlFor="ahosp-cardiologist">Specialization *</label>
+                  <input id="ahosp-cardiologist" value={editDoctor.specialization || ''} onChange={e => setEditDoctor(p => ({ ...p, specialization: e.target.value }))} placeholder="Cardiologist" list="admin-specialization-options" required />
                   <datalist id="admin-specialization-options">
                     {SPECIALIZATION_OPTIONS.map(s => <option key={s} value={s} />)}
                   </datalist>
@@ -805,22 +805,22 @@ const Hospitals = () => {
               </div>
               <div className="hp-modal-row">
                 <div className="hp-field">
-                  <label>City</label>
-                  <input value={editDoctor.city || ''} onChange={e => setEditDoctor(p => ({ ...p, city: e.target.value }))} placeholder="City" />
+                  <label htmlFor="ahosp-city">City</label>
+                  <input id="ahosp-city" value={editDoctor.city || ''} onChange={e => setEditDoctor(p => ({ ...p, city: e.target.value }))} placeholder="City" />
                 </div>
                 <div className="hp-field">
-                  <label>Experience (years)</label>
-                  <input type="number" min="0" value={editDoctor.experience || ''} onChange={e => setEditDoctor(p => ({ ...p, experience: e.target.value }))} placeholder="5" />
+                  <label htmlFor="ahosp-experience-years">Experience (years)</label>
+                  <input id="ahosp-experience-years" type="number" min="0" value={editDoctor.experience || ''} onChange={e => setEditDoctor(p => ({ ...p, experience: e.target.value }))} placeholder="5" />
                 </div>
               </div>
               <div className="hp-modal-row">
                 <div className="hp-field">
-                  <label>Fee (₹)</label>
-                  <input type="number" min="0" value={editDoctor.fee || ''} onChange={e => setEditDoctor(p => ({ ...p, fee: e.target.value }))} placeholder="0" />
+                  <label htmlFor="ahosp-fee">Fee (₹)</label>
+                  <input id="ahosp-fee" type="number" min="0" value={editDoctor.fee || ''} onChange={e => setEditDoctor(p => ({ ...p, fee: e.target.value }))} placeholder="0" />
                 </div>
                 <div className="hp-field">
-                  <label>Availability</label>
-                  <select value={editDoctor.available ? 'true' : 'false'} onChange={e => setEditDoctor(p => ({ ...p, available: e.target.value === 'true' }))}>
+                  <label htmlFor="ahosp-availability">Availability</label>
+                  <select id="ahosp-availability" value={editDoctor.available ? 'true' : 'false'} onChange={e => setEditDoctor(p => ({ ...p, available: e.target.value === 'true' }))}>
                     <option value="true"><i className="bi bi-check-circle me-1" />Available</option>
                     <option value="false"><i className="bi bi-x-octagon me-1" />Unavailable</option>
                   </select>

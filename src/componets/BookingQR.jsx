@@ -85,7 +85,7 @@ export default function BookingQR({
             <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 4 }}>
               Token
             </div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "var(--blue-600, #2563EB)", letterSpacing: 3, fontFamily: "monospace" }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "var(--blue-600, #185FA5)", letterSpacing: 3, fontFamily: "monospace" }}>
               {token}
             </div>
           </div>

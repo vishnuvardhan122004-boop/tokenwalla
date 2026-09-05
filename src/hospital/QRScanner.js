@@ -393,9 +393,9 @@ export default function QRScanner() {
 
         {/* Manual entry */}
         <div className="qs-manual">
-          <label className="qs-manual-label">Enter Booking Token</label>
+          <label htmlFor="qr-e-g-tw-143052-a3f9b1" className="qs-manual-label">Enter Booking Token</label>
           <form className="qs-manual-row" onSubmit={handleManualSubmit}>
-            <input
+            <input id="qr-e-g-tw-143052-a3f9b1"
               className="qs-manual-input"
               value={manualToken}
               onChange={e => setManualToken(e.target.value)}

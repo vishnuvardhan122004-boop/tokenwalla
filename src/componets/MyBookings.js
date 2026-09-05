@@ -93,8 +93,8 @@ export function WhatsAppOptIn({ onError }) {
   };
 
   return (
-    <label className="mb-wa">
-      <input
+    <label htmlFor="mb-f95" className="mb-wa">
+      <input id="mb-f95"
         type="checkbox"
         checked={optIn}
         onChange={(e) => change(e.target.checked)}
@@ -781,8 +781,8 @@ export default function MyBookings() {
           <div className="mb-modal">
             <div className="mb-modal-title"><i className="bi bi-calendar-event me-1" />Reschedule Appointment</div>
             <div className="mb-modal-sub">{providerLabel(rescheduleBooking.doctor_name, rescheduleBooking.provider_kind)} · {rescheduleBooking.hospital_name}</div>
-            <label className="mb-modal-label">Select New Date</label>
-            <input
+            <label htmlFor="mb-select-new-date" className="mb-modal-label">Select New Date</label>
+            <input id="mb-select-new-date"
               type="date" className="mb-modal-input" min={today} value={newDate}
               onChange={e => { setNewDate(e.target.value); setNewSlot(''); }}
               disabled={rescheduling}

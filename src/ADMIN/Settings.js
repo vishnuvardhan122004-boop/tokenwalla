@@ -56,16 +56,16 @@ const Settings = () => {
           {saved && <div className="st-success"><i className="bi bi-check-circle me-1" />Settings saved successfully!</div>}
           <form onSubmit={handleSave}>
             <div className="st-field">
-              <label>Full Name</label>
-              <input type="text" defaultValue={user?.name || ''} placeholder="Your name" />
+              <label htmlFor="set-your-name">Full Name</label>
+              <input id="set-your-name" type="text" defaultValue={user?.name || ''} placeholder="Your name" />
             </div>
             <div className="st-field">
-              <label>Mobile Number</label>
-              <input type="text" defaultValue={user?.mobile || ''} readOnly />
+              <label htmlFor="set-mobile-number">Mobile Number</label>
+              <input id="set-mobile-number" type="text" defaultValue={user?.mobile || ''} readOnly />
             </div>
             <div className="st-field">
-              <label>Role</label>
-              <input type="text" value="Administrator" disabled />
+              <label htmlFor="set-role">Role</label>
+              <input id="set-role" type="text" value="Administrator" disabled />
             </div>
             <button type="submit" className="st-save-btn">Save Changes</button>
           </form>
@@ -93,16 +93,16 @@ const Settings = () => {
         <div className="st-card">
           <div className="st-card-title"><i className="bi bi-shield-lock me-1" />Change Password</div>
           <div className="st-field">
-            <label>Current Password</label>
-            <input type="password" placeholder="Enter current password" />
+            <label htmlFor="set-enter-current-password">Current Password</label>
+            <input id="set-enter-current-password" type="password" placeholder="Enter current password" />
           </div>
           <div className="st-field">
-            <label>New Password</label>
-            <input type="password" placeholder="Enter new password (min 6 chars)" />
+            <label htmlFor="set-enter-new-password-min-6-c">New Password</label>
+            <input id="set-enter-new-password-min-6-c" type="password" placeholder="Enter new password (min 6 chars)" />
           </div>
           <div className="st-field">
-            <label>Confirm New Password</label>
-            <input type="password" placeholder="Confirm new password" />
+            <label htmlFor="set-confirm-new-password">Confirm New Password</label>
+            <input id="set-confirm-new-password" type="password" placeholder="Confirm new password" />
           </div>
           <button type="button" className="st-save-btn" style={{ background: 'var(--color-warning-text)' }}>
             Update Password

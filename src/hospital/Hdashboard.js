@@ -620,8 +620,8 @@ const Hdashboard = () => {
         /* ── Cleaner navbar ── */
         .tw-navbar{position:sticky;top:0;z-index:1020;background:rgba(255,255,255,.85);backdrop-filter:saturate(180%) blur(8px);-webkit-backdrop-filter:saturate(180%) blur(8px);border-bottom:1px solid #eceef1}
         .tw-back{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid #e4e8ec;background:#fff;color:#5b6672;border-radius:10px;font-size:18px;line-height:1;transition:all .15s ease;cursor:pointer}
-        .tw-back:hover{background:#f4f6f8;color:#0d6efd;border-color:#d4dbe1}
-        .tw-brand{font-weight:700;letter-spacing:-.02em;color:#0d6efd;font-size:16px}
+        .tw-back:hover{background:#f4f6f8;color:#185FA5;border-color:#d4dbe1}
+        .tw-brand{font-weight:700;letter-spacing:-.02em;color:#185FA5;font-size:16px}
         .tw-hosp{display:inline-flex;align-items:center;gap:6px;background:#f4f6f8;color:#5b6672;font-size:13px;font-weight:500;padding:6px 13px;border-radius:999px}
         .tw-nav-btn{display:inline-flex;align-items:center;gap:5px;border:1px solid #e4e8ec;background:#fff;color:#5b6672;font-size:13px;font-weight:600;padding:7px 15px;border-radius:10px;transition:all .15s ease;cursor:pointer}
         .tw-nav-btn:hover{background:#f4f6f8;color:#212529}
@@ -639,7 +639,7 @@ const Hdashboard = () => {
         .tw-tabs{display:inline-flex;gap:4px;background:#f1f3f5;border-radius:12px;padding:4px;flex-wrap:wrap}
         .tw-tab{border:0;background:transparent;color:#5b6672;font-size:14px;font-weight:600;padding:8px 16px;border-radius:9px;transition:all .15s ease;white-space:nowrap;cursor:pointer}
         .tw-tab:hover{color:#212529}
-        .tw-tab--active{background:#fff;color:#0d6efd;box-shadow:0 1px 3px rgba(16,24,40,.12)}
+        .tw-tab--active{background:#fff;color:#185FA5;box-shadow:0 1px 3px rgba(16,24,40,.12)}
 
         /* Slot picker. Its own class rather than Bootstrap's .d-flex, so the
            mobile grid below can override it without an !important fight. */
@@ -780,7 +780,7 @@ const Hdashboard = () => {
         {/* Stats */}
         <div className="row g-3 mb-4">
           {[
-            { label: `${dayWord} Total`, val: filteredTotal,  hex: "#2563eb" },
+            { label: `${dayWord} Total`, val: filteredTotal,  hex: "#185FA5" },
             { label: "Waiting",      val: fWaiting.length,    hex: "#d97706" },
             { label: "In Progress",  val: fInProgress.length, hex: "#0ea5e9" },
             { label: "Completed",    val: fCompleted.length,  hex: "#16a34a" },
@@ -1051,32 +1051,32 @@ const Hdashboard = () => {
               <form className="card p-3 mb-3 shadow-sm" onSubmit={saveScan}>
                 <div className="row g-2">
                   <div className="col-md-6">
-                    <label className="form-label small fw-semibold">{Unit} name</label>
-                    <input className="form-control" required placeholder={unit.eg}
+                    <label htmlFor="hd-f1053" className="form-label small fw-semibold">{Unit} name</label>
+                    <input id="hd-f1053" className="form-control" required placeholder={unit.eg}
                       value={scanForm.name}
                       onChange={e => setScanForm(f => ({ ...f, name: e.target.value }))} />
                   </div>
                   <div className="col-md-3">
-                    <label className="form-label small fw-semibold">Type</label>
-                    <input className="form-control" placeholder={unit.egType}
+                    <label htmlFor="hd-type" className="form-label small fw-semibold">Type</label>
+                    <input id="hd-type" className="form-control" placeholder={unit.egType}
                       value={scanForm.modality}
                       onChange={e => setScanForm(f => ({ ...f, modality: e.target.value }))} />
                   </div>
                   <div className="col-md-3">
-                    <label className="form-label small fw-semibold">Price (₹)</label>
-                    <input className="form-control" type="number" min="0" required
+                    <label htmlFor="hd-price" className="form-label small fw-semibold">Price (₹)</label>
+                    <input id="hd-price" className="form-control" type="number" min="0" required
                       value={scanForm.price}
                       onChange={e => setScanForm(f => ({ ...f, price: e.target.value }))} />
                   </div>
                   <div className="col-md-3">
-                    <label className="form-label small fw-semibold">Minutes</label>
-                    <input className="form-control" type="number" min="1"
+                    <label htmlFor="hd-minutes" className="form-label small fw-semibold">Minutes</label>
+                    <input id="hd-minutes" className="form-control" type="number" min="1"
                       value={scanForm.duration_minutes}
                       onChange={e => setScanForm(f => ({ ...f, duration_minutes: e.target.value }))} />
                   </div>
                   <div className="col-md-3">
-                    <label className="form-label small fw-semibold">Patients per slot</label>
-                    <input className="form-control" type="number" min="1"
+                    <label htmlFor="hd-patients-per-slot" className="form-label small fw-semibold">Patients per slot</label>
+                    <input id="hd-patients-per-slot" className="form-control" type="number" min="1"
                       value={scanForm.max_per_slot}
                       onChange={e => setScanForm(f => ({ ...f, max_per_slot: e.target.value }))} />
                     <small className="text-muted">Usually 1 — one machine, one patient.</small>
@@ -1108,21 +1108,21 @@ const Hdashboard = () => {
                     />
                   </div>
                   <div className="col-md-6">
-                    <label className="form-label small fw-semibold">Days</label>
-                    <input className="form-control" placeholder="Mon, Tue, Wed"
+                    <label htmlFor="hd-mon-tue-wed" className="form-label small fw-semibold">Days</label>
+                    <input id="hd-mon-tue-wed" className="form-control" placeholder="Mon, Tue, Wed"
                       value={scanForm.daysText}
                       onChange={e => setScanForm(f => ({ ...f, daysText: e.target.value }))} />
                   </div>
                   <div className="col-12">
-                    <label className="form-label small fw-semibold">Time slots</label>
-                    <input className="form-control" placeholder="09:00 AM, 09:30 AM, 10:00 AM"
+                    <label htmlFor="hd-09-00-am-09-30-am-10-00-am" className="form-label small fw-semibold">Time slots</label>
+                    <input id="hd-09-00-am-09-30-am-10-00-am" className="form-control" placeholder="09:00 AM, 09:30 AM, 10:00 AM"
                       value={scanForm.slotsText}
                       onChange={e => setScanForm(f => ({ ...f, slotsText: e.target.value }))} />
                     <small className="text-muted">Comma separated. Leave empty if you take walk-ins only.</small>
                   </div>
                   <div className="col-12">
-                    <label className="form-label small fw-semibold">How the patient pays</label>
-                    <select
+                    <label htmlFor="hd-how-the-patient-pays" className="form-label small fw-semibold">How the patient pays</label>
+                    <select id="hd-how-the-patient-pays"
                       className="form-select"
                       value={scanForm.payment_collection_mode === 'FULL' ? 'FULL' : 'SERVICE_ONLY'}
                       onChange={e => setScanForm(f => ({ ...f, payment_collection_mode: e.target.value }))}
@@ -1137,8 +1137,8 @@ const Hdashboard = () => {
                     </small>
                   </div>
                   <div className="col-12">
-                    <label className="form-label small fw-semibold">Before you come</label>
-                    <textarea className="form-control" rows={2}
+                    <label htmlFor="hd-before-you-come" className="form-label small fw-semibold">Before you come</label>
+                    <textarea id="hd-before-you-come" className="form-control" rows={2}
                       placeholder={unit.egPrep}
                       value={scanForm.prep_instructions}
                       onChange={e => setScanForm(f => ({ ...f, prep_instructions: e.target.value }))} />
@@ -1242,8 +1242,8 @@ const Hdashboard = () => {
                     <div className="col-12">
                       <div className="row g-3">
                         <div className="col-md-6">
-                          <label className="form-label fw-semibold"><i className="bi bi-person-square me-1" />Doctor Profile Image</label>
-                          <input
+                          <label htmlFor="hd-doctor-profile-image" className="form-label fw-semibold"><i className="bi bi-person-square me-1" />Doctor Profile Image</label>
+                          <input id="hd-doctor-profile-image"
                             type="file" accept="image/*" className="form-control mb-2"
                             onChange={(e) => handleImageChange(e, "doctor")}
                           />
@@ -1259,8 +1259,8 @@ const Hdashboard = () => {
                           )}
                         </div>
                         <div className="col-md-6">
-                          <label className="form-label fw-semibold"><i className="bi bi-image me-1" />Hospital Banner Image</label>
-                          <input
+                          <label htmlFor="hd-hospital-banner-image" className="form-label fw-semibold"><i className="bi bi-image me-1" />Hospital Banner Image</label>
+                          <input id="hd-hospital-banner-image"
                             type="file" accept="image/*" className="form-control mb-2"
                             onChange={(e) => handleImageChange(e, "hospital")}
                           />
@@ -1279,8 +1279,8 @@ const Hdashboard = () => {
                     </div>
 
                     <div className="col-md-6">
-                      <label className="form-label fw-semibold">Doctor Name *</label>
-                      <input
+                      <label htmlFor="hd-john-smith" className="form-label fw-semibold">Doctor Name *</label>
+                      <input id="hd-john-smith"
                         className={`form-control ${errors.name ? "is-invalid" : ""}`}
                         placeholder="John Smith"
                         value={formData.name}
@@ -1290,8 +1290,8 @@ const Hdashboard = () => {
                     </div>
 
                     <div className="col-md-6">
-                      <label className="form-label fw-semibold">Specialization *</label>
-                      <input
+                      <label htmlFor="hd-cardiologist" className="form-label fw-semibold">Specialization *</label>
+                      <input id="hd-cardiologist"
                         className={`form-control ${errors.specialization ? "is-invalid" : ""}`}
                         placeholder="Cardiologist"
                         list="specialization-options"
@@ -1305,8 +1305,8 @@ const Hdashboard = () => {
                     </div>
 
                     <div className="col-12">
-                      <label className="form-label fw-semibold">Search Keywords</label>
-                      <input
+                      <label htmlFor="hd-e-g-heart-chest-pain-bp-ec" className="form-label fw-semibold">Search Keywords</label>
+                      <input id="hd-e-g-heart-chest-pain-bp-ec"
                         className="form-control"
                         placeholder="e.g. heart, chest pain, BP, ECG"
                         value={formData.keywords}
@@ -1318,8 +1318,8 @@ const Hdashboard = () => {
                     </div>
 
                     <div className="col-md-4">
-                      <label className="form-label fw-semibold">Experience (years)</label>
-                      <input
+                      <label htmlFor="hd-experience-years" className="form-label fw-semibold">Experience (years)</label>
+                      <input id="hd-experience-years"
                         className={`form-control ${errors.experience ? "is-invalid" : ""}`}
                         type="number" min="0" max="60" placeholder="5"
                         value={formData.experience}
@@ -1329,10 +1329,10 @@ const Hdashboard = () => {
                     </div>
 
                     <div className="col-md-4">
-                      <label className="form-label fw-semibold">Consultation Fee (₹)</label>
+                      <label htmlFor="hd-500" className="form-label fw-semibold">Consultation Fee (₹)</label>
                       <div className="input-group">
                         <span className="input-group-text text-muted">₹</span>
-                        <input
+                        <input id="hd-500"
                           className={`form-control ${errors.fee ? "is-invalid" : ""}`}
                           type="number" min="0" step="1" placeholder="500"
                           value={formData.fee}
@@ -1359,10 +1359,10 @@ const Hdashboard = () => {
                     </div>
 
                     <div className="col-md-4">
-                      <label className="form-label fw-semibold">
+                      <label htmlFor="hd-08812-234567" className="form-label fw-semibold">
                         Landline <small className="text-muted">(with STD code)</small>
                       </label>
-                      <input
+                      <input id="hd-08812-234567"
                         className={`form-control ${errors.landline ? "is-invalid" : formData.landline && LANDLINE_RE.test(formData.landline) ? "is-valid" : ""}`}
                         type="tel" placeholder="08812-234567" maxLength={15}
                         value={formData.landline}
@@ -1375,8 +1375,8 @@ const Hdashboard = () => {
                     </div>
 
                     <div className="col-md-4">
-                      <label className="form-label fw-semibold">Max Patients Per Slot</label>
-                      <input
+                      <label htmlFor="hd-max-patients-per-slot" className="form-label fw-semibold">Max Patients Per Slot</label>
+                      <input id="hd-max-patients-per-slot"
                         className={`form-control ${errors.max_per_slot ? "is-invalid" : ""}`}
                         type="number" min="1" max="100" placeholder="10"
                         value={formData.max_per_slot}
