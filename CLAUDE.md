@@ -33,6 +33,44 @@ red run.
 `.claude/hooks/guard-production.py` blocks all of the above. If it fires, that's
 the system working: surface it, don't route around it.
 
+**The one carve-out: feature flags on Railway.** A session MAY set a variable
+from the table below — and nothing else — when Vishnu says so **in the session,
+naming the variable and the value**. It exists because these flags are the
+product's off switches: the whole point of one is that flipping it is not a
+deploy, and routing a kill switch through a PR is slower than the incident it's
+there to stop.
+
+| Flag | Off means |
+|---|---|
+| `PASS_ENABLED` | the Appointment Pass stops selling and stops redeeming |
+
+Every time, all four:
+
+1. **One variable per change.** Read the current value back first and say what
+   it is. If it already holds the target value, stop and say so.
+2. **Show the change before applying it** — variable, old value, new value —
+   and apply only on his go-ahead. Never a batch, never a second variable that
+   may as well go along with it.
+3. **Say which direction it is.** Off is the safe direction. Turning one ON
+   starts real money moving, so name what that costs first, and if ROADMAP has
+   an open question against the flag, quote it. Whether the budget is settled
+   is his answer, not the session's.
+4. **Record it in WORKLOG** with the timestamp and the value, the way
+   2026-09-02 is recorded. A production change that exists only in a chat log
+   didn't happen.
+
+Everything outside that table is still a flat no from a session: secrets and
+API keys, `DATABASE_URL`, `DEBUG`, `ALLOWED_HOSTS`, anything Razorpay, and
+anything that triggers a deploy, a migration or a restart of its own accord.
+Adding a row to the table is a deliberate edit to this file, as its own commit
+— never something a session decides mid-task because a flag looked harmless.
+
+The guard hook does **not** enforce this. It matches the three production
+subcommands named above, not `railway variables`, so this section is the rule
+and the hook is a backstop that happens not to cover it. (It matches command
+*text*, so it also fires on prose that merely quotes those subcommands — a
+false positive worth recognising rather than working around.)
+
 **Migrations against live data.** Additive only — new nullable columns, new
 tables. Never drop or rename a column that deployed code still reads. Railway
 migrates and deploys as separate steps, so every migration must be safe to run
