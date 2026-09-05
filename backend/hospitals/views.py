@@ -371,6 +371,25 @@ class HospitalDetailView(APIView):
             hospital = Hospital.objects.get(pk=pk)
         except Hospital.DoesNotExist:
             return Response({'message': 'Not found.'}, status=404)
+
+        # The LIST endpoint hides pending/rejected registrations and internal
+        # [TEST] fixtures; this one returned them to anyone who guessed the id.
+        # That is the same leak the [TEST] filter was added for after it bit in
+        # production on 2026-08-11 — a demo provider is the one row set to
+        # collect the FULL fee, so a patient reaching it can be charged for an
+        # appointment that does not exist.
+        #
+        # Owner and admin are exempt: a hospital awaiting approval still loads
+        # its own profile page (Hprofile.js fetches this endpoint), and filtering
+        # it out would lock a pending partner out of their own settings.
+        if not _is_owner_or_admin(request.user, hospital):
+            if hospital.status != 'active':
+                return Response({'message': 'Not found.'}, status=404)
+            if not show_test_hospitals_to(request.user) and \
+                    not exclude_test_hospitals(
+                        Hospital.objects.filter(pk=hospital.pk)).exists():
+                return Response({'message': 'Not found.'}, status=404)
+
         return Response(HospitalSerializer(hospital).data)
 
     def patch(self, request, pk):

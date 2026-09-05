@@ -350,3 +350,99 @@ class LiveKeyGuardTests(TestCase):
     def test_escape_hatch(self):
         with mock.patch.dict(os.environ, {'ALLOW_LIVE_RAZORPAY': '1'}):
             self.assertIsNotNone(self.ru.get_client())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Absence clawback must not close out a booking that was never credited
+# ─────────────────────────────────────────────────────────────────────────────
+class AbsenceClawbackSettlementTests(TestCase):
+    """record_absence_refund writes a NEGATIVE ledger row and deliberately
+    leaves doctor_payout_status PENDING, waiting for run_daily_payouts to write
+    the matching +fee row.
+
+    MarkPayoutPaidView used to mark every booking behind the batched rows as
+    PAID — including one whose only row was that clawback. That removed it from
+    the cron's `COMPLETED + PENDING` filter permanently, so the earning was
+    never written and the doctor was docked a fee with nothing to net it
+    against. Order-dependent: it only bites when the absence is recorded before
+    the cron runs, which is the normal same-day case.
+    """
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIClient
+        from hospitals.models import Hospital
+        from doctors.models import Doctor
+        User = get_user_model()
+
+        self.user = User.objects.create(username='p', mobile='9400000001', role='patient')
+        self.hospital = Hospital.objects.create(
+            name='Apollo', city='Hyd', mobile='9400000002', password='x')
+        self.doctor = Doctor.objects.create(
+            hospital=self.hospital, name='Rao', specialization='GP',
+            mobile='9400000003', fee=200, slots=['09:00 AM'],
+            payment_collection_mode=Doctor.COLLECT_FULL,
+            upi_vpa='rao@upi')
+        admin = User.objects.create(
+            username='adm', mobile='9400000009', role='admin', is_staff=True)
+        self.admin = APIClient()
+        self.admin.force_authenticate(admin)
+        self._n = 0
+
+    def _completed_booking(self, fee=Decimal('200.00')):
+        self._n += 1
+        b = Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate(), slot='09:00 AM', token=f'TW-AC{self._n}',
+            status=Booking.COMPLETED, amount=225)
+        Payment.objects.create(
+            booking=b, order_id=f'o{self._n}', payment_id=f'pay_{self._n}',
+            amount=225, doctor_fee=fee, platform_fee=Decimal('20.00'),
+            gateway_fee=Decimal('1.50'), gst_amount=Decimal('3.87'),
+            final_amount=Decimal('225.37'), status=Payment.PAID)
+        return b
+
+    @mock.patch('payments.views._notify_doctor_payout_async', lambda b: None)
+    def test_a_clawback_only_booking_still_gets_its_earning_row_later(self):
+        from payments.refunds import record_absence_refund
+        from payments.models import DoctorLedger
+
+        # Two bookings completed and ledgered by an earlier cron run: +400 owed.
+        self._completed_booking()
+        self._completed_booking()
+        call_command('run_daily_payouts')
+
+        # A third completes AFTER that run, so it is still PENDING with no
+        # ledger rows at all — this ordering is what makes the bug reachable.
+        absent = self._completed_booking()
+        self.assertEqual(absent.doctor_payout_status, Booking.PAYOUT_PENDING)
+
+        # The doctor is marked absent for it: a NEGATIVE row, status untouched.
+        record_absence_refund(absent)
+        self.assertEqual(
+            list(DoctorLedger.objects.filter(booking=absent)
+                 .values_list('amount', flat=True)),
+            [Decimal('-200.00')])
+
+        # Admin settles before the next cron. Net owed is 400 - 200 = 200, so
+        # the batch goes through and closes out the rows behind it.
+        res = self.admin.post('/api/payment/payouts/mark-paid/',
+                              {'doctor_id': self.doctor.id}, format='json')
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(res.json()['amount_paid'], '200.00')
+
+        absent.refresh_from_db()
+        # THE ASSERTION: the absent booking was never credited, so closing it
+        # out here would remove it from the cron's COMPLETED+PENDING filter
+        # forever and the +200 would never be written — docking the doctor 200.
+        self.assertNotEqual(
+            absent.doctor_payout_status, Booking.PAYOUT_PAID,
+            'A booking whose only ledger row is a clawback was closed out, so '
+            'its +fee row can never be written and the doctor is short a fee.')
+
+        # The next cron writes the earning, and the pair nets to zero.
+        call_command('run_daily_payouts')
+        self.assertEqual(
+            sum(r.amount for r in DoctorLedger.objects.filter(booking=absent)),
+            Decimal('0.00'),
+            'clawback and earning must net to zero for an absent visit')

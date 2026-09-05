@@ -342,8 +342,28 @@ class CancelBookingView(APIView):
                 status=502,
             )
 
-        booking.status = 'CANCELLED'
-        booking.save(update_fields=['status'])
+        # Claim the CONFIRMED -> CANCELLED transition atomically. The status
+        # check at the top of this method is an unlocked read, so a
+        # double-submitted cancel gets TWO requests past it, and everything
+        # below here would then run twice.
+        #
+        # The refund above is already safe (it locks the Payment row and
+        # re-checks under it), but the pass restore is not: a redeemed visit is
+        # a ₹0 booking with no Payment to lock, so nothing serialised the two
+        # callers and `used_bookings -= 1` ran twice — handing the patient back
+        # two credits for one cancelled visit. The notifications would have gone
+        # out twice as well.
+        #
+        # A conditional UPDATE is the whole guard: exactly one caller matches
+        # status='CONFIRMED' and gets a rowcount of 1; the loser gets 0 and
+        # stops here, having changed nothing.
+        claimed = (Booking.objects
+                   .filter(pk=booking.pk, status='CONFIRMED')
+                   .update(status=Booking.CANCELLED))
+        if not claimed:
+            return Response(
+                {'message': 'This booking has already been cancelled.'}, status=400)
+        booking.status = Booking.CANCELLED   # keep the in-memory copy honest
         logger.info('Booking %s cancelled by user %s (refund: %s)', pk, request.user.id, refund_info)
 
         # Settle the Appointment Pass, if one is involved: a cancelled visit

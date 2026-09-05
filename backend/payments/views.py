@@ -1211,10 +1211,18 @@ class BookingReceiptView(APIView):
         # Access: owner, the booking's hospital staff, or admin.
         is_owner = booking.user_id == request.user.id
         is_admin = getattr(request.user, 'role', '') == 'admin'
-        try:
-            staff_hospital = int(request.user.last_name)
-        except (ValueError, TypeError, AttributeError):
-            staff_hospital = None
+        # `role == 'hospital'` guard, which every sibling ownership check in the
+        # codebase applies (hospitals._is_owner_or_admin, permissions.
+        # IsDoctorOwnerHospitalOrAdmin, scans._may_see_report) and this one did
+        # not. User.last_name only means "the hospital I manage" for a hospital
+        # account; on any other role a numeric value there is meaningless and
+        # must not be read as a hospital id.
+        staff_hospital = None
+        if getattr(request.user, 'role', '') == 'hospital':
+            try:
+                staff_hospital = int(request.user.last_name)
+            except (ValueError, TypeError, AttributeError):
+                staff_hospital = None
         if not (is_owner or is_admin or staff_hospital == booking.hospital_id):
             return Response({'message': 'Access denied.'}, status=403)
 
@@ -1473,7 +1481,21 @@ class MarkPayoutPaidView(APIView):
             entry_ids = [r.id for r in rows]
             DoctorLedger.objects.filter(id__in=entry_ids).update(payout_batch=batch)
 
-            booking_ids = [r.booking_id for r in rows if r.booking_id]
+            # Only bookings whose EARNING was settled here. A booking whose
+            # sole row in this batch is an ABSENCE_REFUND clawback was never
+            # credited: record_absence_refund writes the negative row and
+            # deliberately leaves doctor_payout_status PENDING, waiting for the
+            # cron to write the matching +fee row.
+            #
+            # Marking it PAID here removed it from that cron's
+            # `status=COMPLETED, doctor_payout_status=PENDING` filter forever,
+            # so the +fee row was never written and the doctor was docked the
+            # fee with nothing to net it against — short by exactly one
+            # consultation fee, silently and permanently. Leaving it PENDING
+            # lets the cron write the earning, which nets to zero across the
+            # two batches.
+            booking_ids = [r.booking_id for r in rows
+                           if r.booking_id and r.reason == DoctorLedger.BOOKING_COMPLETED]
             Booking.objects.filter(id__in=booking_ids).update(
                 doctor_payout_status=Booking.PAYOUT_PAID)
 

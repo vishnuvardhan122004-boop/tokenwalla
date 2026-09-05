@@ -596,3 +596,73 @@ class PassExpiryReminderTests(PassWorldMixin, TestCase):
         self.give_pass(used=1, days=-1)                # already lapsed
         self.give_pass(used=1, days=2, voided=True)    # voided
         self.assertFalse(self._run().called)
+
+
+class ConcurrentCancelTests(TestCase):
+    """A double-submitted cancel must restore ONE credit, not two.
+
+    CancelBookingView's `status != 'CONFIRMED'` check is an unlocked read, so
+    two concurrent requests both get past it. The refund path is immune (it
+    locks the Payment row and re-checks under it) — but a pass-redeemed visit is
+    a ₹0 booking with NO Payment to lock, so nothing serialised the two callers
+    and `used_bookings -= 1` ran twice, handing back a free visit.
+
+    True concurrency needs Postgres and is skipUnless'd elsewhere, so the
+    interleaving is simulated: the other racer is made to win DURING the refund
+    call, which is exactly the window the conditional UPDATE now closes.
+    """
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIClient
+        from hospitals.models import Hospital
+        from doctors.models import Doctor
+        from payments.models import AppointmentPass
+        User = get_user_model()
+
+        self.user = User.objects.create(username='p', mobile='9500000001', role='patient')
+        self.hospital = Hospital.objects.create(
+            name='Apollo', city='Hyd', mobile='9500000002', password='x')
+        self.doctor = Doctor.objects.create(
+            hospital=self.hospital, name='Rao', specialization='GP',
+            mobile='9500000003', fee=200, slots=['09:00 AM'])
+        self.ap = AppointmentPass.objects.create(
+            user=self.user, price=Decimal('35.00'), total_bookings=2,
+            used_bookings=2, expires_at=AppointmentPass.default_expiry())
+        self.booking = Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate() + timedelta(days=3), slot='09:00 AM',
+            token='TW-CC1', status=Booking.CONFIRMED, amount=0,
+            appointment_pass=self.ap)
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    @mock.patch('bookings.views._whatsapp_async', lambda *a, **k: None)
+    def test_the_loser_of_a_concurrent_cancel_restores_nothing(self):
+        def _other_racer_wins(booking):
+            # Simulates the concurrent request committing its CANCELLED flip
+            # while this one is still inside the refund call.
+            Booking.objects.filter(pk=booking.pk).update(status=Booking.CANCELLED)
+            self.ap.used_bookings = 1     # its restore already happened
+            self.ap.save(update_fields=['used_bookings'])
+            return None, {'refunded': False, 'reason': 'no_paid_payment'}
+
+        with mock.patch('bookings.views.process_cancellation_refund',
+                        side_effect=_other_racer_wins):
+            res = self.client.patch(f'/api/bookings/cancel/{self.booking.id}/')
+
+        self.assertEqual(res.status_code, 400, res.content)
+        self.ap.refresh_from_db()
+        self.assertEqual(
+            self.ap.used_bookings, 1,
+            'the losing request restored a second credit — one cancelled visit '
+            'handed back two free visits')
+
+    @mock.patch('bookings.views._whatsapp_async', lambda *a, **k: None)
+    def test_an_uncontended_cancel_still_restores_exactly_one(self):
+        res = self.client.patch(f'/api/bookings/cancel/{self.booking.id}/')
+        self.assertEqual(res.status_code, 200, res.content)
+        self.ap.refresh_from_db()
+        self.assertEqual(self.ap.used_bookings, 1)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.status, Booking.CANCELLED)
