@@ -666,3 +666,69 @@ class ConcurrentCancelTests(TestCase):
         self.assertEqual(self.ap.used_bookings, 1)
         self.booking.refresh_from_db()
         self.assertEqual(self.booking.status, Booking.CANCELLED)
+
+
+class PassRedeemDoubleTapTests(TestCase):
+    """A double-tapped redemption must spend ONE credit, not two.
+
+    A redemption is a ₹0 booking with a blank payment_id, and the partial unique
+    index only covers non-blank ones — so nothing collapsed a repeat the way the
+    paid path's unique payment_id does.
+
+    The guard is a WINDOW, not a ban on same-slot bookings: a patient may
+    legitimately spend both credits on two family members in one slot, which is
+    what booked_for_name exists for.
+    """
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIClient
+        from hospitals.models import Hospital
+        from doctors.models import Doctor
+        from payments.models import AppointmentPass
+        User = get_user_model()
+        self.user = User.objects.create(username='p', mobile='9900000001', role='patient')
+        self.hospital = Hospital.objects.create(
+            name='Apollo', city='Hyd', mobile='9900000002', password='x')
+        self.doctor = Doctor.objects.create(
+            hospital=self.hospital, name='Rao', specialization='GP',
+            mobile='9900000003', fee=200, slots=['09:00 AM'], max_per_slot=5)
+        self.ap = AppointmentPass.objects.create(
+            user=self.user, price=Decimal('35.00'), total_bookings=2,
+            used_bookings=0, expires_at=AppointmentPass.default_expiry())
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.date = str(timezone.localdate() + timedelta(days=3))
+
+    def _redeem(self, **extra):
+        return self.client.post('/api/payment/pass/redeem/', {
+            'booking': {'doctorId': self.doctor.id, 'date': self.date,
+                        'slot': '09:00 AM', **extra},
+        }, format='json')
+
+    @mock.patch('payments.views._dispatch_booking_notifications', lambda b: None)
+    def test_a_double_tap_spends_one_credit(self):
+        first = self._redeem()
+        self.assertEqual(first.status_code, 200, first.content)
+
+        second = self._redeem()          # the same tap, milliseconds later
+        self.assertEqual(second.status_code, 409, second.content)
+
+        self.ap.refresh_from_db()
+        self.assertEqual(self.ap.used_bookings, 1,
+                         'a double-tap burned both credits on one visit')
+        self.assertEqual(Booking.objects.filter(appointment_pass=self.ap).count(), 1)
+
+    @mock.patch('payments.views._dispatch_booking_notifications', lambda b: None)
+    def test_a_second_person_in_the_same_slot_is_still_allowed(self):
+        from payments.views import PASS_REDEEM_DEDUPE_SECONDS
+        self.assertEqual(self._redeem().status_code, 200)
+
+        # Outside the window: a deliberate second booking, not a double-tap.
+        Booking.objects.filter(appointment_pass=self.ap).update(
+            created=timezone.now() - timedelta(seconds=PASS_REDEEM_DEDUPE_SECONDS + 5))
+
+        second = self._redeem(bookedForName='Sister', bookedForMobile='9900000004')
+        self.assertEqual(second.status_code, 200, second.content)
+        self.ap.refresh_from_db()
+        self.assertEqual(self.ap.used_bookings, 2)

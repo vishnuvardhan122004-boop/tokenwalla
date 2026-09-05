@@ -19,12 +19,13 @@ import uuid
 import logging
 import threading
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from notifications.whatsapp import (
     send_booking_confirmation, send_hospital_new_booking, send_appointment_prep,
 )
 from notifications.push import push_booking_confirmed, push_new_booking_to_hospital
 from django.conf import settings
+from django.utils import timezone
 from django.db import transaction, IntegrityError, connection
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -54,6 +55,11 @@ from payments.fees import (
 from payments.pass_utils import PassUnavailable, active_pass, serialize_pass
 
 logger = logging.getLogger('tokenwalla')
+
+# How long two identical pass redemptions are treated as one double-tap rather
+# than two deliberate bookings. Wide enough to cover a slow double-click or a
+# client retry, far too narrow to catch someone choosing a second family member.
+PASS_REDEEM_DEDUPE_SECONDS = 15
 
 
 def _refund_unfulfillable_booking(*, payment_id, amount_inr, breakdown, reason, user_id):
@@ -753,6 +759,36 @@ class VerifyPaymentView(APIView):
                     if not appointment_pass.is_active():
                         raise PassUnavailable(
                             'This pass has no visits left, or it has expired.')
+
+                    # Double-tap guard. A redemption is a ₹0 booking with a
+                    # blank payment_id, and the partial unique index only covers
+                    # NON-blank ones — so nothing stopped two taps from spending
+                    # both credits on one visit. The paid path never needed this:
+                    # its unique payment_id already collapses a repeat.
+                    #
+                    # Checked HERE, after select_for_update on the pass, because
+                    # that lock is what serialises the two callers: the loser
+                    # blocks until the winner commits and therefore sees its
+                    # booking. The same check before the transaction would let
+                    # both callers read nothing and both proceed.
+                    #
+                    # A window, not a blanket ban on same-slot bookings: a
+                    # patient may legitimately spend both credits on two family
+                    # members in one slot (that is what booked_for_name is for).
+                    # A double-tap is milliseconds apart; choosing a second
+                    # person is not.
+                    recent = timezone.now() - timedelta(seconds=PASS_REDEEM_DEDUPE_SECONDS)
+                    if Booking.objects.filter(
+                        user=request.user, date=date_val, slot=slot_val,
+                        appointment_pass=appointment_pass,
+                        status__in=('CONFIRMED', 'IN_PROGRESS'),
+                        created__gte=recent,
+                        **({'scan_id': provider.id} if is_scan
+                           else {'doctor_id': provider.id}),
+                    ).exists():
+                        raise PassUnavailable(
+                            'You already booked this slot a moment ago. Check My '
+                            'Bookings before trying again.')
                     appointment_pass.used_bookings += 1
                     appointment_pass.save(update_fields=['used_bookings'])
 
