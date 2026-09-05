@@ -5,7 +5,7 @@ Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** `main` on both repos, everything merged and pushed, nothing in flight. Today's five branches (`feat/appointment-pass`, `feat/pass-refund-fairness`, `chore/pass-expiry-on-the-existing-cron`, `docs/pass-switched-off` web; `feat/appointment-pass` app) are all merged and safe to delete locally and on `origin`. Web locals are now just `main` and `develop` — the docs branch was merged and the two eslint branches deleted on 2026-08-29 (all three still on `origin` as the undo). **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
 - **Latest commit at last update:** `386538a` main (web/backend — merged and deployed; production served `12359b04`, migrations 0012/0013 applied, `PASS_ENABLED=False`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass)
-- **Last updated:** 2026-09-02 — **the Appointment Pass shipped and was switched off the same day.** Five web PRs (#47–#50) plus app #17, all merged. The day's real find was a refund hole — buy, redeem the free visit, cancel the paid one, keep both the money and the visit — closed in #48 with three UX holes alongside it. **429 backend tests (2 skipped) · 44 web · 160 app.** `PASS_ENABLED=False` on Railway, so nothing is on sale; turning it on is one variable once the −₹11.84 budget question is answered. **One loose end:** the expiry nudge has never been observed running (ROADMAP 14c). **Two deadlines found:** config-as-code dies 2026-12-01 and takes both cron services with it (14b), and the app half is merged but unbuilt.
+- **Last updated:** 2026-09-05 — **a full-codebase audit: 1 critical throttle bypass, a critical data-loss path in force-delete, and three money bugs.** 13 commits on `fix/reschedule-capacity-login-cap-perf` (`ee544ae`), **not merged**. 475 backend tests (2 skipped) · 47 web · no migrations. Three of the commits fix my own earlier work in the same session — see "What I got wrong". ⚠️ `NUM_PROXIES=1` cannot be verified from code; ROADMAP 16 has the check.\n- **Previously:** 2026-09-02 — **the Appointment Pass shipped and was switched off the same day.** Five web PRs (#47–#50) plus app #17, all merged. The day's real find was a refund hole — buy, redeem the free visit, cancel the paid one, keep both the money and the visit — closed in #48 with three UX holes alongside it. **429 backend tests (2 skipped) · 44 web · 160 app.** `PASS_ENABLED=False` on Railway, so nothing is on sale; turning it on is one variable once the −₹11.84 budget question is answered. **One loose end:** the expiry nudge has never been observed running (ROADMAP 14c). **Two deadlines found:** config-as-code dies 2026-12-01 and takes both cron services with it (14b), and the app half is merged but unbuilt.
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -25,6 +25,91 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-04 → 09-05 — A full audit: the throttle key was forgeable, a doctor was being short-paid, and force-delete erased the money
+
+**13 commits on `fix/reschedule-capacity-login-cap-perf`, not merged.** A
+complete read of the codebase followed by four multi-agent audit runs. 475
+backend tests (2 skipped) · 47 web · eslint clean · no migrations · no API shape
+change.
+
+### The five that could lose money or let someone in
+
+| What | Where | Status |
+|---|---|---|
+| **Every per-IP limit was bypassable with a header.** `NUM_PROXIES` unset → DRF returns the whole client-controlled `X-Forwarded-For` as the throttle key, so a new header per request = a new bucket. Defeated the anon rate, the OTP send burst, the **10/hour guard on `ADMIN_SETUP_KEY`**, and the 2000/day paid-SMS ceiling. | `tokenwalla/settings.py` | ✅ `5a6f8c8` — ⚠️ see ROADMAP 16 |
+| **Force-delete erased the entire financial record.** `Booking.doctor/hospital` are PROTECT, but force-delete deletes the Bookings first and every money model behind one is CASCADE — Payment, Refund, ReschedulePayment, DoctorLedger, PayoutBatch. One admin click, GST rows included, response said "deleted successfully". | `hospitals/views.py`, `doctors/views.py` | ✅ `be5b991` |
+| **A doctor was silently short-paid a full fee.** An absence writes a negative-only ledger row leaving the booking PENDING; mark-paid then flipped it to PAID, so the cron's `COMPLETED + PENDING` filter never wrote the matching `+fee`. | `payments/views.py` | ✅ `11f120e` |
+| **A lost gateway response became a second refund.** `refund_payment` raising ≠ the refund not happening; the rollback took the Refund row with it and the retry refunded again. Now reconciles against Razorpay first. | `payments/refunds.py` | ✅ `3b60690` |
+| **Neither login had brute-force protection.** Both sat on the 300/min anon throttle only, with a 6-char password minimum and `/auth/check-mobile/` confirming which numbers exist. | `users/auth_views.py`, `hospitals/views.py` | ✅ `9257144` |
+
+### Also fixed
+
+- **Paid reschedule oversold slots and 500'd on scans** — no capacity check, no
+  cutoff, no lock; and `.doctor.slots` on a scan booking after the fee was
+  captured. `9257144`, `35f4f08`
+- **A patient no-show on a FULL provider kept the provider's money** — never
+  ledgered, never refunded. Now settles COMPLETED + NO_SHOW. `3b60690`
+- **A double-submitted cancel handed back two pass credits**; six booking
+  transitions had no atomic claim. `11f120e`, `be5b991`
+- **Perf:** hospital queue 84 → 6 queries at 40 waiting (polled every 10s per
+  desk); `main.js` 1.25 MB → 556 kB via route splitting; hospital-list N+1;
+  `RateCounter.purge_expired` was called from nothing but its own test.
+  `9257144`, `cb88e1c`
+- **UI:** checkout reported every failure through native `alert()`; logout was
+  unreachable by keyboard; zero `htmlFor` app-wide; a failed `/doctors/` fetch
+  rendered as "No doctors found". `cb88e1c`, `1a43631`, `ee544ae`
+- **Design tokens** unified onto `#185FA5` — chosen because it is hardcoded in
+  67 places including the Razorpay checkout theme and the canvas-drawn ticket
+  PNG, **neither of which can read a CSS variable**. `cb88e1c`
+
+### What I got wrong, and what caught it
+
+Worth recording, because three of the commits above fix my *own* earlier work in
+the same session:
+
+- Fixed `select_related` on four list endpoints but `queue_map` on only the one
+  I measured — `build_queue_map` couldn't take the other two's argument shape.
+- Added a capacity check to reschedule *verify* without one on *create-order*,
+  which would have turned "oversold" into "charged ₹5, then refused".
+- "Fixed" the pass double-credit by recomputing from an invariant the schema
+  does not enforce. **Two existing tests caught it.**
+- Unified tokens toward a blue that would have made the payment modal a
+  different colour from the site.
+
+### Audit coverage — and why the empty results lie
+
+Four runs; the first three mostly died on session limits. **A dimension that
+returns zero findings because its agent died renders identically to one that
+found nothing**, and I nearly reported one as clean.
+
+| Dimension | Pass | Result |
+|---|---|---|
+| auth/security | ✅ | 1 critical, fixed |
+| money | ✅ | 2 high confirmed, both fixed |
+| tenancy/IDOR | ✅ | 3 low fixed, 1 false positive |
+| perf | ✅ | 2 fixed |
+| data/migrations | ✅ | 1 critical + 2 high, fixed |
+| frontend | ✅ | 4 fixed, ~85 labels outstanding |
+
+**The runs that died used 25–26 agents against a configured guideline of under
+5. The 2-agent run completed.** Also: one money finding arrived looking
+adversarially confirmed when two of its three verifiers had died — only the
+failure list revealed it. Any harness here needs an explicit UNVERIFIED state.
+
+### Action items
+
+- [ ] **Merge the PR** — 13 commits, CI-gated, nothing else in flight
+- [ ] **ROADMAP 16 — verify `NUM_PROXIES=1` after deploy.** `curl /health/` from
+      a phone on mobile data and read `proxy.resolved_ident`. Fails safe, but a
+      wrong value over-groups real users into one throttle bucket
+- [ ] ROADMAP 15 — the app re-pays the ₹5 after a refused slot (two-line change)
+- [ ] ROADMAP 4c — still cannot scan `backend/.env` for a live Razorpay key; the
+      production guard blocks it, correctly. Needs a human
+- [ ] Remaining audit findings: ~85 staff/admin labels, pass redemption
+      double-submit, stray blues in Hdashboard
 
 ---
 
