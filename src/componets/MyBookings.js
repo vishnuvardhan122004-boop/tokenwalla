@@ -398,6 +398,12 @@ export default function MyBookings() {
   // A scan's journey does not end at the visit: the report comes back hours or
   // days later. This is the only place in the product where something arrives
   // AFTER a booking is COMPLETED.
+  const completedIdsKey = bookings
+    .filter(b => b.status === 'COMPLETED')
+    .map(b => b.id)
+    .sort()
+    .join(',');
+
   useEffect(() => {
     // Any provider may share a document now — a hospital's discharge summary,
     // not just a centre's scan PDF — so this asks every completed booking.
@@ -412,7 +418,12 @@ export default function MyBookings() {
       if (!cancelled) setReports(Object.fromEntries(pairs));
     });
     return () => { cancelled = true; };
-  }, [bookings]);
+    // `bookings` is a NEW array on every 15s poll, so depending on it re-ran
+    // this whole fan-out every 15 seconds — one request per completed
+    // booking, forever, for data that changes maybe once a day. Depend on
+    // WHICH completed bookings exist instead, which is stable across polls.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedIdsKey]);
 
   const downloadReport = async (bookingId, report) => {
     setDownloading(report.id);

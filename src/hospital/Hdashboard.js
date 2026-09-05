@@ -592,7 +592,11 @@ const Hdashboard = () => {
           padding: "12px 24px", borderRadius: 12,
           background: toast.type === "error" ? "#A32D2D" : "#3B6D11",
           color: "#fff", fontSize: 14, fontWeight: 500,
-          zIndex: 9999, whiteSpace: "nowrap",
+          zIndex: 9999,
+          // Was whiteSpace: "nowrap". The validation messages fed to this are
+          // full sentences, so on a laptop they ran off both edges of the
+          // viewport with the middle unreadable. Wrap and cap the width.
+          maxWidth: "min(92vw, 460px)", whiteSpace: "pre-line", textAlign: "center",
           boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
           animation: "fadeInToast 0.3s ease",
         }}>

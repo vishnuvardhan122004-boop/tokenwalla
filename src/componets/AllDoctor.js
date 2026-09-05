@@ -81,6 +81,7 @@ export default function AllDoctor() {
 
   const [doctors,    setDoctors]    = useState([]);
   const [loading,    setLoading]    = useState(true);
+  const [loadError,  setLoadError]  = useState(false);
   // Seed the search from a ?q= param (e.g. the hero specialty chips link here).
   const [search,     setSearch]     = useState(searchParams.get('q') || '');
   const [city,       setCity]       = useState('');
@@ -125,6 +126,7 @@ export default function AllDoctor() {
 
   useEffect(() => {
     setLoading(true);
+    setLoadError(false);
     API.get('/doctors/')
       .then(({ data }) => {
         const all  = Array.isArray(data) ? data : (data.results || []);
@@ -133,7 +135,14 @@ export default function AllDoctor() {
         setDoctors(list);
         setCities([...new Set(list.map(d => d.city).filter(Boolean))]);
       })
-      .catch(() => {})
+      .catch(() => {
+        // `.catch(() => {})` swallowed this entirely, so a dropped connection
+        // or a 500 left `doctors` empty and the UI rendered the ordinary
+        // "no results, adjust your filters" state — telling a patient the
+        // catalogue is empty when in fact we never reached the server. Clearing
+        // filters, which is what that state invites, then changes nothing.
+        setLoadError(true);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -620,7 +629,24 @@ export default function AllDoctor() {
               </div>
             )}
 
-            {!loading && mode === 'doctors' && filtered.length === 0 && (
+            {!loading && loadError && (
+              <div className="empty-state">
+                <span className="empty-icon"><i className="bi bi-wifi-off me-1" /></span>
+                <div className="empty-title">Couldn't load doctors</div>
+                <p className="empty-sub">
+                  We couldn't reach the server. Check your connection and try again.
+                </p>
+                <button
+                  className="btn-outline"
+                  style={{ marginTop: 20 }}
+                  onClick={() => window.location.reload()}
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+
+            {!loading && !loadError && mode === 'doctors' && filtered.length === 0 && (
               <div className="empty-state">
                 <span className="empty-icon"><i className="bi bi-search me-1" /></span>
                 <div className="empty-title">{t('doctors.noResults')}</div>
