@@ -1458,6 +1458,27 @@ while it is off; nothing else about the deploy changed, and no pass had been
 sold. **Turning the promotion on is now a one-variable change** — set it to
 `True` once the −₹11.84 budget question below is settled.
 
+> **Asked and answered, 2026-09-05: "the ₹35 offer isn't showing on the web."**
+> That is this flag, working. Not a bug, and not a regression — checked against
+> the branch diff, which does not touch the pass gate or its rendering at all.
+> The web reads the server's verdict directly:
+>
+> ```js
+> passOffered = !!passData?.enabled && !isScan
+>               && breakdown?.collection_mode === 'SERVICE_ONLY';
+> ```
+>
+> `passData.enabled` is `bool(settings.PASS_ENABLED)` from `PassView`, so with
+> the variable off the offer correctly never renders.
+>
+> If it is switched on and the offer is STILL absent, the other two conditions
+> are the place to look, both deliberate: the doctor must be `SERVICE_ONLY`
+> (the pass waives the service fee only, so it never shows on a `FULL` doctor
+> or on a scan), and `Payment.js` does `.catch(() => setPassData(null))` on
+> `/api/payment/pass/` so that a bad response never blocks checkout — which
+> means a 401 or a network blip looks identical to "no offer". Check that
+> request before suspecting the UI.
+
 **The default in `settings.py` is still `True`**, which is why merging started
 it. If the safe state should be the default — off unless explicitly switched
 on — that is a one-line follow-up, and then the Railway variable becomes what
