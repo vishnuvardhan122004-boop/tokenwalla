@@ -30,8 +30,8 @@ Newest entry on top. Update the **Status** columns as things land.
 
 ## 2026-09-04 → 09-05 — A full audit: the throttle key was forgeable, a doctor was being short-paid, and force-delete erased the money
 
-**13 commits on `fix/reschedule-capacity-login-cap-perf`, not merged.** A
-complete read of the codebase followed by four multi-agent audit runs. 475
+**16 commits on `fix/reschedule-capacity-login-cap-perf`, not merged.** A
+complete read of the codebase followed by four multi-agent audit runs. 477
 backend tests (2 skipped) · 47 web · eslint clean · no migrations · no API shape
 change.
 
@@ -108,8 +108,9 @@ failure list revealed it. Any harness here needs an explicit UNVERIFIED state.
 - [ ] ROADMAP 15 — the app re-pays the ₹5 after a refused slot (two-line change)
 - [ ] ROADMAP 4c — still cannot scan `backend/.env` for a live Razorpay key; the
       production guard blocks it, correctly. Needs a human
-- [ ] Remaining audit findings: ~85 staff/admin labels, pass redemption
-      double-submit, stray blues in Hdashboard
+- [x] ~~Remaining audit findings~~ — all three closed: label associations now
+      94 app-wide (was 20), pass redemption double-tap guarded with a 15s
+      window, and zero stray framework blues left
 
 ---
 

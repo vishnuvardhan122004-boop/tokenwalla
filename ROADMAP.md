@@ -1755,8 +1755,8 @@ is not a clean bill of health**, and the run summary renders both identically.
 | money | ✅ done | 2 high confirmed, both fixed |
 | tenancy / IDOR | ✅ done | 3 low fixed, 1 false positive |
 | perf | ✅ done | hospital-list N+1, RateCounter leak — fixed |
-| data / migrations | ❌ **never completed** | agents died 3x on limits |
-| frontend | ❌ **never completed** | agents died 3x on limits |
+| data / migrations | ✅ done | 1 critical + 2 high, all fixed |
+| frontend | ✅ done | 4 fixed; labels + blues closed later the same session |
 
 **Lesson worth keeping:** the runs that died used 25-26 agents against a
 configured guideline of under 5. The small runs completed. Size the fan-out to
