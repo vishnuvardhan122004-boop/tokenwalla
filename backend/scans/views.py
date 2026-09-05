@@ -277,6 +277,10 @@ class ScanReportListCreateView(APIView):
     """
     permission_classes = [IsAuthenticated]
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
+    # `delete` below takes a report_id, which the LIST url does not supply — a
+    # DELETE here raised an uncaught TypeError (500) instead of 405. The detail
+    # subclass overrides this with ['delete', 'options'].
+    http_method_names  = ['get', 'post', 'head', 'options']
 
     def _booking(self, pk):
         from bookings.models import Booking

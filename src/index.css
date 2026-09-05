@@ -1,14 +1,37 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Mono:wght@400;500&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=Noto+Sans+Telugu:wght@400;500;600;700;800&family=Noto+Sans+Kannada:wght@400;500;600;700;800&display=swap');
 
-/* ── Design tokens ─────────────────────────────────────────────────────── */
+/* ── Design tokens ───────────────────────────────────────────────────────
+ *
+ * theme.css is the SOURCE for the tokens that were genuinely DUPLICATED: the
+ * brand blue, the muted grey, and the two shared radii. Those are aliased below,
+ * each carrying its literal as a var() fallback so this stylesheet still stands
+ * on its own if theme.css fails to load.
+ *
+ * Scope, because it is easy to over-reach here. The two files are not rivals:
+ * theme.css treats Bootstrap's surfaces, index.css defines tokens for the
+ * hand-rolled components. The only true duplication was the brand blue, which
+ * really was two values (#185FA5 here, #1D5FA8 there) meaning one thing.
+ *
+ * Everything else stays declared locally ON PURPOSE. --color-border and
+ * --shadow-sm/md were briefly aliased onto theme.css's hairline and shadows,
+ * and that was a mistake: 34 components hardcode `1px solid #B5D4F4`, so
+ * re-pointing the token left it disagreeing with them — one inconsistency
+ * swapped for another. Bootstrap's own surfaces already take theme.css's
+ * values through the !important rules in that file, which is the right place
+ * for that. Converging the hand-rolled components too is a deliberate repaint;
+ * ask for it, don't get it as a side effect of de-duplicating a token.
+ *
+ * The rule that keeps this honest: a token unification must be VISUALLY INERT.
+ * Every alias resolves to the value that token already rendered.
+ */
 :root {
-  /* Blues */
+  /* Blues — 600 and 700 defer to theme.css; the rest of the ramp lives here. */
   --blue-50:  #E6F1FB;
   --blue-100: #B5D4F4;
   --blue-200: #85B7EB;
   --blue-400: #378ADD;
-  --blue-600: #185FA5;
-  --blue-700: #125291;
+  --blue-600: var(--tw-blue-600, #1D5FA8);
+  --blue-700: var(--tw-blue-700, #174E8C);
   --blue-800: #0C447C;
   --blue-900: #042C53;
 
@@ -18,7 +41,8 @@
   --gray-200: #E2E8F0;
   --gray-400: #94A3B8;
   --gray-500: #7C8CA2;
-  --gray-600: #64748B;
+  /* Same value on both sides already — aliased so it can only ever be one. */
+  --gray-600: var(--tw-muted, #64748B);
   --gray-800: #1E293B;
   --gray-900: #0F172A;
 
@@ -26,6 +50,12 @@
   --color-primary:        var(--blue-600);
   --color-primary-hover:  var(--blue-800);
   --color-primary-light:  var(--blue-50);
+  /* NOT aliased to --tw-line. Bootstrap's bordered surfaces already take that
+     hairline via theme.css's own `.border` !important rule, but 34 hand-rolled
+     components hardcode this blue (`border: 1px solid #B5D4F4`). Pointing the
+     token at the grey hairline would leave the token and those 34 literals
+     disagreeing — swapping one inconsistency for another. Converging the two
+     is a deliberate repaint, not part of de-duplicating a token. */
   --color-border:         var(--blue-100);
   --color-surface:        #F4F9FF;
   --color-bg:             #FFFFFF;
@@ -47,15 +77,19 @@
   --color-info-text:    var(--blue-600);
   --color-info-border:  var(--blue-200);
 
-  /* Shadows */
+  /* Also not aliased, same reasoning as --color-border. `.card` already renders
+     theme.css's shadow via its own !important rule; re-pointing these would
+     restyle every hand-rolled panel on the site. That is a design change to ask
+     for, not a side effect of removing a duplicate declaration. */
   --shadow-sm: 0 1px 3px rgba(24,95,165,0.08), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-md: 0 4px 12px rgba(24,95,165,0.12), 0 2px 4px rgba(0,0,0,0.04);
   --shadow-lg: 0 12px 32px rgba(24,95,165,0.14), 0 4px 8px rgba(0,0,0,0.04);
 
-  /* Radius */
+  /* Radius — md and lg were already 10px/14px on both sides. Aliased so a
+     future change to one cannot silently desync them again. */
   --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-md: var(--tw-radius-sm, 10px);
+  --radius-lg: var(--tw-radius, 14px);
   --radius-xl: 20px;
 
   /* Typography */

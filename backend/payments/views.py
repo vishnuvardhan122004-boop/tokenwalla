@@ -31,7 +31,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
 from bookings.models import Booking
-from bookings.serializers import BookingSerializer
+from bookings.serializers import BookingSerializer, build_queue_map
 # One definition of "can this slot take another booking", shared with the
 # read-only availability endpoint. See CAPACITY.md §1 for why this has to be
 # enforced here and not just in the UI.
@@ -292,6 +292,53 @@ class CreateOrderView(APIView):
                 {'message': f'Invalid amount. Allowed values (₹): {allowed}'},
                 status=400,
             )
+
+        # Reject a full or expired slot BEFORE the ₹5 is taken.
+        #
+        # This branch never checked capacity, so the fee was captured and the
+        # slot validated afterwards. That is not a rare race — it is EVERY
+        # reschedule into a full slot. Adding the locked backstop in verify
+        # (see _handle_reschedule) closed the overselling but turned the common
+        # case into "charged ₹5, then refused", which is worse for the patient.
+        #
+        # `booking_id`/`date`/`slot` are OPTIONAL, exactly as they are in
+        # _create_booking_order: the mobile app ships on its own release cycle
+        # and sends none of them, so an older client is unaffected and simply
+        # falls through to the verify-side backstop. A client that DOES send
+        # them turns nearly every collision into a clean rejection with no
+        # money involved.
+        resched_id = request.data.get('booking_id') or request.data.get('bookingId')
+        date_val   = str(request.data.get('date', '') or '').strip()
+        slot_val   = str(request.data.get('slot', '') or '').strip()
+        if plan_info['plan'] == 'reschedule' and resched_id and date_val and slot_val:
+            try:
+                target = (Booking.objects
+                          .select_related('doctor', 'scan')
+                          .get(pk=int(resched_id), user=request.user))
+            except (Booking.DoesNotExist, ValueError, TypeError):
+                return Response({'message': 'Booking not found.'}, status=404)
+            # Mirror EVERY precondition _handle_reschedule enforces, not just
+            # the slot. Checking capacity but not status let a patient pay ₹5 to
+            # reschedule a CANCELLED or COMPLETED booking and be refused after
+            # capture — the exact charge-then-refuse shape this pre-check exists
+            # to prevent, reintroduced through the door left open.
+            if target.status != 'CONFIRMED':
+                return Response(
+                    {'message': f'Cannot reschedule a booking with status '
+                                f'"{target.status}". Only confirmed bookings can '
+                                f'be rescheduled.'},
+                    status=400)
+            provider = target.provider
+            if provider is None:
+                return Response({'message': 'This booking cannot be rescheduled.'},
+                                status=400)
+            try:
+                # exclude_pk: re-picking the booking's own slot is a no-op, not
+                # a collision with itself.
+                check_slot_available(provider, date_val, slot_val,
+                                     exclude_pk=target.pk)
+            except SlotUnavailable as exc:
+                return Response({'message': exc.message}, status=409)
 
         order_id = f'tw_{uuid.uuid4().hex}'
         try:
@@ -893,7 +940,7 @@ class VerifyPaymentView(APIView):
 
         # Fetch the booking — must belong to the requesting user
         try:
-            existing_booking = Booking.objects.select_related('doctor', 'hospital').get(
+            existing_booking = Booking.objects.select_related('doctor', 'scan', 'hospital').get(
                 pk=int(booking_id),
                 user=request.user,
             )
@@ -913,16 +960,27 @@ class VerifyPaymentView(APIView):
                 status=400,
             )
 
-        # Validate the new slot against the doctor's configured slots
-        doctor_slots = existing_booking.doctor.slots or []
-        if new_slot not in doctor_slots:
-            return Response(
-                {'success': False, 'message': f'Slot "{new_slot}" is not available for this doctor.'},
-                status=400,
-            )
-
         try:
             with transaction.atomic():
+                # Same capacity + cutoff guard the new-booking path and the free
+                # reschedule already run. This path used to check only
+                # `new_slot in doctor.slots`, so ₹5 bought a seat in a slot that
+                # was already full, or one that had already started — the two
+                # things check_slot_available exists to refuse.
+                #
+                # Locked, and `exclude_pk` so re-picking the booking's current
+                # slot doesn't count it against itself. A scan booking reaches
+                # here too: reading `.doctor.slots` on one raised AttributeError
+                # (doctor is None) and 500'd AFTER the fee was captured.
+                if existing_booking.is_scan:
+                    check_scan_slot_available_locked(
+                        existing_booking.scan_id, new_date, new_slot,
+                        exclude_pk=existing_booking.pk)
+                else:
+                    check_slot_available_locked(
+                        existing_booking.doctor_id, new_date, new_slot,
+                        exclude_pk=existing_booking.pk)
+
                 # Update the booking dates
                 existing_booking.date = new_date
                 existing_booking.slot = new_slot
@@ -960,6 +1018,33 @@ class VerifyPaymentView(APIView):
                 },
             })
 
+        except SlotUnavailable as exc:
+            # The ₹5 is captured and stays captured — deliberately. Nothing was
+            # written (the atomic block rolled back), so the booking still holds
+            # its ORIGINAL slot and the patient has lost nothing.
+            #
+            # Crucially, no ReschedulePayment row was created, so this order_id
+            # is still unredeemed: the client can call /verify/ again with the
+            # same order_id and a different slot, and the idempotency check at
+            # the top of post() lets it straight through. The retry is free.
+            # Refunding ₹5 instead would cost more in gateway fees than it
+            # returns, and would leave the patient with no reschedule at all.
+            logger.info('Reschedule of booking %s refused (%s); order %s left '
+                        'unredeemed so it can be retried on the same fee.',
+                        existing_booking.id, exc.reason, order_id)
+            return Response({
+                'success': False,
+                # Deliberately does NOT promise a free retry. Reusing the order
+                # is something the CLIENT has to do (re-POST /verify/ with the
+                # same order_id and a different slot) and only the website does
+                # it today — the app mints a fresh ₹5 order on retry until its
+                # next release. Saying "still credited" here would be a promise
+                # the app cannot keep. `order_id` is echoed back so a client
+                # that knows how to reuse it has it to hand.
+                'message': f'{exc.message} Your reschedule fee has not been used.',
+                'retryable': True,
+                'order_id': order_id,
+            }, status=409)
         except Exception as exc:
             logger.exception('Unexpected error in _handle_reschedule: %s', exc)
             return Response({'success': False, 'message': 'Internal error during reschedule.'}, status=500)
@@ -1075,7 +1160,7 @@ class AdminReportsView(APIView):
         all_b = (
             Booking.objects
             .all()
-            .select_related('doctor', 'hospital', 'user')
+            .select_related('doctor', 'scan', 'hospital', 'user', 'appointment_pass')
             .order_by('-created')
         )
 
@@ -1084,7 +1169,14 @@ class AdminReportsView(APIView):
         waiting   = all_b.filter(status='CONFIRMED').count()
 
         recent   = all_b[:500]
-        bookings = BookingSerializer(recent, many=True, context={'request': request}).data
+        # The map matters most here: 500 rows with no map meant up to 500
+        # extra queries from get_queue_position's slow path. build_queue_map
+        # takes a sliced queryset now (it used to try to re-filter its input,
+        # which is why this call site passed nothing).
+        bookings = BookingSerializer(
+            recent, many=True,
+            context={'request': request, 'queue_map': build_queue_map(recent)},
+        ).data
 
         return Response({
             'total':     total,
@@ -1119,10 +1211,18 @@ class BookingReceiptView(APIView):
         # Access: owner, the booking's hospital staff, or admin.
         is_owner = booking.user_id == request.user.id
         is_admin = getattr(request.user, 'role', '') == 'admin'
-        try:
-            staff_hospital = int(request.user.last_name)
-        except (ValueError, TypeError, AttributeError):
-            staff_hospital = None
+        # `role == 'hospital'` guard, which every sibling ownership check in the
+        # codebase applies (hospitals._is_owner_or_admin, permissions.
+        # IsDoctorOwnerHospitalOrAdmin, scans._may_see_report) and this one did
+        # not. User.last_name only means "the hospital I manage" for a hospital
+        # account; on any other role a numeric value there is meaningless and
+        # must not be read as a hospital id.
+        staff_hospital = None
+        if getattr(request.user, 'role', '') == 'hospital':
+            try:
+                staff_hospital = int(request.user.last_name)
+            except (ValueError, TypeError, AttributeError):
+                staff_hospital = None
         if not (is_owner or is_admin or staff_hospital == booking.hospital_id):
             return Response({'message': 'Access denied.'}, status=403)
 
@@ -1381,7 +1481,21 @@ class MarkPayoutPaidView(APIView):
             entry_ids = [r.id for r in rows]
             DoctorLedger.objects.filter(id__in=entry_ids).update(payout_batch=batch)
 
-            booking_ids = [r.booking_id for r in rows if r.booking_id]
+            # Only bookings whose EARNING was settled here. A booking whose
+            # sole row in this batch is an ABSENCE_REFUND clawback was never
+            # credited: record_absence_refund writes the negative row and
+            # deliberately leaves doctor_payout_status PENDING, waiting for the
+            # cron to write the matching +fee row.
+            #
+            # Marking it PAID here removed it from that cron's
+            # `status=COMPLETED, doctor_payout_status=PENDING` filter forever,
+            # so the +fee row was never written and the doctor was docked the
+            # fee with nothing to net it against — short by exactly one
+            # consultation fee, silently and permanently. Leaving it PENDING
+            # lets the cron write the earning, which nets to zero across the
+            # two batches.
+            booking_ids = [r.booking_id for r in rows
+                           if r.booking_id and r.reason == DoctorLedger.BOOKING_COMPLETED]
             Booking.objects.filter(id__in=booking_ids).update(
                 doctor_payout_status=Booking.PAYOUT_PAID)
 

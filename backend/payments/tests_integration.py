@@ -337,6 +337,100 @@ class VerifyRescheduleTests(WorldMixin, TestCase):
         self.assertTrue(r.json()['success'])
         self.assertEqual(ReschedulePayment.objects.filter(payment_id='rzp_rs_1').count(), 1)
 
+    # ── Capacity + cutoff on the PAID reschedule ─────────────────────────────
+    # This path validated only `slot in doctor.slots`, so ₹5 bought a seat in a
+    # slot that was already full, or one that had already started. The free
+    # reschedule (bookings.views.RescheduleBookingView) always checked capacity;
+    # this one never did, and nothing covered it.
+
+    def _reschedule(self, date, slot, ref='rzp_rs_new'):
+        with mock.patch('payments.views.confirm_order_paid') as m:
+            m.return_value = (True, ref, Decimal('5.00'), {'plan': 'reschedule'})
+            return self.client.post('/api/payment/verify/', {
+                'order_id': 'order_rs_new',
+                'booking': {'booking_id': self.booking.id, 'date': date, 'slot': slot},
+            }, format='json')
+
+    def test_reschedule_into_a_full_slot_is_refused(self):
+        self.doctor.max_per_slot = 1
+        self.doctor.save(update_fields=['max_per_slot'])
+        # Someone else already holds the only seat at 10:00 AM.
+        Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=FUTURE_DATE, slot='10:00 AM', token='TW-RS-FULL',
+            status='CONFIRMED')
+
+        r = self._reschedule(FUTURE_DATE, '10:00 AM')
+
+        self.assertEqual(r.status_code, 409)
+        self.assertFalse(r.json()['success'])
+        # The booking keeps its ORIGINAL slot — nothing was moved.
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.slot, '09:00 AM')
+        # And no ReschedulePayment was written, so the SAME order_id can be
+        # redeemed again against a different slot. That is what makes the
+        # ₹5 a retryable credit rather than a loss.
+        self.assertFalse(ReschedulePayment.objects.filter(payment_id='rzp_rs_new').exists())
+
+    def test_refused_reschedule_can_be_retried_free_on_the_same_order(self):
+        self.doctor.max_per_slot = 1
+        self.doctor.save(update_fields=['max_per_slot'])
+        Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=FUTURE_DATE, slot='10:00 AM', token='TW-RS-FULL2',
+            status='CONFIRMED')
+
+        self.assertEqual(self._reschedule(FUTURE_DATE, '10:00 AM').status_code, 409)
+        # Same order, different slot — no second payment involved.
+        r = self._reschedule(FUTURE_DATE, '09:00 AM')
+
+        self.assertEqual(r.status_code, 200)
+        self.booking.refresh_from_db()
+        self.assertEqual((str(self.booking.date), self.booking.slot),
+                         (FUTURE_DATE, '09:00 AM'))
+        self.assertEqual(ReschedulePayment.objects.filter(payment_id='rzp_rs_new').count(), 1)
+
+    def test_reschedule_into_a_past_date_is_refused(self):
+        r = self._reschedule(str(timezone.localdate() - timedelta(days=1)), '10:00 AM')
+
+        self.assertEqual(r.status_code, 409)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.slot, '09:00 AM')
+
+    def test_reschedule_onto_the_bookings_own_slot_is_allowed(self):
+        # max_per_slot=1 and the booking itself occupies 09:00 AM. Without
+        # exclude_pk it would count itself and refuse its own slot.
+        self.doctor.max_per_slot = 1
+        self.doctor.save(update_fields=['max_per_slot'])
+        self.booking.date = FUTURE_DATE
+        self.booking.save(update_fields=['date'])
+
+        r = self._reschedule(FUTURE_DATE, '09:00 AM')
+
+        self.assertEqual(r.status_code, 200)
+
+    def test_rescheduling_a_scan_booking_does_not_crash(self):
+        # Reading `.doctor.slots` on a scan booking raised AttributeError
+        # (doctor is None) and 500'd AFTER the ₹5 was captured.
+        from scans.models import Scan
+        centre = Hospital.objects.create(
+            name='Centre', city='Hyd', mobile='9000000009', password='x',
+            status='active', kind=Hospital.SCAN_CENTER)
+        scan = Scan.objects.create(
+            center=centre, name='MRI Brain', modality='MRI', price=2000,
+            slots=['09:00 AM', '10:00 AM'], max_per_slot=1,
+            days=['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+        self.booking.doctor = None
+        self.booking.scan = scan
+        self.booking.hospital = centre
+        self.booking.save(update_fields=['doctor', 'scan', 'hospital'])
+
+        r = self._reschedule(FUTURE_DATE, '10:00 AM')
+
+        self.assertEqual(r.status_code, 200)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.slot, '10:00 AM')
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Salaried doctors — the payout goes to the HOSPITAL's account
@@ -473,3 +567,81 @@ class ChooseModeTests(WorldMixin, TestCase):
         self.doctor.bank_account_number = ''
         self.doctor.ifsc = ''
         self.assertIsNone(choose_mode(self.doctor))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Reschedule: refuse a full slot BEFORE the ₹5 is taken
+# ─────────────────────────────────────────────────────────────────────────────
+class RescheduleCreateOrderTests(WorldMixin, TestCase):
+    """The fee must not be captured for a slot that will then be refused.
+
+    The reschedule branch of create-order never checked capacity, so the ₹5 was
+    taken and the slot validated afterwards. That is not a rare race — it is
+    EVERY reschedule into a full slot. Adding the locked backstop in verify
+    closed the overselling but turned the common case into "charged, then
+    refused", which is worse for the patient than the bug it fixed.
+
+    booking_id/date/slot are OPTIONAL (the mobile app sends none of them and
+    keeps working), so both shapes are pinned here.
+    """
+
+    def setUp(self):
+        self.make_actors()
+        self.booking = Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate(), slot='09:00 AM', token='TW-RC-1',
+            status='CONFIRMED')
+
+    def _order(self, **extra):
+        return self.client.post('/api/payment/create-order/',
+                                {'amount': 5, **extra}, format='json')
+
+    @mock.patch('payments.views.create_order')
+    def test_full_slot_is_refused_before_any_order_is_created(self, mock_create):
+        self.doctor.max_per_slot = 1
+        self.doctor.save(update_fields=['max_per_slot'])
+        Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=FUTURE_DATE, slot='10:00 AM', token='TW-RC-FULL',
+            status='CONFIRMED')
+
+        r = self._order(booking_id=self.booking.id, date=FUTURE_DATE, slot='10:00 AM')
+
+        self.assertEqual(r.status_code, 409)
+        # The whole point: the gateway was never called, so nothing was charged.
+        mock_create.assert_not_called()
+
+    @mock.patch('payments.views.create_order')
+    def test_past_slot_is_refused_before_any_order_is_created(self, mock_create):
+        r = self._order(booking_id=self.booking.id,
+                        date=str(timezone.localdate() - timedelta(days=1)),
+                        slot='10:00 AM')
+        self.assertEqual(r.status_code, 409)
+        mock_create.assert_not_called()
+
+    @mock.patch('payments.views.create_order')
+    def test_an_open_slot_still_creates_the_order(self, mock_create):
+        mock_create.return_value = {'order_id': 'ord_ok', 'key': 'rzp_test_x'}
+        r = self._order(booking_id=self.booking.id, date=FUTURE_DATE, slot='10:00 AM')
+        self.assertEqual(r.status_code, 200)
+        mock_create.assert_called_once()
+
+    @mock.patch('payments.views.create_order')
+    def test_a_client_that_sends_no_slot_is_unaffected(self, mock_create):
+        # The installed mobile app posts {amount: 5} and nothing else. It must
+        # keep working exactly as before and fall through to the verify backstop.
+        mock_create.return_value = {'order_id': 'ord_legacy', 'key': 'rzp_test_x'}
+        r = self._order()
+        self.assertEqual(r.status_code, 200)
+        mock_create.assert_called_once()
+
+    @mock.patch('payments.views.create_order')
+    def test_another_users_booking_is_not_addressable(self, mock_create):
+        other = User.objects.create(username='other', mobile='9000000456', role='patient')
+        theirs = Booking.objects.create(
+            user=other, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate(), slot='09:00 AM', token='TW-RC-OTHER',
+            status='CONFIRMED')
+        r = self._order(booking_id=theirs.id, date=FUTURE_DATE, slot='10:00 AM')
+        self.assertEqual(r.status_code, 404)
+        mock_create.assert_not_called()

@@ -38,6 +38,36 @@ def _cache_probe():
     return {'backend': backend, 'ok': ok}
 
 
+def _proxy_probe(request):
+    """What the throttles think the caller's address is — echoed to the caller.
+
+    NUM_PROXIES decides whether every per-IP limit in the product works, and it
+    cannot be verified from the code: it depends on how many proxies sit in
+    front in the real deployment. Guessing it wrong is asymmetric — too high and
+    the limits are spoofable again, too low and everyone shares one bucket and
+    gets 429s, which is the silent, self-confirming failure this codebase has
+    already been bitten by twice (see the OTP rate comments in settings.py).
+
+    So: curl /health/ from a phone on mobile data and read `resolved_ident`. If
+    it is that phone's public address, NUM_PROXIES is right. If it is something
+    else — a CDN egress, or a private 10.x — it is too low and real users are
+    being grouped together.
+
+    Discloses nothing: `resolved_ident` is the CALLER'S OWN address, derived
+    from the caller's own request, exactly as any echo service returns it. No
+    other user's data is involved, and the raw header is deliberately NOT
+    echoed — the count is what diagnoses the setting.
+    """
+    from rest_framework.throttling import BaseThrottle
+
+    xff = request.META.get('HTTP_X_FORWARDED_FOR') or ''
+    return {
+        'num_proxies':    settings.REST_FRAMEWORK.get('NUM_PROXIES'),
+        'chain_length':   len([p for p in xff.split(',') if p.strip()]),
+        'resolved_ident': BaseThrottle().get_ident(request),
+    }
+
+
 def health_check(request):
     """Used by load balancers, uptime monitors, and CI pipelines.
 
@@ -56,6 +86,10 @@ def health_check(request):
         'version': '1.0.0',
         'commit':  settings.GIT_COMMIT,
         'cache':   _cache_probe(),
+        # See _proxy_probe: the one setting that decides whether the rate
+        # limits work, and the only way to confirm it against the real
+        # deployment rather than assuming.
+        'proxy':   _proxy_probe(request),
     })
 
 

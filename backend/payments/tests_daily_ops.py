@@ -257,3 +257,41 @@ class DailyOpsEndpointTests(DailyOpsMixin, TestCase):
                  Booking.objects.count(), Payment.objects.count(),
                  list(Booking.objects.values_list('doctor_payout_status', flat=True)))
         self.assertEqual(before, after)
+
+
+class RateCounterHousekeepingTests(TestCase):
+    """The daily cron reclaims expired rate-limit rows.
+
+    RateCounter.purge_expired() existed but nothing called it outside its own
+    test, so the table only grew: a permanent row per mobile that ever asked for
+    an OTP or mistyped a password, and per throttle ident ever seen.
+    """
+
+    def test_the_daily_run_purges_expired_counters(self):
+        from django.utils import timezone
+        from datetime import timedelta
+        from django.core.management import call_command
+        from users.models import RateCounter
+
+        now = timezone.now()
+        RateCounter.objects.create(key='login_fails:9000000001', count=3,
+                                   expires_at=now - timedelta(hours=1))
+        RateCounter.objects.create(key='otp_sends:9000000002', count=1,
+                                   expires_at=now - timedelta(days=2))
+        live = RateCounter.objects.create(key='login_fails:9000000003', count=1,
+                                          expires_at=now + timedelta(minutes=20))
+
+        call_command('run_daily_payouts')
+
+        # Expired rows gone, the live window untouched — purging an in-flight
+        # counter would hand an attacker a fresh set of guesses.
+        self.assertEqual(
+            list(RateCounter.objects.values_list('key', flat=True)), [live.key])
+
+    def test_a_purge_failure_cannot_break_the_payout_run(self):
+        from unittest import mock
+        from django.core.management import call_command
+
+        with mock.patch('payments.management.commands.run_daily_payouts.RateCounter'
+                        '.purge_expired', side_effect=RuntimeError('boom')):
+            call_command('run_daily_payouts')   # must not raise

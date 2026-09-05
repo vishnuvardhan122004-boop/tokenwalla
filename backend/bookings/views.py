@@ -85,7 +85,7 @@ class MyBookingsView(APIView):
         bookings = (
             Booking.objects
             .filter(user=request.user)
-            .select_related('doctor', 'hospital', 'user')
+            .select_related('doctor', 'scan', 'hospital', 'user', 'appointment_pass')
             .order_by('-created')
         )
         queue_map  = build_queue_map(bookings)
@@ -134,25 +134,40 @@ class HospitalQueueView(APIView):
             Booking.objects
             .filter(hospital_id=hospital_id,
                     date__gte=window_start, date__lte=window_end)
-            .select_related('doctor', 'user')
+            # `hospital`, `scan` and `appointment_pass` were missing, and the
+            # serializer reads all three (hospital_name/hospital_mobile,
+            # provider_name on a scan booking, pass_role). Each was a query per
+            # row on the endpoint every reception desk polls every 10 seconds.
+            .select_related('doctor', 'scan', 'hospital', 'user', 'appointment_pass')
         )
+
+        # Without this the serializer takes get_queue_position's SLOW path —
+        # one query per waiting patient, on every poll. build_queue_map answers
+        # the whole set in three queries flat, and MyBookingsView has always
+        # passed it; this endpoint never did. Only CONFIRMED/IN_PROGRESS rows
+        # carry a position, so the map is built from exactly those.
+        ctx = {
+            'request':   request,
+            'queue_map': build_queue_map(
+                base.filter(status__in=('CONFIRMED', 'IN_PROGRESS'))),
+        }
 
         return Response({
             'waiting':    BookingSerializer(
                 base.filter(status='CONFIRMED').order_by('created'),
-                many=True, context={'request': request}
+                many=True, context=ctx
             ).data,
             'onHold':     BookingSerializer(
                 base.filter(status='ON_HOLD').order_by('created'),
-                many=True, context={'request': request}
+                many=True, context=ctx
             ).data,
             'inProgress': BookingSerializer(
                 base.filter(status='IN_PROGRESS').order_by('created'),
-                many=True, context={'request': request}
+                many=True, context=ctx
             ).data,
             'completed':  BookingSerializer(
                 base.filter(status='COMPLETED').order_by('-created')[:50],
-                many=True, context={'request': request}
+                many=True, context=ctx
             ).data,
         })
 
@@ -287,11 +302,16 @@ class AllBookingsView(APIView):
         qs = (
             Booking.objects
             .all()
-            .select_related('doctor', 'hospital', 'user')
+            .select_related('doctor', 'scan', 'hospital', 'user', 'appointment_pass')
             .order_by('-created')
         )
         page       = paginator.paginate_queryset(qs, request)
-        serializer = BookingSerializer(page, many=True, context={'request': request})
+        # Without the map this took get_queue_position's slow path — one query
+        # per CONFIRMED booking on the page, so up to 50 extra per request.
+        serializer = BookingSerializer(
+            page, many=True,
+            context={'request': request, 'queue_map': build_queue_map(page)},
+        )
         return paginator.get_paginated_response(serializer.data)
 
 
@@ -322,8 +342,28 @@ class CancelBookingView(APIView):
                 status=502,
             )
 
-        booking.status = 'CANCELLED'
-        booking.save(update_fields=['status'])
+        # Claim the CONFIRMED -> CANCELLED transition atomically. The status
+        # check at the top of this method is an unlocked read, so a
+        # double-submitted cancel gets TWO requests past it, and everything
+        # below here would then run twice.
+        #
+        # The refund above is already safe (it locks the Payment row and
+        # re-checks under it), but the pass restore is not: a redeemed visit is
+        # a ₹0 booking with no Payment to lock, so nothing serialised the two
+        # callers and `used_bookings -= 1` ran twice — handing the patient back
+        # two credits for one cancelled visit. The notifications would have gone
+        # out twice as well.
+        #
+        # A conditional UPDATE is the whole guard: exactly one caller matches
+        # status='CONFIRMED' and gets a rowcount of 1; the loser gets 0 and
+        # stops here, having changed nothing.
+        claimed = (Booking.objects
+                   .filter(pk=booking.pk, status='CONFIRMED')
+                   .update(status=Booking.CANCELLED))
+        if not claimed:
+            return Response(
+                {'message': 'This booking has already been cancelled.'}, status=400)
+        booking.status = Booking.CANCELLED   # keep the in-memory copy honest
         logger.info('Booking %s cancelled by user %s (refund: %s)', pk, request.user.id, refund_info)
 
         # Settle the Appointment Pass, if one is involved: a cancelled visit
@@ -547,7 +587,10 @@ class ScanQRView(APIView):
         try:
             return (
                 Booking.objects
-                .select_related('user', 'doctor', 'hospital')
+                # 'scan' included: _serialize_booking reads provider_name /
+                # provider_detail / provider_fee, all of which touch .scan on a
+                # scan booking.
+                .select_related('user', 'doctor', 'scan', 'hospital')
                 .get(token=token)
             ), None
         except Booking.DoesNotExist:

@@ -11,6 +11,18 @@
  * break pages. Only surface treatment: radius, shadow, colour, transition.
  *
  * Loaded once from App.js, after Bootstrap so it wins on specificity ties.
+ *
+ * SCOPE: this file treats Bootstrap's surfaces. index.css defines the tokens the
+ * hand-rolled components use. They are not rivals, and only the BRAND BLUE was
+ * ever genuinely duplicated — index.css said #185FA5, this file said #1D5FA8,
+ * and the same "primary" rendered as two colours on one page depending on
+ * whether the element was a Bootstrap component. index.css's --blue-600/700,
+ * --gray-600 and --radius-md/lg now alias the --tw-* names below.
+ *
+ * Do NOT extend that to --tw-line or the shadows. Those reach Bootstrap
+ * surfaces through the !important rules further down, which is correct; making
+ * index.css point at them as well restyles every hand-rolled panel and border
+ * on the site. That is a repaint to ask for, not a de-duplication.
  */
 
 :root {
@@ -18,7 +30,13 @@
      rest of the site matches what already works. */
   --tw-blue-50:  #EFF5FC;
   --tw-blue-100: #D6E6F7;
-  --tw-blue-600: #1D5FA8;
+  /* The product's blue. Not a preference — this exact value is hardcoded in
+     67 places across the components, in the Razorpay checkout theme, and in
+     the canvas-drawn ticket PNG. The last two CANNOT read a CSS variable,
+     so the token has to match them or the payment modal and the downloaded
+     ticket render a different blue from the site. (This file briefly said
+     #1D5FA8, which only ever reached Bootstrap buttons.) */
+  --tw-blue-600: #185FA5;
   --tw-blue-700: #174E8C;
   --tw-ink:      #0F1B2A;
   --tw-muted:    #64748B;

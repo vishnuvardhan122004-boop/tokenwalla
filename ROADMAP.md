@@ -1633,6 +1633,44 @@ queue as item 9.
 
 ---
 
+### 15. The app re-pays the ₹5 reschedule fee after a refused slot 🟡 — found 2026-09-04, web half shipped
+
+**Web is fixed; the app is not, and the app cannot be fixed on our schedule.**
+
+`/api/payment/verify/` refuses a reschedule into a full or already-started slot
+(added 2026-09-04 — before this it silently oversold the slot). On that refusal
+the server writes **no `ReschedulePayment` row**, so the paid ₹5 order stays
+redeemable: a client can POST `/verify/` again with the **same `order_id`** and
+a different slot, at no extra charge. The 409 body carries `retryable: true`
+and echoes `order_id` for exactly this.
+
+`MyBookings.js` now does that. **The app does not** — it calls
+`create-order` again and mints a second ₹5 order, so an app patient who picks a
+full slot pays twice for one reschedule.
+
+Mostly de-fanged already: `create-order` also refuses a full slot **before**
+taking the fee, and the app will get that protection with no release needed —
+but only when it starts sending `booking_id`/`date`/`slot`, which it does not.
+So today the app still pays first and gets refused second.
+
+**The app change, in two parts:**
+
+1. Send `booking_id`, `date` and `slot` on the reschedule `create-order` call.
+   This alone fixes the common case — the fee is never taken. Additive; the
+   server ignores them from any client that omits them.
+2. On a `409` with `retryable: true`, keep `order_id` and re-POST `/verify/`
+   with it when the patient picks another slot, instead of creating a new order.
+
+Part 1 is a two-line change and worth doing on its own. Part 2 only matters for
+the genuine race (the slot filling between checkout opening and verify landing),
+which is seconds wide.
+
+**Until part 1 ships, the patient-facing message must not promise a free retry**
+— which is why the server says "your reschedule fee has not been used" rather
+than "still credited". Do not reword it back without shipping the app half.
+
+---
+
 ## Next
 
 - **Slice 10 has no app half** — new 2026-08-19. The website ships scan-report

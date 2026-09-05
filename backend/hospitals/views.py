@@ -12,6 +12,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from tokenwalla.utils import check_password_strength, is_valid_landline
+# One counter for both logins — a partner account and a patient account are the
+# same brute-force target, and two copies of the cap would drift.
+from users.auth_views import login_password_allowed, clear_login_failures
 
 from .models import (
     Hospital, HospitalPhoto, in_segment, exclude_test_hospitals,
@@ -72,7 +75,11 @@ class HospitalListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        hospitals = Hospital.objects.filter(status='active').order_by('name')
+        # prefetch photos: HospitalSerializer.get_gallery reads obj.photos.all(),
+        # which without this is one query PER HOSPITAL on the public browse
+        # path — the list every patient loads before booking anything.
+        hospitals = (Hospital.objects.filter(status='active')
+                     .prefetch_related('photos').order_by('name'))
 
         # Unknown/absent value ⇒ hospitals. An old client sends nothing; a typo
         # must not silently widen the list, so only the exact opt-in counts.
@@ -266,12 +273,26 @@ class HospitalLoginView(APIView):
                 status=403,
             )
 
-        password_ok = check_password(password, hospital.password)
+        # Same password brute-force cap as the patient login, and the same
+        # shared counter — see users.auth_views.login_password_allowed. A
+        # hospital account is the higher-value target of the two: it holds other
+        # people's patient records. The OTP branch still runs when locked, so
+        # reception is never shut out of its own dashboard.
+        unlocked = login_password_allowed(mobile)
+        password_ok = unlocked and check_password(password, hospital.password)
         otp_ok = _verify_otp(mobile, password)
 
         if not password_ok and not otp_ok:
             logger.warning('Failed hospital login for mobile ending ...%s', mobile[-4:])
+            if not unlocked:
+                return Response(
+                    {'message': 'Too many failed password attempts. Log in with an '
+                                'OTP instead, or try again later.'},
+                    status=429,
+                )
             return Response({'message': 'Invalid credentials.'}, status=401)
+
+        clear_login_failures(mobile)
 
         user, created = User.objects.get_or_create(
             mobile=mobile,
@@ -350,6 +371,25 @@ class HospitalDetailView(APIView):
             hospital = Hospital.objects.get(pk=pk)
         except Hospital.DoesNotExist:
             return Response({'message': 'Not found.'}, status=404)
+
+        # The LIST endpoint hides pending/rejected registrations and internal
+        # [TEST] fixtures; this one returned them to anyone who guessed the id.
+        # That is the same leak the [TEST] filter was added for after it bit in
+        # production on 2026-08-11 — a demo provider is the one row set to
+        # collect the FULL fee, so a patient reaching it can be charged for an
+        # appointment that does not exist.
+        #
+        # Owner and admin are exempt: a hospital awaiting approval still loads
+        # its own profile page (Hprofile.js fetches this endpoint), and filtering
+        # it out would lock a pending partner out of their own settings.
+        if not _is_owner_or_admin(request.user, hospital):
+            if hospital.status != 'active':
+                return Response({'message': 'Not found.'}, status=404)
+            if not show_test_hospitals_to(request.user) and \
+                    not exclude_test_hospitals(
+                        Hospital.objects.filter(pk=hospital.pk)).exists():
+                return Response({'message': 'Not found.'}, status=404)
+
         return Response(HospitalSerializer(hospital).data)
 
     def patch(self, request, pk):
@@ -592,6 +632,9 @@ class HospitalResetPasswordView(APIView):
             pass
 
         cache.delete(f'otp_verified:{mobile}')
+        # Same as the patient reset — an OTP-verified reset must not leave the
+        # account still locked out by the password cap.
+        clear_login_failures(mobile)
         logger.info('Hospital password reset for mobile ending ...%s', mobile[-4:])
         return Response({'message': 'Password reset successfully.'})
 
@@ -601,7 +644,9 @@ class HospitalAdminListView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get(self, request):
-        hospitals = Hospital.objects.all().order_by('name')
+        # Same gallery N+1, and this one is unpaginated and includes pending
+        # and rejected rows, so N is strictly larger than the public list's.
+        hospitals = Hospital.objects.all().prefetch_related('photos').order_by('name')
         return Response(HospitalSerializer(hospitals, many=True).data)
 
 

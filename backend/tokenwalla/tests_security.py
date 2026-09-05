@@ -577,3 +577,178 @@ class PasswordStrengthTests(TestCase):
         self.assertEqual(res.status_code, 400)
         self.assertFalse(Hospital.objects.filter(mobile=mobile).exists())
         self.assertFalse(User.objects.filter(mobile=mobile).exists())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Password brute force — the door left unlocked next to the hardened OTP path
+# ─────────────────────────────────────────────────────────────────────────────
+@override_settings(CACHES=LOCMEM_CACHE)
+class LoginBruteForceTests(TestCase):
+    """Both logins capped the OTP path and nothing else.
+
+    AnonRateThrottle is deliberately loose (300/minute, for CGNAT), the password
+    minimum is 6 characters, and /auth/check-mobile/ confirms which numbers
+    exist — so the password path was brute-forceable online. The cap is counted
+    per MOBILE in the database (users.RateCounter), and it locks the PASSWORD
+    path only: an OTP still gets the real owner in.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        cache.clear()
+        self.mobile = '9333000001'
+        self.user = User.objects.create(
+            username=self.mobile, mobile=self.mobile, role='patient')
+        self.user.set_password('Pat1ent-Str0ng-2026')
+        self.user.save()
+
+    def _login(self, password):
+        return self.client.post(
+            '/api/auth/login/', {'mobile': self.mobile, 'password': password},
+            format='json')
+
+    def test_password_guessing_is_locked_out_after_the_cap(self):
+        from users.auth_views import LOGIN_MAX_ATTEMPTS
+
+        for _ in range(LOGIN_MAX_ATTEMPTS):
+            self.assertEqual(self._login('wrong-guess').status_code, 401)
+
+        # Past the cap the answer changes from "wrong" to "stop".
+        locked = self._login('wrong-guess')
+        self.assertEqual(locked.status_code, 429)
+
+        # And the CORRECT password is refused too — that is the whole point.
+        self.assertEqual(self._login('Pat1ent-Str0ng-2026').status_code, 429)
+
+    @override_settings(TWOFACTOR_API_KEY='')
+    def test_a_locked_account_can_still_log_in_with_an_otp(self):
+        from users.auth_views import LOGIN_MAX_ATTEMPTS
+
+        for _ in range(LOGIN_MAX_ATTEMPTS + 1):
+            self._login('wrong-guess')
+        self.assertEqual(self._login('Pat1ent-Str0ng-2026').status_code, 429)
+
+        # The owner requests an OTP and logs in with it. If this ever fails, the
+        # cap has become a way to lock someone out of their own account.
+        cache.set(f'otp_session:{self.mobile}', '654321', timeout=300)
+        ok = self._login('654321')
+        self.assertEqual(ok.status_code, 200)
+        self.assertIn('access', ok.json())
+
+    def test_a_successful_login_clears_the_counter(self):
+        from users.auth_views import LOGIN_MAX_ATTEMPTS
+
+        for _ in range(LOGIN_MAX_ATTEMPTS - 1):
+            self._login('wrong-guess')
+        self.assertEqual(self._login('Pat1ent-Str0ng-2026').status_code, 200)
+
+        # Counter reset — a fresh run of wrong guesses is needed to lock it.
+        for _ in range(LOGIN_MAX_ATTEMPTS - 1):
+            self.assertEqual(self._login('wrong-guess').status_code, 401)
+
+    def test_hospital_login_shares_the_same_cap(self):
+        from users.auth_views import LOGIN_MAX_ATTEMPTS
+        from django.contrib.auth.hashers import make_password
+
+        mobile = '9333000002'
+        Hospital.objects.create(
+            name='Locked Clinic', city='Hyd', mobile=mobile, status='active',
+            password=make_password('H0spital-Str0ng-2026'))
+
+        for _ in range(LOGIN_MAX_ATTEMPTS):
+            r = self.client.post('/api/hospitals/login/',
+                                 {'mobile': mobile, 'password': 'wrong'},
+                                 format='json')
+            self.assertEqual(r.status_code, 401)
+
+        locked = self.client.post('/api/hospitals/login/',
+                                  {'mobile': mobile, 'password': 'H0spital-Str0ng-2026'},
+                                  format='json')
+        self.assertEqual(locked.status_code, 429)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The throttle key must not be forgeable
+# ─────────────────────────────────────────────────────────────────────────────
+@override_settings(CACHES=LOCMEM_CACHE)
+class ThrottleIdentSpoofTests(TestCase):
+    """Every per-IP limit keys on BaseThrottle.get_ident.
+
+    NUM_PROXIES was never set, and DRF's default of None makes get_ident return
+    the WHOLE X-Forwarded-For header — which the client controls. A new header
+    value per request meant a new bucket per request, so the OTP send burst, the
+    2000/day paid-SMS ceiling, the anon rate and the ADMIN_SETUP_KEY brute-force
+    guard were all bypassable by anyone who could set a header.
+
+    These pin the identity, not the rate: the rates are tuned elsewhere and
+    change, but a forgeable key makes all of them decorative.
+    """
+
+    def setUp(self):
+        cache.clear()
+        from users.auth_views import OTPRateThrottle
+        self.throttle = OTPRateThrottle()
+        self.factory = __import__('rest_framework.test', fromlist=['APIRequestFactory']).APIRequestFactory()
+
+    def _ident(self, xff, remote='203.0.113.9'):
+        req = self.factory.post('/api/auth/otp/request/', {}, format='json')
+        req.META['REMOTE_ADDR'] = remote
+        if xff is not None:
+            req.META['HTTP_X_FORWARDED_FOR'] = xff
+        return self.throttle.get_ident(req)
+
+    def test_a_spoofed_prefix_cannot_mint_a_new_bucket(self):
+        # Railway appends the real address; the attacker chooses the prefix.
+        real = '198.51.100.7'
+        idents = {self._ident(f'{fake}, {real}') for fake in
+                  ('10.0.0.1', '10.0.0.2', '10.0.0.3', 'not-an-ip', '')}
+        self.assertEqual(
+            idents, {real},
+            'Every spoofed prefix must collapse to the address Railway appended '
+            '— otherwise one host gets unlimited buckets.')
+
+    def test_two_genuinely_different_clients_still_separate(self):
+        # The fix must not over-group: real clients need their own buckets, or
+        # one abuser 429s the whole platform.
+        self.assertNotEqual(self._ident('198.51.100.7'), self._ident('198.51.100.8'))
+
+    def test_no_forwarded_header_falls_back_to_the_socket(self):
+        # Local dev and any direct connection.
+        self.assertEqual(self._ident(None, remote='127.0.0.1'), '127.0.0.1')
+
+    def test_the_daily_sms_ceiling_keys_on_the_unforgeable_ident(self):
+        # _reserve_otp_send_for_ip reuses get_ident, so it inherits the fix.
+        # Same real client behind different spoofed prefixes must share ONE
+        # counter, which is the whole point of the ceiling.
+        from users.auth_views import _reserve_otp_send_for_ip
+
+        def req(fake):
+            r = self.factory.post('/api/auth/otp/request/', {}, format='json')
+            r.META['REMOTE_ADDR'] = '203.0.113.9'
+            r.META['HTTP_X_FORWARDED_FOR'] = f'{fake}, 198.51.100.7'
+            return r
+
+        with override_settings(OTP_MAX_SENDS_PER_IP_PER_DAY=3):
+            self.assertTrue(_reserve_otp_send_for_ip(req('10.0.0.1')))
+            self.assertTrue(_reserve_otp_send_for_ip(req('10.0.0.2')))
+            self.assertTrue(_reserve_otp_send_for_ip(req('10.0.0.3')))
+            # Fourth send from the SAME real client, fourth different spoof.
+            self.assertFalse(_reserve_otp_send_for_ip(req('10.0.0.4')))
+
+    def test_health_reports_the_resolved_ident_for_verification(self):
+        # NUM_PROXIES cannot be verified from the code — it depends on the real
+        # deployment. /health/ echoes back what the throttles resolved so the
+        # setting can be confirmed against production instead of assumed.
+        res = self.client.get(
+            '/health/', HTTP_X_FORWARDED_FOR='10.0.0.1, 198.51.100.7')
+        self.assertEqual(res.status_code, 200)
+        proxy = res.json()['proxy']
+        self.assertEqual(proxy['resolved_ident'], '198.51.100.7')
+        self.assertEqual(proxy['chain_length'], 2)
+        self.assertEqual(proxy['num_proxies'], 1)
+
+    def test_health_does_not_echo_the_raw_forwarded_header(self):
+        # The count diagnoses the setting; the chain itself is not echoed.
+        res = self.client.get(
+            '/health/', HTTP_X_FORWARDED_FOR='10.0.0.1, 198.51.100.7')
+        self.assertNotIn('10.0.0.1', res.content.decode())

@@ -201,8 +201,48 @@ ANON_RATE = config('ANON_RATE', default='300/minute')
 # and simply can't be spent until it is switched back on.
 PASS_ENABLED = config('PASS_ENABLED', default=True, cast=bool)
 
+# ── How many proxies sit in front of us ───────────────────────────────────────
+# This one line decides whether EVERY per-IP limit in the product actually
+# works. It was never set, and DRF's default is None — which sends
+# BaseThrottle.get_ident down its last branch:
+#
+#     return ''.join(xff.split()) if xff else remote_addr
+#
+# i.e. the throttle key becomes the whole X-Forwarded-For header, which the
+# CLIENT controls. Railway's proxy appends the real address, but an
+# attacker-chosen prefix survives in the value, so `X-Forwarded-For: 10.0.0.1`
+# then `10.0.0.2` … yields a brand-new bucket on every request. That silently
+# defeated:
+#
+#   * AnonRateThrottle (300/min) on every public endpoint
+#   * OTPRateThrottle (the 20/min SMS-send burst)
+#   * AdminSetupRateThrottle — the 10/hour anti-brute-force on ADMIN_SETUP_KEY
+#   * users.auth_views._reserve_otp_send_for_ip, the 2000/day paid-SMS spend
+#     ceiling, which deliberately reuses get_ident to "count the same client
+#     the throttle does". Moving that counter into the database fixed its
+#     ATOMICITY; the key itself was still forgeable.
+#
+# The per-NUMBER caps were never affected — they key on the mobile, so flooding
+# one number is still capped at 10/day, and the login and OTP attempt caps
+# still hold. The exposure was breadth: one host walking many numbers, unmetered.
+#
+# With NUM_PROXIES = 1, get_ident takes `addrs[-1]` — the address Railway itself
+# appended, which a client cannot forge.
+#
+# Env-overridable, and the value MATTERS in both directions:
+#   too HIGH  → reads further left into attacker-supplied entries, re-opening this.
+#   0         → returns REMOTE_ADDR, which behind a proxy is the PROXY's own
+#               address, so every user on the platform shares one bucket and
+#               everyone gets 429s. Never set this to 0 on Railway.
+# 1 is correct for Railway fronting the app directly (the current deployment).
+# Add a hop only if something else is ever put in front (a CDN, a WAF).
+NUM_PROXIES = config('NUM_PROXIES', default=1, cast=int)
+
 # ── REST Framework ────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
+    # See the NUM_PROXIES block above — without this every per-IP limit here is
+    # bypassable with a header.
+    'NUM_PROXIES': NUM_PROXIES,
     'DEFAULT_AUTHENTICATION_CLASSES': [
         # JWTAuthentication + a check on User.status, so blocking someone takes
         # effect on the tokens they already hold. See tokenwalla/permissions.py.

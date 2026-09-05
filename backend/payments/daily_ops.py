@@ -142,8 +142,11 @@ def _attention(day, balances):
     # 1. The ledger cron has stopped. Silent failure: bookings complete, doctors
     #    simply never appear on the payouts page.
     lag_cutoff = day - timedelta(days=LEDGER_LAG_DAYS)
+    # Same status set the cron settles (COMPLETED + NO_SHOW). If this probe
+    # watched only COMPLETED, a NO_SHOW payout that never got ledgered would be
+    # invisible on the one screen checked every day.
     stuck_ledger = Booking.objects.filter(
-        status=Booking.COMPLETED,
+        status__in=(Booking.COMPLETED, Booking.NO_SHOW),
         doctor_payout_status=Booking.PAYOUT_PENDING,
         date__lt=lag_cutoff,
     ).count()
