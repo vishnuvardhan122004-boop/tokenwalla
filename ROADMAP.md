@@ -1804,6 +1804,40 @@ mobile app reads, so it is additive-or-versioned, not a free change.
 
 ---
 
+### 21. Pending/rejected facilities have their providers listed publicly 🔴 — found 2026-09-06 by /ship
+
+`HospitalListView` filters `status='active'`. **Neither `DoctorViewSet.get_queryset`
+nor `ScanViewSet.get_queryset` filters on the facility's status at all** — they
+filter `[TEST]` names and segment, and nothing else.
+
+So a hospital sitting at `pending` (registered, never approved) or `rejected`
+still has **every one of its doctors in the public browse list**, and a pending
+centre has every one of its scans. A patient can open one and book it. The
+facility itself is hidden from `/api/hospitals/`, which is what makes this hard
+to notice: the provider is listed, its facility is not.
+
+Found while shipping the audit branch. A fix there had made
+`/api/hospitals/<pk>/` 404 for non-active facilities, to match the list — and
+that turned out to make things worse, not better. It does not stop the booking;
+it just breaks the page, and it breaks it hard on the centre screens, which
+fetch the facility inside a `Promise.all` and render a failure state
+(`ScanCenterDetails.js:72`, app `scan-center/[id].tsx:125`). The doctor screens
+swallow it and merely lose the contact block. **That half was reverted** — the
+detail endpoint now hides `[TEST]` fixtures only, which is inert for real
+facilities and is the half with a production incident behind it.
+
+**The fix is to filter the lists, not to 404 the detail**, and it is its own PR
+because it has to answer a question first: what happens to bookings ALREADY
+taken against a facility that is not active? Hiding the provider does not cancel
+those, and a patient holding a token for a hospital that has since been rejected
+still needs their booking, their queue position and their refund path to work.
+
+Deliberately NOT bundled into the audit branch: that branch is additive and
+carries no behaviour change a patient can see, and this one is visible to
+patients on the public browse path.
+
+---
+
 ## Next
 
 - **Slice 10 has no app half** — new 2026-08-19. The website ships scan-report

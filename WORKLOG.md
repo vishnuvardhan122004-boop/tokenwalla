@@ -40,11 +40,15 @@ pass (ROADMAP 1329), the budget question ROADMAP 48 still lists as open. Vishnu
 proceeded with it open. That question is now live spend, not a hypothetical.
 
 **Verified after the restart** — `/health/` 200, `commit 8b173d0e` matching
-`origin/main` `8b173d0`, `cache.backend=redis ok`. **Not verified from the
-session:** the flag's own value. `GET /api/payment/pass/` is `IsAuthenticated`
-and returns 401 unauthenticated, so confirming `enabled: true` needs a logged-in
-patient at a `SERVICE_ONLY` doctor's checkout. Vishnu's dashboard read is the
-only confirmation on record.
+`origin/main` `8b173d0`, `cache.backend=redis ok`. **Then confirmed where it
+counts:** Vishnu opened a logged-in checkout and the ₹25 / ₹35 options render.
+The flag is on and the offer is live to patients.
+
+Worth keeping for next time: the session could verify the restart but never the
+flag. `GET /api/payment/pass/` is `IsAuthenticated` and 401s unauthenticated, so
+`enabled` is invisible from an unauthenticated probe — a config change to this
+flag always ends with a human looking at a checkout screen, and no amount of
+curl replaces that.
 
 **Why it wasn't the session that flipped it.** Three layers said no; two were
 resolved and one was not:
@@ -81,12 +85,12 @@ table stays a flat no.
 | 1 | `PASS_ENABLED=True` on Railway `tokenwalla-backend` (dashboard, Vishnu) | no commit — config | ✅ |
 | 2 | CLAUDE.md feature-flag carve-out + hook-gap note | uncommitted | 🕒 |
 | 3 | Reconcile CLAUDE.md carve-out with the `settings.json` deny rule | — | ⬜ |
-| 4 | Confirm the ₹25/₹35 offer renders for a logged-in patient at a `SERVICE_ONLY` doctor | — | ⬜ |
+| 4 | Confirm the ₹25/₹35 offer renders for a logged-in patient at a `SERVICE_ONLY` doctor | — | ✅ |
 
 **Action items**
 
-- [ ] Vishnu: open a checkout at a `SERVICE_ONLY` doctor and confirm the two
-      options render — this is the only real proof the flag took.
+- [x] Vishnu: open a checkout at a `SERVICE_ONLY` doctor and confirm the two
+      options render — done, both showing. The pass is live.
 - [ ] Decide whether `settings.json` keeps denying `railway variables:*`.
 - [ ] Land the CLAUDE.md carve-out and the unmerged `d8749c6` ROADMAP commit —
       both docs, both currently stranded on the already-merged
