@@ -446,3 +446,122 @@ class AbsenceClawbackSettlementTests(TestCase):
             sum(r.amount for r in DoctorLedger.objects.filter(booking=absent)),
             Decimal('0.00'),
             'clawback and earning must net to zero for an absent visit')
+
+
+class RefundRetryReconciliationTests(TestCase):
+    """A gateway timeout must not become a second refund.
+
+    refund_payment raising does NOT mean the refund failed to happen: Razorpay
+    can process it while the HTTP response is lost. The exception rolls back the
+    Refund row, the booking stays CONFIRMED, and the patient's retry sees no row
+    and refunds again. The Payment lock only serialises CONCURRENT cancels — it
+    does nothing for a sequential retry after a rollback.
+    """
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from hospitals.models import Hospital
+        from doctors.models import Doctor
+        User = get_user_model()
+        self.user = User.objects.create(username='p', mobile='9600000001', role='patient')
+        self.hospital = Hospital.objects.create(
+            name='Apollo', city='Hyd', mobile='9600000002', password='x')
+        self.doctor = Doctor.objects.create(
+            hospital=self.hospital, name='Rao', specialization='GP',
+            mobile='9600000003', fee=200, slots=['09:00 AM'])
+        self.booking = Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate() + timedelta(days=3), slot='09:00 AM',
+            token='TW-RR1', status=Booking.CONFIRMED, amount=225)
+        self.payment = Payment.objects.create(
+            booking=self.booking, order_id='o1', payment_id='pay_rr1',
+            amount=225, doctor_fee=Decimal('200.00'),
+            platform_fee=Decimal('20.00'), gateway_fee=Decimal('1.50'),
+            gst_amount=Decimal('3.87'), final_amount=Decimal('225.37'),
+            status=Payment.PAID)
+
+    def test_a_retry_after_a_lost_response_adopts_the_refund_instead_of_repeating(self):
+        from payments.refunds import process_cancellation_refund
+        from payments.models import Refund
+
+        # First attempt: Razorpay processes it, the response is lost.
+        with mock.patch('payments.razorpay_utils.refund_payment',
+                        side_effect=ConnectionError('timeout')), \
+             mock.patch('payments.razorpay_utils.find_existing_refund', return_value=''):
+            with self.assertRaises(ConnectionError):
+                process_cancellation_refund(self.booking)
+
+        # The row was rolled back — this is the state the patient retries from.
+        self.assertEqual(Refund.objects.count(), 0)
+
+        # Retry: the gateway reports the refund it already holds.
+        with mock.patch('payments.razorpay_utils.refund_payment') as issue, \
+             mock.patch('payments.razorpay_utils.find_existing_refund',
+                        return_value='rfnd_already_there'):
+            refund, info = process_cancellation_refund(self.booking)
+
+        issue.assert_not_called()          # THE ASSERTION: no second refund
+        self.assertEqual(refund.razorpay_refund_id, 'rfnd_already_there')
+        self.assertEqual(Refund.objects.count(), 1)
+
+    def test_a_clean_first_refund_still_calls_the_gateway(self):
+        from payments.refunds import process_cancellation_refund
+
+        with mock.patch('payments.razorpay_utils.refund_payment',
+                        return_value={'id': 'rfnd_new'}) as issue, \
+             mock.patch('payments.razorpay_utils.find_existing_refund', return_value=''):
+            refund, info = process_cancellation_refund(self.booking)
+
+        issue.assert_called_once()
+        self.assertEqual(refund.razorpay_refund_id, 'rfnd_new')
+
+
+class NoShowPayoutTests(TestCase):
+    """A patient no-show on a FULL provider still owes the provider their fee.
+
+    The fee was collected online and NO_SHOW is terminal and non-refundable, so
+    if the cron skips it the money is neither paid out nor returned — TokenWalla
+    just keeps it, which the money rules forbid.
+    """
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from hospitals.models import Hospital
+        from doctors.models import Doctor
+        User = get_user_model()
+        self.user = User.objects.create(username='p', mobile='9700000001', role='patient')
+        self.hospital = Hospital.objects.create(
+            name='Apollo', city='Hyd', mobile='9700000002', password='x')
+        self.doctor = Doctor.objects.create(
+            hospital=self.hospital, name='Rao', specialization='GP',
+            mobile='9700000003', fee=200, slots=['09:00 AM'],
+            payment_collection_mode=Doctor.COLLECT_FULL, upi_vpa='rao@upi')
+
+    def _booking(self, status):
+        b = Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate(), slot='09:00 AM',
+            token=f'TW-NS{status[:3]}', status=status, amount=225)
+        Payment.objects.create(
+            booking=b, order_id=f'o{b.id}', payment_id=f'pay_{b.id}',
+            amount=225, doctor_fee=Decimal('200.00'),
+            platform_fee=Decimal('20.00'), gateway_fee=Decimal('1.50'),
+            gst_amount=Decimal('3.87'), final_amount=Decimal('225.37'),
+            status=Payment.PAID)
+        return b
+
+    def test_a_no_show_is_ledgered_to_the_provider(self):
+        from payments.models import DoctorLedger
+        b = self._booking(Booking.NO_SHOW)
+        call_command('run_daily_payouts')
+        rows = DoctorLedger.objects.filter(booking=b)
+        self.assertEqual(
+            [r.amount for r in rows], [Decimal('200.00')],
+            'the slot was held and lost, and the patient is not refunded — so '
+            'the provider must be paid, not TokenWalla')
+
+    def test_a_cancelled_booking_is_still_never_ledgered(self):
+        from payments.models import DoctorLedger
+        b = self._booking(Booking.CANCELLED)
+        call_command('run_daily_payouts')
+        self.assertFalse(DoctorLedger.objects.filter(booking=b).exists())

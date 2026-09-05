@@ -125,7 +125,7 @@ def process_cancellation_refund(booking):
     from django.db import transaction
     from bookings.models import Booking
     from payments.models import Payment, Refund
-    from payments.razorpay_utils import refund_payment
+    from payments.razorpay_utils import refund_payment, find_existing_refund
 
     if booking.status not in Booking.REFUNDABLE_STATUSES:
         raise RefundNotAllowed(
@@ -159,15 +159,35 @@ def process_cancellation_refund(booking):
 
         razorpay_refund_id = ''
         if pool > 0:
-            # Razorpay refunds are keyed by PAYMENT id (not order id), take a
-            # rupee amount, and use a deterministic refund_id for logging.
-            resp = refund_payment(
-                payment_id=payment.payment_id,
-                amount_rupees=pool,
-                refund_id=f'rfnd_{payment.id}',
-                note='TokenWalla cancellation refund',
-            )
-            razorpay_refund_id = (resp or {}).get('id', '') or ''
+            # Reconcile BEFORE issuing. `refund_payment` raising does not mean
+            # the refund failed to happen: a gateway timeout can leave Razorpay
+            # having processed it while this block raises and rolls back, taking
+            # the Refund row with it. The booking stays CONFIRMED, the patient
+            # retries, the idempotency check above finds no row, and a SECOND
+            # refund goes out. The lock only serialises CONCURRENT cancels; it
+            # does nothing for a sequential retry after a rollback.
+            #
+            # Only ever one refund per payment here (the check above returns on
+            # any existing row), so anything the gateway already holds against
+            # this payment is ours — adopt it instead of paying it twice.
+            prior = find_existing_refund(payment.payment_id)
+            if prior:
+                logger.warning(
+                    'Adopting Razorpay refund %s already held against payment '
+                    '%s — a previous attempt reached the gateway but its '
+                    'response did not reach us. No second refund issued.',
+                    prior, payment.payment_id)
+                razorpay_refund_id = prior
+            else:
+                # Razorpay refunds are keyed by PAYMENT id (not order id), take
+                # a rupee amount, and use a deterministic refund_id for logging.
+                resp = refund_payment(
+                    payment_id=payment.payment_id,
+                    amount_rupees=pool,
+                    refund_id=f'rfnd_{payment.id}',
+                    note='TokenWalla cancellation refund',
+                )
+                razorpay_refund_id = (resp or {}).get('id', '') or ''
 
         refund = Refund.objects.create(
             payment            = payment,

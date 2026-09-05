@@ -138,6 +138,36 @@ def confirm_order_paid(order_id):
     return paid, payment_ref, amount_rupees, tags
 
 
+def find_existing_refund(payment_id) -> str:
+    """Id of any refund Razorpay already holds against this payment, or ''.
+
+    Exists because `refund_payment` raising does NOT mean the refund failed to
+    happen — a gateway timeout can leave Razorpay having processed it while our
+    caller sees an exception and rolls back the Refund row. The patient then
+    retries, our idempotency check finds no row, and a SECOND refund goes out.
+
+    Asking the gateway what it already holds turns that retry into a
+    reconciliation. One booking is only ever refunded once here (see
+    process_cancellation_refund's one-row-per-payment rule), so ANY refund found
+    against this payment is ours and must be adopted rather than duplicated.
+
+    Failing soft on purpose: if this lookup itself errors we return '' and the
+    caller proceeds to refund. Refusing to refund because a diagnostic call
+    failed would strand a patient's money over a transient network fault, which
+    is the worse of the two errors.
+    """
+    try:
+        resp = get_client().payment.fetch_multiple_refund(payment_id) or {}
+        for item in (resp.get('items') or []):
+            rid = str(item.get('id', '') or '')
+            if rid:
+                return rid
+    except Exception:
+        logger.warning('Could not list existing refunds for payment %s; '
+                       'proceeding as if none exist.', payment_id)
+    return ''
+
+
 def refund_payment(payment_id, amount_rupees, refund_id, note=None):
     """Issue a (partial or full) refund on a captured Razorpay payment.
 

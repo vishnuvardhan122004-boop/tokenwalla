@@ -38,7 +38,19 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         eligible = (
             Booking.objects
-            .filter(status=Booking.COMPLETED,
+            # NO_SHOW is included deliberately. On a FULL-mode provider the
+            # consultation fee (or scan price) was collected online, and a
+            # patient no-show is documented as terminal and NON-refundable — so
+            # without this the money was collected on the provider's behalf,
+            # never ledgered to them and never returned to the patient, and
+            # TokenWalla simply kept it. That contradicts the money rule in
+            # CLAUDE.md: our revenue is the service fee, the provider's payout
+            # is the full online consultation fee.
+            #
+            # The slot was held and lost, which is the same reasoning
+            # refunds.unused_pass_share already applies when it counts a NO_SHOW
+            # sibling as consumed.
+            .filter(status__in=(Booking.COMPLETED, Booking.NO_SHOW),
                     doctor_payout_status=Booking.PAYOUT_PENDING)
             .exclude(payment__refunds__isnull=False)   # never pay out a refunded booking
             .select_related('doctor', 'payment', 'scan__center')
