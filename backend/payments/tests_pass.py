@@ -32,6 +32,8 @@ from payments.fees import (
     compute_fee_breakdown, compute_pass_split, pass_eligible,
     PASS_BOOKINGS, PASS_PRICE, PASS_BUY, PASS_REDEEM,
 )
+from notifications.models import WhatsAppLog
+from notifications.whatsapp import send_pass_expiring
 from payments.models import AppointmentPass, Payment
 
 User = get_user_model()
@@ -572,30 +574,112 @@ class PassExpiryReminderTests(PassWorldMixin, TestCase):
         self.make_actors()
 
     def _run(self):
+        """Both channels patched. The WhatsApp half is a real outbound call on
+        any machine with a token in .env — see CLAUDE.md trap 1."""
         from django.core.management import call_command
-        with mock.patch('payments.management.commands.send_pass_expiry_reminders'
-                        '.push_pass_expiring') as push:
+        base = 'payments.management.commands.send_pass_expiry_reminders.'
+        with mock.patch(base + 'push_pass_expiring') as push, \
+             mock.patch(base + 'send_pass_expiring') as wa:
             call_command('send_pass_expiry_reminders')
-        return push
+        return push, wa
 
     def test_nudges_an_unused_visit_three_days_out(self):
         ap = self.give_pass(used=1, days=2)
-        push = self._run()
+        push, wa = self._run()
         push.assert_called_once()
+        # WhatsApp is not a fallback the command chooses — it always fires, and
+        # for a web-only buyer (every buyer today) it is the only one that lands.
+        wa.assert_called_once_with(ap)
         ap.refresh_from_db()
         self.assertTrue(ap.expiry_reminder_sent)
 
     def test_never_nudges_twice(self):
         self.give_pass(used=1, days=2)
         self._run()
-        self.assertFalse(self._run().called)
+        push, wa = self._run()
+        self.assertFalse(push.called)
+        self.assertFalse(wa.called)
 
     def test_leaves_alone_what_it_should(self):
         self.give_pass(used=2, days=2)                 # nothing left to spend
         self.give_pass(used=1, days=20)                # not close enough yet
         self.give_pass(used=1, days=-1)                # already lapsed
         self.give_pass(used=1, days=2, voided=True)    # voided
-        self.assertFalse(self._run().called)
+        push, wa = self._run()
+        self.assertFalse(push.called)
+        self.assertFalse(wa.called)
+
+    def test_one_unsendable_pass_does_not_strand_the_rest(self):
+        # Without the guard the loop dies on the first raise, the flag is never
+        # set, and the same row re-breaks the run every 10 minutes forever.
+        self.give_pass(used=1, days=2)
+        self.give_pass(used=1, days=2, user=User.objects.create(
+            username='pat2', mobile='9000000009', role='patient'))
+        from django.core.management import call_command
+        base = 'payments.management.commands.send_pass_expiry_reminders.'
+        with mock.patch(base + 'push_pass_expiring', side_effect=RuntimeError('boom')), \
+             mock.patch(base + 'send_pass_expiring'):
+            call_command('send_pass_expiry_reminders')
+        self.assertEqual(AppointmentPass.objects.filter(expiry_reminder_sent=True).count(), 2)
+
+
+class PassExpiringWhatsAppTests(PassWorldMixin, TestCase):
+    """The WhatsApp half of the nudge, on its own.
+
+    The template is not approved yet (WHATSAPP_TEMPLATES.md section 15), so in
+    production this currently writes a `failed` row and nothing arrives. What
+    these lock down is what gets sent the moment it IS approved — params in the
+    right order is the failure mode that only shows up live (ROADMAP 4b).
+    """
+
+    def setUp(self):
+        self.make_actors()
+
+    def _send(self, ap, success=True):
+        with mock.patch('notifications.whatsapp.send_template',
+                        return_value={'success': success, 'message_id': 'wamid.1',
+                                      'error': None if success else '132001'}) as st:
+            send_pass_expiring(ap)
+        return st
+
+    def test_it_sends_the_pass_template_and_logs_the_send(self):
+        ap = self.give_pass(used=1, days=3)
+        st = self._send(ap)
+        kwargs = st.call_args.kwargs
+        self.assertEqual(kwargs['to_mobile'], '9000000001')
+        self.assertEqual(kwargs['template_name'], 'pass_expiring')
+        name, left, when = kwargs['params']
+        self.assertEqual(name, 'pat')
+        self.assertEqual(left, '1 free visit')
+        # Local time: a pass expiring just after midnight IST would otherwise
+        # be announced as the previous day.
+        self.assertEqual(when, f'{timezone.localtime(ap.expires_at):%d %b %Y}')
+
+        log = WhatsAppLog.objects.get()
+        self.assertEqual(log.event_type, 'pass_expiring')
+        self.assertEqual(log.status, 'sent')
+        # A pass outlives the booking that bought it, so there is none to point
+        # at — the same reason the payout notification leaves this null.
+        self.assertIsNone(log.booking)
+
+    def test_two_credits_left_reads_as_plural(self):
+        st = self._send(self.give_pass(used=0, days=3))
+        self.assertEqual(st.call_args.kwargs['params'][1], '2 free visits')
+
+    def test_a_refused_send_is_recorded_not_swallowed(self):
+        # An unapproved template comes back 132001; the row is the only way
+        # anyone finds out the nudge never landed.
+        self._send(self.give_pass(used=1, days=3), success=False)
+        log = WhatsAppLog.objects.get()
+        self.assertEqual(log.status, 'failed')
+        self.assertEqual(log.error, '132001')
+
+    def test_an_opted_out_patient_is_not_messaged(self):
+        self.user.whatsapp_opt_in = False
+        self.user.save(update_fields=['whatsapp_opt_in'])
+        st = self._send(self.give_pass(used=1, days=3))
+        self.assertFalse(st.called)
+        self.assertFalse(WhatsAppLog.objects.exists())
 
 
 class ConcurrentCancelTests(TestCase):

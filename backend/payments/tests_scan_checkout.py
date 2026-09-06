@@ -266,6 +266,7 @@ class VerifyScanBookingTests(ScanWorldMixin, TestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 # payouts — a centre is paid from the same ledger a doctor is
 # ─────────────────────────────────────────────────────────────────────────────
+@mock.patch('payments.views._notify_doctor_payout_async', lambda *a, **k: None)
 class CentrePayoutTests(ScanWorldMixin, TestCase):
     """The end of the FULL-collection path. We hold the centre's scan price
     until someone wires it, so the money has to be VISIBLE on the payouts page

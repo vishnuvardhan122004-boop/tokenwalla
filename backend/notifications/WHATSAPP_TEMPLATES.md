@@ -23,7 +23,9 @@ order** by the `params` list in `notifications/whatsapp.py`.
 >
 > **§11 (`scan_report_ready`) was submitted 2026-08-27 and was last seen "In
 > review" — check WhatsApp Manager rather than resubmitting. §12–14 are ⏳ NOT
-> SUBMITTED, added 2026-08-29 for scanning and blood centres. §1–10 are all ✅.**
+> SUBMITTED, added 2026-08-29 for scanning and blood centres, and §15 is ⏳ NOT
+> SUBMITTED, added 2026-09-06 for the Appointment Pass expiry nudge. §1–10 are
+> all ✅.**
 > Any section marked ⏳ SUBMIT THIS is NOT approved yet and does need
 > submitting. Templates get added whenever a new sender is written, so this block
 > deliberately does not name a total — check the per-section marker, which is the
@@ -619,6 +621,58 @@ Booking reference {{6}}. Contact the centre if anything is unclear.
 > An empty param would be rejected by Meta anyway.
 
 > This one IS gated on the patient's `whatsapp_opt_in`, unlike §12 and §13.
+
+---
+
+## 15. `pass_expiring`  ⏳ SUBMIT THIS (added 2026-09-06, not yet submitted)
+
+The 3-days-before Appointment Pass nudge — ~day 27 of the 30-day pass.
+Sender: `notifications.whatsapp.send_pass_expiring(appointment_pass)`, called
+by `manage.py send_pass_expiry_reminders` off the 10-minute reminders cron.
+
+**Until this is approved the nudge still reaches nobody.** The command sent
+push only, and no current buyer has the app — the pass is sold on the web and
+the app has not been built since 1.1.3 (36). The code half shipped 2026-09-06;
+this form is the other half, and ROADMAP 14c does not close without it.
+
+**Category is Utility, and the wording is load-bearing for that.** It reports
+the status of something the patient has already paid for, which is why it says
+what is left and when it lapses and does not advertise the pass or offer a
+discount. Written as a promotion it would be re-categorised Marketing, which
+needs a separate opt-in we do not collect.
+
+| Field | Value |
+|-------|-------|
+| **Name** | `pass_expiring` |
+| **Category** | **Utility** (transactional) |
+| **Language** | English (`en`) |
+| **Header** | None |
+| **Footer** | `TokenWalla` |
+| **Buttons** | None |
+
+**Body** (paste exactly):
+
+```
+Hi {{1}}, you still have {{2}} on your TokenWalla Appointment Pass.
+
+It expires on {{3}} — the service fee is already paid, so book before then to use it.
+```
+
+| Placeholder | Meaning | Sample value for review |
+|-------------|---------|-------------------------|
+| `{{1}}` | Patient name | Rahul |
+| `{{2}}` | What is left, pre-rendered | 1 free visit |
+| `{{3}}` | Expiry date, local time | 09 Sep 2026 |
+
+> **{{2}} is pre-rendered, not a number.** A Meta template is fixed text and
+> cannot pluralise, so the sender passes `1 free visit` / `2 free visits` whole
+> — the same trick as the refund line in §6.
+
+> **This is the only `WhatsAppLog` row with no booking.** A pass outlives the
+> booking that bought it, so `event_type='pass_expiring'` rows have
+> `booking=NULL`, like the payout notifications in §5.
+
+> Gated on the patient's `whatsapp_opt_in`.
 
 ---
 

@@ -56,6 +56,7 @@ class WhatsAppLog(models.Model):
         ('centre_new_booking',    'Centre New Booking'),
         ('centre_payout',         'Centre Payout Paid'),
         ('appointment_prep',      'Appointment Preparation'),
+        ('pass_expiring',         'Appointment Pass Expiring'),
     ]
     STATUS_CHOICES = [
         ('sent',   'Sent'),
