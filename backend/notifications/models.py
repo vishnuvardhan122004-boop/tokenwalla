@@ -50,6 +50,12 @@ class WhatsAppLog(models.Model):
         ('queue_advance',        'Queue Advance (you are next)'),
         ('booking_on_hold',      'Booking On Hold'),
         ('hospital_cancellation', 'Hospital Cancellation Alert'),
+        ('scan_report_ready',     'Scan Report Ready'),
+        # Written since the scan-centre senders landed, but never listed here,
+        # so the admin's event_type filter could not see them.
+        ('centre_new_booking',    'Centre New Booking'),
+        ('centre_payout',         'Centre Payout Paid'),
+        ('appointment_prep',      'Appointment Preparation'),
     ]
     STATUS_CHOICES = [
         ('sent',   'Sent'),
