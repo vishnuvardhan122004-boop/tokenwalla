@@ -380,6 +380,10 @@ WHATSAPP_TEMPLATE_SCAN_REPORT    = config('WHATSAPP_TEMPLATE_SCAN_REPORT', defau
 WHATSAPP_TEMPLATE_CENTRE_NEW_BOOKING = config('WHATSAPP_TEMPLATE_CENTRE_NEW_BOOKING', default='centre_new_booking')
 WHATSAPP_TEMPLATE_CENTRE_PAYOUT  = config('WHATSAPP_TEMPLATE_CENTRE_PAYOUT', default='centre_payout')
 WHATSAPP_TEMPLATE_APPOINTMENT_PREP = config('WHATSAPP_TEMPLATE_APPOINTMENT_PREP', default='appointment_prep')
+# The 3-days-before Appointment Pass nudge — WHATSAPP_TEMPLATES.md section 15.
+# NOT submitted to Meta yet, so this one is inert until it is approved:
+# send_template logs a warning and returns, and nothing else breaks.
+WHATSAPP_TEMPLATE_PASS_EXPIRING  = config('WHATSAPP_TEMPLATE_PASS_EXPIRING', default='pass_expiring')
 WHATSAPP_TEMPLATE_LANG           = config('WHATSAPP_TEMPLATE_LANG', default='en')
 ADMIN_SETUP_KEY = config('ADMIN_SETUP_KEY', default='')
 

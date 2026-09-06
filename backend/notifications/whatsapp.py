@@ -8,6 +8,7 @@ and check the returned dict for success/failure, logging via WhatsAppLog.
 import logging
 import requests
 from django.conf import settings
+from django.utils import timezone
 
 logger = logging.getLogger('tokenwalla')
 
@@ -636,6 +637,51 @@ def send_scan_report_ready(booking):
     WhatsAppLog.objects.create(
         booking=booking,
         event_type='scan_report_ready',
+        status='sent' if result['success'] else 'failed',
+        wa_message_id=result.get('message_id') or '',
+        error=result.get('error') or '',
+    )
+
+
+def send_pass_expiring(appointment_pass):
+    """Tell a patient their Appointment Pass visits lapse in ~3 days.
+
+    Not a fallback the caller picks between: `push_pass_expiring` reaches
+    nobody who hasn't installed the app, and every pass sold today is bought on
+    the web, so for a real buyer this is the only channel that arrives at all
+    (ROADMAP 14c). Both fire; each already declines on its own terms — push on
+    having no registered device, this on `whatsapp_opt_in`.
+
+    Params: {{1}} patient  {{2}} what is left  {{3}} the date it lapses.
+    {{2}} is pre-rendered because a Meta template is fixed text and cannot
+    pluralise — the same trick as the cancellation refund line.
+
+    The template is NOT approved yet (WHATSAPP_TEMPLATES.md section 15), so
+    until it is, `send_template` logs a warning, returns, and this writes a
+    `failed` row. Inert, not broken.
+    """
+    from .models import WhatsAppLog
+
+    user = appointment_pass.user
+    if not getattr(user, 'whatsapp_opt_in', True):
+        return
+
+    left = appointment_pass.remaining
+    result = send_template(
+        to_mobile=user.mobile,
+        template_name=settings.WHATSAPP_TEMPLATE_PASS_EXPIRING,
+        params=[
+            user.first_name or user.username,
+            f'{left} free visit' if left == 1 else f'{left} free visits',
+            # localtime, not the raw UTC value: a pass expiring just after
+            # midnight IST would otherwise be announced as the day before.
+            f'{timezone.localtime(appointment_pass.expires_at):%d %b %Y}',
+        ],
+    )
+    # No booking to point at — a pass outlives the booking that bought it, the
+    # same reason the payout notification leaves this null.
+    WhatsAppLog.objects.create(
+        event_type='pass_expiring',
         status='sent' if result['success'] else 'failed',
         wa_message_id=result.get('message_id') or '',
         error=result.get('error') or '',
