@@ -843,6 +843,24 @@ genuinely unusable — that one is a hard gate, not a nag. The prompt itself is
 proven: it was watched firing on 08-17, and "Not now" survived a
 background/reopen.
 
+> **Still open as of 2026-09-06 — and check the variable before you check a
+> device.** A handoff that day recorded `APP_LATEST_VERSION=1.4.0` as already
+> live and asked for a v1.3.x device test to confirm the modal fires. It is not
+> live: every record says it has held the blank default since it was reset on
+> 2026-08-17 (WORKLOG 2026-08-17, "`APP_LATEST_VERSION` blanked … no install is
+> being nagged"), and this item has stayed 🟡 open ever since. With the value
+> blank there is nothing to compare against, so **no modal fires and a device
+> test would show an empty result for a reason that is not in the device.**
+> Run the `curl` above first — it is public, read-only, and settles it in one
+> second. Note also that `APP_STORE_URL` is a plain listing URL keyed on the
+> package id; a Play link cannot target versionCode 40, it resolves to whatever
+> build is live.
+>
+> **A session may not set this variable.** The CLAUDE.md feature-flag carve-out
+> holds exactly one row, `PASS_ENABLED`. Adding `APP_LATEST_VERSION` to it is a
+> deliberate commit to that file, never a mid-task decision — so item 13 is
+> Vishnu's to execute in the Railway dashboard even if a session is asked.
+
 ### 6. Watch the first day live 🟡
 
 - `grep oversold_refund` in the Railway logs — any hit means a patient was
@@ -1684,10 +1702,24 @@ CA needs to answer GST on a pass sold as an advance (invoice raised in full at
 purchase, the second service delivered up to 30 days later). The build assumes
 invoice-at-purchase.
 
-**Also deferred, and worth naming:** the nudge is **push-only**, so a patient
-without the app or with notifications off is never told their pass is about to
-lapse. A WhatsApp version needs a new Meta template — a manual submission, same
-queue as item 9.
+**Also deferred, and worth naming — and it is worse than "some patients":** the
+nudge is **push-only** (`send_pass_expiry_reminders.py:30,57` imports and calls
+`push_pass_expiring` and nothing else). The app has not been built since 1.1.3
+(36) and every pass sold today is bought on the web, so there is **no current
+buyer the nudge can reach at all** — not "a patient without the app", but every
+one of them. Proving the `;` chain runs therefore does not prove a patient is
+ever told; it only proves the command fires. A WhatsApp version needs a new Meta
+template — a manual submission, same queue as item 9.
+
+**Two details corrected 2026-09-06** (a handoff had them wrong, so they are
+pinned here): the window is **3 days before expiry**
+(`send_pass_expiry_reminders.py:35 REMIND_DAYS_BEFORE = 3`), i.e. ~day 27 of the
+30-day pass — there is no "day 25" nudge anywhere in the codebase. And the cron
+is **not** gated on the flag: `railway.cron.json:4` runs the chain every 10
+minutes regardless, and the command never reads `PASS_ENABLED`. Dormancy is an
+empty queryset, not a gate — so turning the flag OFF would stop selling and
+redeeming but would NOT stop nudges for passes already held. Probably right,
+but it was never a recorded decision.
 
 ---
 
@@ -2000,9 +2032,15 @@ design.
   taxable value, GST, SAC code, consultation fee marked exempt, readable by the
   booking's own patient. **Neither the app nor the website calls it.** For a paid
   healthcare service in India this is the most substantive product gap open.
-- **App has no WhatsApp opt-in toggle** — new 2026-08-11. The website calls
-  `PATCH /auth/me/whatsapp-opt-in/` (`MyBookings.js:111`); the app never does, so
-  mobile patients cannot turn WhatsApp messages off. That is a consent control.
+- ~~**App has no WhatsApp opt-in toggle**~~ ✅ **closed 2026-09-06** — both
+  halves of this bullet had gone stale and it was actively misleading readers.
+  The app DOES have the toggle (`app/(patient)/profile.tsx:124`, patching
+  `/auth/me/whatsapp-opt-in/` at `:51-54`, commit `f438c00`), and the web line
+  number moved (`MyBookings.js:88`, component at `:70`, rendered `:560`). Both
+  products expose the same account-level control; item 12 shipped the web half
+  on 2026-08-29. Kept rather than deleted because this bullet is the likely
+  source of a 2026-09-06 handoff that re-opened "web WhatsApp opt-in parity" as
+  outstanding work when there is none — see the note under item 12.
 - **Sentry ships blind in production** — `SENTRY_DISABLE_AUTO_UPLOAD=true` on all
   three EAS profiles, so production crashes arrive minified and unsymbolicated.
   Correct while there is no `SENTRY_AUTH_TOKEN`; turn it back on for production
@@ -2014,7 +2052,26 @@ design.
 - **No component or screen tests in the app** — all 118 are pure logic. Nothing
   renders a screen; there is no `@testing-library/react-native`. This is why the
   `useAndroidBack` hook shipped without one.
-- **Raise the 6-char password floor**
+- **Raise the 6-char password floor** — note for whoever picks this up: the
+  wiring is NOT missing. Item 4d closed 2026-08-22 and
+  `tokenwalla.utils.check_password_strength` (which runs Django's
+  `validate_password`) is called from all five entry points, patient signup
+  (`users/serializers.py:29`) and patient reset (`users/auth_views.py:581`)
+  included. What is missing is a **decision**: the floor is 6 for patient and
+  hospital paths (`settings.py:471`, plus ad-hoc `< 6` at
+  `users/auth_views.py:570` and `hospitals/views.py:616`) but 8 for admin
+  (`users/auth_views.py:748`, `create_admin.py:34`). Raising it is one settings
+  line + three ad-hoc checks + three frontend rules, but it is Vishnu's call
+  about receptionist friction, so a session should not just pick 8.
+- **The web signup password rule is stricter than the server's, and wrong** —
+  new 2026-09-06, found while verifying the above. `src/componets/profilecreate.js:34-35`
+  validates against `/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/` — an
+  **alphanumeric-only** character class, so a password containing a symbol is
+  rejected in the browser while the backend accepts it happily. `Test@1234` —
+  the very example item 4d cites as passing the server — cannot be typed into
+  the web signup form. The two rules disagree and the client is both the
+  stricter and the worse of the pair, since it pushes users off symbols. One
+  regex, its own commit; not folded into a floor change.
 - **Branch cleanup** — 12 local branches, several long dead
 
 Resolved and deliberately removed, so they don't get re-added:

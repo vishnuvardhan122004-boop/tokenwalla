@@ -3,7 +3,7 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `fix/facility-status-provider-leak` on web — **not pushed**, 2 commits, **stacked on `docs/prod-flag-carve-out`** (cut from it, not from `main`, because all four files it touches differ between the two). Merge the doc branch first or the PR will show its commits too. `docs/prod-flag-carve-out` — **`9f48104` is pushed and needs a PR**; everything else is merged. `origin/main` is `30d54c0` (PRs #54 and #55; #55 re-merged the already-landed `d8749c6` and changed no files). The audit branch `fix/reschedule-capacity-login-cap-perf` merged as #53 and is safe to delete locally and on `origin`. **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
+- **Branch:** `fix/facility-status-provider-leak` on web — **not pushed**, 2 commits, **stacked on `docs/prod-flag-carve-out`** (cut from it, not from `main`, because all four files it touches differ between the two). Merge the doc branch first or the PR will show its commits too. `docs/prod-flag-carve-out` — **fully pushed at `3e5181f`** (all three commits, not just `9f48104` as this line previously said) **and needs a PR**; `origin/main` is still `30d54c0`, so it has not merged. Everything else is merged. Note `gh` is not authenticated in the session, so a session cannot open the PR — that is the web UI or `gh auth login`. `origin/main` is `30d54c0` (PRs #54 and #55; #55 re-merged the already-landed `d8749c6` and changed no files). The audit branch `fix/reschedule-capacity-login-cap-perf` merged as #53 and is safe to delete locally and on `origin`. **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
 - **Latest commit at last update:** `d273dd9` `fix/facility-status-provider-leak` (web/backend — **not pushed, no PR yet**; `origin/main` is `30d54c0`, deployed, `PASS_ENABLED=True`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass; every pass sold is bought on the web)
 - **Last updated:** 2026-09-06 (second session) — **ROADMAP 21 is fixed** and **the refund idempotency rule now exists in the database**, not only in Python. **495 backend tests (2 skipped)** · 47 web unchanged — the new baseline is 477 + 18. ⚠️ **One pre-merge check is outstanding and needs Vishnu**: the refund migration adds a UNIQUE constraint to a live table and will fail on Railway if prod ever wrote two refunds for one payment — see below for the query. Nothing was pushed.
 - **Previously:** 2026-09-06 — **the ₹35 pass is back on sale** (`PASS_ENABLED=True`, set by Vishnu in the Railway dashboard at ~01:10 IST, budget question knowingly still open), the 2026-09-04/05 audit branch merged as **#53**, and CLAUDE.md gained a **feature-flag carve-out** as **#54**. `/ship` then caught a regression the audit branch was about to ship and found **ROADMAP 21** 🔴 — pending/rejected facilities have every provider publicly listed and bookable. **477 backend tests (2 skipped) · 47 web**, both baselines refreshed in the same commit. **ROADMAP 14c went 🟡 → 🔴:** the flag being on means a real buyer now depends on an expiry nudge nobody has ever seen run.
@@ -141,11 +141,50 @@ What narrows is content — a non-active facility's providers stop being returne
 and their detail routes 404 for patients. That is the bug being fixed, and both
 clients already handle an absent provider. No endpoint needed versioning.
 
+### A handoff was checked against the code, and four of its claims were wrong
+
+A status handoff was written at the end of this session. Rather than copy it
+into ROADMAP, each technical claim was verified against the checkout first (four
+parallel read-only audits). **That was worth doing — it does not survive
+contact with the code.** Corrections, all now pinned in ROADMAP:
+
+| Handoff said | Actually |
+|---|---|
+| `APP_LATEST_VERSION=1.4.0` is live; test the modal on a v1.3.x device | **Not live.** Blank since it was reset 2026-08-17; item 13 is still 🟡 open. With it blank nothing fires, so the device test would have shown an empty result for a reason not in the device. `curl /api/app-version/` settles it in a second. |
+| The "Day-25 nudge" stays dormant | **There is no day-25 nudge.** `REMIND_DAYS_BEFORE = 3` → ~day 27 of a 30-day pass. The cron also runs every 10 min regardless and never reads `PASS_ENABLED` — dormancy is an empty queryset, not a gate. |
+| Item 12 (web WhatsApp opt-in) is open backlog | **Shipped 2026-08-29.** Both products have the account-level toggle. The handoff looks to have read the Appointment Pass's "Opt-in per checkout" comment as a WhatsApp one — and a stale `## Next` bullet, now closed, was reinforcing it. |
+| Item 4d — "wire `validate_password` into web signup/reset" | **Closed 2026-08-22; it is wired at all five entry points**, patient signup and reset included. What is open is only the 6-vs-8 floor decision. |
+
+Two claims are **not checkable from a session** and stay Vishnu's:
+`PASS_ENABLED=True` and `AppointmentPass.objects.count() == 0` are Railway
+config and live prod data. Worth noting the count is now an *assumption* — the
+pass has been on sale since ~01:10 IST, so "nobody has bought one" is roughly a
+day of live traffic unobserved, not a verified zero.
+
+Two claims **confirmed exactly**: the −₹11.84 per fully-redeemed pass reproduces
+from `fees.py` constants, and the live-key guard `dc865e9` is landed on `main`
+and intact.
+
+**Two real findings fell out of the check.** (1) The pass expiry nudge is
+**push-only**, and since the app has not been built since 1.1.3 (36) every
+current buyer is web-only — so there is no buyer it can reach *at all*. That
+makes 14c worse than it was written: proving the `;` chain runs proves the
+command fires, not that a patient is ever told. (2) `profilecreate.js:34-35`
+rejects symbols in passwords that the backend accepts — `Test@1234` cannot be
+typed into web signup. Both are now in ROADMAP.
+
+Also confirmed en route: `backend/.env` still holds a **live-prefix** Razorpay
+key (classified by prefix/length, never printed), so `stress_test.sh --checkout`
+exits 1 before issuing a request and its happy path remains never-executed.
+
 ### Tomorrow's first move
 
-Run the two SQL checks above. If clean, merge `docs/prod-flag-carve-out` first
-(it is the base), then open the PR for this branch — the diff will read clean
-only in that order.
+Run the two SQL checks above — **a session cannot**, CLAUDE.md forbids `psql`
+and the prod DB outright, and that rule has no read-only carve-out. If clean,
+merge `docs/prod-flag-carve-out` first (it is the base), then open the PR for
+this branch — the diff reads clean only in that order, and `gh` needs auth.
+
+Then item 13 is one Railway variable, not a device test.
 
 ---
 
