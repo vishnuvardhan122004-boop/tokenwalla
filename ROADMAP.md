@@ -1671,6 +1671,10 @@ tests (42 in `tests_pass.py`), 44 web.
 
 #### 14c. Prove the expiry nudge actually runs 🔴 — was 🟡; the flag going ON promoted it 2026-09-06
 
+> **2026-09-06 (third session):** the WhatsApp half shipped. Still 🔴 — the
+> cron run is unobserved AND the template is unsubmitted, so no patient has
+> been told anything yet. See "The delivery half" below.
+
 > **Why this is red now.** While the promotion was off, `Nudged 0 pass(es)` was
 > the right answer whether the chain worked or not, so an unrun nudge cost
 > nothing. With `PASS_ENABLED=True` a real patient can buy a real pass, and if
@@ -1702,14 +1706,20 @@ CA needs to answer GST on a pass sold as an advance (invoice raised in full at
 purchase, the second service delivered up to 30 days later). The build assumes
 invoice-at-purchase.
 
-**Also deferred, and worth naming — and it is worse than "some patients":** the
-nudge is **push-only** (`send_pass_expiry_reminders.py:30,57` imports and calls
-`push_pass_expiring` and nothing else). The app has not been built since 1.1.3
-(36) and every pass sold today is bought on the web, so there is **no current
-buyer the nudge can reach at all** — not "a patient without the app", but every
-one of them. Proving the `;` chain runs therefore does not prove a patient is
-ever told; it only proves the command fires. A WhatsApp version needs a new Meta
-template — a manual submission, same queue as item 9.
+**The delivery half — half-closed 2026-09-06, and the remaining half is a
+form, not code.** The nudge WAS push-only, and since the app has not been built
+since 1.1.3 (36) and every pass sold today is bought on the web, there was **no
+current buyer it could reach at all** — not "a patient without the app", but
+every one of them. `send_pass_expiring` now fires alongside the push
+(`send_pass_expiry_reminders.py`), so the command no longer talks to an empty
+channel. **But the `pass_expiring` template is NOT submitted to Meta**, and an
+unapproved template is inert: `send_template` logs a warning, returns, and the
+run writes a `failed` WhatsAppLog row carrying `132001`. So the code half is
+done and **delivery still has not happened**. The paste-ready body is
+WHATSAPP_TEMPLATES.md §15; submitting it is Vishnu's, same queue as item 9.
+**This item closes on two things, not one:** both `complete` lines in the
+Railway log (below), and one `pass_expiring` row in the admin with
+`status='sent'`.
 
 **Two details corrected 2026-09-06** (a handoff had them wrong, so they are
 pinned here): the window is **3 days before expiry**

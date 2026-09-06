@@ -3,9 +3,10 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `fix/facility-status-provider-leak` on web — **not pushed**, 2 commits, **stacked on `docs/prod-flag-carve-out`** (cut from it, not from `main`, because all four files it touches differ between the two). Merge the doc branch first or the PR will show its commits too. `docs/prod-flag-carve-out` — **fully pushed at `3e5181f`** (all three commits, not just `9f48104` as this line previously said) **and needs a PR**; `origin/main` is still `30d54c0`, so it has not merged. Everything else is merged. Note `gh` is not authenticated in the session, so a session cannot open the PR — that is the web UI or `gh auth login`. `origin/main` is `30d54c0` (PRs #54 and #55; #55 re-merged the already-landed `d8749c6` and changed no files). The audit branch `fix/reschedule-capacity-login-cap-perf` merged as #53 and is safe to delete locally and on `origin`. **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
-- **Latest commit at last update:** `d273dd9` `fix/facility-status-provider-leak` (web/backend — **not pushed, no PR yet**; `origin/main` is `30d54c0`, deployed, `PASS_ENABLED=True`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass; every pass sold is bought on the web)
-- **Last updated:** 2026-09-06 (second session) — **ROADMAP 21 is fixed** and **the refund idempotency rule now exists in the database**, not only in Python. **495 backend tests (2 skipped)** · 47 web unchanged — the new baseline is 477 + 18. ⚠️ **One pre-merge check is outstanding and needs Vishnu**: the refund migration adds a UNIQUE constraint to a live table and will fail on Railway if prod ever wrote two refunds for one payment — see below for the query. Nothing was pushed.
+- **Branch:** `fix/web-password-regex-and-pass-nudge` on web — **not pushed, no PR**, 3 commits, cut clean from `origin/main` (`5e4ffce`, which carries #56). Nothing is stacked on it. Note `gh` is not authenticated in the session, so a session cannot open the PR — that is the web UI or `gh auth login`. **Do NOT delete** `develop`, which deploys to staging. `fix/facility-status-provider-leak` merged as **#56** and is safe to delete locally and on `origin`, along with `docs/prod-flag-carve-out`.
+- **Latest commit at last update:** `a1da0ca` `fix/web-password-regex-and-pass-nudge` (web/backend — **not pushed, no PR yet**; `origin/main` is `5e4ffce`, deployed, `PASS_ENABLED=True`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass; every pass sold is bought on the web)
+- **Last updated:** 2026-09-06 (third session) — **the pass expiry nudge now has a channel that can reach a web-only buyer**, and **the signup form stops rejecting passwords with a symbol**. **500 backend tests (2 skipped)** · **49 web** — the new baselines. ⚠️ **ROADMAP 14c is still 🔴 and needs Vishnu**: the `pass_expiring` Meta template is unsubmitted, so the WhatsApp half is inert until it is approved — paste-ready body in WHATSAPP_TEMPLATES.md §15. Nothing was pushed.
+- **Previously:** 2026-09-06 (second session) — ROADMAP 21 fixed and refund idempotency taken down to the database; 495 backend tests. ⚠️ its refund-migration pre-merge check is still outstanding.
 - **Previously:** 2026-09-06 — **the ₹35 pass is back on sale** (`PASS_ENABLED=True`, set by Vishnu in the Railway dashboard at ~01:10 IST, budget question knowingly still open), the 2026-09-04/05 audit branch merged as **#53**, and CLAUDE.md gained a **feature-flag carve-out** as **#54**. `/ship` then caught a regression the audit branch was about to ship and found **ROADMAP 21** 🔴 — pending/rejected facilities have every provider publicly listed and bookable. **477 backend tests (2 skipped) · 47 web**, both baselines refreshed in the same commit. **ROADMAP 14c went 🟡 → 🔴:** the flag being on means a real buyer now depends on an expiry nudge nobody has ever seen run.
 - **Previously:** 2026-09-05 — a full-codebase audit: 1 critical throttle bypass, a critical data-loss path in force-delete, and three money bugs. 13 commits, since merged. ⚠️ `NUM_PROXIES=1` still cannot be verified from code; ROADMAP 16 has the check.
 - **Previously:** 2026-09-02 — the Appointment Pass shipped and was switched off the same day. Five web PRs (#47–#50) plus app #17. The day's real find was a refund hole — buy, redeem the free visit, cancel the paid one, keep both the money and the visit — closed in #48.
@@ -28,6 +29,89 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-06 (third session) — the pass expiry nudge gets a channel that reaches somebody, and a password with a symbol can sign up again
+
+Two unrelated slices on a branch cut fresh from `origin/main` (`5e4ffce`, which
+already carries #56). **Nothing pushed, no PR opened, no production anything
+touched.**
+
+| # | Change | Commit | Status |
+|---|---|---|---|
+| 1 | Signup password regex accepts symbols | `82f54eb` | ✅ done |
+| 2 | Pass expiry nudge also sends WhatsApp (ROADMAP 14c) | `a1da0ca` | ✅ code done, ⏳ template unsubmitted |
+| 3 | ROADMAP 14c rewritten, WORKLOG updated | this commit | ✅ done |
+
+**500 backend tests (2 skipped) · 49 web** — up from 495 / 47, all five new
+backend tests and both new web tests are this session's. `makemigrations
+--check` clean. `manage.py test -v 2` shows **zero `graph.facebook.com` lines**,
+so no notification thread escaped the suite.
+
+### 1. The signup password regex
+
+`profilecreate.js` validated with `[A-Za-z\d]{6,}`, a character class with no
+symbols in it. `Test@1234` — which Django's validators accept without complaint
+— failed in the browser and never reached the API, under the message "Min 6
+chars with at least one letter & number", against a password that has both.
+
+Now `.{6,}`, with the letter and digit lookaheads kept. Deliberately **not** a
+symbol whitelist like `[A-Za-z\d@$!%*?&#]`: the server is the real gate
+(`tokenwalla.utils.check_password_strength`, `min_length` 6), and a whitelist
+only moves the bug to the first symbol it forgets — `Test-1234` and
+`Test_1234` were next. Two tests in `profilecreate.test.js` walk the whole OTP
+flow and assert the symbol password reaches `/auth/register/` while a
+digit-less one still stops in the browser.
+
+Only one such regex exists in the web app; `Usercreate.js` has a placeholder
+saying "Min 6 characters" and no client-side password check at all, so there
+was no second copy to drift.
+
+### 2. The expiry nudge — ROADMAP 14c, half-closed
+
+The nudge was **push-only**, and push reached **nobody**. The app has not been
+built since 1.1.3 (36) and every pass sold today is bought on the web, so
+`push_pass_expiring` was firing into an empty `DeviceToken` set for every real
+buyer. The cron ran, `Nudged N` counted up, and no patient was ever told the
+pass they paid ₹35 for was about to lapse — while we keep the +₹8.16 on the
+pass they didn't use. That is the shape of bug nobody reports.
+
+`notifications.whatsapp.send_pass_expiring` is the other channel. Both fire
+unconditionally; neither is a fallback the command chooses between, because
+each already declines on its own terms — push when there is no registered
+device, WhatsApp on `whatsapp_opt_in` — which keeps the decision next to the
+thing that knows about it.
+
+Idempotency is unchanged: one `expiry_reminder_sent` flag, still set whether or
+not either channel got through. Making it conditional on success would re-send
+every 10 minutes for as long as a channel stayed broken, which is exactly the
+state an unapproved template leaves WhatsApp in today. The loop is now wrapped
+so one unsendable row cannot strand every pass behind it.
+
+Migration `0010_alter_whatsapplog_event_type` adds the `pass_expiring` choice.
+Choices-only, so no SQL runs against the live table and it is safe before the
+code that needs it. These rows carry `booking=NULL` — a pass outlives the
+booking that bought it, the same reason payout rows do.
+
+> ⚠️ **This does not deliver yet, and that is the whole of what is left.** The
+> `pass_expiring` template is **NOT submitted to Meta**. Until it is approved
+> `send_template` logs a warning and returns, and the run writes a `failed`
+> WhatsAppLog row carrying `132001`. **For Vishnu:** the paste-ready body is
+> `backend/notifications/WHATSAPP_TEMPLATES.md` §15 — Utility category, English,
+> three params. Submission is manual; the Business Manager form does not work
+> under automation. 14c closes on both `complete` lines in the Railway log
+> **and** one `pass_expiring` row with `status='sent'`.
+
+### Found in passing, not fixed
+
+`notifications/whatsapp.py:send_scan_report_ready` writes its `WhatsAppLog` row
+with `template=`, `to_mobile=`, `success=` and `message_id=` — **four keyword
+arguments that do not exist on the model** (`event_type`, `status`,
+`wa_message_id`, `error`). It raises `TypeError` after the message has already
+been sent, inside `scans.views._notify_report_ready_async`'s background thread,
+where the exception is logged and swallowed. Untouched here: different feature,
+and its own §11 template is unsubmitted too, so nothing is being lost today.
 
 ---
 
