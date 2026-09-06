@@ -31,7 +31,10 @@ export default function Profilecreate() {
       errs.name = 'Enter your full name (letters only)';
     if (!/^[6-9]\d{9}$/.test(user.mobile.trim()))
       errs.mobile = 'Enter a valid 10-digit Indian mobile number';
-    if (!/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/.test(user.password))
+    // `.` and not a symbol whitelist: the server is the real gate, and it
+    // accepts anything Django's validators allow. The old [A-Za-z\d] class
+    // rejected `Test@1234` here and never let the request out of the browser.
+    if (!/^(?=.*[A-Za-z])(?=.*\d).{6,}$/.test(user.password))
       errs.password = 'Min 6 chars with at least one letter & number';
     if (user.password !== user.confirmPassword)
       errs.confirmPassword = 'Passwords do not match';
