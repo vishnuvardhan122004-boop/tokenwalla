@@ -169,6 +169,24 @@ class Refund(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            # The database half of the never-refund-twice rule. refunds.py
+            # already re-checks under select_for_update(), but that lock only
+            # serialises concurrent cancels within one process — this holds
+            # even if a second writer ever reaches the table another way.
+            models.UniqueConstraint(fields=['payment'], name='unique_payment_refund'),
+            # Non-BLANK, not non-null: the column is blank=True with no
+            # null=True, so an unspent id is '' and never NULL. Keyed on
+            # isnull the condition would match every row, sweep in every ₹0
+            # refund (pool <= 0 never calls the gateway, so the id stays '')
+            # and collide on the first duplicate blank. Same shape as
+            # Payment's uniq_payment_payment_id_nonblank.
+            models.UniqueConstraint(
+                fields=['razorpay_refund_id'],
+                name='unique_razorpay_refund_id',
+                condition=~models.Q(razorpay_refund_id=''),
+            ),
+        ]
 
     @property
     def refund_amount(self):
