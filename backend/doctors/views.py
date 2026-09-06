@@ -127,6 +127,19 @@ class DoctorViewSet(viewsets.ModelViewSet):
         # a payout against it. Staff and admins still see them.
         if not show_test_hospitals_to(getattr(self.request, 'user', None)):
             qs = exclude_test_hospitals(qs, field='hospital__name')
+            # ROADMAP 21: HospitalListView has always filtered status='active',
+            # this did not. A hospital sitting at 'pending' (registered, never
+            # approved) or 'rejected' kept every one of its doctors in the
+            # public browse list — the facility hidden, the provider bookable.
+            #
+            # Gated on the same staff/admin predicate as the [TEST] rule, not
+            # applied flat, because src/ADMIN/Hospitals.js drives its doctor
+            # list, edit and delete through THIS queryset while listing
+            # pending and rejected hospitals from /hospitals/admin/all/.
+            # Filtering unconditionally would 404 an admin out of cleaning up
+            # a rejected facility's doctors. A non-active facility's own staff
+            # gain nothing here — HospitalLoginView 403s them at login.
+            qs = qs.filter(hospital__status='active')
 
         # A scanning centre has Scans, not Doctors, so this should normally
         # match nothing. It is here because "should" is not a guarantee: a

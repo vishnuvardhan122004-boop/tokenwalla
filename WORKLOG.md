@@ -3,9 +3,12 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `main` on both repos, everything merged and pushed, nothing in flight. Today's five branches (`feat/appointment-pass`, `feat/pass-refund-fairness`, `chore/pass-expiry-on-the-existing-cron`, `docs/pass-switched-off` web; `feat/appointment-pass` app) are all merged and safe to delete locally and on `origin`. Web locals are now just `main` and `develop` — the docs branch was merged and the two eslint branches deleted on 2026-08-29 (all three still on `origin` as the undo). **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
-- **Latest commit at last update:** `386538a` main (web/backend — merged and deployed; production served `12359b04`, migrations 0012/0013 applied, `PASS_ENABLED=False`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass)
-- **Last updated:** 2026-09-05 — **a full-codebase audit: 1 critical throttle bypass, a critical data-loss path in force-delete, and three money bugs.** 13 commits on `fix/reschedule-capacity-login-cap-perf` (`ee544ae`), **not merged**. 475 backend tests (2 skipped) · 47 web · no migrations. Three of the commits fix my own earlier work in the same session — see "What I got wrong". ⚠️ `NUM_PROXIES=1` cannot be verified from code; ROADMAP 16 has the check.\n- **Previously:** 2026-09-02 — **the Appointment Pass shipped and was switched off the same day.** Five web PRs (#47–#50) plus app #17, all merged. The day's real find was a refund hole — buy, redeem the free visit, cancel the paid one, keep both the money and the visit — closed in #48 with three UX holes alongside it. **429 backend tests (2 skipped) · 44 web · 160 app.** `PASS_ENABLED=False` on Railway, so nothing is on sale; turning it on is one variable once the −₹11.84 budget question is answered. **One loose end:** the expiry nudge has never been observed running (ROADMAP 14c). **Two deadlines found:** config-as-code dies 2026-12-01 and takes both cron services with it (14b), and the app half is merged but unbuilt.
+- **Branch:** `fix/facility-status-provider-leak` on web — **not pushed**, 2 commits, **stacked on `docs/prod-flag-carve-out`** (cut from it, not from `main`, because all four files it touches differ between the two). Merge the doc branch first or the PR will show its commits too. `docs/prod-flag-carve-out` — **fully pushed at `3e5181f`** (all three commits, not just `9f48104` as this line previously said) **and needs a PR**; `origin/main` is still `30d54c0`, so it has not merged. Everything else is merged. Note `gh` is not authenticated in the session, so a session cannot open the PR — that is the web UI or `gh auth login`. `origin/main` is `30d54c0` (PRs #54 and #55; #55 re-merged the already-landed `d8749c6` and changed no files). The audit branch `fix/reschedule-capacity-login-cap-perf` merged as #53 and is safe to delete locally and on `origin`. **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
+- **Latest commit at last update:** `d273dd9` `fix/facility-status-provider-leak` (web/backend — **not pushed, no PR yet**; `origin/main` is `30d54c0`, deployed, `PASS_ENABLED=True`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass; every pass sold is bought on the web)
+- **Last updated:** 2026-09-06 (second session) — **ROADMAP 21 is fixed** and **the refund idempotency rule now exists in the database**, not only in Python. **495 backend tests (2 skipped)** · 47 web unchanged — the new baseline is 477 + 18. ⚠️ **One pre-merge check is outstanding and needs Vishnu**: the refund migration adds a UNIQUE constraint to a live table and will fail on Railway if prod ever wrote two refunds for one payment — see below for the query. Nothing was pushed.
+- **Previously:** 2026-09-06 — **the ₹35 pass is back on sale** (`PASS_ENABLED=True`, set by Vishnu in the Railway dashboard at ~01:10 IST, budget question knowingly still open), the 2026-09-04/05 audit branch merged as **#53**, and CLAUDE.md gained a **feature-flag carve-out** as **#54**. `/ship` then caught a regression the audit branch was about to ship and found **ROADMAP 21** 🔴 — pending/rejected facilities have every provider publicly listed and bookable. **477 backend tests (2 skipped) · 47 web**, both baselines refreshed in the same commit. **ROADMAP 14c went 🟡 → 🔴:** the flag being on means a real buyer now depends on an expiry nudge nobody has ever seen run.
+- **Previously:** 2026-09-05 — a full-codebase audit: 1 critical throttle bypass, a critical data-loss path in force-delete, and three money bugs. 13 commits, since merged. ⚠️ `NUM_PROXIES=1` still cannot be verified from code; ROADMAP 16 has the check.
+- **Previously:** 2026-09-02 — the Appointment Pass shipped and was switched off the same day. Five web PRs (#47–#50) plus app #17. The day's real find was a refund hole — buy, redeem the free visit, cancel the paid one, keep both the money and the visit — closed in #48.
 
 > ✅ **The backend is live again.** Railway deployed the 4-day backlog on
 > 2026-08-16 (bill paid + PR #25 merged to trigger it), so backend entries below
@@ -28,6 +31,163 @@ Newest entry on top. Update the **Status** columns as things land.
 
 ---
 
+## 2026-09-06 (second session) — ROADMAP 21 closed, and refund idempotency taken down to the database
+
+Two unrelated slices, two commits, one branch. **Nothing pushed, no PR opened,
+no production anything touched.**
+
+| # | Change | Commit | Status |
+|---|---|---|---|
+| 1 | Pending/rejected facilities no longer leak their providers (ROADMAP 21) | `5015dc1` | ✅ done |
+| 2 | `Refund` gets two UniqueConstraints + migration `0014` | `d273dd9` | ✅ done, ⚠️ see the pre-merge check |
+| 3 | ROADMAP 21 written up, WORKLOG updated | this commit | ✅ done |
+
+### 1. ROADMAP 21 — the provider leak
+
+One filter in each of two querysets: `hospital__status='active'` in
+`DoctorViewSet.get_queryset`, `center__status='active'` in
+`ScanViewSet.get_queryset`. `HospitalListView` had filtered status since it was
+written; these two never did, so a `pending` or `rejected` facility kept every
+doctor and every scan in the public browse list while the facility itself was
+correctly hidden. `get_object()` runs through `get_queryset()`, so the detail
+routes closed with the lists — the guessable-id hole went with them, and
+`HospitalDetailView` was not touched, which is what the reverted half got wrong.
+
+**The one judgement call worth re-reading before changing it:** the filter is
+gated on `show_test_hospitals_to`, exactly like the `[TEST]` rule above it,
+rather than applied flat the way `HospitalListView` applies it. `HospitalListView`
+can afford flat because admins have their own endpoint (`/hospitals/admin/all/`).
+Doctors have no such sibling — `src/ADMIN/Hospitals.js` runs its list, its edit
+modal and both delete paths through the *same* queryset a patient browses, while
+listing pending and rejected facilities next to them. Flat would have emptied
+that screen and 404'd an admin out of cleaning up a rejected facility. The
+exemption gives a non-active facility's own staff nothing, because
+`HospitalLoginView` 403s them on status before it ever issues a token.
+
+**The question ROADMAP said had to be answered first — what happens to bookings
+already taken against a non-active facility — is answered: nothing happens.**
+Cards, token, queue position and the refund path all read `/api/bookings/`, and
+`BookingSerializer` carries `doctor_name` off the booking row rather than
+re-fetching. The single degradation is `MyBookings.js:248`, which re-fetches the
+doctor when the **reschedule** modal opens; it 404s now and the `catch` beside it
+swallows it, so the picker opens empty. Fails soft, and is arguably right — a
+facility that is no longer approved should not be taking new slots.
+
+13 tests in `hospitals/tests_facility_status_visibility.py`. **8 of them fail
+with either filter removed** (verified by removing them); the other 5 pin the
+admin exemption and the untouched active facility and pass in both directions on
+purpose.
+
+### 2. Refund idempotency, in the database
+
+`process_cancellation_refund` re-checks under `select_for_update()`, but that
+lock only serialises concurrent cancels reaching that one function. Migration
+`0014` adds `unique_payment_refund` and `unique_razorpay_refund_id`.
+
+**The task as written asked for `condition=Q(razorpay_refund_id__isnull=False)`
+and that would have been wrong** — worth recording, because it is the same trap
+`Payment.payment_id` already hit. The column is `blank=True` with no
+`null=True`, so an unissued id is `''` and *never* NULL. Conditioned on
+`isnull` the partial index matches **every** row, sweeps in every zero-pool
+refund (`pool <= 0` never calls the gateway, so the id stays blank) and dies on
+the second one. Written as non-blank instead — `~Q(razorpay_refund_id='')` —
+which is byte-for-byte the shape of `uniq_payment_payment_id_nonblank` from
+migration `0007`. A test pins it: two blank ids on different payments must both
+still write.
+
+Kept as Meta constraints on the ForeignKey rather than promoting it to a
+`OneToOneField`, because `refunds.py:150` reads `payment.refunds.first()` and
+needs the reverse manager.
+
+### ⚠️ Pre-merge check — needs Vishnu, cannot be done from a session
+
+`0014` adds a UNIQUE constraint to a table with live rows. Railway migrates as
+its own step, so **if two refunds were ever written against one payment the
+migration fails and the deploy stops there.** A session may not touch the prod
+database, so this was not verified — only reasoned:
+
+- `refunds.py:192` is the **only** place a `Refund` row is created anywhere in
+  the codebase.
+- The `payment.refunds.first()` idempotency check has been there since
+  `7b2a01c` (2026-07-28), i.e. from the day refunds shipped.
+- `select_for_update()` came 5 days later in `b8abb7b` (2026-08-02).
+
+So a duplicate requires two *concurrent* cancels of the same booking inside that
+2026-07-28 → 2026-08-02 window — which overlaps the Cashfree period that was
+reverted. Unlikely, not impossible. **Run this against prod before merging:**
+
+```sql
+SELECT payment_id, COUNT(*) FROM payments_refund GROUP BY payment_id HAVING COUNT(*) > 1;
+SELECT razorpay_refund_id, COUNT(*) FROM payments_refund
+WHERE razorpay_refund_id <> '' GROUP BY razorpay_refund_id HAVING COUNT(*) > 1;
+```
+
+Two empty results means `0014` applies cleanly. Any row back means stop and
+reconcile it by hand first — do not widen the constraint to make it fit.
+
+### Checks run
+
+- `python manage.py test` → **495 tests, OK (skipped=2)**. Baseline was 477 + 2,
+  and 477 + 18 new = 495, so nothing regressed.
+- `makemigrations --check --dry-run` → `No changes detected` (the CI gate).
+- `manage.py test -v 2 | grep -c graph.facebook.com` → **0**, so no notification
+  thread escaped the suite.
+- Frontend suite not run: **zero frontend files changed.**
+
+### API contract
+
+Additive-safe for installed app builds: **no shape, status or field changed.**
+What narrows is content — a non-active facility's providers stop being returned,
+and their detail routes 404 for patients. That is the bug being fixed, and both
+clients already handle an absent provider. No endpoint needed versioning.
+
+### A handoff was checked against the code, and four of its claims were wrong
+
+A status handoff was written at the end of this session. Rather than copy it
+into ROADMAP, each technical claim was verified against the checkout first (four
+parallel read-only audits). **That was worth doing — it does not survive
+contact with the code.** Corrections, all now pinned in ROADMAP:
+
+| Handoff said | Actually |
+|---|---|
+| `APP_LATEST_VERSION=1.4.0` is live; test the modal on a v1.3.x device | **Not live.** Blank since it was reset 2026-08-17; item 13 is still 🟡 open. With it blank nothing fires, so the device test would have shown an empty result for a reason not in the device. `curl /api/app-version/` settles it in a second. |
+| The "Day-25 nudge" stays dormant | **There is no day-25 nudge.** `REMIND_DAYS_BEFORE = 3` → ~day 27 of a 30-day pass. The cron also runs every 10 min regardless and never reads `PASS_ENABLED` — dormancy is an empty queryset, not a gate. |
+| Item 12 (web WhatsApp opt-in) is open backlog | **Shipped 2026-08-29.** Both products have the account-level toggle. The handoff looks to have read the Appointment Pass's "Opt-in per checkout" comment as a WhatsApp one — and a stale `## Next` bullet, now closed, was reinforcing it. |
+| Item 4d — "wire `validate_password` into web signup/reset" | **Closed 2026-08-22; it is wired at all five entry points**, patient signup and reset included. What is open is only the 6-vs-8 floor decision. |
+
+Two claims are **not checkable from a session** and stay Vishnu's:
+`PASS_ENABLED=True` and `AppointmentPass.objects.count() == 0` are Railway
+config and live prod data. Worth noting the count is now an *assumption* — the
+pass has been on sale since ~01:10 IST, so "nobody has bought one" is roughly a
+day of live traffic unobserved, not a verified zero.
+
+Two claims **confirmed exactly**: the −₹11.84 per fully-redeemed pass reproduces
+from `fees.py` constants, and the live-key guard `dc865e9` is landed on `main`
+and intact.
+
+**Two real findings fell out of the check.** (1) The pass expiry nudge is
+**push-only**, and since the app has not been built since 1.1.3 (36) every
+current buyer is web-only — so there is no buyer it can reach *at all*. That
+makes 14c worse than it was written: proving the `;` chain runs proves the
+command fires, not that a patient is ever told. (2) `profilecreate.js:34-35`
+rejects symbols in passwords that the backend accepts — `Test@1234` cannot be
+typed into web signup. Both are now in ROADMAP.
+
+Also confirmed en route: `backend/.env` still holds a **live-prefix** Razorpay
+key (classified by prefix/length, never printed), so `stress_test.sh --checkout`
+exits 1 before issuing a request and its happy path remains never-executed.
+
+### Tomorrow's first move
+
+Run the two SQL checks above — **a session cannot**, CLAUDE.md forbids `psql`
+and the prod DB outright, and that rule has no read-only carve-out. If clean,
+merge `docs/prod-flag-carve-out` first (it is the base), then open the PR for
+this branch — the diff reads clean only in that order, and `gh` needs auth.
+
+Then item 13 is one Railway variable, not a device test.
+
+---
+
 ## 2026-09-06 — The Appointment Pass switched back ON, and a carve-out written to allow it
 
 **Production config change.** `PASS_ENABLED=True` on the Railway
@@ -40,11 +200,15 @@ pass (ROADMAP 1329), the budget question ROADMAP 48 still lists as open. Vishnu
 proceeded with it open. That question is now live spend, not a hypothetical.
 
 **Verified after the restart** — `/health/` 200, `commit 8b173d0e` matching
-`origin/main` `8b173d0`, `cache.backend=redis ok`. **Not verified from the
-session:** the flag's own value. `GET /api/payment/pass/` is `IsAuthenticated`
-and returns 401 unauthenticated, so confirming `enabled: true` needs a logged-in
-patient at a `SERVICE_ONLY` doctor's checkout. Vishnu's dashboard read is the
-only confirmation on record.
+`origin/main` `8b173d0`, `cache.backend=redis ok`. **Then confirmed where it
+counts:** Vishnu opened a logged-in checkout and the ₹25 / ₹35 options render.
+The flag is on and the offer is live to patients.
+
+Worth keeping for next time: the session could verify the restart but never the
+flag. `GET /api/payment/pass/` is `IsAuthenticated` and 401s unauthenticated, so
+`enabled` is invisible from an unauthenticated probe — a config change to this
+flag always ends with a human looking at a checkout screen, and no amount of
+curl replaces that.
 
 **Why it wasn't the session that flipped it.** Three layers said no; two were
 resolved and one was not:
@@ -81,17 +245,52 @@ table stays a flat no.
 | 1 | `PASS_ENABLED=True` on Railway `tokenwalla-backend` (dashboard, Vishnu) | no commit — config | ✅ |
 | 2 | CLAUDE.md feature-flag carve-out + hook-gap note | uncommitted | 🕒 |
 | 3 | Reconcile CLAUDE.md carve-out with the `settings.json` deny rule | — | ⬜ |
-| 4 | Confirm the ₹25/₹35 offer renders for a logged-in patient at a `SERVICE_ONLY` doctor | — | ⬜ |
+| 4 | Confirm the ₹25/₹35 offer renders for a logged-in patient at a `SERVICE_ONLY` doctor | — | ✅ |
 
 **Action items**
 
-- [ ] Vishnu: open a checkout at a `SERVICE_ONLY` doctor and confirm the two
-      options render — this is the only real proof the flag took.
-- [ ] Decide whether `settings.json` keeps denying `railway variables:*`.
-- [ ] Land the CLAUDE.md carve-out and the unmerged `d8749c6` ROADMAP commit —
-      both docs, both currently stranded on the already-merged
-      `fix/reschedule-capacity-login-cap-perf` branch.
+- [x] Vishnu: open a checkout at a `SERVICE_ONLY` doctor and confirm the two
+      options render — done, both showing. The pass is live.
+- [x] Land the CLAUDE.md carve-out and the stranded `d8749c6` ROADMAP commit —
+      both shipped as **PR #54**, `origin/main` now `f6a274e`.
+- [ ] Decide whether `settings.json` keeps denying `railway variables:*`. The
+      carve-out in CLAUDE.md now permits what the deny rule forbids, and a deny
+      rule cannot be prompted past — so today the prose and the config disagree.
+      It also blocks the **read**, which is step 1 of the carve-out's own
+      procedure.
 - [ ] Watch the first redeemed pass against the −₹11.84 figure.
+- [ ] **Prove the expiry nudge runs (ROADMAP 14c).** Now red, not amber: a real
+      patient can buy a real pass, so an unrun nudge is a patient never told
+      their pass is lapsing — and the +₹8.16 we keep looks like revenue.
+
+### Then `/ship` refused to let the audit branch out unchanged
+
+| Change | Commit | Status |
+|---|---|---|
+| Reverted the `/api/hospitals/<pk>/` 404 for non-active facilities; kept the `[TEST]` half | `9f48104` | ✅ |
+| Refreshed both stale test baselines — CLAUDE.md 419/44, `ship.md` 371/30 → **477/47** | `9f48104` | ✅ |
+| Recorded ROADMAP **21** — pending/rejected facilities' providers are publicly listed | `9f48104` | ✅ |
+| Open a PR for `9f48104` + `994567f` | — | ⬜ **`gh` is not authenticated in this session — open it in the browser** |
+
+**Why the 404 was worse than the bug.** The audit fix made the hospital detail
+endpoint 404 for `pending`/`rejected` facilities, to match what the list already
+hides. But **neither `DoctorViewSet` nor `ScanViewSet` filters on facility
+status at all**, so those providers are still publicly listed and still
+bookable — the detail page is reachable from a link the API itself handed out.
+404ing it stops no booking; it just breaks the page, and it breaks it hard on
+the centre screens, which fetch the facility inside a `Promise.all` and render a
+failure state (`ScanCenterDetails.js:72`, app `scan-center/[id].tsx:125` — and
+the app cannot be updated on our schedule). The doctor screens swallow it and
+merely lose the contact block. The real defect is **ROADMAP 21**, its own PR,
+because it has to answer what happens to bookings already taken against a
+facility that is no longer active.
+
+**A stale baseline defeats the check.** `/ship` compares the test count against
+the number written down; when the written number is 58 tests old it cannot tell
+a deleted test from a normal run. Both files now say 477/47, measured today.
+
+**Verified:** 477 backend OK (2 skipped), **0 `graph.facebook.com` lines under
+`-v 2`**, 47 web, eslint clean, `makemigrations --check` clean, no migrations.
 
 ---
 

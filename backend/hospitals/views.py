@@ -382,9 +382,27 @@ class HospitalDetailView(APIView):
         # Owner and admin are exempt: a hospital awaiting approval still loads
         # its own profile page (Hprofile.js fetches this endpoint), and filtering
         # it out would lock a pending partner out of their own settings.
+        # [TEST] fixtures only. This deliberately does NOT also 404 a
+        # pending/rejected facility, though the LIST hides both.
+        #
+        # Neither the doctor list nor the scan list filters on facility status,
+        # so a pending hospital's doctors and a pending centre's scans are still
+        # returned publicly — the detail page is reachable from a link the API
+        # itself handed out. 404ing it there does not stop the booking; it just
+        # breaks the page. And it breaks it hard on the centre screens, which
+        # fetch this inside a Promise.all and show a failure state
+        # (ScanCenterDetails.js, and the app's scan-center/[id].tsx). The doctor
+        # screens swallow it and merely lose the contact block.
+        #
+        # The real defect is that non-active facilities have their providers
+        # listed at all — see ROADMAP 21. Fixing THAT is the change worth
+        # making, and it belongs in its own PR because it has to decide what
+        # happens to bookings already taken against such a facility.
+        #
+        # The [TEST] half carries a production incident behind it (2026-08-11, a
+        # demo provider in FULL mode chargeable by real patients), and is inert
+        # for every real active facility, so it stays.
         if not _is_owner_or_admin(request.user, hospital):
-            if hospital.status != 'active':
-                return Response({'message': 'Not found.'}, status=404)
             if not show_test_hospitals_to(request.user) and \
                     not exclude_test_hospitals(
                         Hospital.objects.filter(pk=hospital.pk)).exists():

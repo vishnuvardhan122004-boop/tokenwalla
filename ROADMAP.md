@@ -7,7 +7,26 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-02 — see the 2026-09-01/02 note at the end of this
+- **Last updated:** 2026-09-06 — **the ₹35 Appointment Pass is BACK ON SALE.**
+  Vishnu set `PASS_ENABLED=True` in the Railway dashboard at ~01:10 IST, with
+  the **−₹11.84 budget question still open** and named out loud before the flip.
+  Real patients can buy a pass from now on, which promotes **14c** — the expiry
+  nudge has never been observed running — from a wiring curiosity to a live
+  obligation: someone can now hold a pass that quietly lapses unwarned, and the
+  +₹8.16 we keep on an unused pass is exactly what makes an unsent nudge look
+  like revenue. **That is the top of Now.** Also landed: the 2026-09-04/05 audit
+  branch merged (**#53**), and CLAUDE.md gained a **feature-flag carve-out**
+  (**#54**) so a session may set one named flag when Vishnu says so — the
+  `settings.json` deny rule still blocks it, which is deliberate and unresolved.
+  `/ship` then caught a regression on the way out and found **21** 🔴: pending
+  and rejected facilities still have **every one of their doctors and scans in
+  the public browse lists, bookable** — the facility is hidden, the provider is
+  not. Web `origin/main` `30d54c0` (#54, then #55 re-merging the already-landed
+  `d8749c6` — a no-op, the trees are identical), plus `9f48104` and `994567f`
+  pushed on `docs/prod-flag-carve-out` **and still needing a PR**. 477 backend tests
+  (2 skipped) · 47 web. **The app is still `0dbe505` and still unbuilt**, so no
+  phone has the pass at all — every pass sold from here is bought on the web.
+  **Before 2026-09-06:** see the 2026-09-01/02 note at the end of this
   block for the Appointment Pass. Before that: **two feature sessions and a short evening one
   landed since the last update; the features are live on the web and none of it
   is on a phone.** 2026-08-26 (**item 10**):
@@ -824,6 +843,24 @@ genuinely unusable — that one is a hard gate, not a nag. The prompt itself is
 proven: it was watched firing on 08-17, and "Not now" survived a
 background/reopen.
 
+> **Still open as of 2026-09-06 — and check the variable before you check a
+> device.** A handoff that day recorded `APP_LATEST_VERSION=1.4.0` as already
+> live and asked for a v1.3.x device test to confirm the modal fires. It is not
+> live: every record says it has held the blank default since it was reset on
+> 2026-08-17 (WORKLOG 2026-08-17, "`APP_LATEST_VERSION` blanked … no install is
+> being nagged"), and this item has stayed 🟡 open ever since. With the value
+> blank there is nothing to compare against, so **no modal fires and a device
+> test would show an empty result for a reason that is not in the device.**
+> Run the `curl` above first — it is public, read-only, and settles it in one
+> second. Note also that `APP_STORE_URL` is a plain listing URL keyed on the
+> package id; a Play link cannot target versionCode 40, it resolves to whatever
+> build is live.
+>
+> **A session may not set this variable.** The CLAUDE.md feature-flag carve-out
+> holds exactly one row, `PASS_ENABLED`. Adding `APP_LATEST_VERSION` to it is a
+> deliberate commit to that file, never a mid-task decision — so item 13 is
+> Vishnu's to execute in the Railway dashboard even if a session is asked.
+
 ### 6. Watch the first day live 🟡
 
 - `grep oversold_refund` in the Railway logs — any hit means a patient was
@@ -1288,10 +1325,21 @@ Migrations, all additive and safe to run before the code: `doctors.0014`,
 **What this does NOT close:** every one of these has an app half that is merged
 and unbuilt. See 5b.
 
-### 14. The Appointment Pass — ₹35 for two visits, 30 days 🟡 — SHIPPED AND SWITCHED OFF 2026-09-02
+### 14. The Appointment Pass — ₹35 for two visits, 30 days 🟡 — SHIPPED 2026-09-02, **ON SALE AGAIN 2026-09-06**
 
-**Where it stands, end of 2026-09-02.** Built, reviewed, merged and deployed —
-then deliberately turned off. Web PRs **#47, #48, #49, #50** and app PR **#17**
+**Where it stands, 2026-09-06: ON.** `PASS_ENABLED=True` on the Railway
+`tokenwalla-backend` project, set by Vishnu in the dashboard at ~01:10 IST and
+confirmed by opening a logged-in checkout and seeing the ₹25 / ₹35 options
+render. The budget question at the bottom of this item was **still open when he
+flipped it** — that is his call, taken knowingly, and it means the −₹11.84 is
+now live spend rather than a hypothetical. **Watch the first redeemed pass
+against that figure.** Note the flag is only readable by a logged-in patient:
+`GET /api/payment/pass/` is `IsAuthenticated`, so no unauthenticated probe can
+tell you whether the promotion is on — a change to this flag always ends with a
+human looking at a checkout screen.
+
+**How it got here, end of 2026-09-02.** Built, reviewed, merged and deployed —
+then deliberately turned off for four days. Web PRs **#47, #48, #49, #50** and app PR **#17**
 are all merged; `origin/main` is `386538a`, production served `12359b04`, and
 migrations `payments.0012`, `payments.0013` and `bookings.0013` all applied.
 `PASS_ENABLED=False` is set on the Railway `tokenwalla` service, so **nothing
@@ -1621,7 +1669,14 @@ use-case survives).
 Migration `payments.0013` adds two columns, both nullable/defaulted. 429 backend
 tests (42 in `tests_pass.py`), 44 web.
 
-#### 14c. Prove the expiry nudge actually runs 🟡 — the only loose end, 2026-09-02
+#### 14c. Prove the expiry nudge actually runs 🔴 — was 🟡; the flag going ON promoted it 2026-09-06
+
+> **Why this is red now.** While the promotion was off, `Nudged 0 pass(es)` was
+> the right answer whether the chain worked or not, so an unrun nudge cost
+> nothing. With `PASS_ENABLED=True` a real patient can buy a real pass, and if
+> the `;` chain is dead they are never told it is about to lapse — and we keep
+> the +₹8.16 on the pass they didn't use. An unsent nudge now looks like
+> revenue, which is precisely the kind of bug nobody reports.
 
 **Everything up to the run is verified; the run itself is not.** `main` carries
 the two-command start line, the cron service's Deploy panel shows it reading
@@ -1647,10 +1702,24 @@ CA needs to answer GST on a pass sold as an advance (invoice raised in full at
 purchase, the second service delivered up to 30 days later). The build assumes
 invoice-at-purchase.
 
-**Also deferred, and worth naming:** the nudge is **push-only**, so a patient
-without the app or with notifications off is never told their pass is about to
-lapse. A WhatsApp version needs a new Meta template — a manual submission, same
-queue as item 9.
+**Also deferred, and worth naming — and it is worse than "some patients":** the
+nudge is **push-only** (`send_pass_expiry_reminders.py:30,57` imports and calls
+`push_pass_expiring` and nothing else). The app has not been built since 1.1.3
+(36) and every pass sold today is bought on the web, so there is **no current
+buyer the nudge can reach at all** — not "a patient without the app", but every
+one of them. Proving the `;` chain runs therefore does not prove a patient is
+ever told; it only proves the command fires. A WhatsApp version needs a new Meta
+template — a manual submission, same queue as item 9.
+
+**Two details corrected 2026-09-06** (a handoff had them wrong, so they are
+pinned here): the window is **3 days before expiry**
+(`send_pass_expiry_reminders.py:35 REMIND_DAYS_BEFORE = 3`), i.e. ~day 27 of the
+30-day pass — there is no "day 25" nudge anywhere in the codebase. And the cron
+is **not** gated on the flag: `railway.cron.json:4` runs the chain every 10
+minutes regardless, and the command never reads `PASS_ENABLED`. Dormancy is an
+empty queryset, not a gate — so turning the flag OFF would stop selling and
+redeeming but would NOT stop nudges for passes already held. Probably right,
+but it was never a recorded decision.
 
 ---
 
@@ -1804,6 +1873,73 @@ mobile app reads, so it is additive-or-versioned, not a free change.
 
 ---
 
+### 21. Pending/rejected facilities have their providers listed publicly ✅ — found 2026-09-06 by /ship, fixed 2026-09-06
+
+`HospitalListView` filters `status='active'`. **Neither `DoctorViewSet.get_queryset`
+nor `ScanViewSet.get_queryset` filters on the facility's status at all** — they
+filter `[TEST]` names and segment, and nothing else.
+
+So a hospital sitting at `pending` (registered, never approved) or `rejected`
+still has **every one of its doctors in the public browse list**, and a pending
+centre has every one of its scans. A patient can open one and book it. The
+facility itself is hidden from `/api/hospitals/`, which is what makes this hard
+to notice: the provider is listed, its facility is not.
+
+Found while shipping the audit branch. A fix there had made
+`/api/hospitals/<pk>/` 404 for non-active facilities, to match the list — and
+that turned out to make things worse, not better. It does not stop the booking;
+it just breaks the page, and it breaks it hard on the centre screens, which
+fetch the facility inside a `Promise.all` and render a failure state
+(`ScanCenterDetails.js:72`, app `scan-center/[id].tsx:125`). The doctor screens
+swallow it and merely lose the contact block. **That half was reverted** — the
+detail endpoint now hides `[TEST]` fixtures only, which is inert for real
+facilities and is the half with a production incident behind it.
+
+**The fix is to filter the lists, not to 404 the detail**, and it is its own PR
+because it has to answer a question first: what happens to bookings ALREADY
+taken against a facility that is not active? Hiding the provider does not cancel
+those, and a patient holding a token for a hospital that has since been rejected
+still needs their booking, their queue position and their refund path to work.
+
+Deliberately NOT bundled into the audit branch: that branch is additive and
+carries no behaviour change a patient can see, and this one is visible to
+patients on the public browse path.
+
+**Fixed 2026-09-06** on `fix/facility-status-provider-leak`. One filter in each
+of the two querysets — `hospital__status='active'` in
+`DoctorViewSet.get_queryset`, `center__status='active'` in
+`ScanViewSet.get_queryset`. `get_object()` runs through `get_queryset()`, so the
+detail routes closed with the lists and the id stopped being guessable, without
+touching `HospitalDetailView` — the half that was reverted for breaking the
+centre screens.
+
+**Gated on `show_test_hospitals_to`, not applied flat**, which is the one
+non-obvious part. `src/ADMIN/Hospitals.js` drives its doctor list (`/doctors/`),
+its edit modal (`openEdit`) and both delete paths through this very queryset,
+while listing pending and rejected facilities beside them from
+`/hospitals/admin/all/`. A flat filter empties that screen and 404s an admin out
+of cleaning up a rejected facility. Staff gain nothing from the exemption: a
+non-active facility's own account cannot authenticate at all, because
+`HospitalLoginView` 403s on status before it issues a token.
+
+**The question it had to answer first — what happens to bookings already taken
+against a facility that is not active — is: nothing.** Booking cards, the token,
+the queue position and the refund path all read `/api/bookings/`, and
+`BookingSerializer` carries `doctor_name` from the booking row itself rather
+than re-fetching the provider. The only reachable degradation is
+`MyBookings.js:248`, which re-fetches the doctor by id when the **reschedule**
+modal opens; it now 404s and is caught by the `catch` beside it, so the picker
+opens with no slots. That is arguably the correct answer anyway — a facility
+that is no longer approved should not be taking new slots — and it fails soft,
+unlike the `Promise.all` breakage that got the detail-endpoint half reverted.
+
+Covered by `hospitals/tests_facility_status_visibility.py` (13 tests). 8 of them
+fail with either filter removed; the other 5 are the ones that pin the admin
+exemption and the untouched active facility, and pass in both directions by
+design.
+
+---
+
 ## Next
 
 - **Slice 10 has no app half** — new 2026-08-19. The website ships scan-report
@@ -1896,9 +2032,15 @@ mobile app reads, so it is additive-or-versioned, not a free change.
   taxable value, GST, SAC code, consultation fee marked exempt, readable by the
   booking's own patient. **Neither the app nor the website calls it.** For a paid
   healthcare service in India this is the most substantive product gap open.
-- **App has no WhatsApp opt-in toggle** — new 2026-08-11. The website calls
-  `PATCH /auth/me/whatsapp-opt-in/` (`MyBookings.js:111`); the app never does, so
-  mobile patients cannot turn WhatsApp messages off. That is a consent control.
+- ~~**App has no WhatsApp opt-in toggle**~~ ✅ **closed 2026-09-06** — both
+  halves of this bullet had gone stale and it was actively misleading readers.
+  The app DOES have the toggle (`app/(patient)/profile.tsx:124`, patching
+  `/auth/me/whatsapp-opt-in/` at `:51-54`, commit `f438c00`), and the web line
+  number moved (`MyBookings.js:88`, component at `:70`, rendered `:560`). Both
+  products expose the same account-level control; item 12 shipped the web half
+  on 2026-08-29. Kept rather than deleted because this bullet is the likely
+  source of a 2026-09-06 handoff that re-opened "web WhatsApp opt-in parity" as
+  outstanding work when there is none — see the note under item 12.
 - **Sentry ships blind in production** — `SENTRY_DISABLE_AUTO_UPLOAD=true` on all
   three EAS profiles, so production crashes arrive minified and unsymbolicated.
   Correct while there is no `SENTRY_AUTH_TOKEN`; turn it back on for production
@@ -1910,7 +2052,26 @@ mobile app reads, so it is additive-or-versioned, not a free change.
 - **No component or screen tests in the app** — all 118 are pure logic. Nothing
   renders a screen; there is no `@testing-library/react-native`. This is why the
   `useAndroidBack` hook shipped without one.
-- **Raise the 6-char password floor**
+- **Raise the 6-char password floor** — note for whoever picks this up: the
+  wiring is NOT missing. Item 4d closed 2026-08-22 and
+  `tokenwalla.utils.check_password_strength` (which runs Django's
+  `validate_password`) is called from all five entry points, patient signup
+  (`users/serializers.py:29`) and patient reset (`users/auth_views.py:581`)
+  included. What is missing is a **decision**: the floor is 6 for patient and
+  hospital paths (`settings.py:471`, plus ad-hoc `< 6` at
+  `users/auth_views.py:570` and `hospitals/views.py:616`) but 8 for admin
+  (`users/auth_views.py:748`, `create_admin.py:34`). Raising it is one settings
+  line + three ad-hoc checks + three frontend rules, but it is Vishnu's call
+  about receptionist friction, so a session should not just pick 8.
+- **The web signup password rule is stricter than the server's, and wrong** —
+  new 2026-09-06, found while verifying the above. `src/componets/profilecreate.js:34-35`
+  validates against `/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/` — an
+  **alphanumeric-only** character class, so a password containing a symbol is
+  rejected in the browser while the backend accepts it happily. `Test@1234` —
+  the very example item 4d cites as passing the server — cannot be typed into
+  the web signup form. The two rules disagree and the client is both the
+  stricter and the worse of the pair, since it pushes users off symbols. One
+  regex, its own commit; not folded into a floor change.
 - **Branch cleanup** — 12 local branches, several long dead
 
 Resolved and deliberately removed, so they don't get re-added:
@@ -1964,6 +2125,35 @@ Resolved and deliberately removed, so they don't get re-added:
 ---
 
 ## Done
+
+- **2026-09-04 → 09-06** — **A full-codebase audit merged, and the pass switched
+  back on.** The audit branch landed as **#53** (13 commits): the forgeable
+  throttle key, force-delete erasing the entire financial record behind a
+  booking, a doctor short-paid on an absence, a lost gateway response becoming a
+  second refund, and neither login having brute-force protection. Then **#54**,
+  the CLAUDE.md **feature-flag carve-out** — a session may now set one variable
+  from a named table when Vishnu says so in the session, because routing a kill
+  switch through a PR is slower than the incident it exists to stop.
+  **Production config, 2026-09-06 ~01:10 IST: `PASS_ENABLED=True`**, set by
+  Vishnu in the dashboard, not by a session. Verified `/health/` 200 at
+  `8b173d0e` and then confirmed where it counts — a logged-in checkout renders
+  the ₹25 / ₹35 options. **The pass is on sale to real patients with the
+  −₹11.84 budget question still open**, knowingly.
+  **`/ship` earned its place twice.** It caught a regression the audit branch
+  was about to ship — 404ing `/api/hospitals/<pk>/` for non-active facilities,
+  which breaks the centre pages hard (they fetch inside a `Promise.all`) without
+  stopping a single booking, so that half was reverted and the inert `[TEST]`
+  half kept. And it refused two stale baselines: CLAUDE.md said 419/44 and
+  `ship.md` said 371/30; both are now **477 backend (2 skipped) · 47 web**, the
+  numbers measured 2026-09-06. A stale baseline defeats the check that a test
+  was deleted.
+  **What it found on the way out is item 21** 🔴, deliberately not bundled:
+  neither `DoctorViewSet` nor `ScanViewSet` filters on facility status, so a
+  pending or rejected facility has every provider publicly listed and bookable.
+  **Three things this did NOT prove:** the expiry nudge running (**14c**, now
+  red because the flag is on), `NUM_PROXIES=1` matching the real deployment
+  (**16**), and anything at all on a phone — the app is still `0dbe505` and
+  still unbuilt.
 
 - **2026-09-02** — **Item 14 shipped and switched off: the Appointment Pass.**
   ₹35 buys the service fee for two visits inside 30 days, at any service-fee-only

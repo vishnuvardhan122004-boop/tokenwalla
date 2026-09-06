@@ -12,6 +12,7 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
+from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -660,3 +661,105 @@ class ForceDeleteFinancialGuardTests(TestCase):
         req.user.is_superuser = True
 
         self.assertTrue(admin_obj.has_delete_permission(req, clean))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Refund idempotency — the DATABASE half
+# ─────────────────────────────────────────────────────────────────────────────
+class RefundConstraintTests(TestCase):
+    """`refunds.process_cancellation_refund` re-checks under
+    `select_for_update()` before writing, but that lock only serialises
+    concurrent cancels reaching that one function. These constraints hold the
+    same invariant a level down, where nothing can route around them.
+
+    The blank case is the one that needs a test rather than a reading: the
+    column is `blank=True` with no `null=True`, so an unissued id is `''` and
+    never NULL. A partial index conditioned on `isnull=False` would match every
+    row, sweep in every ₹0 refund — `pool <= 0` never calls the gateway, so the
+    id stays blank — and collide on the second one.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create(
+            username='refund-constraint', mobile='9800000901', role='patient')
+        self.hospital = Hospital.objects.create(
+            name='Sri Sarwodhaya orthopaedic hospital', city='Hindupur',
+            mobile='9800000902', status='active', password='x')
+        self.doctor = Doctor.objects.create(
+            name='Dr. Hari krishna', specialization='Orthopedic Surgeon',
+            hospital=self.hospital, fee=200, available=True)
+
+    def _payment(self, n, status=None):
+        # A week out, computed from localdate(): the refund tier is a function
+        # of hours-until-slot, so a booking dated today would change tier with
+        # the time of day the suite runs. >= 24h is always the 70% tier.
+        booking = Booking.objects.create(
+            user=self.user, doctor=self.doctor, hospital=self.hospital,
+            date=timezone.localdate() + timedelta(days=7), slot='11:00 AM',
+            token=f'TW-C{n}', status=status or Booking.CANCELLED, amount=200)
+        bd = compute_fee_breakdown(200, 'FULL')
+        return Payment.objects.create(
+            booking=booking, order_id=f'oc{n}', payment_id=f'pc{n}',
+            amount=int(bd['final_amount']), doctor_fee=bd['doctor_fee'],
+            platform_fee=bd['platform_fee'], gateway_fee=bd['gateway_fee'],
+            gst_amount=bd['gst_amount'], final_amount=bd['final_amount'],
+            status=Payment.PAID)
+
+    def _refund(self, payment, razorpay_refund_id=''):
+        return Refund.objects.create(
+            payment=payment, refund_percentage=Decimal('0.70'),
+            doctor_loss=Decimal('140.00'), platform_loss=Decimal('14.00'),
+            razorpay_refund_id=razorpay_refund_id)
+
+    def test_a_payment_cannot_be_refunded_twice(self):
+        payment = self._payment(1)
+        self._refund(payment, 'rfnd_A')
+        # atomic() around the failing write: an IntegrityError otherwise
+        # poisons the TestCase's own transaction for everything after it.
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self._refund(payment, 'rfnd_B')
+        self.assertEqual(payment.refunds.count(), 1)
+
+    def test_two_zero_pool_refunds_can_both_have_a_blank_gateway_id(self):
+        """The reason the condition is non-blank and not non-null.
+
+        A ₹0 refund pool never reaches Razorpay, so it stores ''. Two of them
+        against different payments is ordinary, and must stay writable.
+        """
+        self._refund(self._payment(2))
+        self._refund(self._payment(3))
+        self.assertEqual(
+            Refund.objects.filter(razorpay_refund_id='').count(), 2)
+
+    def test_one_gateway_refund_id_cannot_be_recorded_twice(self):
+        """Adopting the same Razorpay refund against two payments would double
+        count money that only moved once."""
+        self._refund(self._payment(4), 'rfnd_shared')
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self._refund(self._payment(5), 'rfnd_shared')
+
+    def test_the_happy_path_still_writes_a_refund(self):
+        """The constraints must not block the flow they protect."""
+        payment = self._payment(6, Booking.CONFIRMED)
+        with mock.patch('payments.razorpay_utils.find_existing_refund',
+                        return_value=None), \
+             mock.patch('payments.razorpay_utils.refund_payment',
+                        return_value={'id': 'rfnd_live'}):
+            refund, info = process_cancellation_refund(payment.booking)
+        self.assertIsNotNone(refund)
+        self.assertEqual(Refund.objects.filter(payment=payment).count(), 1)
+
+    def test_a_second_cancellation_returns_the_first_refund(self):
+        """Idempotency is still answered in Python — the constraint is the
+        backstop, not the error path the caller sees."""
+        payment = self._payment(7, Booking.CONFIRMED)
+        with mock.patch('payments.razorpay_utils.find_existing_refund',
+                        return_value=None), \
+             mock.patch('payments.razorpay_utils.refund_payment',
+                        return_value={'id': 'rfnd_first'}):
+            first, _ = process_cancellation_refund(payment.booking)
+            again, info = process_cancellation_refund(payment.booking)
+        self.assertEqual(first.id, again.id)
+        self.assertEqual(info['reason'], 'already_refunded')
