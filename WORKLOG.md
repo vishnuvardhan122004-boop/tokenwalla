@@ -3,8 +3,8 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `docs/prod-flag-carve-out` on web — **`9f48104` is pushed and needs a PR**; everything else is merged. `origin/main` is `f6a274e` (PR #54). The audit branch `fix/reschedule-capacity-login-cap-perf` merged as #53 and is safe to delete locally and on `origin`. **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
-- **Latest commit at last update:** `9f48104` `docs/prod-flag-carve-out` (web/backend — **not yet merged**; `origin/main` is `f6a274e`, deployed, `PASS_ENABLED=True`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass; every pass sold is bought on the web)
+- **Branch:** `docs/prod-flag-carve-out` on web — **`9f48104` is pushed and needs a PR**; everything else is merged. `origin/main` is `30d54c0` (PRs #54 and #55; #55 re-merged the already-landed `d8749c6` and changed no files). The audit branch `fix/reschedule-capacity-login-cap-perf` merged as #53 and is safe to delete locally and on `origin`. **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
+- **Latest commit at last update:** `9f48104` `docs/prod-flag-carve-out` (web/backend — **not yet merged**; `origin/main` is `30d54c0`, deployed, `PASS_ENABLED=True`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass; every pass sold is bought on the web)
 - **Last updated:** 2026-09-06 — **the ₹35 pass is back on sale** (`PASS_ENABLED=True`, set by Vishnu in the Railway dashboard at ~01:10 IST, budget question knowingly still open), the 2026-09-04/05 audit branch merged as **#53**, and CLAUDE.md gained a **feature-flag carve-out** as **#54**. `/ship` then caught a regression the audit branch was about to ship and found **ROADMAP 21** 🔴 — pending/rejected facilities have every provider publicly listed and bookable. **477 backend tests (2 skipped) · 47 web**, both baselines refreshed in the same commit. **ROADMAP 14c went 🟡 → 🔴:** the flag being on means a real buyer now depends on an expiry nudge nobody has ever seen run.
 - **Previously:** 2026-09-05 — a full-codebase audit: 1 critical throttle bypass, a critical data-loss path in force-delete, and three money bugs. 13 commits, since merged. ⚠️ `NUM_PROXIES=1` still cannot be verified from code; ROADMAP 16 has the check.
 - **Previously:** 2026-09-02 — the Appointment Pass shipped and was switched off the same day. Five web PRs (#47–#50) plus app #17. The day's real find was a refund hole — buy, redeem the free visit, cancel the paid one, keep both the money and the visit — closed in #48.
@@ -112,7 +112,7 @@ table stays a flat no.
 | Reverted the `/api/hospitals/<pk>/` 404 for non-active facilities; kept the `[TEST]` half | `9f48104` | ✅ |
 | Refreshed both stale test baselines — CLAUDE.md 419/44, `ship.md` 371/30 → **477/47** | `9f48104` | ✅ |
 | Recorded ROADMAP **21** — pending/rejected facilities' providers are publicly listed | `9f48104` | ✅ |
-| Open a PR for `9f48104` | — | ⬜ |
+| Open a PR for `9f48104` + `994567f` | — | ⬜ **`gh` is not authenticated in this session — open it in the browser** |
 
 **Why the 404 was worse than the bug.** The audit fix made the hospital detail
 endpoint 404 for `pending`/`rejected` facilities, to match what the list already

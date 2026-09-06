@@ -21,8 +21,9 @@ the things that can lose money or break a live booking come first.
   `/ship` then caught a regression on the way out and found **21** 🔴: pending
   and rejected facilities still have **every one of their doctors and scans in
   the public browse lists, bookable** — the facility is hidden, the provider is
-  not. Web `origin/main` `f6a274e`, plus `9f48104` pushed on
-  `docs/prod-flag-carve-out` **and still needing a PR**. 477 backend tests
+  not. Web `origin/main` `30d54c0` (#54, then #55 re-merging the already-landed
+  `d8749c6` — a no-op, the trees are identical), plus `9f48104` and `994567f`
+  pushed on `docs/prod-flag-carve-out` **and still needing a PR**. 477 backend tests
   (2 skipped) · 47 web. **The app is still `0dbe505` and still unbuilt**, so no
   phone has the pass at all — every pass sold from here is bought on the web.
   **Before 2026-09-06:** see the 2026-09-01/02 note at the end of this
