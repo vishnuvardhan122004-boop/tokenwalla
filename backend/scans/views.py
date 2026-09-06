@@ -76,6 +76,10 @@ class ScanViewSet(viewsets.ModelViewSet):
         # patient-facing, but stay visible to their own staff and to admins.
         if not show_test_hospitals_to(getattr(self.request, 'user', None)):
             qs = exclude_test_hospitals(qs, field='center__name')
+            # ROADMAP 21, the centre half: a pending or rejected centre kept
+            # every one of its scans in the public list. Same staff/admin gate
+            # as above, for the same reason — see DoctorViewSet.get_queryset.
+            qs = qs.filter(center__status='active')
         return qs
 
     # ── Popularity ────────────────────────────────────────────────────────────
