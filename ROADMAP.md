@@ -1674,6 +1674,14 @@ tests (42 in `tests_pass.py`), 44 web.
 > **2026-09-06 (third session):** the WhatsApp half shipped. Still 🔴 — the
 > cron run is unobserved AND the template is unsubmitted, so no patient has
 > been told anything yet. See "The delivery half" below.
+>
+> **2026-09-06 (merged):** that code is now on `main` (PR #58, `ee8e9dc`) and so
+> is live, migration `0011_whatsapplog_pass_expiring` included — choices-only,
+> so it needed no window. **Nothing in this item is waiting on code any more.**
+> It waits on one form: `pass_expiring` submitted to Meta and approved. Until
+> then each run writes a `failed` WhatsAppLog row carrying `132001`, which is
+> the expected state, not a regression. Still 🔴 — a red that only Vishnu can
+> clear, and it clears on a `sent` row, not on a merge.
 
 > **Why this is red now.** While the promotion was off, `Nudged 0 pass(es)` was
 > the right answer whether the chain worked or not, so an unrun nudge cost

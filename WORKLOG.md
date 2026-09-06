@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `fix/web-password-regex-and-pass-nudge` on web — **not pushed, no PR**, 3 commits, cut clean from `origin/main` (`5e4ffce`, which carries #56). Nothing is stacked on it. Note `gh` is not authenticated in the session, so a session cannot open the PR — that is the web UI or `gh auth login`. **Do NOT delete** `develop`, which deploys to staging. `fix/facility-status-provider-leak` merged as **#56** and is safe to delete locally and on `origin`, along with `docs/prod-flag-carve-out`.
-- **Latest commit at last update:** `a1da0ca` `fix/web-password-regex-and-pass-nudge` (web/backend — **not pushed, no PR yet**; `origin/main` is `5e4ffce`, deployed, `PASS_ENABLED=True`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass; every pass sold is bought on the web)
-- **Last updated:** 2026-09-06 (third session) — **the pass expiry nudge now has a channel that can reach a web-only buyer**, and **the signup form stops rejecting passwords with a symbol**. **503 backend tests (2 skipped)** · **49 web** — the new baselines (this line said 500; re-measured twice at 503). ⚠️ **ROADMAP 14c is still 🔴 and needs Vishnu**: the `pass_expiring` Meta template is unsubmitted, so the WhatsApp half is inert until it is approved — paste-ready body in WHATSAPP_TEMPLATES.md §15. Nothing was pushed.
+- **Branch:** `docs/session-wrap-2026-09-06` on web — this wrap only, **needs a PR**. Everything else is merged: `fix/web-password-regex-and-pass-nudge` landed as **#58** and its local branch is deleted (the remote one is safe to delete too), `fix/whatsapplog-scan-report-kwargs` as **#57**. Note `gh` is not authenticated in the session, so a session cannot open a PR — that is the web UI or `gh auth login`. **Do NOT delete** `develop`, which deploys to staging.
+- **Latest commit at last update:** `ee8e9dc` `main` (web/backend — **merged and deployed**, `PASS_ENABLED=True`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass; every pass sold is bought on the web)
+- **Last updated:** 2026-09-06 (fourth session) — **PR #58 merged**: the pass expiry nudge's WhatsApp half, the signup password regex, `ACTIVE_TASK.md`, and one escaped test thread. **503 backend tests (2 skipped)** · **49 web** — the baselines, re-measured on `main` after the merge (an earlier line said 500; that was wrong). ⚠️ **ROADMAP 14c is still 🔴 and needs Vishnu, and it is now the only thing holding it**: the `pass_expiring` Meta template is unsubmitted, so the deployed WhatsApp path writes a `failed` row with `132001` on every run — paste-ready body in WHATSAPP_TEMPLATES.md §15.
 - **Previously:** 2026-09-06 (second session) — ROADMAP 21 fixed and refund idempotency taken down to the database; 495 backend tests. ⚠️ its refund-migration pre-merge check is still outstanding.
 - **Previously:** 2026-09-06 — **the ₹35 pass is back on sale** (`PASS_ENABLED=True`, set by Vishnu in the Railway dashboard at ~01:10 IST, budget question knowingly still open), the 2026-09-04/05 audit branch merged as **#53**, and CLAUDE.md gained a **feature-flag carve-out** as **#54**. `/ship` then caught a regression the audit branch was about to ship and found **ROADMAP 21** 🔴 — pending/rejected facilities have every provider publicly listed and bookable. **477 backend tests (2 skipped) · 47 web**, both baselines refreshed in the same commit. **ROADMAP 14c went 🟡 → 🔴:** the flag being on means a real buyer now depends on an expiry nudge nobody has ever seen run.
 - **Previously:** 2026-09-05 — a full-codebase audit: 1 critical throttle bypass, a critical data-loss path in force-delete, and three money bugs. 13 commits, since merged. ⚠️ `NUM_PROXIES=1` still cannot be verified from code; ROADMAP 16 has the check.
@@ -29,6 +29,42 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-06 (session wrap) — #58 merged, local synced to `main`
+
+The day's three sessions are all on `main` now. `fix/web-password-regex-and-pass-nudge`
+merged as **#58** (`ee8e9dc`); local `main` fast-forwarded 40 commits and the
+feature branch is deleted locally.
+
+**Gates re-run on `main` after the merge, not just on the branch:**
+
+| Gate | Result |
+|---|---|
+| `python manage.py test` | 503 passed, 2 skipped |
+| `CI=true npx react-scripts test --watchAll=false` | 49 passed, 11 suites |
+| `makemigrations --check` | No changes detected |
+| Thread/network leaks | Zero `graph.facebook.com` lines, zero failed background pushes. The only two `table is locked` strings in the log are the *skip reasons* of the Postgres-only `ConcurrentCapTests` — the phrase appears in their skip text, not in an error. |
+
+**What landed today, across the three sessions:** ROADMAP 21 (pending/rejected
+facilities leaking providers) and refund idempotency at the database level;
+the signup password regex; the pass expiry nudge's WhatsApp half plus migration
+`0011`; `ACTIVE_TASK.md`; and a patch to `CentrePayoutTests`, which had been
+posting to `/payouts/mark-paid/` without patching `_notify_doctor_payout_async`
+and letting the notification thread escape into the suite.
+
+**⚠️ One human item is left, and it is not code.** The `pass_expiring` Meta
+template is unsubmitted (`WHATSAPP_TEMPLATES.md` §15 has the paste-ready body).
+Submission is manual — the Business Manager form fails silently under
+automation. Until it is approved, ROADMAP **14c stays 🔴** and every nudge run
+writes a `failed` WhatsAppLog row with `132001`. That is expected, not a
+regression, but it means **no patient has yet been told their pass is lapsing.**
+
+Also still open from the second session and unrelated to this merge: the refund
+migration's UNIQUE constraint went out with #56 — if production ever wrote two
+refunds for one payment it would have failed on deploy. Worth a glance at the
+Railway migrate log to confirm it applied.
 
 ---
 

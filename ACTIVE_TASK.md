@@ -1,6 +1,7 @@
 # ACTIVE TASK SPECIFICATION
 
 **Status**: COMPLETED  
+**Merged**: `c93fb18` → `main` as PR #58 (merge commit `ee8e9dc`), 2026-09-06  
 **Date**: 2026-09-06  
 **Owner**: Cloud Code Execution Agent  
 **Source**: Gemini Spark (AI PM)  
@@ -92,4 +93,6 @@ the Railway cron log, AND one `pass_expiring` WhatsAppLog row reading `sent`.
 | `makemigrations --check` | No changes detected |
 | Thread leaks | **One found and fixed.** `payments/tests_scan_checkout.CentrePayoutTests` posts to `/payouts/mark-paid/` without patching `_notify_doctor_payout_async`, and the escaped thread logged `push_to_hospital(1) failed: database table is locked: users_user` — CLAUDE.md trap #1, a flake that lands on an unrelated later test. Patched at class level; the re-run has zero `table is locked` and zero `graph.facebook.com` lines. |
 
-Nothing was pushed, no PR opened, no production anything touched.
+Merged to `main` as PR #58. Both hosts deploy off a push to `main`, so migration
+`0011` and the nudge's WhatsApp half are now live — inert until the template is
+approved, which is the expected state rather than a fault.
