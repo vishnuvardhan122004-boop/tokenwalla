@@ -5,7 +5,7 @@ Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** `fix/web-password-regex-and-pass-nudge` on web — **not pushed, no PR**, 3 commits, cut clean from `origin/main` (`5e4ffce`, which carries #56). Nothing is stacked on it. Note `gh` is not authenticated in the session, so a session cannot open the PR — that is the web UI or `gh auth login`. **Do NOT delete** `develop`, which deploys to staging. `fix/facility-status-provider-leak` merged as **#56** and is safe to delete locally and on `origin`, along with `docs/prod-flag-carve-out`.
 - **Latest commit at last update:** `a1da0ca` `fix/web-password-regex-and-pass-nudge` (web/backend — **not pushed, no PR yet**; `origin/main` is `5e4ffce`, deployed, `PASS_ENABLED=True`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass; every pass sold is bought on the web)
-- **Last updated:** 2026-09-06 (third session) — **the pass expiry nudge now has a channel that can reach a web-only buyer**, and **the signup form stops rejecting passwords with a symbol**. **500 backend tests (2 skipped)** · **49 web** — the new baselines. ⚠️ **ROADMAP 14c is still 🔴 and needs Vishnu**: the `pass_expiring` Meta template is unsubmitted, so the WhatsApp half is inert until it is approved — paste-ready body in WHATSAPP_TEMPLATES.md §15. Nothing was pushed.
+- **Last updated:** 2026-09-06 (third session) — **the pass expiry nudge now has a channel that can reach a web-only buyer**, and **the signup form stops rejecting passwords with a symbol**. **503 backend tests (2 skipped)** · **49 web** — the new baselines (this line said 500; re-measured twice at 503). ⚠️ **ROADMAP 14c is still 🔴 and needs Vishnu**: the `pass_expiring` Meta template is unsubmitted, so the WhatsApp half is inert until it is approved — paste-ready body in WHATSAPP_TEMPLATES.md §15. Nothing was pushed.
 - **Previously:** 2026-09-06 (second session) — ROADMAP 21 fixed and refund idempotency taken down to the database; 495 backend tests. ⚠️ its refund-migration pre-merge check is still outstanding.
 - **Previously:** 2026-09-06 — **the ₹35 pass is back on sale** (`PASS_ENABLED=True`, set by Vishnu in the Railway dashboard at ~01:10 IST, budget question knowingly still open), the 2026-09-04/05 audit branch merged as **#53**, and CLAUDE.md gained a **feature-flag carve-out** as **#54**. `/ship` then caught a regression the audit branch was about to ship and found **ROADMAP 21** 🔴 — pending/rejected facilities have every provider publicly listed and bookable. **477 backend tests (2 skipped) · 47 web**, both baselines refreshed in the same commit. **ROADMAP 14c went 🟡 → 🔴:** the flag being on means a real buyer now depends on an expiry nudge nobody has ever seen run.
 - **Previously:** 2026-09-05 — a full-codebase audit: 1 critical throttle bypass, a critical data-loss path in force-delete, and three money bugs. 13 commits, since merged. ⚠️ `NUM_PROXIES=1` still cannot be verified from code; ROADMAP 16 has the check.
@@ -29,6 +29,34 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-06 (fourth session) — `ACTIVE_TASK.md`, and one escaped notification thread
+
+Added **`ACTIVE_TASK.md`** at the repo root: a spec handed down by the AI PM,
+naming Task A (signup password regex) and Task B (pass expiry nudge on
+WhatsApp). Both were **already done** in this branch's `b2d5dbe` and `01f95fd`,
+so this session verified rather than re-implemented, and recorded the result in
+the file's §5.
+
+**503 backend tests (2 skipped) · 49 web**, `makemigrations --check` clean. The
+503 matters: the entry below says 500, which was wrong — measured twice.
+
+The one real find is CLAUDE.md **trap #1**. `payments.tests_scan_checkout.
+CentrePayoutTests` posts to `/api/payment/payouts/mark-paid/` without patching
+`_notify_doctor_payout_async`, so the background thread ran during the suite and
+logged `push_to_hospital(1) failed: database table is locked: users_user`. It
+passed anyway — that is the shape of the flake: the thread's collision lands on
+whichever unrelated test is running when it finishes. Patched at class level
+(`@mock.patch('payments.views._notify_doctor_payout_async', ...)`); the re-run
+has zero `table is locked` and zero `graph.facebook.com` lines.
+
+⚠️ **Unchanged and still Vishnu's:** the `pass_expiring` Meta template is
+unsubmitted, so ROADMAP 14c's WhatsApp half remains inert. `ACTIVE_TASK.md`
+says COMPLETED about the code, not about delivery.
+
+Nothing pushed, no PR, no production anything touched.
 
 ---
 
