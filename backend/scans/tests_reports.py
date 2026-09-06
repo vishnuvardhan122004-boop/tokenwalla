@@ -24,6 +24,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from bookings.models import Booking
 from doctors.models import Doctor
 from hospitals.models import Hospital
+from notifications.models import WhatsAppLog
+from notifications.whatsapp import send_scan_report_ready
 from scans.models import Scan, ScanReport
 
 User = get_user_model()
@@ -262,3 +264,59 @@ class ScanReportNotifyTests(TestCase):
             self.client.post(f'/api/bookings/{self.booking.id}/reports/',
                              {'file': a_pdf()}, format='multipart')
         self.assertEqual(ScanReport.objects.count(), 1)
+
+
+class ScanReportWhatsAppTests(TestCase):
+    """The sender itself, not the dispatch.
+
+    `_notify_report_ready_async` swallows what this raises, so a broken sender
+    looks exactly like a working one from the endpoint: the message goes out
+    and no audit row is written. That is how a `WhatsAppLog.objects.create()`
+    with four non-existent kwargs survived — every test above patches the
+    thread, so nothing ever called this.
+    """
+
+    def setUp(self):
+        self.patient = User.objects.create(
+            username='p3', mobile='9000000820', first_name='Rahul')
+        self.centre = Hospital.objects.create(
+            name='Vijaya', city='Hindupur', mobile='9000000821',
+            status='active', password='x', kind=Hospital.SCAN_CENTER)
+        self.scan = Scan.objects.create(center=self.centre, name='MRI Brain', price=4500)
+        self.booking = Booking.objects.create(
+            user=self.patient, scan=self.scan, hospital=self.centre,
+            date=timezone.localdate(), slot='09:00 AM', token='TW-RPT-20',
+            status=Booking.COMPLETED)
+
+    def _send(self, success=True):
+        with mock.patch('notifications.whatsapp.send_template',
+                        return_value={'success': success, 'message_id': 'wamid.9',
+                                      'error': None if success else '132001'}) as st:
+            send_scan_report_ready(self.booking)
+        return st
+
+    def test_it_sends_the_report_template_and_logs_the_send(self):
+        st = self._send()
+        params = st.call_args.kwargs['params']
+        # No link: the report is medical PII and a WhatsApp message forwards.
+        self.assertNotIn('http', ' '.join(str(p) for p in params))
+        self.assertEqual(params, ['Rahul', 'MRI Brain', 'Vijaya', 'TW-RPT-20'])
+
+        log = WhatsAppLog.objects.get()
+        self.assertEqual(log.event_type, 'scan_report_ready')
+        self.assertEqual(log.status, 'sent')
+        self.assertEqual(log.booking, self.booking)
+        self.assertEqual(log.wa_message_id, 'wamid.9')
+
+    def test_a_refused_send_is_recorded_not_swallowed(self):
+        self._send(success=False)
+        log = WhatsAppLog.objects.get()
+        self.assertEqual(log.status, 'failed')
+        self.assertEqual(log.error, '132001')
+
+    def test_an_opted_out_patient_is_not_messaged(self):
+        self.patient.whatsapp_opt_in = False
+        self.patient.save(update_fields=['whatsapp_opt_in'])
+        st = self._send()
+        self.assertFalse(st.called)
+        self.assertFalse(WhatsAppLog.objects.exists())

@@ -635,9 +635,8 @@ def send_scan_report_ready(booking):
     )
     WhatsAppLog.objects.create(
         booking=booking,
-        template=settings.WHATSAPP_TEMPLATE_SCAN_REPORT,
-        to_mobile=booking.patient_display_mobile or user.mobile,
-        success=result['success'],
-        message_id=result.get('message_id') or '',
+        event_type='scan_report_ready',
+        status='sent' if result['success'] else 'failed',
+        wa_message_id=result.get('message_id') or '',
         error=result.get('error') or '',
     )
