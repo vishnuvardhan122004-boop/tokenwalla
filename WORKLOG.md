@@ -3,9 +3,10 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `docs/prod-flag-carve-out` on web — **`9f48104` is pushed and needs a PR**; everything else is merged. `origin/main` is `30d54c0` (PRs #54 and #55; #55 re-merged the already-landed `d8749c6` and changed no files). The audit branch `fix/reschedule-capacity-login-cap-perf` merged as #53 and is safe to delete locally and on `origin`. **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
-- **Latest commit at last update:** `9f48104` `docs/prod-flag-carve-out` (web/backend — **not yet merged**; `origin/main` is `30d54c0`, deployed, `PASS_ENABLED=True`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass; every pass sold is bought on the web)
-- **Last updated:** 2026-09-06 — **the ₹35 pass is back on sale** (`PASS_ENABLED=True`, set by Vishnu in the Railway dashboard at ~01:10 IST, budget question knowingly still open), the 2026-09-04/05 audit branch merged as **#53**, and CLAUDE.md gained a **feature-flag carve-out** as **#54**. `/ship` then caught a regression the audit branch was about to ship and found **ROADMAP 21** 🔴 — pending/rejected facilities have every provider publicly listed and bookable. **477 backend tests (2 skipped) · 47 web**, both baselines refreshed in the same commit. **ROADMAP 14c went 🟡 → 🔴:** the flag being on means a real buyer now depends on an expiry nudge nobody has ever seen run.
+- **Branch:** `fix/facility-status-provider-leak` on web — **not pushed**, 2 commits, **stacked on `docs/prod-flag-carve-out`** (cut from it, not from `main`, because all four files it touches differ between the two). Merge the doc branch first or the PR will show its commits too. `docs/prod-flag-carve-out` — **`9f48104` is pushed and needs a PR**; everything else is merged. `origin/main` is `30d54c0` (PRs #54 and #55; #55 re-merged the already-landed `d8749c6` and changed no files). The audit branch `fix/reschedule-capacity-login-cap-perf` merged as #53 and is safe to delete locally and on `origin`. **Do NOT delete** `develop`, which deploys to staging. Fully-merged local branches still worth clearing: web `feat/booking-notice`, `feat/provider-about-panel`, `feat/share-documents` and the six old `feat/scan-*` ones; app `feat/share-documents` and `claude/friendly-wilson-a0e0cf`.
+- **Latest commit at last update:** `d273dd9` `fix/facility-status-provider-leak` (web/backend — **not pushed, no PR yet**; `origin/main` is `30d54c0`, deployed, `PASS_ENABLED=True`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass; every pass sold is bought on the web)
+- **Last updated:** 2026-09-06 (second session) — **ROADMAP 21 is fixed** and **the refund idempotency rule now exists in the database**, not only in Python. **495 backend tests (2 skipped)** · 47 web unchanged — the new baseline is 477 + 18. ⚠️ **One pre-merge check is outstanding and needs Vishnu**: the refund migration adds a UNIQUE constraint to a live table and will fail on Railway if prod ever wrote two refunds for one payment — see below for the query. Nothing was pushed.
+- **Previously:** 2026-09-06 — **the ₹35 pass is back on sale** (`PASS_ENABLED=True`, set by Vishnu in the Railway dashboard at ~01:10 IST, budget question knowingly still open), the 2026-09-04/05 audit branch merged as **#53**, and CLAUDE.md gained a **feature-flag carve-out** as **#54**. `/ship` then caught a regression the audit branch was about to ship and found **ROADMAP 21** 🔴 — pending/rejected facilities have every provider publicly listed and bookable. **477 backend tests (2 skipped) · 47 web**, both baselines refreshed in the same commit. **ROADMAP 14c went 🟡 → 🔴:** the flag being on means a real buyer now depends on an expiry nudge nobody has ever seen run.
 - **Previously:** 2026-09-05 — a full-codebase audit: 1 critical throttle bypass, a critical data-loss path in force-delete, and three money bugs. 13 commits, since merged. ⚠️ `NUM_PROXIES=1` still cannot be verified from code; ROADMAP 16 has the check.
 - **Previously:** 2026-09-02 — the Appointment Pass shipped and was switched off the same day. Five web PRs (#47–#50) plus app #17. The day's real find was a refund hole — buy, redeem the free visit, cancel the paid one, keep both the money and the visit — closed in #48.
 
@@ -27,6 +28,124 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-06 (second session) — ROADMAP 21 closed, and refund idempotency taken down to the database
+
+Two unrelated slices, two commits, one branch. **Nothing pushed, no PR opened,
+no production anything touched.**
+
+| # | Change | Commit | Status |
+|---|---|---|---|
+| 1 | Pending/rejected facilities no longer leak their providers (ROADMAP 21) | `5015dc1` | ✅ done |
+| 2 | `Refund` gets two UniqueConstraints + migration `0014` | `d273dd9` | ✅ done, ⚠️ see the pre-merge check |
+| 3 | ROADMAP 21 written up, WORKLOG updated | this commit | ✅ done |
+
+### 1. ROADMAP 21 — the provider leak
+
+One filter in each of two querysets: `hospital__status='active'` in
+`DoctorViewSet.get_queryset`, `center__status='active'` in
+`ScanViewSet.get_queryset`. `HospitalListView` had filtered status since it was
+written; these two never did, so a `pending` or `rejected` facility kept every
+doctor and every scan in the public browse list while the facility itself was
+correctly hidden. `get_object()` runs through `get_queryset()`, so the detail
+routes closed with the lists — the guessable-id hole went with them, and
+`HospitalDetailView` was not touched, which is what the reverted half got wrong.
+
+**The one judgement call worth re-reading before changing it:** the filter is
+gated on `show_test_hospitals_to`, exactly like the `[TEST]` rule above it,
+rather than applied flat the way `HospitalListView` applies it. `HospitalListView`
+can afford flat because admins have their own endpoint (`/hospitals/admin/all/`).
+Doctors have no such sibling — `src/ADMIN/Hospitals.js` runs its list, its edit
+modal and both delete paths through the *same* queryset a patient browses, while
+listing pending and rejected facilities next to them. Flat would have emptied
+that screen and 404'd an admin out of cleaning up a rejected facility. The
+exemption gives a non-active facility's own staff nothing, because
+`HospitalLoginView` 403s them on status before it ever issues a token.
+
+**The question ROADMAP said had to be answered first — what happens to bookings
+already taken against a non-active facility — is answered: nothing happens.**
+Cards, token, queue position and the refund path all read `/api/bookings/`, and
+`BookingSerializer` carries `doctor_name` off the booking row rather than
+re-fetching. The single degradation is `MyBookings.js:248`, which re-fetches the
+doctor when the **reschedule** modal opens; it 404s now and the `catch` beside it
+swallows it, so the picker opens empty. Fails soft, and is arguably right — a
+facility that is no longer approved should not be taking new slots.
+
+13 tests in `hospitals/tests_facility_status_visibility.py`. **8 of them fail
+with either filter removed** (verified by removing them); the other 5 pin the
+admin exemption and the untouched active facility and pass in both directions on
+purpose.
+
+### 2. Refund idempotency, in the database
+
+`process_cancellation_refund` re-checks under `select_for_update()`, but that
+lock only serialises concurrent cancels reaching that one function. Migration
+`0014` adds `unique_payment_refund` and `unique_razorpay_refund_id`.
+
+**The task as written asked for `condition=Q(razorpay_refund_id__isnull=False)`
+and that would have been wrong** — worth recording, because it is the same trap
+`Payment.payment_id` already hit. The column is `blank=True` with no
+`null=True`, so an unissued id is `''` and *never* NULL. Conditioned on
+`isnull` the partial index matches **every** row, sweeps in every zero-pool
+refund (`pool <= 0` never calls the gateway, so the id stays blank) and dies on
+the second one. Written as non-blank instead — `~Q(razorpay_refund_id='')` —
+which is byte-for-byte the shape of `uniq_payment_payment_id_nonblank` from
+migration `0007`. A test pins it: two blank ids on different payments must both
+still write.
+
+Kept as Meta constraints on the ForeignKey rather than promoting it to a
+`OneToOneField`, because `refunds.py:150` reads `payment.refunds.first()` and
+needs the reverse manager.
+
+### ⚠️ Pre-merge check — needs Vishnu, cannot be done from a session
+
+`0014` adds a UNIQUE constraint to a table with live rows. Railway migrates as
+its own step, so **if two refunds were ever written against one payment the
+migration fails and the deploy stops there.** A session may not touch the prod
+database, so this was not verified — only reasoned:
+
+- `refunds.py:192` is the **only** place a `Refund` row is created anywhere in
+  the codebase.
+- The `payment.refunds.first()` idempotency check has been there since
+  `7b2a01c` (2026-07-28), i.e. from the day refunds shipped.
+- `select_for_update()` came 5 days later in `b8abb7b` (2026-08-02).
+
+So a duplicate requires two *concurrent* cancels of the same booking inside that
+2026-07-28 → 2026-08-02 window — which overlaps the Cashfree period that was
+reverted. Unlikely, not impossible. **Run this against prod before merging:**
+
+```sql
+SELECT payment_id, COUNT(*) FROM payments_refund GROUP BY payment_id HAVING COUNT(*) > 1;
+SELECT razorpay_refund_id, COUNT(*) FROM payments_refund
+WHERE razorpay_refund_id <> '' GROUP BY razorpay_refund_id HAVING COUNT(*) > 1;
+```
+
+Two empty results means `0014` applies cleanly. Any row back means stop and
+reconcile it by hand first — do not widen the constraint to make it fit.
+
+### Checks run
+
+- `python manage.py test` → **495 tests, OK (skipped=2)**. Baseline was 477 + 2,
+  and 477 + 18 new = 495, so nothing regressed.
+- `makemigrations --check --dry-run` → `No changes detected` (the CI gate).
+- `manage.py test -v 2 | grep -c graph.facebook.com` → **0**, so no notification
+  thread escaped the suite.
+- Frontend suite not run: **zero frontend files changed.**
+
+### API contract
+
+Additive-safe for installed app builds: **no shape, status or field changed.**
+What narrows is content — a non-active facility's providers stop being returned,
+and their detail routes 404 for patients. That is the bug being fixed, and both
+clients already handle an absent provider. No endpoint needed versioning.
+
+### Tomorrow's first move
+
+Run the two SQL checks above. If clean, merge `docs/prod-flag-carve-out` first
+(it is the base), then open the PR for this branch — the diff will read clean
+only in that order.
 
 ---
 

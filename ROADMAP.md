@@ -1841,7 +1841,7 @@ mobile app reads, so it is additive-or-versioned, not a free change.
 
 ---
 
-### 21. Pending/rejected facilities have their providers listed publicly 🔴 — found 2026-09-06 by /ship
+### 21. Pending/rejected facilities have their providers listed publicly ✅ — found 2026-09-06 by /ship, fixed 2026-09-06
 
 `HospitalListView` filters `status='active'`. **Neither `DoctorViewSet.get_queryset`
 nor `ScanViewSet.get_queryset` filters on the facility's status at all** — they
@@ -1872,6 +1872,39 @@ still needs their booking, their queue position and their refund path to work.
 Deliberately NOT bundled into the audit branch: that branch is additive and
 carries no behaviour change a patient can see, and this one is visible to
 patients on the public browse path.
+
+**Fixed 2026-09-06** on `fix/facility-status-provider-leak`. One filter in each
+of the two querysets — `hospital__status='active'` in
+`DoctorViewSet.get_queryset`, `center__status='active'` in
+`ScanViewSet.get_queryset`. `get_object()` runs through `get_queryset()`, so the
+detail routes closed with the lists and the id stopped being guessable, without
+touching `HospitalDetailView` — the half that was reverted for breaking the
+centre screens.
+
+**Gated on `show_test_hospitals_to`, not applied flat**, which is the one
+non-obvious part. `src/ADMIN/Hospitals.js` drives its doctor list (`/doctors/`),
+its edit modal (`openEdit`) and both delete paths through this very queryset,
+while listing pending and rejected facilities beside them from
+`/hospitals/admin/all/`. A flat filter empties that screen and 404s an admin out
+of cleaning up a rejected facility. Staff gain nothing from the exemption: a
+non-active facility's own account cannot authenticate at all, because
+`HospitalLoginView` 403s on status before it issues a token.
+
+**The question it had to answer first — what happens to bookings already taken
+against a facility that is not active — is: nothing.** Booking cards, the token,
+the queue position and the refund path all read `/api/bookings/`, and
+`BookingSerializer` carries `doctor_name` from the booking row itself rather
+than re-fetching the provider. The only reachable degradation is
+`MyBookings.js:248`, which re-fetches the doctor by id when the **reschedule**
+modal opens; it now 404s and is caught by the `catch` beside it, so the picker
+opens with no slots. That is arguably the correct answer anyway — a facility
+that is no longer approved should not be taking new slots — and it fails soft,
+unlike the `Promise.all` breakage that got the detail-endpoint half reverted.
+
+Covered by `hospitals/tests_facility_status_visibility.py` (13 tests). 8 of them
+fail with either filter removed; the other 5 are the ones that pin the admin
+exemption and the untouched active facility, and pass in both directions by
+design.
 
 ---
 
