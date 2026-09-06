@@ -28,7 +28,23 @@ This is the part that matters most — it's the file `/start` reads tomorrow.
 Add a dated section on top: what changed, what it fixed, what tests prove it.
 Keep it short — one line per change. Bump `Latest commit` and `Last updated`.
 
-## 4. Write tomorrow's first move
+## 4. Push it and hand over the PR link
+
+A commit sitting on an unpushed local branch is work that didn't happen — the
+next session checks out `main` and it vanishes from view.
+
+```bash
+git push origin $(git branch --show-current)
+```
+
+`gh` is not authenticated here, so you cannot open the PR yourself. Print:
+
+    https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...<branch>?expand=1
+
+Never push `main` or `develop` — both deploy. If the branch is already merged,
+say so and skip this step.
+
+## 5. Write tomorrow's first move
 
 End your response with exactly this, filled in:
 
