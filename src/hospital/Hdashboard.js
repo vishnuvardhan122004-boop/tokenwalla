@@ -106,6 +106,7 @@ const Hdashboard = () => {
   const [hospitalImagePreview, setHospitalImagePreview] = useState(null);
   const [submitting,           setSubmitting]           = useState(false);
   const [toggling,             setToggling]             = useState(new Set());
+  const [delaySaving,          setDelaySaving]          = useState(new Set());
   const [toast,                setToast]                = useState(null);
 
   const showToast = (msg, type = "success") => {
@@ -392,6 +393,29 @@ const Hdashboard = () => {
       showToast(err?.response?.data?.message || "Failed to update availability.", "error");
     } finally {
       setToggling(prev => { const s = new Set(prev); s.delete(docId); return s; });
+    }
+  };
+
+  // ── Doctor Running Late ──────────────────────────────────────────────────────
+  const DELAY_PRESETS = [10, 15, 20, 30];
+
+  const setDoctorDelay = async (doctor, minutes) => {
+    const docId = doctor.id;
+    setDelaySaving(prev => new Set(prev).add(docId));
+    try {
+      const { data } = await API.post(`/doctors/${docId}/set-delay/`, { delay_minutes: minutes });
+      setDoctors(prev => prev.map(d => d.id === docId
+        ? { ...d, running_delay_minutes: data.running_delay_minutes }
+        : d));
+      showToast(
+        minutes > 0
+          ? `Dr. ${doctor.name} marked ${minutes}m late. ${data.notified_count} patients notified.`
+          : `Dr. ${doctor.name}'s delay cleared.`
+      );
+    } catch (err) {
+      showToast(err?.response?.data?.message || "Failed to update delay.", "error");
+    } finally {
+      setDelaySaving(prev => { const s = new Set(prev); s.delete(docId); return s; });
     }
   };
 
@@ -1512,6 +1536,7 @@ const Hdashboard = () => {
                 )}
                 {doctors.map(doc => {
                   const isToggling = toggling.has(doc.id);
+                  const isDelaySaving = delaySaving.has(doc.id);
                   return (
                     <div key={doc.id} className="col-md-6 col-lg-4">
                       <div className="card border-0 shadow-sm h-100">
@@ -1579,6 +1604,35 @@ const Hdashboard = () => {
                                   Walk-in — no online booking
                                 </span>
                               )}
+                            </div>
+                          </div>
+                          <div className="mb-3">
+                            <small className="fw-semibold text-muted d-block mb-1">
+                              <i className="bi bi-alarm me-1" />Running Late
+                              {doc.running_delay_minutes > 0 && (
+                                <span className="text-warning-emphasis"> · +{doc.running_delay_minutes}m</span>
+                              )}
+                            </small>
+                            <div className="d-flex flex-wrap gap-1">
+                              {DELAY_PRESETS.map(m => (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  className={`btn btn-sm ${doc.running_delay_minutes === m ? "btn-warning" : "btn-outline-secondary"}`}
+                                  onClick={() => setDoctorDelay(doc, m)}
+                                  disabled={isDelaySaving}
+                                >
+                                  +{m}m
+                                </button>
+                              ))}
+                              <button
+                                type="button"
+                                className={`btn btn-sm ${!doc.running_delay_minutes ? "btn-outline-success" : "btn-outline-danger"}`}
+                                onClick={() => setDoctorDelay(doc, 0)}
+                                disabled={isDelaySaving || !doc.running_delay_minutes}
+                              >
+                                {isDelaySaving ? <span className="spinner-border spinner-border-sm" style={{ width: 12, height: 12, borderWidth: 2 }} /> : "Clear"}
+                              </button>
                             </div>
                           </div>
                           <div className="d-flex gap-2">
