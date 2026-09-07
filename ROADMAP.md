@@ -1377,10 +1377,15 @@ confirmed by opening a logged-in checkout and seeing the ₹25 / ₹35 options
 render. The budget question at the bottom of this item was **still open when he
 flipped it** — that is his call, taken knowingly, and it means the −₹11.84 is
 now live spend rather than a hypothetical. **Watch the first redeemed pass
-against that figure.** Note the flag is only readable by a logged-in patient:
-`GET /api/payment/pass/` is `IsAuthenticated`, so no unauthenticated probe can
-tell you whether the promotion is on — a change to this flag always ends with a
-human looking at a checkout screen.
+against that figure.**
+
+**Update, 2026-09-07:** `GET /api/payment/pass/` is `AllowAny` now, not
+`IsAuthenticated` — opened up so the landing page can advertise the offer
+pre-login (`feat/show-pass-to-everyone`, PR #68). `enabled` still reads the
+real `PASS_ENABLED` value for anonymous callers, so an unauthenticated probe
+*does* answer whether the promotion is on now — the line above claiming
+otherwise was true when written and is stale. Checkout itself is unchanged:
+buying or redeeming still requires login.
 
 **How it got here, end of 2026-09-02.** Built, reviewed, merged and deployed —
 then deliberately turned off for four days. Web PRs **#47, #48, #49, #50** and app PR **#17**
