@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `fix/otp-6-digit-input` on web, pushed to origin @ `dd2a24c`, **needs a PR** (`gh` still has no auth in a session — web UI or `gh auth login`). Compare link: https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...fix/otp-6-digit-input?expand=1. `fix/pass-web-visibility` merged since the last entry (PRs #60, #61). **Do NOT delete** `develop`, which deploys to staging.
-- **Latest commit at last update:** `dd2a24c` `fix/otp-6-digit-input` (web, **pushed, not merged**) · `470d1ed` `main` (web/backend — merged and deployed)
-- **Last updated:** 2026-09-07 — **patient registration OTP fixed**: the sign-up form's OTP field was capped at 4 digits while the backend always issues 6-digit codes, so no new patient could complete registration. Fixed in `profilecreate.js` (6-digit input, digit filtering, Verify-button gating) plus a stale "4-digit" placeholder in `ForgotPassword.js`; zero backend/API changes needed. **503 backend tests (2 skipped) · 52 web** (was 51, +1 from the new OTP test) — baseline refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end; see 2026-09-07 section below for the per-check breakdown.
+- **Branch:** `fix/otp-6-digit-input` on web, pushed to origin @ `d553884`, **needs a PR** (`gh` still has no auth in a session — web UI or `gh auth login`). Compare link: https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...fix/otp-6-digit-input?expand=1. `fix/pass-web-visibility` merged since the last entry (PRs #60, #61). **Do NOT delete** `develop`, which deploys to staging.
+- **Latest commit at last update:** `d553884` `fix/otp-6-digit-input` (web, **pushed, not merged**) · `470d1ed` `main` (web/backend — merged and deployed)
+- **Last updated:** 2026-09-07 — **patient registration OTP fixed**: the sign-up form's OTP field was capped at 4 digits while the backend always issues 6-digit codes, so no new patient could complete registration — this has been broken since the file's first commit, 2026-03-21. Fixed in `profilecreate.js` (6-digit input, digit filtering, Verify-button gating) plus a stale "4-digit" placeholder in `ForgotPassword.js`; zero backend/API changes needed. **503 backend tests (2 skipped) · 52 web** (was 51, +1 from the new OTP test) — baseline refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end; ROADMAP updated with the fix plus two new findings (see below). See the 2026-09-07 sections below for the per-check breakdown.
 - **Previously:** 2026-09-07 — **ROADMAP 14d**: the pass offer was invisible on `MyBookings.js` for non-holders, and the Pay button could fire before `/payment/pass/` resolved, letting a pass holder get charged full price in the gap. Both fixed, regression test added. 503 backend tests (2 skipped) · 51 web (was 49, +2 from the new test) — baselines refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end. ⚠️ ROADMAP 14c is unchanged, still 🔴, still needs Vishnu — untouched by this session.
 - **Previously:** 2026-09-06 (session wrap) — PR #58 merged: the pass expiry nudge's WhatsApp half, the signup password regex, `ACTIVE_TASK.md`, and one escaped test thread. 503 backend tests (2 skipped) · 49 web.
 - **Previously:** 2026-09-06 (second session) — ROADMAP 21 fixed and refund idempotency taken down to the database; 495 backend tests. ⚠️ its refund-migration pre-merge check is still outstanding.
@@ -31,6 +31,24 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-07 (session wrap) — OTP fix closed out, ROADMAP updated
+
+Closing the OTP session (detail in the section right below). `/ship` was
+already clean; this pass updates ROADMAP.md and hands off for tomorrow.
+
+- ROADMAP: OTP fix logged in **Done**; two new findings filed to **Next** — the
+  `/ship` secret-scan guard false-positive recurring, and an invalid local
+  `TWOFACTOR_API_KEY` blocking local OTP send. Top-of-file summary rewritten,
+  14d's line kept (unrelated, still pushed-not-merged).
+- No code changed in this pass — docs only. `d553884` on `fix/otp-6-digit-input`,
+  pushed, needs a PR — `gh` still has no auth in a session. (`fix/pass-web-visibility`,
+  waiting on a PR as of the last entry, is merged now — PRs #60/#61 — so this
+  is the only branch in that state.)
+- Not done: opening the PR, merging, or touching the invalid local
+  `TWOFACTOR_API_KEY` (Vishnu's `.env`, out of session scope).
 
 ---
 
