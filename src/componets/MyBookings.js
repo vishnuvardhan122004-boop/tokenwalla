@@ -51,10 +51,24 @@ function loadRazorpayScript() {
 
 // Local YYYY-MM-DD (avoid toISOString — it uses UTC and shifts the date back
 // a day for IST users at night, which would let a past date be picked).
-const today = (() => {
+export const today = (() => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 })();
+
+// "10:30 AM" + 15 -> "10:45 AM". Slot strings are always this hh:mm AM/PM
+// shape (see DEFAULT_SLOTS in Hdashboard.js); an unparseable one is returned
+// unchanged rather than shown as garbage.
+export function addMinutesToSlot(slot, minutes) {
+  const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(String(slot || '').trim());
+  if (!m) return slot;
+  let hour = parseInt(m[1], 10) % 12;
+  if (/pm/i.test(m[3])) hour += 12;
+  const dt = new Date(2000, 0, 1, hour, parseInt(m[2], 10) + minutes);
+  const outHour = String(dt.getHours() % 12 || 12).padStart(2, '0');
+  const outMin  = String(dt.getMinutes()).padStart(2, '0');
+  return `${outHour}:${outMin} ${dt.getHours() >= 12 ? 'PM' : 'AM'}`;
+}
 
 /**
  * The patient's WhatsApp opt-out. Lives here because the website has no profile
@@ -170,6 +184,29 @@ export default function MyBookings() {
   // Auto-refresh only when there are active bookings, pauses when tab hidden
   const hasActive = bookings.some(b => b.status === 'CONFIRMED' || b.status === 'IN_PROGRESS');
   useVisiblePolling(() => fetchBookings(true), 15000, hasActive);
+
+  // Doctor Running Late: { [doctorId]: running_delay_minutes }. Bookings carry
+  // only the doctor's id, not their live delay, so it's fetched separately for
+  // today's confirmed doctors — refetched on every bookings poll so a delay
+  // set mid-wait shows up within 15s, same as the queue position does.
+  const [doctorDelays, setDoctorDelays] = useState({});
+  useEffect(() => {
+    const ids = [...new Set(
+      bookings.filter(b => b.status === 'CONFIRMED' && b.date === today).map(b => b.doctor)
+    )].filter(Boolean);
+    if (!ids.length) return;
+    let alive = true;
+    Promise.all(ids.map(id => API.get(`/doctors/${id}/`).then(({ data }) => [id, data.running_delay_minutes]).catch(() => null)))
+      .then(pairs => {
+        if (!alive) return;
+        setDoctorDelays(prev => {
+          const next = { ...prev };
+          pairs.forEach(p => { if (p) next[p[0]] = p[1]; });
+          return next;
+        });
+      });
+    return () => { alive = false; };
+  }, [bookings]);
 
   const handleDownload = async (booking) => {
     // Prefer the booking's patient name (the beneficiary when booked for
@@ -651,6 +688,15 @@ export default function MyBookings() {
                         </div>
                       </div>
                     </div>
+
+                    {/* ── DOCTOR RUNNING LATE BANNER ── */}
+                    {booking.status === 'CONFIRMED' && booking.date === today && doctorDelays[booking.doctor] > 0 && (
+                      <div className="mb-unavail-banner">
+                        <i className="bi bi-exclamation-triangle-fill me-1" />
+                        {providerLabel(booking.doctor_name, booking.provider_kind)} is running ~{doctorDelays[booking.doctor]} mins late.
+                        {' '}Adjusted time: <del>{booking.slot}</del> → {addMinutesToSlot(booking.slot, doctorDelays[booking.doctor])}
+                      </div>
+                    )}
 
                     {/* ── QUEUE PANEL ── */}
                     {isActive && booking.queue_access && (
