@@ -24,7 +24,7 @@ async function submitWith(password) {
   await type('Full Name', 'Test Patient');
   await type('Mobile Number', '9876543210');
   await userEvent.click(screen.getByRole('button', { name: 'Get OTP' }));
-  await userEvent.type(await screen.findByPlaceholderText('4-digit OTP'), '1234');
+  await userEvent.type(await screen.findByPlaceholderText('6-digit OTP'), '123456');
   await userEvent.click(screen.getByRole('button', { name: /Verify OTP/ }));
   await screen.findAllByText(/Mobile verified/);   // the badge and the step-3 subtitle
   await type('Password', password);
@@ -46,4 +46,29 @@ test('a password with no digit is still refused before the request', async () =>
   await submitWith('abcdefgh');
   expect(await screen.findByText(/Min 6 chars/)).toBeInTheDocument();
   expect(API.post).not.toHaveBeenCalledWith('/auth/register/', expect.anything());
+});
+
+test('OTP field accepts 6 digits, strips non-digits, and gates the verify button', async () => {
+  API.post.mockImplementation((url) =>
+    url === '/auth/otp/request/' ? Promise.resolve({ data: {} }) : Promise.reject());
+
+  render(<MemoryRouter><Profilecreate /></MemoryRouter>);
+  await type('Full Name', 'Test Patient');
+  await type('Mobile Number', '9876543210');
+  await userEvent.click(screen.getByRole('button', { name: 'Get OTP' }));
+
+  const otpInput  = await screen.findByPlaceholderText('6-digit OTP');
+  const verifyBtn = screen.getByRole('button', { name: /Verify OTP/ });
+
+  await userEvent.type(otpInput, '12ab34');
+  expect(otpInput).toHaveValue('1234');
+  expect(verifyBtn).toBeDisabled();
+
+  await userEvent.type(otpInput, '56');
+  expect(otpInput).toHaveValue('123456');
+  expect(verifyBtn).toBeEnabled();
+
+  // A 7th keystroke is dropped, not appended.
+  await userEvent.type(otpInput, '7');
+  expect(otpInput).toHaveValue('123456');
 });

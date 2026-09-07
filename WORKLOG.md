@@ -3,9 +3,10 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `fix/pass-web-visibility` on web, pushed to origin @ `57fe00b`, **needs a PR** (`gh` still has no auth in a session — web UI or `gh auth login`). Compare link: https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...fix/pass-web-visibility?expand=1. Everything from the prior wrap is merged. **Do NOT delete** `develop`, which deploys to staging.
-- **Latest commit at last update:** `57fe00b` `fix/pass-web-visibility` (web, **pushed, not merged**) · `ee8e9dc` `main` (web/backend — merged and deployed, `PASS_ENABLED=True`) · `0dbe505` main (app — merged, NOT built; every pass sold is still bought on the web)
-- **Last updated:** 2026-09-07 — **ROADMAP 14d**: the pass offer was invisible on `MyBookings.js` for non-holders, and the Pay button could fire before `/payment/pass/` resolved, letting a pass holder get charged full price in the gap. Both fixed, regression test added. **503 backend tests (2 skipped) · 51 web** (was 49, +2 from the new test) — baselines refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end; see 2026-09-07 section below for the per-check breakdown. ⚠️ **ROADMAP 14c is unchanged, still 🔴, still needs Vishnu** — untouched by this session.
+- **Branch:** `fix/otp-6-digit-input` on web, pushed to origin @ `dd2a24c`, **needs a PR** (`gh` still has no auth in a session — web UI or `gh auth login`). Compare link: https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...fix/otp-6-digit-input?expand=1. `fix/pass-web-visibility` merged since the last entry (PRs #60, #61). **Do NOT delete** `develop`, which deploys to staging.
+- **Latest commit at last update:** `dd2a24c` `fix/otp-6-digit-input` (web, **pushed, not merged**) · `470d1ed` `main` (web/backend — merged and deployed)
+- **Last updated:** 2026-09-07 — **patient registration OTP fixed**: the sign-up form's OTP field was capped at 4 digits while the backend always issues 6-digit codes, so no new patient could complete registration. Fixed in `profilecreate.js` (6-digit input, digit filtering, Verify-button gating) plus a stale "4-digit" placeholder in `ForgotPassword.js`; zero backend/API changes needed. **503 backend tests (2 skipped) · 52 web** (was 51, +1 from the new OTP test) — baseline refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end; see 2026-09-07 section below for the per-check breakdown.
+- **Previously:** 2026-09-07 — **ROADMAP 14d**: the pass offer was invisible on `MyBookings.js` for non-holders, and the Pay button could fire before `/payment/pass/` resolved, letting a pass holder get charged full price in the gap. Both fixed, regression test added. 503 backend tests (2 skipped) · 51 web (was 49, +2 from the new test) — baselines refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end. ⚠️ ROADMAP 14c is unchanged, still 🔴, still needs Vishnu — untouched by this session.
 - **Previously:** 2026-09-06 (session wrap) — PR #58 merged: the pass expiry nudge's WhatsApp half, the signup password regex, `ACTIVE_TASK.md`, and one escaped test thread. 503 backend tests (2 skipped) · 49 web.
 - **Previously:** 2026-09-06 (second session) — ROADMAP 21 fixed and refund idempotency taken down to the database; 495 backend tests. ⚠️ its refund-migration pre-merge check is still outstanding.
 - **Previously:** 2026-09-06 — **the ₹35 pass is back on sale** (`PASS_ENABLED=True`, set by Vishnu in the Railway dashboard at ~01:10 IST, budget question knowingly still open), the 2026-09-04/05 audit branch merged as **#53**, and CLAUDE.md gained a **feature-flag carve-out** as **#54**. `/ship` then caught a regression the audit branch was about to ship and found **ROADMAP 21** 🔴 — pending/rejected facilities have every provider publicly listed and bookable. **477 backend tests (2 skipped) · 47 web**, both baselines refreshed in the same commit. **ROADMAP 14c went 🟡 → 🔴:** the flag being on means a real buyer now depends on an expiry nudge nobody has ever seen run.
@@ -30,6 +31,53 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-07 (second session) — Patient registration OTP: 4 digits → 6
+
+Bug report from Vishnu: the OTP sent to patients is always 6 digits
+(`secrets.randbelow(900000) + 100000` in `backend/users/auth_views.py`), but
+the registration form's OTP field was capped at 4 — no new patient could ever
+complete sign-up.
+
+**What it fixes (frontend-only, no backend or API contract change):**
+- `profilecreate.js` — OTP input `maxLength` 4 → 6, added digit-only
+  filtering + truncation (matching the pattern already used in
+  `ForgotPassword.js` / `Hprofile.js` / `Usercreate.js`), fixed the
+  "4-digit" copy in two places, and the Verify button now disables until
+  `otp.length === 6` (previously never disabled at all).
+- `ForgotPassword.js` — that field's `maxLength`/logic were already correct
+  at 6; only the "Enter 4-digit OTP" placeholder was stale.
+- Backend confirmed to need no change: `verify_otp`'s regex (`\d{4,8}`)
+  already accepts 6-digit codes.
+
+**Gate results:**
+
+| Gate | Result |
+|---|---|
+| `python manage.py test` | 503 passed, 2 skipped — unchanged |
+| `CI=true npx react-scripts test --watchAll=false` | 52 passed, 11 suites — was 51, +1 new |
+| `makemigrations --check --dry-run` | No changes detected (no backend touched) |
+| `npm run build` | Compiles clean |
+| Secrets/debris scan | Clean — reviewed the diff directly; 3 frontend files only |
+| Money paths / API contract | N/A — zero backend or `/api/*` changes |
+
+Also: mid-session this checkout got switched from `fix/otp-6-digit-input` to
+`main` by another process sharing the same working directory (a plain
+`checkout` in the reflog, not a reset — nothing lost). Switched back and
+re-verified the commit and file contents before continuing; see
+`parallel-sessions-share-one-worktree` in session memory.
+
+**Found, not fixed — flagged to Vishnu:** local OTP send 500s
+(`POST /api/auth/otp/request/` → "Invalid API Key") because `backend/.env`'s
+`TWOFACTOR_API_KEY` holds a present-but-invalid value, so `send_otp()` takes
+the live-send branch instead of falling back to its built-in dev-mode,
+console-printed OTP. Blocks any local OTP testing on this machine today,
+unrelated to this fix — needs a valid key or a blanked-out one.
+
+**Pushed, not merged.** `dd2a24c` on `fix/otp-6-digit-input`. Compare link is
+in the header above.
 
 ---
 

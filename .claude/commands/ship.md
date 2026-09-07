@@ -13,7 +13,7 @@ CI=true npx react-scripts test --watchAll=false
 ```
 
 Paste the real pass/fail counts. Baseline as of 2026-09-07: **503 backend (2
-skipped), 51 frontend**. If either number dropped, something got deleted; say
+skipped), 52 frontend**. If either number dropped, something got deleted; say
 so. If it rose, update this line in the same PR — a stale baseline defeats the
 check.
 

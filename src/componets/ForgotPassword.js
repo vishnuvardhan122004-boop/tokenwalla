@@ -271,7 +271,7 @@ export default function ForgotPassword({ type = 'patient' }) {
                 <label htmlFor="fp-otp">OTP from Text Message</label>
                 <div className="fp-wrap">
                   <span className="fp-icon"><i className="bi bi-123 me-1" /></span>
-                  <input className="fp-input" type="text" id="fp-otp" placeholder="Enter 4-digit OTP"
+                  <input className="fp-input" type="text" id="fp-otp" placeholder="Enter 6-digit OTP"
                     value={otp} onChange={e => setOtp(e.target.value.replace(/\D/,'').slice(0,6))} maxLength={6} />
                 </div>
               </div>
