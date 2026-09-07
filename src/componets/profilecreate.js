@@ -122,7 +122,7 @@ export default function Profilecreate() {
             <div className="auth-features">
               {[
                 { icon: 'bi-1-circle', title: 'Enter your details',    desc: 'Name, mobile number and password'           },
-                { icon: 'bi-2-circle', title: 'Verify mobile via OTP', desc: "We'll send a 4-digit code to your number"   },
+                { icon: 'bi-2-circle', title: 'Verify mobile via OTP', desc: "We'll send a 6-digit code to your number"   },
                 { icon: 'bi-3-circle', title: 'Start booking',         desc: 'Find doctors and book your first appointment' },
               ].map((f, i) => (
                 <div className="auth-feature" key={i}>
@@ -198,8 +198,8 @@ export default function Profilecreate() {
                 <div className="auth-input-wrap">
                   <span className="auth-input-icon"><i className="bi bi-123 me-1" /></span>
                   <input
-                    className="auth-input" type="text" placeholder="4-digit OTP"
-                    value={otp} onChange={e => setOtp(e.target.value)} maxLength={4}
+                    className="auth-input" type="text" placeholder="6-digit OTP"
+                    value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6}
                   />
                 </div>
                 <button
@@ -209,9 +209,11 @@ export default function Profilecreate() {
                     border:'1px solid var(--color-success-border)',
                     background:'var(--color-success-bg)', color:'var(--color-success-text)',
                     fontFamily:'DM Sans,sans-serif', fontSize:14, fontWeight:600,
-                    cursor:'pointer', transition:'all 0.15s',
+                    cursor: otp.length === 6 ? 'pointer' : 'not-allowed',
+                    opacity: otp.length === 6 ? 1 : 0.5, transition:'all 0.15s',
                   }}
                   onClick={verifyOTP}
+                  disabled={otp.length !== 6}
                 >
                   Verify OTP →
                 </button>
