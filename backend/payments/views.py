@@ -48,9 +48,9 @@ from payments.razorpay_utils import (
 )
 # Server-side fee math — the client is never trusted for booking amounts.
 from payments.fees import (
-    compute_fee_breakdown, pass_eligible,
+    compute_fee_breakdown,
     SAC_CODE, GST_RATE, PASS_PRICE, PASS_BOOKINGS, PASS_DAYS,
-    PASS_BUY, PASS_REDEEM,
+    PASS_BUY, PASS_REDEEM, FULL,
 )
 from payments.pass_utils import PassUnavailable, active_pass, serialize_pass
 
@@ -475,18 +475,35 @@ class CreateOrderView(APIView):
         # buying a second visit's service fee inside 30 days. Opt-in per
         # checkout — an older client that never sends the flag is unaffected.
         buy_pass = bool(request.data.get('buyPass') or request.data.get('buy_pass'))
-        if buy_pass:
-            if not settings.PASS_ENABLED:
-                return Response({'message': 'The Appointment Pass is not on sale right now.'},
-                                status=400)
-            if not pass_eligible(collection_mode):
-                return Response(
-                    {'message': 'The Appointment Pass covers the service fee only, so it '
-                                'is not available for this doctor.'},
-                    status=400)
+        if buy_pass and not settings.PASS_ENABLED:
+            return Response({'message': 'The Appointment Pass is not on sale right now.'},
+                            status=400)
 
-        breakdown = compute_fee_breakdown(doctor.fee, collection_mode,
-                                          PASS_BUY if buy_pass else None)
+        # Spending a credit at a FULL doctor. The pass still waives only the
+        # SERVICE fee — the consultation fee is charged through checkout like
+        # any other FULL booking, which is what makes this a real payment
+        # rather than the ₹0 RedeemPassView flow (SERVICE_ONLY only; a FULL
+        # doctor there is refused and pointed here).
+        redeem_pass = bool(request.data.get('redeemPass') or request.data.get('redeem_pass'))
+        if buy_pass and redeem_pass:
+            return Response({'message': 'Choose either buying or spending a pass, not both.'},
+                            status=400)
+        if redeem_pass:
+            if not settings.PASS_ENABLED:
+                return Response({'message': 'The Appointment Pass is not available right now.'},
+                                status=400)
+            if collection_mode != FULL:
+                return Response(
+                    {'message': 'Use /api/payment/pass/redeem/ for this doctor — no '
+                                'payment is needed.'},
+                    status=400)
+            if active_pass(request.user) is None:
+                return Response(
+                    {'message': 'You have no visits left on an Appointment Pass.'},
+                    status=409)
+
+        pass_action = PASS_BUY if buy_pass else (PASS_REDEEM if redeem_pass else None)
+        breakdown = compute_fee_breakdown(doctor.fee, collection_mode, pass_action)
         order_id  = f'tw_{uuid.uuid4().hex}'
         try:
             order = create_order(
@@ -499,7 +516,7 @@ class CreateOrderView(APIView):
                     'doctor_id':  str(doctor.id),
                     # Server-written, like every other tag here: verify reads
                     # the pass off the ORDER, never off what the client re-sends.
-                    'pass':       'buy' if buy_pass else '',
+                    'pass':       'buy' if buy_pass else ('redeem' if redeem_pass else ''),
                     # The full consultation fee (verify re-derives the online vs
                     # offline split from `collection_mode`, so store the raw fee).
                     'doctor_fee': str(doctor.fee),
@@ -659,11 +676,13 @@ class VerifyPaymentView(APIView):
                             status=400)
 
         # The pass, like the doctor and the payer, is whatever the ORDER says.
-        buy_pass  = (tags.get('pass') == 'buy')
+        buy_pass    = (tags.get('pass') == 'buy')
+        redeem_pass = (tags.get('pass') == 'redeem')
+        pass_action = PASS_BUY if buy_pass else (PASS_REDEEM if redeem_pass else None)
         breakdown = compute_fee_breakdown(
             tags.get('doctor_fee') or 0,
             tags.get('collection_mode') or 'FULL',
-            PASS_BUY if buy_pass else None,
+            pass_action,
         )
         # The amount actually captured must match the split we computed —
         # otherwise the doctor's fee changed mid-checkout or the amount was
@@ -674,12 +693,31 @@ class VerifyPaymentView(APIView):
                          order_id, amount_rupees, breakdown['final_amount'])
             return Response({'success': False, 'message': 'Payment amount mismatch.'}, status=400)
 
+        # A paid redemption (FULL doctor) spends a credit just like
+        # RedeemPassView does — only here real money has already been captured
+        # for the consultation fee. The pass must still be there at verify
+        # time; it may have been spent, expired or voided in the gap between
+        # opening checkout and the payment clearing. Unlike the ₹0 path, money
+        # has moved, so a missing pass is refunded rather than simply refused.
+        appointment_pass = None
+        if redeem_pass:
+            appointment_pass = active_pass(request.user)
+            if appointment_pass is None:
+                return _refund_unfulfillable_booking(
+                    payment_id=payment_id,
+                    amount_inr=int(round(float(amount_rupees))),
+                    breakdown=breakdown,
+                    reason=PassUnavailable('Your Appointment Pass has no visits left.'),
+                    user_id=request.user.id,
+                )
+
         return self._handle_new_booking(
             request, booking_data, payment_id, order_id,
             amount_inr=int(round(float(breakdown['final_amount']))),
             # Every booking now includes live queue access — it's part of the
             # service fee, not a separate ₹15 upgrade any more.
             queue_access=True, breakdown=breakdown, buy_pass=buy_pass,
+            appointment_pass=appointment_pass,
         )
 
     # ── Handler: new appointment booking ─────────────────────────────────────
@@ -896,11 +934,19 @@ class VerifyPaymentView(APIView):
             })
 
         except PassUnavailable as exc:
-            # Only reachable from RedeemPassView: nothing was captured for a
-            # redemption, so there is nothing to refund. Must be caught above
-            # the generic handler, and never routed to the refund path.
             logger.info('Pass redemption refused for user %s: %s', request.user.id, exc.message)
-            return Response({'success': False, 'message': exc.message}, status=409)
+            # RedeemPassView's ₹0 path (payment_id blank): nothing was
+            # captured, so there is nothing to refund.
+            if not payment_id:
+                return Response({'success': False, 'message': exc.message}, status=409)
+            # A FULL-doctor paid redemption: the consultation fee was already
+            # captured before this transaction opened, and the pass turned out
+            # to be gone (spent elsewhere, expired, voided) by the time it ran.
+            # The patient paid — give it back, same as an oversold slot.
+            return _refund_unfulfillable_booking(
+                payment_id=payment_id, amount_inr=amount_inr, breakdown=breakdown,
+                reason=exc, user_id=request.user.id,
+            )
         except SlotUnavailable as exc:
             # A pass redemption captured nothing, so there is nothing to give
             # back — and routing it through the refund path would log an
@@ -1118,7 +1164,11 @@ class RedeemPassView(VerifyPaymentView):
     single most dangerous duplication in this repo. `post` is fully overridden —
     nothing of the payment path runs here.
 
-    Eligibility is re-checked server-side (pass active, doctor service-only,
+    SERVICE_ONLY doctors only — a FULL doctor still owes a consultation fee, so
+    that redemption is a real, paid checkout (see _create_booking_order /
+    VerifyPaymentView's `redeemPass` handling), not this endpoint.
+
+    Eligibility is re-checked server-side (pass active, doctor not FULL,
     feature on). The client's opinion decides nothing.
     """
     permission_classes = [IsAuthenticated]
@@ -1141,13 +1191,16 @@ class RedeemPassView(VerifyPaymentView):
         except (Doctor.DoesNotExist, ValueError, TypeError):
             return Response({'success': False, 'message': 'Doctor not found.'}, status=404)
 
-        # A pass covers the SERVICE fee only. At a FULL doctor the consultation
-        # fee would still be payable, which is a paid checkout, not a redemption.
-        if not pass_eligible(doctor.payment_collection_mode):
+        # A pass covers the SERVICE fee only. This endpoint only ever handles
+        # the ₹0 case (pass_eligible no longer gates that — it's universal
+        # now), so a FULL doctor is refused here and pointed at checkout,
+        # where /payment/create-order/ with redeemPass=true charges the
+        # consultation fee through the normal Razorpay flow instead.
+        if doctor.payment_collection_mode == FULL:
             return Response(
                 {'success': False,
-                 'message': 'This doctor collects the consultation fee online, so a pass '
-                            'visit cannot be used here.'},
+                 'message': 'This doctor collects the consultation fee online — pay via '
+                            'checkout to use your pass on this visit.'},
                 status=400)
 
         ap = active_pass(request.user)

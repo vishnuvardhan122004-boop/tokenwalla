@@ -111,10 +111,28 @@ class PassFeeMathTests(TestCase):
         self.assertEqual(compute_fee_breakdown(200, 'SERVICE_ONLY')['final_amount'],
                          Decimal('25.37'))
 
-    def test_only_service_only_providers_are_eligible(self):
+    def test_pass_eligibility_is_universal(self):
         self.assertTrue(pass_eligible('SERVICE_ONLY'))
         self.assertTrue(pass_eligible(''))          # blank ⇒ service only
-        self.assertFalse(pass_eligible('FULL'))
+        self.assertTrue(pass_eligible('FULL'))
+
+    def test_buying_a_pass_on_a_full_doctor_adds_it_to_the_consultation_fee(self):
+        # The service fee is still ₹35 flat — a FULL doctor's consultation fee
+        # rides alongside it, never replaced by it.
+        b = compute_fee_breakdown(200, 'FULL', PASS_BUY)
+        self.assertEqual(b['final_amount'], Decimal('235.00'))       # 200 + 35
+        self.assertEqual(b['doctor_fee'], Decimal('200.00'))
+        self.assertEqual(b['offline_doctor_fee'], Decimal('0.00'))
+
+    def test_redeeming_on_a_full_doctor_still_charges_the_consultation_fee(self):
+        # Only the SERVICE fee is waived by the pass — the consultation fee is
+        # charged online exactly as it is on any other FULL booking.
+        b = compute_fee_breakdown(200, 'FULL', PASS_REDEEM)
+        self.assertEqual(b['final_amount'], Decimal('200.00'))
+        self.assertEqual(b['doctor_fee'], Decimal('200.00'))
+        self.assertEqual(b['platform_fee'], Decimal('0.00'))
+        self.assertEqual(b['gateway_fee'], Decimal('0.00'))
+        self.assertEqual(b['gst_amount'], Decimal('0.00'))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -144,14 +162,17 @@ class BuyPassTests(PassWorldMixin, TestCase):
         self.assertEqual(r.json()['breakdown']['final_amount'], '25.37')
         self.assertEqual(mock_create.call_args.kwargs['tags']['pass'], '')
 
-    @mock.patch('payments.views.create_order')
-    def test_full_doctor_cannot_sell_a_pass(self, mock_create):
+    @mock.patch('payments.views.create_order',
+                return_value={'order_id': 'order_pass_full', 'key': 'rzp_test_x'})
+    def test_a_full_doctor_can_buy_a_pass_priced_fee_plus_35(self, mock_create):
         self.doctor.payment_collection_mode = Doctor.COLLECT_FULL
         self.doctor.save(update_fields=['payment_collection_mode'])
         r = self.client.post('/api/payment/create-order/',
                              {'doctorId': self.doctor.id, 'buyPass': True}, format='json')
-        self.assertEqual(r.status_code, 400)
-        mock_create.assert_not_called()
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()['breakdown']['final_amount'], '235.00')
+        self.assertEqual(mock_create.call_args.kwargs['amount_rupees'], Decimal('235.00'))
+        self.assertEqual(mock_create.call_args.kwargs['tags']['pass'], 'buy')
 
     @override_settings(PASS_ENABLED=False)
     @mock.patch('payments.views.create_order')
@@ -194,6 +215,30 @@ class BuyPassTests(PassWorldMixin, TestCase):
         self.assertEqual(booking.payment.final_amount, Decimal('35.00'))
         self.assertEqual(booking.payment.platform_fee, Decimal('28.16'))
         self.assertEqual(r.json()['pass']['remaining'], 1)
+
+    @mock.patch('payments.views.confirm_order_paid')
+    def test_verify_mints_a_pass_on_a_full_doctor_with_the_fee_charged(self, mock_confirm):
+        self.doctor.payment_collection_mode = Doctor.COLLECT_FULL
+        self.doctor.save(update_fields=['payment_collection_mode'])
+        mock_confirm.return_value = (True, 'rzp_pay_pass_full', Decimal('235.00'),
+                                     {'plan': 'booking', 'doctor_fee': '200',
+                                      'user_id': str(self.user.id),
+                                      'collection_mode': 'FULL', 'pass': 'buy'})
+        r = self.client.post('/api/payment/verify/', {
+            'order_id': 'order_pass_full',
+            'booking': {'doctorId': self.doctor.id, 'date': FUTURE_DATE, 'slot': '09:00 AM'},
+        }, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+
+        ap = AppointmentPass.objects.get()
+        self.assertEqual(ap.used_bookings, 1)
+        booking = Booking.objects.get()
+        self.assertEqual(booking.appointment_pass_id, ap.id)
+        # The consultation fee was charged in full; only the service fee was
+        # replaced by the pass price.
+        self.assertEqual(booking.payment.doctor_fee, Decimal('200.00'))
+        self.assertEqual(booking.payment.platform_fee, Decimal('28.16'))
+        self.assertEqual(booking.payment.final_amount, Decimal('235.00'))
 
     @mock.patch('payments.views.confirm_order_paid')
     def test_a_client_cannot_claim_a_pass_the_order_never_bought(self, mock_confirm):
@@ -321,6 +366,91 @@ class RedeemPassTests(PassWorldMixin, TestCase):
                       {'doctorId': self.doctor.id, 'date': FUTURE_DATE, 'slot': '09:00 AM'},
                       format='json')
         self.assertIn(r.status_code, (401, 403))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Spending it on a FULL doctor — a real, paid checkout for the consultation
+# fee, never the ₹0 RedeemPassView flow above.
+# ─────────────────────────────────────────────────────────────────────────────
+@override_settings(PASS_ENABLED=True)
+class RedeemPassOnFullDoctorTests(PassWorldMixin, TestCase):
+    def setUp(self):
+        self.make_actors(fee=200, mode=Doctor.COLLECT_FULL)
+
+    @mock.patch('payments.views.create_order')
+    def test_the_free_endpoint_refuses_a_full_doctor(self, mock_create):
+        self.give_pass(used=1)
+        r = self.client.post('/api/payment/pass/redeem/',
+                             {'doctorId': self.doctor.id, 'date': FUTURE_DATE,
+                              'slot': '09:00 AM'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(Booking.objects.exists())
+        mock_create.assert_not_called()
+
+    @mock.patch('payments.views.create_order')
+    def test_create_order_refuses_without_an_active_pass(self, mock_create):
+        r = self.client.post('/api/payment/create-order/',
+                             {'doctorId': self.doctor.id, 'redeemPass': True}, format='json')
+        self.assertEqual(r.status_code, 409)
+        mock_create.assert_not_called()
+
+    @mock.patch('payments.views.create_order',
+                return_value={'order_id': 'order_redeem_full', 'key': 'rzp_test_x'})
+    def test_create_order_prices_just_the_consultation_fee(self, mock_create):
+        self.give_pass(used=1)
+        r = self.client.post('/api/payment/create-order/',
+                             {'doctorId': self.doctor.id, 'redeemPass': True}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()['breakdown']['final_amount'], '200.00')
+        self.assertEqual(mock_create.call_args.kwargs['amount_rupees'], Decimal('200.00'))
+        self.assertEqual(mock_create.call_args.kwargs['tags']['pass'], 'redeem')
+
+    @mock.patch('payments.views._dispatch_booking_notifications', lambda b: None)
+    @mock.patch('payments.views.confirm_order_paid')
+    def test_verify_spends_the_credit_and_charges_only_the_consultation_fee(self, mock_confirm):
+        ap = self.give_pass(used=1)
+        mock_confirm.return_value = (True, 'rzp_pay_redeem_full', Decimal('200.00'),
+                                     {'plan': 'booking', 'doctor_fee': '200',
+                                      'user_id': str(self.user.id),
+                                      'collection_mode': 'FULL', 'pass': 'redeem'})
+        r = self.client.post('/api/payment/verify/', {
+            'order_id': 'order_redeem_full',
+            'booking': {'doctorId': self.doctor.id, 'date': FUTURE_DATE, 'slot': '09:00 AM'},
+        }, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+
+        booking = Booking.objects.get()
+        self.assertEqual(booking.appointment_pass_id, ap.id)
+        self.assertEqual(booking.payment.doctor_fee, Decimal('200.00'))
+        self.assertEqual(booking.payment.platform_fee, Decimal('0.00'))
+        self.assertEqual(booking.payment.final_amount, Decimal('200.00'))
+        ap.refresh_from_db()
+        self.assertEqual(ap.used_bookings, 2)
+        self.assertEqual(r.json()['pass']['remaining'], 0)
+
+    @mock.patch('payments.views._dispatch_booking_notifications', lambda b: None)
+    @mock.patch('payments.views.confirm_order_paid')
+    def test_a_pass_gone_by_verify_time_is_refunded_not_just_refused(self, mock_confirm):
+        # Real money was already captured for the consultation fee by the time
+        # verify runs. If the pass has since been fully spent (another tab,
+        # another visit), refusing without a refund would keep the patient's
+        # money for a visit nobody is getting.
+        self.give_pass(used=2)   # nothing left by the time verify runs
+        mock_confirm.return_value = (True, 'rzp_pay_redeem_full2', Decimal('200.00'),
+                                     {'plan': 'booking', 'doctor_fee': '200',
+                                      'user_id': str(self.user.id),
+                                      'collection_mode': 'FULL', 'pass': 'redeem'})
+        with mock.patch('payments.views.refund_payment',
+                        return_value={'id': 'rfnd_pass'}) as mock_refund:
+            r = self.client.post('/api/payment/verify/', {
+                'order_id': 'order_redeem_full2',
+                'booking': {'doctorId': self.doctor.id, 'date': FUTURE_DATE, 'slot': '09:00 AM'},
+            }, format='json')
+        self.assertEqual(r.status_code, 409, r.content)
+        self.assertTrue(r.json().get('refunded'))
+        mock_refund.assert_called_once()
+        self.assertEqual(mock_refund.call_args.args[:2], ('rzp_pay_redeem_full2', Decimal('200.00')))
+        self.assertFalse(Booking.objects.exists())
 
 
 # ─────────────────────────────────────────────────────────────────────────────

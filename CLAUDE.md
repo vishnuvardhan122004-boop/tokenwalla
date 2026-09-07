@@ -182,24 +182,40 @@ salaried doctor's money goes to their hospital) and *on which rail*
   predate the field, so a legacy in-flight order reconciles instead of being
   rejected after capture.)
 - **The Appointment Pass** (`PASS_ENABLED`, ₹35 / 2 visits / 30 days) waives the
-  SERVICE fee only, never a consultation fee, and is sold and spent **only where
-  `pass_eligible(collection_mode)` is true** (i.e. not `FULL`). That restriction
-  is what makes a redemption a ₹0 booking with no gateway call and no payout
-  owed — widening it to `FULL` doctors means a second, *paid* redemption path.
-  A credit is taken inside the booking transaction under `select_for_update()`,
-  never before it. Cancelling a redeemed visit returns the credit; cancelling
-  the booking that BOUGHT the pass voids the remaining credits, because that
-  money is refunded — remove that and the pass is free money.
+  SERVICE fee only, never a consultation fee, and **`pass_eligible` is
+  universal — every `collection_mode` qualifies** (changed 2026-09-07; a
+  `FULL` doctor was refused in v1 because that made a redemption always a ₹0
+  booking with no gateway call and no payout owed). At a `SERVICE_ONLY`
+  provider it still is exactly that. At a `FULL` provider a redemption is a
+  **second, paid redemption path**: the consultation fee is charged through
+  the normal Razorpay checkout for `doctor_fee` alone (order tag `pass:
+  'redeem'`, priced by `compute_fee_breakdown(..., PASS_REDEEM)`), never the
+  ₹0 `RedeemPassView` — that endpoint still refuses a `FULL` doctor outright
+  and points the client at checkout instead. Money already captured there
+  means a pass that turns out to be gone by verify time (spent elsewhere,
+  expired, voided) is refunded, not just refused — see the `PassUnavailable`
+  branch in `_handle_new_booking` that checks `payment_id` before deciding
+  which. A credit is taken inside the booking transaction under
+  `select_for_update()`, never before it, in both paths. Cancelling a redeemed
+  visit returns the credit; cancelling the booking that BOUGHT the pass voids
+  the remaining credits, because that money is refunded — remove that and the
+  pass is free money.
 - **A pass purchase only refunds what nobody has spent** (`refunds.
   unused_pass_share`). ₹35 buys two visits' service fee, so refunding the whole
   tier while the free visit still stands pays back money for a visit we are
   still going to deliver — buy, redeem, cancel the paid one, keep the free one.
   The pool scales by `unused ÷ total_bookings`; a CANCELLED sibling is not
   consumed, a NO_SHOW is. Don't "simplify" this back to the flat platform fee.
-- **A pass visit costs ₹0, so the refund line alone is never the whole story.**
-  Cancellation push and WhatsApp both take `pass_result` and render
-  `pass_utils.cancellation_line` — without it the patient is told "No refund was
-  due on this booking" and nothing about the credit going back.
+- **A `SERVICE_ONLY` pass visit costs ₹0 — a `FULL` one still costs the
+  consultation fee — so the refund line alone is never the whole story either
+  way.** Cancellation push and WhatsApp both take `pass_result` and render
+  `pass_utils.cancellation_line` alongside whatever `refund_info` says; without
+  the pass line a `SERVICE_ONLY` cancellation is told "No refund was due on
+  this booking" and nothing about the credit going back, and a `FULL` one is
+  told about the consultation-fee refund but not that the visit is back on the
+  pass. Both notification functions already combine the two lines when both
+  apply — that generic handling is why the `FULL` paid-redemption path needed
+  no changes here.
 - Gateway fee and GST are **never refunded** (the gateway doesn't return them).
 - Idempotency and locking on the money paths are load-bearing. `Payment` has a
   partial unique index on non-blank `payment_id`; refunds, absence adjustments,

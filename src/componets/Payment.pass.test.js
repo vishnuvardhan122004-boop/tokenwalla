@@ -76,16 +76,36 @@ test('choosing the pass repriced the button to ₹35', async () => {
   expect(await screen.findByRole('button', { name: /Pay ₹35.00/ })).toBeInTheDocument();
 });
 
-test('a doctor who collects the full fee online is never offered one', async () => {
-  serve({ doctor: {
-    fee: 200, payment_collection_mode: 'FULL',
-    fee_breakdown: { ...SERVICE_ONLY_DOCTOR.fee_breakdown,
-                     doctor_fee: '200.00', offline_doctor_fee: '0.00',
-                     collection_mode: 'FULL', final_amount: '225.37' },
-  } });
+const FULL_DOCTOR = {
+  fee: 200, payment_collection_mode: 'FULL',
+  fee_breakdown: { ...SERVICE_ONLY_DOCTOR.fee_breakdown,
+                   doctor_fee: '200.00', offline_doctor_fee: '0.00',
+                   collection_mode: 'FULL', final_amount: '225.37' },
+};
+
+test('a doctor who collects the full fee online is offered the pass too, priced fee + 35', async () => {
+  serve({ doctor: FULL_DOCTOR });
   show();
   await screen.findByRole('button', { name: /Pay ₹225.37/ });
-  expect(screen.queryByText(/Appointment Pass/)).not.toBeInTheDocument();
+  expect(screen.getByText(/Appointment Pass/)).toBeInTheDocument();
+
+  const option = await screen.findByRole('radio', { checked: false });
+  await userEvent.click(option);
+  // Doctor Consultation ₹200 + Appointment Pass ₹35 = ₹235 — never just ₹35,
+  // which would mean the consultation fee was silently waived too.
+  expect(await screen.findByRole('button', { name: /Pay ₹235.00/ })).toBeInTheDocument();
+  expect(screen.getByText(/Doctor Consultation: ₹200.00 \+ Appointment Pass: ₹35.00 = Total: ₹235.00/))
+    .toBeInTheDocument();
+});
+
+test('holding a pass on a FULL doctor still charges the consultation fee, never ₹0', async () => {
+  serve({ doctor: FULL_DOCTOR, pass: HELD });
+  show();
+  // A FULL doctor's consultation fee is never waived by the pass — only the
+  // service fee is, so this is a real payment, not the free-confirmation flow.
+  await screen.findByRole('button', { name: /Pay ₹200.00 & Confirm Appointment/ });
+  expect(screen.queryByRole('button', { name: /Use your pass/ })).not.toBeInTheDocument();
+  expect(screen.getByText(/pay only the ₹200.00 consultation fee/)).toBeInTheDocument();
 });
 
 test('the kill switch hides the offer', async () => {

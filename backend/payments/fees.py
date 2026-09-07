@@ -77,13 +77,15 @@ def compute_pass_split() -> dict:
 def pass_eligible(collection_mode) -> bool:
     """Can a pass be bought or spent on this provider?
 
-    Only where nothing else is charged online. The pass waives the SERVICE fee,
-    never the consultation fee, so at a FULL doctor a redemption would still have
-    to open checkout for the consultation — a second, paid redemption path. v1
-    refuses instead: a redemption is always a ₹0 booking with no gateway
-    involved, and no payout is ever owed on one.
+    Universal: every collection mode is eligible. The pass always waives the
+    SERVICE fee only, never the consultation fee. At a SERVICE_ONLY provider
+    that makes a redemption a ₹0 booking with no gateway call. At a FULL
+    provider the consultation fee is still charged — see
+    views.RedeemPassView (which only ever handles the ₹0 case) and the paid
+    redeem path in views._create_booking_order / VerifyPaymentView for the
+    checkout that collects it.
     """
-    return collection_mode != FULL
+    return True
 
 
 def compute_fee_breakdown(doctor_fee, collection_mode=SERVICE_ONLY,

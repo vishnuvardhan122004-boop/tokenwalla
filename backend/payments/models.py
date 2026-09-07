@@ -65,10 +65,13 @@ class AppointmentPass(models.Model):
 
     Bought as an upgrade at checkout: the patient pays ₹35 instead of that one
     booking's ₹25.37 service fee, and the second visit's service fee is already
-    paid for. It never covers a doctor's consultation fee, so v1 only sells and
-    spends it where nothing else is charged online (fees.pass_eligible) — which
-    makes every redemption a ₹0 booking: no gateway call, no split to verify and
-    no payout owed.
+    paid for. It never covers a doctor's consultation fee (fees.pass_eligible is
+    universal — every collection mode qualifies). At a SERVICE_ONLY provider
+    that makes a redemption a ₹0 booking: no gateway call, no split to verify
+    and no payout owed. At a FULL provider the consultation fee is still
+    charged online, so a redemption there is a real, paid checkout for just the
+    doctor_fee — see views.py's paid redeem path (tagged `pass: 'redeem'`) as
+    opposed to RedeemPassView, which only ever handles the ₹0 case.
 
     price / total_bookings / expires_at are COLUMNS, not constants read back at
     display time. Changing the price or the window later must not retroactively

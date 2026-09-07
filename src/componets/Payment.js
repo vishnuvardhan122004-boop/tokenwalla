@@ -120,24 +120,40 @@ export default function Payment() {
     return () => { cancelled = true; };
   }, [isScan]);
 
-  // The pass waives the SERVICE fee only, so it applies where nothing else is
-  // charged online. `collection_mode` is the server's own verdict, not a guess
-  // from the numbers.
-  const passOffered  = !!passData?.enabled && !isScan
-                       && breakdown?.collection_mode === 'SERVICE_ONLY';
-  const creditsLeft  = passData?.pass?.remaining || 0;
+  // The pass is offered at every doctor now — it always waives the SERVICE
+  // fee only. `collection_mode` (the server's own verdict, not a guess from
+  // the numbers) decides whether that leaves anything else to charge: at a
+  // FULL doctor the consultation fee is still collected online, through the
+  // gateway, same as any other FULL booking.
+  const isFull        = breakdown?.collection_mode === 'FULL';
+  const doctorFeeOnline = Number(breakdown?.doctor_fee || 0);
+  const passOffered   = !!passData?.enabled && !isScan;
+  const creditsLeft    = passData?.pass?.remaining || 0;
   // Holding one → spend it. Otherwise → offer to buy one.
-  const canRedeem    = passOffered && creditsLeft > 0;
+  const canRedeem      = passOffered && creditsLeft > 0;
+  // SERVICE_ONLY: no gateway, ₹0. FULL: the consultation fee is still
+  // charged, so spending a credit opens Razorpay for just that amount.
+  const redeemIsFree   = canRedeem && !isFull;
+  const redeemNeedsPay = canRedeem && isFull;
   const canBuy       = passOffered && creditsLeft === 0;
   const passSelected = canBuy && buyPass;
   const passExpiry   = passData?.pass?.expires_at
     ? new Date(passData.pass.expires_at).toLocaleDateString('en-IN',
         { day: 'numeric', month: 'short', year: 'numeric' })
     : '';
+  // What buying a pass here replaces — the service fee alone, doctor_fee
+  // excluded either way. Used for both the purchase price and the "save ₹"
+  // math, which must never count a doctor's consultation fee as a saving.
+  const serviceFeeTotal = total !== null ? Number(total) - doctorFeeOnline : null;
 
-  // What the patient is actually charged now. A redemption is free; a pass
-  // purchase is the server's quoted price; everything else is the usual bill.
-  const payable = canRedeem ? 0 : passSelected ? Number(passData.price) : total;
+  // What the patient is actually charged now. A free redemption is ₹0; a paid
+  // (FULL-doctor) redemption is just the consultation fee; a pass purchase
+  // adds the ₹35 price to whatever consultation fee is charged online;
+  // everything else is the usual bill.
+  const payable = redeemIsFree ? 0
+    : redeemNeedsPay ? doctorFeeOnline
+    : passSelected ? doctorFeeOnline + Number(passData.price)
+    : total;
 
   const goToToken = (verifyData, extra = {}) => navigate('/booking-token', {
     state: {
@@ -163,8 +179,11 @@ export default function Payment() {
     }
   });
 
-  // Spending a credit: no gateway, no order, no Checkout. The server re-checks
-  // the pass, the doctor and the slot — this button only asks.
+  // Spending a credit at a SERVICE_ONLY doctor: no gateway, no order, no
+  // Checkout. The server re-checks the pass, the doctor and the slot — this
+  // button only asks. A FULL doctor still owes the consultation fee, so that
+  // redemption goes through handlePayment (Razorpay) with redeemNeedsPay
+  // instead — see the pass-price flag on /payment/create-order/ below.
   const handleRedeem = async () => {
     if (forOther) {
       if (bookedForName.length < 2) { showToast("Please enter the other person's name."); return; }
@@ -225,9 +244,10 @@ export default function Payment() {
       // charge-then-refund. The server re-checks after capture regardless.
       const { data: orderData } = await API.post('/payment/create-order/', {
         ...(isScan ? { scanId } : { doctorId }), date, slot,
-        // Opt-in per checkout. The server prices and tags the order — this flag
-        // only asks for the upgrade, it never says what it costs.
+        // Opt-in per checkout. The server prices and tags the order — these
+        // flags only say which pass action this is, never what it costs.
         ...(passSelected ? { buyPass: true } : {}),
+        ...(redeemNeedsPay ? { redeemPass: true } : {}),
       });
 
       const verify = async () => {
@@ -655,7 +675,9 @@ export default function Payment() {
                 Appointment Pass
               </div>
               <div className="pay-pass-title">
-                This visit is covered — no payment needed.
+                {redeemIsFree
+                  ? 'This visit is covered — no payment needed.'
+                  : `Your pass covers the service fee — pay only the ₹${inr(doctorFeeOnline)} consultation fee.`}
               </div>
               <div className="pay-pass-desc">
                 {creditsLeft === 1
@@ -688,15 +710,20 @@ export default function Payment() {
                        onChange={() => setBuyPass(true)} />
                 <div>
                   <div className="pay-pass-option-title">
-                    Appointment Pass — ₹{inr(passData.price)}
+                    {isFull
+                      ? <>Doctor Consultation: ₹{inr(doctorFeeOnline)} + Appointment Pass: ₹{inr(passData.price)}
+                          {' '}= Total: ₹{inr(doctorFeeOnline + Number(passData.price))}</>
+                      : <>Appointment Pass — ₹{inr(passData.price)}</>}
                     <span className="pay-pass-save">
-                      save ₹{inr(Number(total) * passData.bookings - Number(passData.price))}
+                      save ₹{inr(Number(serviceFeeTotal) * passData.bookings - Number(passData.price))}
                     </span>
                   </div>
                   <div className="pay-pass-option-desc">
                     This visit plus {passData.bookings - 1} more, at any doctor,
-                    within {passData.days} days. Service fee only — consultation
-                    fees are still paid at the clinic.
+                    within {passData.days} days. Service fee only —{' '}
+                    {isFull
+                      ? 'the consultation fee is still charged for each visit.'
+                      : 'consultation fees are still paid at the clinic.'}
                   </div>
                 </div>
               </label>
@@ -752,9 +779,11 @@ export default function Payment() {
             )}
           </div>
 
-          {/* Secure badge — nothing is being charged on a pass visit, so a
-              "Secured by Razorpay · UPI · Cards" panel is just noise there. */}
-          {!canRedeem && (
+          {/* Secure badge — nothing is being charged on a FREE pass visit, so a
+              "Secured by Razorpay · UPI · Cards" panel is just noise there. A
+              FULL-doctor redemption still pays the consultation fee through
+              the gateway, so it keeps the badge. */}
+          {!redeemIsFree && (
           <div className="pay-secure">
             <div className="pay-secure-icon"><i className="bi bi-shield-lock me-1" /></div>
             <div>
@@ -772,15 +801,15 @@ export default function Payment() {
           {/* Pay button */}
           <button
             className="pay-btn"
-            onClick={canRedeem ? handleRedeem : handlePayment}
+            onClick={redeemIsFree ? handleRedeem : handlePayment}
             disabled={loading || !breakdown || passLoading}
           >
             {loading
               ? <><div className="pay-spinner" />
-                  {canRedeem ? ' Confirming…' : ' Opening Payment Gateway…'}</>
+                  {redeemIsFree ? ' Confirming…' : ' Opening Payment Gateway…'}</>
               : !breakdown || passLoading
                 ? <>{feeError ? 'Fee details unavailable' : 'Loading…'}</>
-                : canRedeem
+                : redeemIsFree
                   ? <><i className="bi bi-ticket-perforated me-1" />Use your pass — Confirm Appointment</>
                   : <><i className="bi bi-credit-card me-1" />Pay ₹{inr(payable)} & Confirm Appointment</>
             }
@@ -788,9 +817,11 @@ export default function Payment() {
 
           <p className="pay-note">
             By paying, you agree to our Terms & Conditions.<br />
-            {canRedeem
+            {redeemIsFree
               ? 'Cancel at least 2 hours before your slot and the visit goes back on your pass.'
-              : 'Refundable if cancelled at least 2 hours before your slot.'}
+              : redeemNeedsPay
+                ? 'Cancel at least 2 hours before your slot for a refund of the consultation fee, and the visit goes back on your pass.'
+                : 'Refundable if cancelled at least 2 hours before your slot.'}
           </p>
         </div>
       </div>

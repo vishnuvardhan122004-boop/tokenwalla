@@ -21,10 +21,19 @@ logger = logging.getLogger('tokenwalla')
 
 
 class PassUnavailable(Exception):
-    """The pass was spent, expired or voided between the check and the spend."""
+    """The pass was spent, expired or voided between the check and the spend.
 
-    def __init__(self, message='This pass has no visits left.'):
+    Carries a `.reason` (like bookings.capacity.SlotUnavailable) so a FULL-
+    doctor paid redemption that hits this can be refunded through
+    views._refund_unfulfillable_booking, which reads reason.reason and
+    reason.message. A free (SERVICE_ONLY) redemption never reaches that path —
+    payment_id is blank, so views._handle_new_booking's handler short-circuits
+    before it matters.
+    """
+
+    def __init__(self, message='This pass has no visits left.', reason='pass_unavailable'):
         self.message = message
+        self.reason = reason
         super().__init__(message)
 
 
