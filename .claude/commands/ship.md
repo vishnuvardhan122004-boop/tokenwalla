@@ -12,8 +12,8 @@ cd backend && python manage.py test
 CI=true npx react-scripts test --watchAll=false
 ```
 
-Paste the real pass/fail counts. Baseline as of 2026-09-07: **525 backend (2
-skipped), 52 frontend**. If either number dropped, something got deleted; say
+Paste the real pass/fail counts. Baseline as of 2026-09-07: **535 backend (2
+skipped), 61 frontend**. If either number dropped, something got deleted; say
 so. If it rose, update this line in the same PR — a stale baseline defeats the
 check.
 

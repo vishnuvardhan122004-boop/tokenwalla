@@ -115,7 +115,10 @@
         "Live queue position",
         "Instant confirmation"
       ],
-      "cta": "Book Appointment →"
+      "cta": "Book Appointment →",
+      "passBadge": "New",
+      "passName": "Appointment Pass",
+      "passSub": "Waives the service fee on {{bookings}} visits within {{days}} days"
     },
     "cta": {
       "title": "Ready to Skip the Queue?",

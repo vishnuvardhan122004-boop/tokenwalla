@@ -29,7 +29,7 @@ from django.utils import timezone
 from django.db import transaction, IntegrityError, connection
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from bookings.models import Booking
 from bookings.serializers import BookingSerializer, build_queue_map
@@ -1142,16 +1142,23 @@ class PassView(APIView):
     Returns the offer (price, visits, window, whether it is on sale at all) as
     well as the pass the patient is currently holding, so a client never has to
     hard-code ₹35 — change the price here and both products follow.
+
+    Open to anonymous callers so the offer can be advertised pre-login (e.g.
+    the landing page); an anonymous caller obviously holds no pass, so `pass`
+    is always null there rather than querying AppointmentPass with no user.
+    `enabled` is still the real settings.PASS_ENABLED value for everyone —
+    this endpoint is a read of the kill switch, never a way around it.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request):
+        held = active_pass(request.user) if request.user.is_authenticated else None
         return Response({
             'enabled':  bool(settings.PASS_ENABLED),
             'price':    str(PASS_PRICE),
             'bookings': PASS_BOOKINGS,
             'days':     PASS_DAYS,
-            'pass':     serialize_pass(active_pass(request.user)),
+            'pass':     serialize_pass(held),
         })
 
 

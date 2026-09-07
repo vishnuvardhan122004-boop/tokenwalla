@@ -486,6 +486,22 @@ class PassStatusTests(PassWorldMixin, TestCase):
     def test_kill_switch_shows_in_the_offer(self):
         self.assertFalse(self.client.get('/api/payment/pass/').json()['enabled'])
 
+    def test_anonymous_caller_gets_the_offer_with_no_pass(self):
+        # Advertised pre-login (e.g. the landing page) — never 401, and never
+        # a query for a pass against a user who doesn't exist.
+        r = APIClient().get('/api/payment/pass/')
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertTrue(data['enabled'])
+        self.assertEqual(data['price'], '35.00')
+        self.assertIsNone(data['pass'])
+
+    @override_settings(PASS_ENABLED=False)
+    def test_anonymous_caller_sees_the_kill_switch_too(self):
+        # The flag is the real answer for everyone — an anonymous caller is
+        # never told the pass is on when it's actually off.
+        self.assertFalse(APIClient().get('/api/payment/pass/').json()['enabled'])
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Cancellation — the exploit this closes
