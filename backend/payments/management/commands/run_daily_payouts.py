@@ -22,11 +22,13 @@ import logging
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils import timezone
 
 from bookings.models import Booking
+from doctors.models import Doctor
 from payments.models import DoctorLedger
 from payments.payout_utils import ledger_owner
-# Housekeeping passenger at the end of run(); see the note there.
+# Housekeeping passengers at the end of run(); see the notes there.
 from users.models import RateCounter
 
 logger = logging.getLogger('tokenwalla')
@@ -121,3 +123,20 @@ class Command(BaseCommand):
                 logger.info('Purged %s expired rate-limit counter(s).', purged)
         except Exception as exc:
             logger.warning('RateCounter purge failed (payouts unaffected): %s', exc)
+
+        # Housekeeping: clear any doctor's running-late flag for the day.
+        #
+        # running_delay_minutes (Doctor Running Late, doctors.views.set_delay)
+        # is same-day broadcast state with nothing else that clears it once the
+        # doctor catches up — left alone, a forgotten delay would carry into
+        # tomorrow's queue and mislead the next day's patients. This is the
+        # only existing daily-cadence cron in the codebase (20:30 IST — after
+        # clinics have closed for the day, though not literally midnight), so
+        # the reset rides along here rather than getting its own service.
+        try:
+            reset = Doctor.objects.filter(running_delay_minutes__gt=0).update(
+                running_delay_minutes=0, delay_updated_at=timezone.now())
+            if reset:
+                logger.info('Reset running-late flag for %s doctor(s).', reset)
+        except Exception as exc:
+            logger.warning('Doctor delay reset failed (payouts unaffected): %s', exc)

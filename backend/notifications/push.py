@@ -146,6 +146,31 @@ def push_doctor_unavailable(booking):
         logger.warning('[push] doctor_unavailable push failed for booking %s: %s', booking.id, exc)
 
 
+def push_doctor_delay(booking, delay_minutes, updated_time):
+    """Patient alert when the doctor is marked running late, with the new time."""
+    try:
+        push_to_user(
+            booking.user,
+            title='⏱ Doctor running late',
+            body=(
+                f'{booking.provider_name} is running ~{delay_minutes} min late. '
+                f'Your token {booking.token} is now expected around {updated_time}.'
+            ),
+            data={
+                'screen': 'my-bookings',
+                'type': 'doctor_delay',
+                'delayMinutes': str(delay_minutes),
+                'bookingId': str(booking.id),
+                'appId': f'delay-{booking.id}',
+                'audience': 'patient',
+                'token': booking.token,
+            },
+            role='patient',
+        )
+    except Exception as exc:
+        logger.warning('[push] doctor_delay push failed for booking %s: %s', booking.id, exc)
+
+
 def push_booking_confirmed(booking):
     """Patient alert the moment payment is verified and the token is issued.
 

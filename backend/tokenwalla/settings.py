@@ -384,6 +384,9 @@ WHATSAPP_TEMPLATE_APPOINTMENT_PREP = config('WHATSAPP_TEMPLATE_APPOINTMENT_PREP'
 # NOT submitted to Meta yet, so this one is inert until it is approved:
 # send_template logs a warning and returns, and nothing else breaks.
 WHATSAPP_TEMPLATE_PASS_EXPIRING  = config('WHATSAPP_TEMPLATE_PASS_EXPIRING', default='pass_expiring')
+# Doctor Running Late broadcast — WHATSAPP_TEMPLATES.md section 16. NOT
+# submitted to Meta yet, so this one is inert until approved (same as above).
+WHATSAPP_TEMPLATE_DOCTOR_DELAY   = config('WHATSAPP_TEMPLATE_DOCTOR_DELAY', default='doctor_running_late')
 WHATSAPP_TEMPLATE_LANG           = config('WHATSAPP_TEMPLATE_LANG', default='en')
 ADMIN_SETUP_KEY = config('ADMIN_SETUP_KEY', default='')
 

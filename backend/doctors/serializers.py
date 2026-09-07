@@ -56,6 +56,7 @@ class DoctorSerializer(serializers.ModelSerializer):
             "image", "hospital_image",
             "image_url", "hospital_image_url",
             "hospital", "hospital_name", "hospital_location", "hospital_address", "city",
+            "running_delay_minutes", "delay_updated_at",
         ]
         extra_kwargs = {
             "image":          {"required": False, "allow_null": True, "write_only": False},
@@ -75,6 +76,10 @@ class DoctorSerializer(serializers.ModelSerializer):
             # is paid online or at the clinic. Bank/UPI details are NOT here —
             # they live in DoctorPaymentDetailsSerializer (owner/admin only).
             "payment_collection_mode": {"required": False},
+            # Set only via the dedicated set-delay action, never through the
+            # regular doctor edit form.
+            "running_delay_minutes": {"read_only": True},
+            "delay_updated_at":      {"read_only": True},
         }
 
     def validate_hospital(self, value):

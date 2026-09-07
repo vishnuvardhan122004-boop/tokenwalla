@@ -7,7 +7,21 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-07 (third session) — **14c: `pass_expiring`
+- **Last updated:** 2026-09-07 (fourth session) — **new item 22: Doctor
+  Running Late broadcast, backend slice shipped, not merged.** Requested as a
+  full 5-phase feature (backend + hospital dashboard + patient banner +
+  tracker); scoped down to backend-only for this session on the
+  one-slice-per-session rule. `POST /api/doctors/<id>/set-delay/` (owning
+  hospital/admin only) sets `Doctor.running_delay_minutes` and broadcasts
+  push + WhatsApp, off-thread, to today's `CONFIRMED` bookings for that
+  doctor — 15-minute per-booking idempotency guard, reset rides the existing
+  `run_daily_payouts` cron. Template `doctor_running_late` documented in
+  `WHATSAPP_TEMPLATES.md` §16 but **not yet submitted to Meta**. 525 backend
+  tests (2 skipped, was 503) · 52 web (untouched). On
+  `feature/doctor-running-late`, **not pushed, no PR yet**. Two judgment calls
+  made without confirming first — see item 22's own section. **Does not touch
+  14/14c/21/22-adjacent work** — 14c is still 🔴 and still Vishnu's.
+- **Previously:** 2026-09-07 (third session) — **14c: `pass_expiring`
   submitted to Meta, PENDING REVIEW.** A read-only audit of the pass's
   mechanics, cron, and WhatsApp contract confirmed the code and the §15 spec
   already matched — nothing to fix. Same day, Vishnu (1) confirmed via a
@@ -2023,6 +2037,54 @@ Covered by `hospitals/tests_facility_status_visibility.py` (13 tests). 8 of them
 fail with either filter removed; the other 5 are the ones that pin the admin
 exemption and the untouched active facility, and pass in both directions by
 design.
+
+---
+
+### 22. Doctor Running Late broadcast — backend shipped 2026-09-07, dashboard/patient UI next 🟡
+
+New capability: hospital staff mark a doctor delayed and today's `CONFIRMED`
+patients get a push + WhatsApp alert with the adjusted time. Requested as a
+full 5-phase feature (backend, hospital dashboard widget, patient banner on
+web + a public tracker); scoped down to **backend only** for this session per
+the one-slice-per-session rule — the dashboard widget and patient-facing
+banner are next session's slice, using the endpoint shipped here.
+
+**Shipped**, on `feature/doctor-running-late`:
+- `Doctor.running_delay_minutes` / `delay_updated_at` (additive migration).
+- `POST /api/doctors/<id>/set-delay/` — owning hospital staff or admin only
+  (`IsHospitalStaff` + `IsDoctorOwnerHospitalOrAdmin`, same pattern as
+  `payment-details`). Broadcasts off-thread to today's `CONFIRMED` bookings for
+  that doctor only; returns `notified_count` for the (future) dashboard toast.
+- `notifications.whatsapp.send_doctor_delay_alert` + `push.push_doctor_delay`,
+  with a 15-minute per-booking idempotency window so a receptionist nudging
+  10 → 15 → 20 minutes doesn't re-text the same patient each time.
+- Reset to 0 rides the existing `run_daily_payouts` cron (20:30 IST — the only
+  daily-cadence cron in the codebase; not literally midnight, noted in the
+  code comment) rather than getting its own service.
+- `WHATSAPP_TEMPLATE_DOCTOR_DELAY` / `doctor_running_late`, documented in
+  `WHATSAPP_TEMPLATES.md` §16. **Not yet submitted to Meta** — inert (dev-mode
+  no-op) until it is, same as §11–15.
+- CLAUDE.md's background-thread table gained a sixth row
+  (`_dispatch_doctor_delay_notifications`).
+- 22 new tests (`doctors/tests_running_delay.py`,
+  `notifications/tests_doctor_delay.py`). 525 backend tests (2 skipped), was
+  503 — baseline needs refreshing in `.claude/commands/ship.md`. Web untouched,
+  52 tests still pass.
+
+**Two deliberate deviations from the original spec, both judgment calls made
+this session, not yet confirmed with Vishnu:**
+- `delay_minutes` is the closed set `{0,10,15,20,30,45,60}`, not a 0–120
+  range — matches the endpoint spec's literal wording and the dashboard's
+  planned preset buttons; a receptionist can't fat-finger an arbitrary value.
+- The template ships with **4 params, not 5** — the spec's `{{5}}` live
+  tracker URL has no page to point at yet (that's Phase 4, deferred). Sending
+  a broken link seemed worse than omitting it; add the param once the tracker
+  page exists, not before, since an approved template's variable count is
+  fixed and a mismatch fails every send.
+
+**Not done:** the hospital dashboard delay widget, the patient-facing banner
+on `MyBookings.js` and the public tracker, and submitting the template to
+Meta. No PR opened yet.
 
 ---
 

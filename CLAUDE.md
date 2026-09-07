@@ -227,7 +227,7 @@ collides with a LATER, UNRELATED test's first write and fails it with
 `database table is locked`. It reproduces about one run in four, on a different
 test each time, so a single green run proves nothing.
 
-There are five such threads. Any test that reaches one must patch it — and note
+There are six such threads. Any test that reaches one must patch it — and note
 the `_whatsapp_async` row grew on 2026-08-16: the **call** and **QR scan**
 endpoints now fire one too (queue-advance WhatsApp), so a test of either that
 previously needed no patch does now. The sender writes a `WhatsAppLog` row, so
@@ -240,6 +240,7 @@ the thread does a **DB write**, which is the flake, with or without a token:
 | doctor toggled to unavailable | `doctors.views._notify_doctor_unavailable` |
 | booking cancel / hold / no-show / **call** / **QR scan** | `bookings.views._whatsapp_async` |
 | **scan report upload** (added 2026-08-18) | `scans.views._notify_report_ready_async` |
+| **doctor delay set** (added 2026-09-07, `set-delay`) | `doctors.views._dispatch_doctor_delay_notifications` |
 
 ```python
 @mock.patch('payments.views._dispatch_booking_notifications', lambda b: None)

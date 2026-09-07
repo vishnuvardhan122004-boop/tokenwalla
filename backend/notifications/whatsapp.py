@@ -6,6 +6,8 @@ Never raises - callers should treat send_template() as fire-and-forget
 and check the returned dict for success/failure, logging via WhatsAppLog.
 """
 import logging
+from datetime import timedelta
+
 import requests
 from django.conf import settings
 from django.utils import timezone
@@ -682,6 +684,50 @@ def send_pass_expiring(appointment_pass):
     # same reason the payout notification leaves this null.
     WhatsAppLog.objects.create(
         event_type='pass_expiring',
+        status='sent' if result['success'] else 'failed',
+        wa_message_id=result.get('message_id') or '',
+        error=result.get('error') or '',
+    )
+
+
+def send_doctor_delay_alert(booking, delay_minutes, updated_time):
+    """Tell the patient their doctor is running late and give the new time.
+
+    Template body (see notifications/WHATSAPP_TEMPLATES.md) params:
+      {{1}} patient name  {{2}} doctor name  {{3}} delay in minutes  {{4}} updated time
+
+    Idempotency guard: a receptionist can nudge the delay more than once in a
+    few minutes (10 → 15 → 20 as the doctor keeps slipping), and each nudge
+    fires this per affected booking — so skip if this booking already got a
+    delay alert in the last 15 minutes, sent or failed, rather than re-texting
+    the patient every time the value changes.
+    """
+    from .models import WhatsAppLog
+
+    user = booking.user
+    if not getattr(user, 'whatsapp_opt_in', True):
+        return
+
+    window_start = timezone.now() - timedelta(minutes=15)
+    if WhatsAppLog.objects.filter(
+        booking=booking, event_type='doctor_delay', created__gte=window_start,
+    ).exists():
+        return
+
+    patient_name = user.first_name or user.username
+    result = send_template(
+        to_mobile=user.mobile,
+        template_name=settings.WHATSAPP_TEMPLATE_DOCTOR_DELAY,
+        params=[
+            patient_name,
+            booking.provider_name,
+            str(delay_minutes),
+            updated_time,
+        ],
+    )
+    WhatsAppLog.objects.create(
+        booking=booking,
+        event_type='doctor_delay',
         status='sent' if result['success'] else 'failed',
         wa_message_id=result.get('message_id') or '',
         error=result.get('error') or '',

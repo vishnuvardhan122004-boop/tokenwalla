@@ -92,6 +92,14 @@ class Doctor(models.Model):
     hospital_image = models.ImageField(upload_to="hospital_banners/", null=True, blank=True)
     created        = models.DateTimeField(auto_now_add=True)
 
+    # ── Running-late broadcast ─────────────────────────────────────────────────
+    # Set by hospital staff via DoctorViewSet.set_delay when the doctor falls
+    # behind; broadcast (push + WhatsApp) to today's CONFIRMED patients. Reset
+    # to 0 by the nightly cron (run_daily_payouts) so a forgotten delay never
+    # carries into the next day. delay_updated_at is null until first set.
+    running_delay_minutes = models.IntegerField(default=0)
+    delay_updated_at      = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["name"]
 
