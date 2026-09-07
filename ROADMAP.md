@@ -7,7 +7,15 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-06 — **the ₹35 Appointment Pass is BACK ON SALE.**
+- **Last updated:** 2026-09-07 — **14d fixed and pushed, not yet merged.** The
+  pass offer was invisible on `MyBookings.js` for non-holders, and the Pay
+  button could fire a full charge in the gap before `/payment/pass/` resolved,
+  overcharging a pass holder. Both closed in `57fe00b` on
+  `fix/pass-web-visibility`; `/ship` ran clean (503 backend / 51 frontend, was
+  49). **No PR yet — `gh` has no auth in a session, same gap as last time; the
+  compare link is in 14d.** This did not touch 14c, which is still 🔴 and still
+  entirely Vishnu's (Meta template + a Railway log check).
+- 2026-09-06 — **the ₹35 Appointment Pass is BACK ON SALE.**
   Vishnu set `PASS_ENABLED=True` in the Railway dashboard at ~01:10 IST, with
   the **−₹11.84 budget question still open** and named out loud before the flip.
   Real patients can buy a pass from now on, which promotes **14c** — the expiry
@@ -1738,6 +1746,36 @@ minutes regardless, and the command never reads `PASS_ENABLED`. Dormancy is an
 empty queryset, not a gate — so turning the flag OFF would stop selling and
 redeeming but would NOT stop nudges for passes already held. Probably right,
 but it was never a recorded decision.
+
+---
+
+#### 14d. Pass offer invisible on MyBookings, and a client-side checkout race ✅ — fixed 2026-09-07, PR open
+
+Two bugs in the web pass-checkout path, both frontend-only (no backend files
+touched, no API contract change):
+
+- **Visibility.** The `/payment/pass/` offer was fetched on `MyBookings.js`
+  but only ever rendered on `Payment.js` — a patient had to pick a doctor
+  *and* a slot before the ₹35 tier appeared anywhere. Now shown to
+  non-holders directly on the bookings list, the page a returning patient
+  actually opens.
+- **Race.** The Pay button enabled as soon as the fee `breakdown` loaded,
+  independently of whether `/payment/pass/` had resolved. A pass holder who
+  tapped Pay in that gap got charged full price via `handlePayment` instead
+  of redeeming free via `handleRedeem` — real money, recoverable only by a
+  manual refund. Button now also gates on `passLoading`, with the fetch
+  capped at 8s so a hang can't disable checkout for everyone.
+
+Regression coverage added in `Payment.pass.test.js`. Gates run clean: 503
+backend (2 skipped, unchanged — money-path suites `tests_pass` +
+`tests_integration`, 91 tests, also re-run directly), 51 frontend (was 49,
++2 from the new test), `makemigrations --check` clean (nothing to check —
+no backend touched), `npm run build` compiles with zero eslint warnings.
+
+**Not yet on `main`.** Pushed as `fix/pass-web-visibility` @ `57fe00b`,
+PR not yet opened by a human (`gh` has no auth in a session — same gap
+noted in the 2026-09-06 wrap). Compare link:
+https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...fix/pass-web-visibility?expand=1
 
 ---
 
