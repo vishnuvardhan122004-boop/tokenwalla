@@ -16,14 +16,17 @@ the things that can lose money or break a live booking come first.
   Meta. **14c stays 🔴, deliberately** — a submission is not a `sent` row, and
   it was explicitly kept open until one exists. Docs-only, no code changed;
   full detail in 14c's own section and in WORKLOG.
+  **Session closed: both PRs merged to `main`** — #63 (the OTP fix,
+  `4c84ad4`) and #64 (this 14c update, `41e404e`). Nothing left pushed and
+  unmerged from today.
 - 2026-09-07 (second session) — **patient web registration
   was completely broken, unrelated to the pass work — found and fixed.** The
   sign-up OTP field has been capped at 4 digits since the file's first commit
   (5+ months) while the backend has always issued 6; no web self-registration
   could ever complete. Fixed in `profilecreate.js` + `ForgotPassword.js`, zero
   backend/API change, `/ship` clean (503 backend / 52 frontend, was 51).
-  `dd2a24c` + `a205d72` on `fix/otp-6-digit-input`, pushed, **not yet merged**
-  (compare link in WORKLOG). See **Done** for the full writeup and **Next** for
+  `dd2a24c` + `a205d72` on `fix/otp-6-digit-input`, **merged to `main` as #63**.
+  See **Done** for the full writeup and **Next** for
   two things found but not fixed (a recurring `/ship` guard false-positive, and
   an invalid local OTP key). **Does not touch 14/14c/14d or reorder Now** — see
   the line below for that thread.
@@ -2237,7 +2240,7 @@ Resolved and deliberately removed, so they don't get re-added:
   gating) and a stale "4-digit" placeholder in `ForgotPassword.js` (that
   field's logic was already correct at 6, only the copy lied). Zero backend or
   API change — confirmed `verify_otp`'s regex already accepts 6 digits.
-  `dd2a24c` + `a205d72` on `fix/otp-6-digit-input`, pushed, not yet merged.
+  `dd2a24c` + `a205d72` on `fix/otp-6-digit-input`, **merged to `main` as #63**.
   `/ship` ran clean: 503 backend (2 skipped) · 52 frontend (was 51, +1 new).
   Two things found and filed to **Next**, not fixed here: the `/ship`
   secret-scan guard false-positive recurring (already tracked, see below), and

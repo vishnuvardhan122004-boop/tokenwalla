@@ -3,9 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `fix/otp-6-digit-input` on web, pushed to origin @ `d553884`, **needs a PR** (`gh` still has no auth in a session — web UI or `gh auth login`). Compare link: https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...fix/otp-6-digit-input?expand=1. `fix/pass-web-visibility` merged since the last entry (PRs #60, #61). **Do NOT delete** `develop`, which deploys to staging.
-- **Latest commit at last update:** `d553884` `fix/otp-6-digit-input` (web, **pushed, not merged**) · `470d1ed` `main` (web/backend — merged and deployed)
-- **Last updated:** 2026-09-07 (third session) — **ROADMAP 14c: `pass_expiring` submitted to Meta, PENDING REVIEW.** A read-only audit of the pass's mechanics/cron/WhatsApp contract found nothing to fix — code already matched the WHATSAPP_TEMPLATES.md §15 spec exactly. Same day Vishnu (1) confirmed via a Railway log check that the cron chain runs both commands (wiring proven — see 14c), and (2) filed the template with Meta. **14c stays 🔴, deliberately** — kept open until a `pass_expiring` WhatsAppLog row reads `sent`. Docs-only, no tests to re-run.
+- **Branch:** `main`, up to date — **nothing pushed and unmerged as of this wrap.** `fix/otp-6-digit-input` merged as **#63** (`4c84ad4`) and `docs/roadmap-14c-meta-submission` merged as **#64** (`41e404e`), both by Vishnu. `fix/pass-web-visibility` merged earlier the same day (PRs #60, #61). **Do NOT delete** `develop`, which deploys to staging.
+- **Latest commit at last update:** `41e404e` `main` (web/backend — merged; not yet confirmed deployed)
+- **Last updated:** 2026-09-07 (third session, wrap) — **ROADMAP 14c: `pass_expiring` submitted to Meta, PENDING REVIEW; session closed, both PRs merged.** A read-only audit of the pass's mechanics/cron/WhatsApp contract found nothing to fix — code already matched the WHATSAPP_TEMPLATES.md §15 spec exactly. Same day Vishnu (1) confirmed via a Railway log check that the cron chain runs both commands (wiring proven — see 14c), and (2) filed the template with Meta. **14c stays 🔴, deliberately** — kept open until a `pass_expiring` WhatsAppLog row reads `sent`. Docs-only, no tests to re-run. See the wrap section below for a git-hygiene note (two near-misses with a shared working directory) and what's sitting locally, uncommitted, for next time.
 - **Previously:** 2026-09-07 (second session) — **patient registration OTP fixed**: the sign-up form's OTP field was capped at 4 digits while the backend always issues 6-digit codes, so no new patient could complete registration — this has been broken since the file's first commit, 2026-03-21. Fixed in `profilecreate.js` (6-digit input, digit filtering, Verify-button gating) plus a stale "4-digit" placeholder in `ForgotPassword.js`; zero backend/API changes needed. **503 backend tests (2 skipped) · 52 web** (was 51, +1 from the new OTP test) — baseline refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end.
 - **Previously:** 2026-09-07 — **ROADMAP 14d**: the pass offer was invisible on `MyBookings.js` for non-holders, and the Pay button could fire before `/payment/pass/` resolved, letting a pass holder get charged full price in the gap. Both fixed, regression test added. 503 backend tests (2 skipped) · 51 web (was 49, +2 from the new test) — baselines refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end. ⚠️ ROADMAP 14c is unchanged, still 🔴, still needs Vishnu — untouched by this session.
 - **Previously:** 2026-09-06 (session wrap) — PR #58 merged: the pass expiry nudge's WhatsApp half, the signup password regex, `ACTIVE_TASK.md`, and one escaped test thread. 503 backend tests (2 skipped) · 49 web.
@@ -32,6 +32,46 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-07 (third session, wrap) — session closed, both PRs merged
+
+Vishnu merged both branches from today's work: **#63** (`fix/otp-6-digit-input`
+→ `4c84ad4`) and **#64** (`docs/roadmap-14c-meta-submission` → `41e404e`).
+`main` is now `41e404e`. Nothing from today is pushed-and-unmerged.
+
+**Two shared-working-directory near-misses this session, worth knowing about
+before the next one:**
+1. Mid-session, this checkout was switched from `fix/otp-6-digit-input` to
+   `main` by something else using the same directory (a plain `checkout`,
+   nothing lost) — see the second-session entry below.
+2. A follow-up docs commit landed directly on local `main` the same way. It
+   was never pushed to `origin/main`, so production was never at risk, but it
+   had to be rescued onto its own branch (`docs/roadmap-14c-meta-submission`,
+   now merged as #64) and `main` restored with `git update-ref
+   refs/heads/main refs/remotes/origin/main` — chosen over `reset --hard`
+   specifically because it never touches a working tree, so it can't be
+   blocked by (or need to route around) the production guard's
+   destroys-uncommitted-work rule.
+
+**What this means going forward:** this repo checkout is being used by more
+than one process/terminal at once (very likely Vishnu's own, working
+alongside a session). `git status` and `git branch --show-current` can change
+between one tool call and the next — check both before trusting what branch
+you're on or what's uncommitted, especially before anything that touches
+`main` or discards working-tree state.
+
+**Sitting in the shared directory as this session ends, not this session's
+work, left untouched:** a branch called `feature/doctor-running-late`, no
+commits of its own, and **live uncommitted changes** across
+`backend/doctors/{models,serializers,views}.py`,
+`backend/notifications/{models,push,whatsapp}.py`, `backend/tokenwalla/settings.py`,
+plus a new untracked migration
+(`0015_doctor_delay_updated_at_doctor_running_delay_minutes.py`) — a
+doctor-running-late delay/notification feature, being written as this session
+closes. Whoever opens the next session: `git status` before anything else,
+and don't assume a clean tree.
 
 ---
 
