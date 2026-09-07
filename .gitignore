@@ -22,3 +22,4 @@ src/.env
 .claude/skills/
 .claude/launch.json
 dashboard.html
+Claude outputs/
