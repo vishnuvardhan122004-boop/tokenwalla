@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.db.models import F
 
@@ -75,6 +75,57 @@ def _notify_doctor_unavailable(doctor_id):
             connection.close()
 
     threading.Thread(target=_run, name=f'doc-unavail-{doctor_id}', daemon=True).start()
+
+
+# Whitelisted delay presets for set-delay — a closed set instead of a numeric
+# range so a fat-fingered value ("500") 400s instead of broadcasting nonsense
+# to every patient booked today.
+DELAY_MINUTES_CHOICES = (0, 10, 15, 20, 30, 45, 60)
+
+
+def _dispatch_doctor_delay_notifications(doctor_id, delay_minutes):
+    """Broadcast a running-late alert (push + WhatsApp) to today's CONFIRMED
+    patients for this doctor. Off-thread for the same reason as
+    _notify_doctor_unavailable above — see CLAUDE.md's background-thread table,
+    this is another row in it. Best-effort: a single patient's failed send
+    never blocks the rest.
+    """
+    def _run():
+        from django.db import connection
+        from django.utils import timezone
+        from bookings.models import Booking
+        from bookings.utils import parse_slot_datetime, SLOT_FORMAT
+        from notifications.push import push_doctor_delay
+        from notifications.whatsapp import send_doctor_delay_alert
+        try:
+            today = timezone.localdate()
+            affected = list(
+                Booking.objects
+                .filter(doctor_id=doctor_id, date=today, status=Booking.CONFIRMED)
+                .select_related('user', 'doctor', 'hospital')
+            )
+            for b in affected:
+                start = parse_slot_datetime(b.date, b.slot)
+                updated_time = (
+                    (start + timedelta(minutes=delay_minutes)).strftime(SLOT_FORMAT)
+                    if start else b.slot
+                )
+                try:
+                    push_doctor_delay(b, delay_minutes, updated_time)
+                except Exception as exc:
+                    logger.warning('doctor_delay push failed for booking %s: %s', b.id, exc)
+                try:
+                    send_doctor_delay_alert(b, delay_minutes, updated_time)
+                except Exception as exc:
+                    logger.warning('doctor_delay WhatsApp failed for booking %s: %s', b.id, exc)
+            logger.info('Doctor %s delay set to %s min — notified %d patient(s) for %s',
+                        doctor_id, delay_minutes, len(affected), today)
+        except Exception as exc:
+            logger.exception('doctor_delay dispatch failed for doctor %s: %s', doctor_id, exc)
+        finally:
+            connection.close()
+
+    threading.Thread(target=_run, name=f'doc-delay-{doctor_id}', daemon=True).start()
 
 
 class DoctorViewSet(viewsets.ModelViewSet):
@@ -572,6 +623,69 @@ class DoctorViewSet(viewsets.ModelViewSet):
                 'paid_amount':           _num(t_paid),
                 'doctor_count':          len(doctors),
             },
+        })
+
+    # ── Doctor Running Late (owning hospital or admin) ─────────────────────────
+
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='set-delay',
+        permission_classes=[IsAuthenticated, IsHospitalStaff, IsDoctorOwnerHospitalOrAdmin],
+    )
+    def set_delay(self, request, pk=None):
+        """
+        POST /api/doctors/<id>/set-delay/
+        Body: { "delay_minutes": 0|10|15|20|30|45|60, "reason": "<optional>" }
+
+        Sets the doctor's running-late status and broadcasts it (push +
+        WhatsApp, off-thread) to today's CONFIRMED patients. `delay_minutes=0`
+        clears the flag without sending a broadcast — there's no "running 0
+        minutes late" message to send.
+
+        Returns `notified_count`: how many patients were queued for
+        notification (best-effort — sends happen off-thread, so this counts
+        eligibility, not confirmed delivery).
+        """
+        from django.utils import timezone
+        from bookings.models import Booking
+
+        doctor = self.get_object()  # runs object-level owner/admin permission
+
+        raw = request.data.get('delay_minutes')
+        try:
+            delay_minutes = int(raw)
+        except (TypeError, ValueError):
+            return Response(
+                {'message': 'delay_minutes is required and must be an integer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if delay_minutes not in DELAY_MINUTES_CHOICES:
+            return Response(
+                {'message': f'delay_minutes must be one of {list(DELAY_MINUTES_CHOICES)}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        reason = str(request.data.get('reason', '') or '').strip()[:200]
+
+        doctor.running_delay_minutes = delay_minutes
+        doctor.delay_updated_at = timezone.now()
+        doctor.save(update_fields=['running_delay_minutes', 'delay_updated_at'])
+
+        notified_count = 0
+        if delay_minutes > 0:
+            notified_count = Booking.objects.filter(
+                doctor=doctor, date=timezone.localdate(), status=Booking.CONFIRMED,
+            ).count()
+            if notified_count:
+                _dispatch_doctor_delay_notifications(doctor.id, delay_minutes)
+
+        logger.info('Doctor %s delay set to %s min by user %s (reason=%r)',
+                    doctor.id, delay_minutes, request.user.id, reason)
+        return Response({
+            'id': doctor.id,
+            'running_delay_minutes': doctor.running_delay_minutes,
+            'delay_updated_at': doctor.delay_updated_at,
+            'notified_count': notified_count,
         })
 
     # ── Internal helpers ──────────────────────────────────────────────────────

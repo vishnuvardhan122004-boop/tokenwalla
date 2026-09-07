@@ -676,6 +676,58 @@ It expires on {{3}} — the service fee is already paid, so book before then to 
 
 ---
 
+## 16. `doctor_running_late`  ⏳ SUBMIT THIS (added 2026-09-07, not yet submitted)
+
+Sent when hospital staff mark a doctor delayed via `POST
+/api/doctors/<id>/set-delay/`, to every patient with a **today, CONFIRMED**
+booking for that doctor. Sender:
+`notifications.whatsapp.send_doctor_delay_alert(booking, delay_minutes,
+updated_time)`.
+
+**Only 4 params for now, not 5.** The original spec for this feature called
+for a 5th variable — a live tracker URL — but there is no public token-tracker
+page in the product yet (queue position is only visible inside the logged-in
+app/site, on `MyBookings.js`). Sending a link to a page that doesn't exist
+would be worse than not sending one. Add `{{5}}` here (and to the sender's
+`params` list) once that page ships — this is deliberately NOT a placeholder
+variable submitted early, because an approved template's variable count is
+fixed and a param count mismatch fails every send at the API layer, not at
+review time.
+
+| Field | Value |
+|-------|-------|
+| **Name** | `doctor_running_late` |
+| **Category** | **Utility** (transactional — reports status of an existing booking, not a promotion) |
+| **Language** | English (`en`) |
+| **Header** | None |
+| **Footer** | `TokenWalla` |
+| **Buttons** | None |
+
+**Body** (paste exactly):
+
+```
+Hi {{1}}, {{2}} is running about {{3}} minutes late.
+
+Your appointment is now expected around {{4}}. Thank you for your patience.
+```
+
+| Placeholder | Meaning | Sample value for review |
+|-------------|---------|-------------------------|
+| `{{1}}` | Patient name | Rahul |
+| `{{2}}` | Doctor name | Anita Rao |
+| `{{3}}` | Delay in minutes | 15 |
+| `{{4}}` | Updated slot time | 09:15 AM |
+
+> **Idempotency guard, not a Meta setting.** `send_doctor_delay_alert` skips a
+> booking that already got a delay alert (sent or failed) in the last 15
+> minutes, so a receptionist nudging 10 → 15 → 20 as the doctor keeps slipping
+> doesn't re-text the same patient on every click. See `WhatsAppLog` rows with
+> `event_type='doctor_delay'`.
+
+> Gated on the patient's `whatsapp_opt_in`, same as every other sender here.
+
+---
+
 ## Submission checklist
 
 1. WhatsApp Manager → **Message templates** → **Create template**.

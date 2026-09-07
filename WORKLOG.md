@@ -3,9 +3,10 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `fix/otp-6-digit-input` on web, pushed to origin @ `d553884`, **needs a PR** (`gh` still has no auth in a session — web UI or `gh auth login`). Compare link: https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...fix/otp-6-digit-input?expand=1. `fix/pass-web-visibility` merged since the last entry (PRs #60, #61). **Do NOT delete** `develop`, which deploys to staging.
-- **Latest commit at last update:** `d553884` `fix/otp-6-digit-input` (web, **pushed, not merged**) · `470d1ed` `main` (web/backend — merged and deployed)
-- **Last updated:** 2026-09-07 (third session) — **ROADMAP 14c: `pass_expiring` submitted to Meta, PENDING REVIEW.** A read-only audit of the pass's mechanics/cron/WhatsApp contract found nothing to fix — code already matched the WHATSAPP_TEMPLATES.md §15 spec exactly. Same day Vishnu (1) confirmed via a Railway log check that the cron chain runs both commands (wiring proven — see 14c), and (2) filed the template with Meta. **14c stays 🔴, deliberately** — kept open until a `pass_expiring` WhatsAppLog row reads `sent`. Docs-only, no tests to re-run.
+- **Branch:** `feature/doctor-running-late` on backend, pushed to origin @ `0fdc9f3`, **needs a PR** (`gh` still has no auth in a session — web UI or `gh auth login`). Compare link: https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...feature/doctor-running-late?expand=1. `fix/otp-6-digit-input` still pushed @ `d553884`, still **needs a PR**. `fix/pass-web-visibility` merged since the last entry (PRs #60, #61). **Do NOT delete** `develop`, which deploys to staging.
+- **Latest commit at last update:** `0fdc9f3` `feature/doctor-running-late` (backend, **pushed, not merged**) · `d553884` `fix/otp-6-digit-input` (web, pushed, not merged) · `470d1ed` `main` (web/backend — merged and deployed)
+- **Last updated:** 2026-09-07 (fourth session) — **new item 22 (ROADMAP): Doctor Running Late broadcast, backend slice only.** Requested as a full 5-phase feature; scoped to backend for this session on the one-slice rule — `POST /api/doctors/<id>/set-delay/`, push+WhatsApp broadcast off-thread to today's `CONFIRMED` bookings, 15-min idempotency guard, reset riding the existing `run_daily_payouts` cron. Template documented (§16) but **not submitted to Meta**. 525 backend tests (2 skipped, was 503) · 52 web (untouched). Pushed, **PR not opened yet**. Full detail below and in ROADMAP item 22.
+- **Previously:** 2026-09-07 (third session) — **ROADMAP 14c: `pass_expiring` submitted to Meta, PENDING REVIEW.** A read-only audit of the pass's mechanics/cron/WhatsApp contract found nothing to fix — code already matched the WHATSAPP_TEMPLATES.md §15 spec exactly. Same day Vishnu (1) confirmed via a Railway log check that the cron chain runs both commands (wiring proven — see 14c), and (2) filed the template with Meta. **14c stays 🔴, deliberately** — kept open until a `pass_expiring` WhatsAppLog row reads `sent`. Docs-only, no tests to re-run.
 - **Previously:** 2026-09-07 (second session) — **patient registration OTP fixed**: the sign-up form's OTP field was capped at 4 digits while the backend always issues 6-digit codes, so no new patient could complete registration — this has been broken since the file's first commit, 2026-03-21. Fixed in `profilecreate.js` (6-digit input, digit filtering, Verify-button gating) plus a stale "4-digit" placeholder in `ForgotPassword.js`; zero backend/API changes needed. **503 backend tests (2 skipped) · 52 web** (was 51, +1 from the new OTP test) — baseline refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end.
 - **Previously:** 2026-09-07 — **ROADMAP 14d**: the pass offer was invisible on `MyBookings.js` for non-holders, and the Pay button could fire before `/payment/pass/` resolved, letting a pass holder get charged full price in the gap. Both fixed, regression test added. 503 backend tests (2 skipped) · 51 web (was 49, +2 from the new test) — baselines refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end. ⚠️ ROADMAP 14c is unchanged, still 🔴, still needs Vishnu — untouched by this session.
 - **Previously:** 2026-09-06 (session wrap) — PR #58 merged: the pass expiry nudge's WhatsApp half, the signup password regex, `ACTIVE_TASK.md`, and one escaped test thread. 503 backend tests (2 skipped) · 49 web.
@@ -32,6 +33,70 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-07 (fourth session) — Doctor Running Late: backend slice
+
+Arrived as a fully-speced 5-phase feature (backend, hospital dashboard widget,
+patient banner + a public tracker page, tests, and the Meta template text) —
+not in ROADMAP, dropped straight into chat. Flagged the scope mismatch against
+the one-slice-per-session rule before writing code; scoped down to **backend
+only** on explicit confirmation. Dashboard widget and patient banner are next
+session's slice.
+
+**Shipped, on `feature/doctor-running-late` (pushed @ `0fdc9f3`, PR not opened):**
+- `Doctor.running_delay_minutes` (int, default 0) + `delay_updated_at`
+  (nullable) — additive migration `0015`.
+- `POST /api/doctors/<id>/set-delay/` — `IsHospitalStaff` +
+  `IsDoctorOwnerHospitalOrAdmin`, the same permission pair as
+  `payment-details`. Body `{delay_minutes, reason}`; `delay_minutes` is
+  restricted to `{0,10,15,20,30,45,60}` — a whitelist, not a range, so a bad
+  value 400s instead of broadcasting nonsense. Returns `notified_count`
+  (today's `CONFIRMED` bookings for that doctor) for the dashboard toast the
+  next session builds.
+- Broadcast is off-thread (`doctors.views._dispatch_doctor_delay_notifications`,
+  same shape as the existing `_notify_doctor_unavailable`): fires
+  `notifications.push.push_doctor_delay` and
+  `notifications.whatsapp.send_doctor_delay_alert` per affected booking.
+  `send_doctor_delay_alert` skips a booking that already got an alert (sent or
+  failed) in the last 15 minutes — a receptionist bumping 10 → 15 → 20 as the
+  doctor keeps slipping doesn't re-text the same patient each time.
+- Reset to 0 attached to `run_daily_payouts` as a third housekeeping
+  passenger (after the ledger write, after the `RateCounter` purge), wrapped
+  so a reset failure can't touch the money path. That cron runs 20:30 IST —
+  the only existing daily-cadence cron in the codebase, not literally
+  midnight as the original spec assumed; noted in the code comment rather
+  than inventing a new cron service for one field.
+- `WHATSAPP_TEMPLATE_DOCTOR_DELAY` (default `doctor_running_late`) in
+  `settings.py`; full spec in `WHATSAPP_TEMPLATES.md` §16. **Shipped with 4
+  body params, not the speced 5** — the 5th was a live-tracker-URL variable,
+  and there is no public tracker page to link to yet (that's the deferred
+  Phase 4). Sending a dead link seemed worse than waiting; the param slot is
+  reserved in the doc for when the page exists.
+- `running_delay_minutes` / `delay_updated_at` exposed read-only on
+  `DoctorSerializer` (writable only through `set-delay`).
+- CLAUDE.md's background-thread table: sixth row added
+  (`_dispatch_doctor_delay_notifications`), matching how the `_whatsapp_async`
+  row grew before.
+- 22 new tests: `doctors/tests_running_delay.py` (permissions, the delay
+  whitelist, recipient filtering, the cron reset) and
+  `notifications/tests_doctor_delay.py` (param order, opt-out, the 15-minute
+  idempotency window in both directions). **525 backend tests (2 skipped, was
+  503)** — `-v 2` run has zero `graph.facebook.com` lines, `makemigrations
+  --check` clean. **52 web tests unaffected** (no frontend files touched).
+
+**Two judgment calls made this session, not yet run past Vishnu — flagged in
+ROADMAP item 22, not silently decided:**
+1. The whitelist vs. a 0–120 range (the endpoint spec said one, the test-plan
+   line said the other — picked the more specific, safer instruction).
+2. Dropping `{{5}}` from the template rather than inventing a tracker URL
+   that points nowhere.
+
+**Not done:** hospital dashboard widget, patient-facing banner + public
+tracker, Meta template submission (that's always a manual, Vishnu-side step —
+see the pass_expiring precedent), and no PR — `gh` has no auth in a session,
+same gap as `fix/otp-6-digit-input`; compare link is above.
 
 ---
 
