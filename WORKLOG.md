@@ -3,9 +3,10 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `feature/doctor-running-late` on backend, pushed to origin @ `0fdc9f3`, **needs a PR** (`gh` still has no auth in a session — web UI or `gh auth login`). Compare link: https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...feature/doctor-running-late?expand=1. `fix/otp-6-digit-input` still pushed @ `d553884`, still **needs a PR**. `fix/pass-web-visibility` merged since the last entry (PRs #60, #61). **Do NOT delete** `develop`, which deploys to staging.
-- **Latest commit at last update:** `0fdc9f3` `feature/doctor-running-late` (backend, **pushed, not merged**) · `d553884` `fix/otp-6-digit-input` (web, pushed, not merged) · `470d1ed` `main` (web/backend — merged and deployed)
-- **Last updated:** 2026-09-07 (fourth session) — **new item 22 (ROADMAP): Doctor Running Late broadcast, backend slice only.** Requested as a full 5-phase feature; scoped to backend for this session on the one-slice rule — `POST /api/doctors/<id>/set-delay/`, push+WhatsApp broadcast off-thread to today's `CONFIRMED` bookings, 15-min idempotency guard, reset riding the existing `run_daily_payouts` cron. Template documented (§16) but **not submitted to Meta**. 525 backend tests (2 skipped, was 503) · 52 web (untouched). Pushed, **PR not opened yet**. Full detail below and in ROADMAP item 22.
+- **Branch:** `feature/doctor-running-late` (backend slice) **merged as PR #65** and `fix/otp-6-digit-input` **merged as PR #63** — both closed since the last entry. Current work is on `feat/doctor-delay-frontend`, pushed to origin @ `3387097`, **needs a PR**. Compare link: https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...feat/doctor-delay-frontend?expand=1. **Do NOT delete** `develop`, which deploys to staging.
+- **Latest commit at last update:** `3387097` `feat/doctor-delay-frontend` (web, **pushed, not merged**) · `43e8018` `main` (web/backend — merged and deployed)
+- **Last updated:** 2026-09-07 (fifth session) — **ROADMAP item 22, frontend slice: Doctor Running Late dashboard buttons + patient banner.** Hospital dashboard doctor cards get a `[+10m][+15m][+20m][+30m][Clear]` row hitting the existing `POST /api/doctors/<id>/set-delay/` (no backend changes — that endpoint shipped last session), highlighting the active preset and toasting `notified_count` on success. `MyBookings.js` shows an amber "running late" banner with struck-through original time → adjusted time for today's `CONFIRMED` bookings, fetched per-doctor off the existing `GET /doctors/{id}/` (bookings carry only the doctor id, not a nested delay field) and refreshed on the same 15s poll as the queue. **533 backend tests (2 skipped) · 57 web (was 52, +5 from this session's new tests)** — see caveat below; `/ship` gate: SHIP. Zero backend files touched, zero `/api/payment/*` or `/api/bookings/*` contract impact. Full detail below.
+- **Previously:** 2026-09-07 (fourth session) — **new item 22 (ROADMAP): Doctor Running Late broadcast, backend slice only.** Requested as a full 5-phase feature; scoped to backend for this session on the one-slice rule — `POST /api/doctors/<id>/set-delay/`, push+WhatsApp broadcast off-thread to today's `CONFIRMED` bookings, 15-min idempotency guard, reset riding the existing `run_daily_payouts` cron. Template documented (§16) but **not submitted to Meta**. 525 backend tests (2 skipped, was 503) · 52 web (untouched). Merged as PR #65. Full detail in that session's section below and in ROADMAP item 22.
 - **Previously:** 2026-09-07 (third session) — **ROADMAP 14c: `pass_expiring` submitted to Meta, PENDING REVIEW.** A read-only audit of the pass's mechanics/cron/WhatsApp contract found nothing to fix — code already matched the WHATSAPP_TEMPLATES.md §15 spec exactly. Same day Vishnu (1) confirmed via a Railway log check that the cron chain runs both commands (wiring proven — see 14c), and (2) filed the template with Meta. **14c stays 🔴, deliberately** — kept open until a `pass_expiring` WhatsAppLog row reads `sent`. Docs-only, no tests to re-run.
 - **Previously:** 2026-09-07 (second session) — **patient registration OTP fixed**: the sign-up form's OTP field was capped at 4 digits while the backend always issues 6-digit codes, so no new patient could complete registration — this has been broken since the file's first commit, 2026-03-21. Fixed in `profilecreate.js` (6-digit input, digit filtering, Verify-button gating) plus a stale "4-digit" placeholder in `ForgotPassword.js`; zero backend/API changes needed. **503 backend tests (2 skipped) · 52 web** (was 51, +1 from the new OTP test) — baseline refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end.
 - **Previously:** 2026-09-07 — **ROADMAP 14d**: the pass offer was invisible on `MyBookings.js` for non-holders, and the Pay button could fire before `/payment/pass/` resolved, letting a pass holder get charged full price in the gap. Both fixed, regression test added. 503 backend tests (2 skipped) · 51 web (was 49, +2 from the new test) — baselines refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end. ⚠️ ROADMAP 14c is unchanged, still 🔴, still needs Vishnu — untouched by this session.
@@ -33,6 +34,61 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-07 (fifth session) — Doctor Running Late: frontend slice
+
+Continuing ROADMAP item 22 — last session shipped the backend endpoint only;
+this session builds the two UI surfaces that were deferred, on a fresh
+`feat/doctor-delay-frontend` branch cut off `main` (after PR #65 merged).
+
+**Shipped, on `feat/doctor-delay-frontend` (pushed @ `3387097`, PR not opened):**
+- **Hospital dashboard** (`src/hospital/Hdashboard.js`, Doctors tab, per doctor
+  card): a "Running Late" row — `[+10m][+15m][+20m][+30m][Clear]`. Active
+  preset gets `btn-warning`; `Clear` is disabled when there's nothing to
+  clear. Click → `POST /doctors/<id>/set-delay/` → merges the response's
+  `running_delay_minutes` into local `doctors` state (no full reload) → toasts
+  `Dr. {name} marked {X}m late. {notified_count} patients notified.` for a
+  real delay, or `Dr. {name}'s delay cleared.` for `Clear` — the backend sends
+  no broadcast on `delay_minutes=0`, so the literal "marked 0m late" template
+  would have been misleading; confirmed with Vishnu and kept.
+- **Patient booking card** (`src/componets/MyBookings.js`): an amber banner
+  (reusing the existing `.mb-unavail-banner` style, not new CSS) on today's
+  `CONFIRMED` bookings once the doctor's delay is known —
+  `Dr. {name} is running ~{X} mins late. Adjusted time: ~~{slot}~~ →
+  {adjusted}`. **The booking payload has no nested doctor object** —
+  `BookingSerializer` only exposes `doctor` (id) and `doctor_name` (string),
+  so the spec's `booking.doctor?.running_delay_minutes` shape doesn't exist on
+  the wire. Fetches it instead via the same `GET /doctors/{id}/` the reschedule
+  flow already calls, keyed by the unique doctor ids among today's confirmed
+  bookings, refetched on every 15s poll tick alongside the rest of the booking
+  list — a delay set mid-wait shows up within 15s, same latency as the queue
+  position. New `addMinutesToSlot()` helper does the hh:mm AM/PM time math
+  (rollover-safe via `Date`, tested at the 11:45 PM → 12:15 AM boundary).
+- **Zero backend files touched** — both endpoints (`set-delay`, doctor
+  detail) already existed. No `/api/payment/*` or `/api/bookings/*` contract
+  change, so nothing for the separate mobile app repo to pick up.
+- 5 new tests: `Hdashboard.delay.test.js` (preset click → API call → state →
+  toast → highlight; Clear → `delay_minutes: 0` → disabled) and
+  `MyBookings.delay.test.js` (time-math unit tests including the midnight
+  rollover; banner renders with correct struck/adjusted times; no banner when
+  delay is 0). **533 backend tests (2 skipped) · 57 web (was 52, +5)**.
+
+**Caveat, not this session's doing:** the shared worktree had unrelated
+uncommitted changes to `backend/payments/{fees,models,pass_utils,views}.py`,
+`tests_pass.py`, `src/componets/Payment.js` and `Payment.pass.test.js` from a
+concurrent session — confirmed via `git diff --cached` that none of them are
+in this commit. The 533/58 raw counts measured during `/ship` include that
+other session's uncommitted work (1 extra frontend test); **this PR's own
+contribution is verified as exactly +5 web tests, +0 backend**, isolated by
+counting `test(` blocks in the two new files against the 52-test baseline.
+Flagged to Vishnu before committing; his call was to proceed and note it here
+rather than touch or stash someone else's in-flight edit.
+
+**Not done:** PR not opened (`gh` has no auth in a session, same recurring
+gap) — compare link is in the top summary. No public delay-tracker page
+(that was already out of scope, per last session's Phase 4 deferral).
 
 ---
 
