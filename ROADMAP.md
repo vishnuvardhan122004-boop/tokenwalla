@@ -7,7 +7,18 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-07 — **14d fixed and pushed, not yet merged.** The
+- **Last updated:** 2026-09-07 (second session) — **patient web registration
+  was completely broken, unrelated to the pass work — found and fixed.** The
+  sign-up OTP field has been capped at 4 digits since the file's first commit
+  (5+ months) while the backend has always issued 6; no web self-registration
+  could ever complete. Fixed in `profilecreate.js` + `ForgotPassword.js`, zero
+  backend/API change, `/ship` clean (503 backend / 52 frontend, was 51).
+  `dd2a24c` + `a205d72` on `fix/otp-6-digit-input`, pushed, **not yet merged**
+  (compare link in WORKLOG). See **Done** for the full writeup and **Next** for
+  two things found but not fixed (a recurring `/ship` guard false-positive, and
+  an invalid local OTP key). **Does not touch 14/14c/14d or reorder Now** — see
+  the line below for that thread.
+- 2026-09-07 — **14d fixed and pushed, not yet merged.** The
   pass offer was invisible on `MyBookings.js` for non-holders, and the Pay
   button could fire a full charge in the gap before `/payment/pass/` resolved,
   overcharging a pass holder. Both closed in `57fe00b` on
@@ -1998,6 +2009,15 @@ design.
 
 ## Next
 
+- **Local `TWOFACTOR_API_KEY` is invalid — no local OTP send works** — new
+  2026-09-07. `backend/.env` has a present but rejected key: `send_otp()` only
+  falls back to its built-in dev-mode (console-printed OTP) when the key is
+  **empty**, so a present-but-bad key still takes the live-send branch and
+  2Factor.in returns "Invalid API Key" → every `/api/auth/otp/request/` 500s
+  locally. Found verifying the item below in a browser. Local-only — says
+  nothing about whether Railway's key works — but it blocks *any* local OTP
+  testing (registration, login-by-OTP, forgot-password) until Vishnu supplies a
+  working key or blanks the local one.
 - **Slice 10 has no app half** — new 2026-08-19. The website ships scan-report
   download in `MyBookings.js`; the app (`a20ad2e`) has **no `reports/` call at
   all**. A patient who books a scan on the app is notified their report is
@@ -2013,6 +2033,8 @@ design.
   narrowed, **a `/ship` report saying "no secrets" is quietly one check short**,
   and that is the part that matters: the gate silently degrades rather than
   failing loudly. One-line fix, its own commit, never folded into a feature PR.
+  **Recurred 2026-09-07** on the OTP-fix session's step-4 secret scan — 19 days
+  later, still open, still a one-line fix nobody has landed on its own.
 - **The test counts in the docs are badly stale** — new 2026-08-19. `CLAUDE.md`
   said 158 backend tests and the `/ship` checklist says 99; the real numbers are
   **304 backend / 25 frontend** (250 backend before item 8). A stale baseline
@@ -2181,6 +2203,27 @@ Resolved and deliberately removed, so they don't get re-added:
 ---
 
 ## Done
+
+- **2026-09-07** — **Patient web registration was completely blocked — fixed.**
+  `profilecreate.js`'s OTP field has had `maxLength={4}` since the file's first
+  commit (`53a415d`, 2026-03-21) while the backend has always issued 6-digit
+  codes (`secrets.randbelow(900000) + 100000`). The Verify button had no
+  digit-count gating either, so a patient could only ever submit a truncated,
+  always-wrong code. **Any patient trying to self-register on the website has
+  been unable to complete sign-up for over five months** — unknown how much of
+  that is masked by patients registering through the app instead, which has
+  its own separate flow; worth a look given how much of Now is about demand
+  being the scarce thing, not code.
+  Fixed in `profilecreate.js` (6-digit input, digit filtering, Verify-button
+  gating) and a stale "4-digit" placeholder in `ForgotPassword.js` (that
+  field's logic was already correct at 6, only the copy lied). Zero backend or
+  API change — confirmed `verify_otp`'s regex already accepts 6 digits.
+  `dd2a24c` + `a205d72` on `fix/otp-6-digit-input`, pushed, not yet merged.
+  `/ship` ran clean: 503 backend (2 skipped) · 52 frontend (was 51, +1 new).
+  Two things found and filed to **Next**, not fixed here: the `/ship`
+  secret-scan guard false-positive recurring (already tracked, see below), and
+  a newly-found invalid local `TWOFACTOR_API_KEY` blocking all local OTP
+  testing. Did not touch 14/14b/14c/14d or reorder the pass work.
 
 - **2026-09-04 → 09-06** — **A full-codebase audit merged, and the pass switched
   back on.** The audit branch landed as **#53** (13 commits): the forgeable
