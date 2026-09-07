@@ -581,6 +581,24 @@ export default function MyBookings() {
             </div>
           )}
 
+          {/* Not holding one, but it is on sale. Without this the offer exists
+              only on the checkout screen — a patient has to pick a doctor AND a
+              slot before the ₹35 tier is on screen at all. This is the page a
+              returning patient actually opens, and the payload below was
+              already fetched above; it was being thrown away for non-holders.
+              Price and terms come from the server, so payments/fees.py stays
+              the single source of truth. */}
+          {passData?.enabled && !passData.pass && (
+            <div className="mb-pass">
+              🎟️
+              <span>
+                <b>Appointment Pass — ₹{passData.price}.</b>{' '}
+                Covers the service fee on {passData.bookings} visits within{' '}
+                {passData.days} days. Add one at checkout on your next booking.
+              </span>
+            </div>
+          )}
+
           {loading && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               {[...Array(3)].map((_, i) => (

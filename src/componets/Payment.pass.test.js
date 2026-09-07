@@ -126,3 +126,38 @@ test('a backend without the endpoint just means no pass', async () => {
   await screen.findByRole('button', { name: /Pay ₹25.37/ });
   expect(screen.queryByText(/Appointment Pass/)).not.toBeInTheDocument();
 });
+
+test('the Pay button waits for the pass check, so a holder is never charged for a covered visit', async () => {
+  // The fee and the pass are two independent requests with no ordering between
+  // them. This pins the dangerous interleaving: the fee lands FIRST, the pass is
+  // still in flight. Before the fix the button went live reading "Pay ₹25.37"
+  // and `canRedeem` was still false, so tapping it opened Razorpay and charged
+  // a patient for a visit their pass covers at ₹0.
+  let landPass;
+  API.get.mockImplementation((url) =>
+    url.startsWith('/payment/pass')
+      ? new Promise((resolve) => { landPass = () => resolve({ data: HELD }); })
+      : Promise.resolve({ data: SERVICE_ONLY_DOCTOR }));
+  show();
+
+  // The fee HAS arrived — the total is on screen — and the button is still held.
+  await screen.findByText('₹25.37');
+  expect(screen.getByRole('button', { name: /Loading…/ })).toBeDisabled();
+
+  landPass();
+
+  // Once the pass lands the same button is a free confirmation, not a charge.
+  expect(await screen.findByRole('button', { name: /Use your pass/ })).toBeEnabled();
+  expect(API.post).not.toHaveBeenCalled();
+});
+
+test('a checkout with no pass still unblocks when the pass call fails', async () => {
+  // The button waits on the pass call now, so a failure must still settle it —
+  // otherwise one bad response disables checkout for every patient.
+  API.get.mockImplementation((url) =>
+    url.startsWith('/payment/pass')
+      ? Promise.reject(new Error('timeout'))
+      : Promise.resolve({ data: SERVICE_ONLY_DOCTOR }));
+  show();
+  expect(await screen.findByRole('button', { name: /Pay ₹25.37/ })).toBeEnabled();
+});

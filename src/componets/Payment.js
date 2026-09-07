@@ -61,6 +61,13 @@ export default function Payment() {
   // screen follows. Doctors only: the pass doesn't cover scans in v1.
   const [passData, setPassData] = useState(null);
   const [buyPass,  setBuyPass]  = useState(false);
+  // Has /payment/pass/ settled yet? `passData === null` cannot answer that on
+  // its own — it means "still loading", "fetch failed" AND "no offer at all".
+  // The Pay button has to tell the first from the other two: the fee fetch and
+  // this one are independent requests with no ordering between them, so
+  // without this a pass holder who taps Pay in the gap is charged for a visit
+  // their pass already covers.
+  const [passLoading, setPassLoading] = useState(true);
 
   // "Book for someone else" — when on, the appointment is for another person
   // (name + mobile). Notifications still go to the logged-in account holder.
@@ -99,13 +106,17 @@ export default function Payment() {
   }, [providerId, isScan, scanId, doctorId, navigate]);
 
   useEffect(() => {
-    if (isScan) return;                     // scans can't use a pass in v1
+    if (isScan) { setPassLoading(false); return; }  // scans can't use a pass in v1
     let cancelled = false;
-    API.get('/payment/pass/')
+    // The timeout is load-bearing, not tidiness. The Pay button now waits for
+    // this request, so a hang that never settles would disable checkout for
+    // everyone — far worse than the race it closes. Capped, it always settles.
+    API.get('/payment/pass/', { timeout: 8000 })
       .then(({ data }) => { if (!cancelled) setPassData(data); })
       // A backend without the endpoint, or an offline moment, simply means no
       // pass on offer — never a blocked checkout.
-      .catch(() => { if (!cancelled) setPassData(null); });
+      .catch(() => { if (!cancelled) setPassData(null); })
+      .finally(() => { if (!cancelled) setPassLoading(false); });
     return () => { cancelled = true; };
   }, [isScan]);
 
@@ -762,12 +773,12 @@ export default function Payment() {
           <button
             className="pay-btn"
             onClick={canRedeem ? handleRedeem : handlePayment}
-            disabled={loading || !breakdown}
+            disabled={loading || !breakdown || passLoading}
           >
             {loading
               ? <><div className="pay-spinner" />
                   {canRedeem ? ' Confirming…' : ' Opening Payment Gateway…'}</>
-              : !breakdown
+              : !breakdown || passLoading
                 ? <>{feeError ? 'Fee details unavailable' : 'Loading…'}</>
                 : canRedeem
                   ? <><i className="bi bi-ticket-perforated me-1" />Use your pass — Confirm Appointment</>
