@@ -18,7 +18,9 @@ the things that can lose money or break a live booking come first.
   `run_daily_payouts` cron. Template `doctor_running_late` documented in
   `WHATSAPP_TEMPLATES.md` §16 but **not yet submitted to Meta**. 525 backend
   tests (2 skipped, was 503) · 52 web (untouched). On
-  `feature/doctor-running-late`, **not pushed, no PR yet**. Two judgment calls
+  `feature/doctor-running-late`, pushed to origin @ `0fdc9f3`, **PR not opened
+  yet** — `gh` has no auth in a session (same recurring gap noted for
+  `fix/otp-6-digit-input`); compare link is in WORKLOG. Two judgment calls
   made without confirming first — see item 22's own section. **Does not touch
   14/14c/21/22-adjacent work** — 14c is still 🔴 and still Vishnu's.
 - **Previously:** 2026-09-07 (third session) — **14c: `pass_expiring`
