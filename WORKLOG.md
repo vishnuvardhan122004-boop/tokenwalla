@@ -5,7 +5,8 @@ Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** `fix/otp-6-digit-input` on web, pushed to origin @ `d553884`, **needs a PR** (`gh` still has no auth in a session — web UI or `gh auth login`). Compare link: https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...fix/otp-6-digit-input?expand=1. `fix/pass-web-visibility` merged since the last entry (PRs #60, #61). **Do NOT delete** `develop`, which deploys to staging.
 - **Latest commit at last update:** `d553884` `fix/otp-6-digit-input` (web, **pushed, not merged**) · `470d1ed` `main` (web/backend — merged and deployed)
-- **Last updated:** 2026-09-07 — **patient registration OTP fixed**: the sign-up form's OTP field was capped at 4 digits while the backend always issues 6-digit codes, so no new patient could complete registration — this has been broken since the file's first commit, 2026-03-21. Fixed in `profilecreate.js` (6-digit input, digit filtering, Verify-button gating) plus a stale "4-digit" placeholder in `ForgotPassword.js`; zero backend/API changes needed. **503 backend tests (2 skipped) · 52 web** (was 51, +1 from the new OTP test) — baseline refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end; ROADMAP updated with the fix plus two new findings (see below). See the 2026-09-07 sections below for the per-check breakdown.
+- **Last updated:** 2026-09-07 (third session) — **ROADMAP 14c: `pass_expiring` submitted to Meta, PENDING REVIEW.** A read-only audit of the pass's mechanics/cron/WhatsApp contract found nothing to fix — code already matched the WHATSAPP_TEMPLATES.md §15 spec exactly. Same day Vishnu (1) confirmed via a Railway log check that the cron chain runs both commands (wiring proven — see 14c), and (2) filed the template with Meta. **14c stays 🔴, deliberately** — kept open until a `pass_expiring` WhatsAppLog row reads `sent`. Docs-only, no tests to re-run.
+- **Previously:** 2026-09-07 (second session) — **patient registration OTP fixed**: the sign-up form's OTP field was capped at 4 digits while the backend always issues 6-digit codes, so no new patient could complete registration — this has been broken since the file's first commit, 2026-03-21. Fixed in `profilecreate.js` (6-digit input, digit filtering, Verify-button gating) plus a stale "4-digit" placeholder in `ForgotPassword.js`; zero backend/API changes needed. **503 backend tests (2 skipped) · 52 web** (was 51, +1 from the new OTP test) — baseline refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end.
 - **Previously:** 2026-09-07 — **ROADMAP 14d**: the pass offer was invisible on `MyBookings.js` for non-holders, and the Pay button could fire before `/payment/pass/` resolved, letting a pass holder get charged full price in the gap. Both fixed, regression test added. 503 backend tests (2 skipped) · 51 web (was 49, +2 from the new test) — baselines refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end. ⚠️ ROADMAP 14c is unchanged, still 🔴, still needs Vishnu — untouched by this session.
 - **Previously:** 2026-09-06 (session wrap) — PR #58 merged: the pass expiry nudge's WhatsApp half, the signup password regex, `ACTIVE_TASK.md`, and one escaped test thread. 503 backend tests (2 skipped) · 49 web.
 - **Previously:** 2026-09-06 (second session) — ROADMAP 21 fixed and refund idempotency taken down to the database; 495 backend tests. ⚠️ its refund-migration pre-merge check is still outstanding.
@@ -31,6 +32,40 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-07 (third session) — 14c audit, and the Meta template is filed
+
+A read-only audit of the ₹35 Appointment Pass (Item 14/14c), requested to
+consolidate its mechanics/cron/WhatsApp spec into one dashboard. No files
+touched by the audit itself — its only side effect was the finding below.
+
+**Audit result: nothing to fix.** `payments/fees.py`'s pass split, the
+`railway.cron.json` cron chain, and `notifications/whatsapp.send_pass_expiring`
+all matched `WHATSAPP_TEMPLATES.md` §15 exactly — name, category, language,
+variables. `send_pass_expiry_reminders --help` confirmed no `--dry-run` flag
+exists (plain `BaseCommand`, no custom args); its query logic was read instead
+of run, to avoid writing real `expiry_reminder_sent` flags against local data.
+
+**Two things Vishnu did the same day, reported back and now recorded:**
+- Checked Railway → Logs on a post-rebuild execution: both `Reminder run
+  complete` and `Nudged 0 pass(es)` are there. **Proves the cron chain wires
+  correctly** — the thing 14c has never been able to confirm before. `Nudged 0`
+  is still correct (no pass was in its 3-day window on that run), so this is
+  wiring proof, not a delivery proof.
+- **Submitted `pass_expiring` to Meta Business Manager.** Status: **PENDING
+  REVIEW**, not yet approved.
+
+**ROADMAP 14c stays 🔴, on explicit instruction** — a submission is not a
+`sent` row, and the item is deliberately kept open until one exists. Full
+narrative is in 14c's own section (heading, three dated blockquotes, the
+"done 2026-09-07" wiring note, and the delivery-half paragraph all updated).
+
+**Not done, and not this session's to do:** watching for Meta's approval
+(usually minutes to a few hours per the §15 checklist, but asynchronous and
+outside a session's control), or checking the WhatsAppLog table for a `sent`
+row once it lands (production data).
 
 ---
 

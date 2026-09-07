@@ -7,7 +7,16 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-07 (second session) — **patient web registration
+- **Last updated:** 2026-09-07 (third session) — **14c: `pass_expiring`
+  submitted to Meta, PENDING REVIEW.** A read-only audit of the pass's
+  mechanics, cron, and WhatsApp contract confirmed the code and the §15 spec
+  already matched — nothing to fix. Same day, Vishnu (1) confirmed via a
+  Railway log check that the cron chain runs both commands end to end
+  (**wiring now proven**), and (2) submitted the `pass_expiring` template to
+  Meta. **14c stays 🔴, deliberately** — a submission is not a `sent` row, and
+  it was explicitly kept open until one exists. Docs-only, no code changed;
+  full detail in 14c's own section and in WORKLOG.
+- 2026-09-07 (second session) — **patient web registration
   was completely broken, unrelated to the pass work — found and fixed.** The
   sign-up OTP field has been capped at 4 digits since the file's first commit
   (5+ months) while the backend has always issued 6; no web self-registration
@@ -1688,7 +1697,7 @@ use-case survives).
 Migration `payments.0013` adds two columns, both nullable/defaulted. 429 backend
 tests (42 in `tests_pass.py`), 44 web.
 
-#### 14c. Prove the expiry nudge actually runs 🔴 — was 🟡; the flag going ON promoted it 2026-09-06
+#### 14c. Prove the expiry nudge actually runs 🔴 — template submitted to Meta 2026-09-07, still red until a `sent` row
 
 > **2026-09-06 (third session):** the WhatsApp half shipped. Still 🔴 — the
 > cron run is unobserved AND the template is unsubmitted, so no patient has
@@ -1701,6 +1710,13 @@ tests (42 in `tests_pass.py`), 44 web.
 > then each run writes a `failed` WhatsAppLog row carrying `132001`, which is
 > the expected state, not a regression. Still 🔴 — a red that only Vishnu can
 > clear, and it clears on a `sent` row, not on a merge.
+
+> **2026-09-07:** a read-only source audit (fees.py, the cron, the WhatsApp
+> sender, `--help` on the command) turned up nothing new to fix — the code and
+> the §15 spec already matched exactly. Same day, **Vishnu submitted
+> `pass_expiring` to Meta — status PENDING REVIEW, not yet approved.** Still
+> 🔴 **on purpose**: a submission is not a `sent` row, and this item is
+> explicitly being kept open until one exists.
 
 > **Why this is red now.** While the promotion was off, `Nudged 0 pass(es)` was
 > the right answer whether the chain worked or not, so an unrun nudge cost
@@ -1716,37 +1732,40 @@ the only runs visible in the logs (12:40, 12:50) happened **before** that
 rebuild, so they show `Reminder run complete` and nothing else — which is
 exactly what a broken chain would also look like.
 
-**First move next session, it is two minutes:** Railway → project → Logs,
-filter `complete`, look at any run after 13:00 on 2026-09-02:
+**Done 2026-09-07** — Vishnu checked a post-rebuild execution in Railway →
+Logs and both lines are there:
 
-    Reminder run complete. Sent 0 reminder(s).
-    Pass expiry run complete. Nudged 0 pass(es).
+    Reminder run complete
+    Nudged 0 pass(es)
 
-Both lines → close this item. **Only the first line → the `;` chain is not
-running the second command**, and that is a real bug: the nudge would be dead
-code that looks configured. `Nudged 0` is the correct number either way — no
-pass exists in production — so this proves wiring, not delivery. A push has
-still never been sent to a real device, and cannot be until the promo is on.
+**Wiring is now proven: the `;` chain runs both commands.** (The note this
+replaces said "both lines → close this item" — that was written before the
+WhatsApp half existed, back when wiring was the whole story. It no longer is;
+see "closes on two things, not one" below.) `Nudged 0` is still the right
+number — no pass was inside its 3-day window on that run — so this confirms
+the cron fires, not that delivery works. A push has still never reached a real
+device (no phone has the app built), and neither has a WhatsApp send — that's
+the one thing still open, and it's gated on Meta's review, not on a session.
 
 **Still open, both for Vishnu:** the −₹11.84 promo budget above, and whether the
 CA needs to answer GST on a pass sold as an advance (invoice raised in full at
 purchase, the second service delivered up to 30 days later). The build assumes
 invoice-at-purchase.
 
-**The delivery half — half-closed 2026-09-06, and the remaining half is a
-form, not code.** The nudge WAS push-only, and since the app has not been built
-since 1.1.3 (36) and every pass sold today is bought on the web, there was **no
-current buyer it could reach at all** — not "a patient without the app", but
-every one of them. `send_pass_expiring` now fires alongside the push
+**The delivery half — code-complete 2026-09-06, the form filed 2026-09-07, now
+waiting on Meta.** The nudge WAS push-only, and since the app has not been
+built since 1.1.3 (36) and every pass sold today is bought on the web, there
+was **no current buyer it could reach at all** — not "a patient without the
+app", but every one of them. `send_pass_expiring` now fires alongside the push
 (`send_pass_expiry_reminders.py`), so the command no longer talks to an empty
-channel. **But the `pass_expiring` template is NOT submitted to Meta**, and an
-unapproved template is inert: `send_template` logs a warning, returns, and the
-run writes a `failed` WhatsAppLog row carrying `132001`. So the code half is
-done and **delivery still has not happened**. The paste-ready body is
-WHATSAPP_TEMPLATES.md §15; submitting it is Vishnu's, same queue as item 9.
-**This item closes on two things, not one:** both `complete` lines in the
-Railway log (below), and one `pass_expiring` row in the admin with
-`status='sent'`.
+channel. **`pass_expiring` was submitted to Meta 2026-09-07** (the paste-ready
+body was WHATSAPP_TEMPLATES.md §15) and sits **PENDING REVIEW**. Until it's
+approved, the template is inert exactly like before: `send_template` logs a
+warning, returns, and the run writes a `failed` WhatsAppLog row carrying
+`132001` — expected, not a regression.
+**This item closes on two things, not one — and wiring (above) is now proven,
+so only one is left:** one `pass_expiring` row in the admin with
+`status='sent'`, which can't exist until Meta approves the template.
 
 **Two details corrected 2026-09-06** (a handoff had them wrong, so they are
 pinned here): the window is **3 days before expiry**
