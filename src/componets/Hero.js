@@ -147,6 +147,12 @@ export default function Hero() {
   const [doctors,   setDoctors]   = useState([]);
   const [activeIdx, setActiveIdx] = useState(0);
   const [heroSearch, setHeroSearch] = useState('');
+  // Advertised pre-login — PassView is open to anonymous callers precisely so
+  // this can ask before a visitor has an account. `enabled` is the real
+  // PASS_ENABLED flag either way, so the kill switch hides this same as it
+  // hides the offer at checkout. A failed/slow fetch just means no teaser,
+  // never a broken landing page.
+  const [passOffer, setPassOffer] = useState(null);
 
   const handleHeroSearch = (e) => {
     e.preventDefault();
@@ -174,6 +180,10 @@ API.get('/doctors/').then(({ data }) => {
   useEffect(() => {
     const interval = setInterval(() => setActiveIdx(p => (p + 1) % 3), 2600);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    API.get('/payment/pass/').then(({ data }) => setPassOffer(data)).catch(() => {});
   }, []);
 
   return (
@@ -726,6 +736,19 @@ API.get('/doctors/').then(({ data }) => {
                 {t('hero.pricing.cta')}
               </Link>
             </div>
+            {passOffer?.enabled && (
+              <div className="price-card">
+                <div className="price-badge">{t('hero.pricing.passBadge')}</div>
+                <div className="price-name">{t('hero.pricing.passName')}</div>
+                <div className="price-amount"><sup>₹</sup>{Math.round(Number(passOffer.price))}</div>
+                <div className="price-sub">
+                  {t('hero.pricing.passSub', { bookings: passOffer.bookings, days: passOffer.days })}
+                </div>
+                <Link to="/alldoctor" className="btn-white-outline" style={{ width: '100%', justifyContent: 'center' }}>
+                  {t('hero.pricing.cta')}
+                </Link>
+              </div>
+            )}
           </div>
         </section>
 
