@@ -3,9 +3,10 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** `docs/session-wrap-2026-09-06` on web — this wrap only, **needs a PR**. Everything else is merged: `fix/web-password-regex-and-pass-nudge` landed as **#58** and its local branch is deleted (the remote one is safe to delete too), `fix/whatsapplog-scan-report-kwargs` as **#57**. Note `gh` is not authenticated in the session, so a session cannot open a PR — that is the web UI or `gh auth login`. **Do NOT delete** `develop`, which deploys to staging.
-- **Latest commit at last update:** `ee8e9dc` `main` (web/backend — **merged and deployed**, `PASS_ENABLED=True`) · `0dbe505` main (app — **merged, NOT built**, so no patient on a phone has the pass; every pass sold is bought on the web)
-- **Last updated:** 2026-09-06 (fourth session) — **PR #58 merged**: the pass expiry nudge's WhatsApp half, the signup password regex, `ACTIVE_TASK.md`, and one escaped test thread. **503 backend tests (2 skipped)** · **49 web** — the baselines, re-measured on `main` after the merge (an earlier line said 500; that was wrong). ⚠️ **ROADMAP 14c is still 🔴 and needs Vishnu, and it is now the only thing holding it**: the `pass_expiring` Meta template is unsubmitted, so the deployed WhatsApp path writes a `failed` row with `132001` on every run — paste-ready body in WHATSAPP_TEMPLATES.md §15.
+- **Branch:** `fix/pass-web-visibility` on web, pushed to origin @ `57fe00b`, **needs a PR** (`gh` still has no auth in a session — web UI or `gh auth login`). Compare link: https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...fix/pass-web-visibility?expand=1. Everything from the prior wrap is merged. **Do NOT delete** `develop`, which deploys to staging.
+- **Latest commit at last update:** `57fe00b` `fix/pass-web-visibility` (web, **pushed, not merged**) · `ee8e9dc` `main` (web/backend — merged and deployed, `PASS_ENABLED=True`) · `0dbe505` main (app — merged, NOT built; every pass sold is still bought on the web)
+- **Last updated:** 2026-09-07 — **ROADMAP 14d**: the pass offer was invisible on `MyBookings.js` for non-holders, and the Pay button could fire before `/payment/pass/` resolved, letting a pass holder get charged full price in the gap. Both fixed, regression test added. **503 backend tests (2 skipped) · 51 web** (was 49, +2 from the new test) — baselines refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate ran clean end to end; see 2026-09-07 section below for the per-check breakdown. ⚠️ **ROADMAP 14c is unchanged, still 🔴, still needs Vishnu** — untouched by this session.
+- **Previously:** 2026-09-06 (session wrap) — PR #58 merged: the pass expiry nudge's WhatsApp half, the signup password regex, `ACTIVE_TASK.md`, and one escaped test thread. 503 backend tests (2 skipped) · 49 web.
 - **Previously:** 2026-09-06 (second session) — ROADMAP 21 fixed and refund idempotency taken down to the database; 495 backend tests. ⚠️ its refund-migration pre-merge check is still outstanding.
 - **Previously:** 2026-09-06 — **the ₹35 pass is back on sale** (`PASS_ENABLED=True`, set by Vishnu in the Railway dashboard at ~01:10 IST, budget question knowingly still open), the 2026-09-04/05 audit branch merged as **#53**, and CLAUDE.md gained a **feature-flag carve-out** as **#54**. `/ship` then caught a regression the audit branch was about to ship and found **ROADMAP 21** 🔴 — pending/rejected facilities have every provider publicly listed and bookable. **477 backend tests (2 skipped) · 47 web**, both baselines refreshed in the same commit. **ROADMAP 14c went 🟡 → 🔴:** the flag being on means a real buyer now depends on an expiry nudge nobody has ever seen run.
 - **Previously:** 2026-09-05 — a full-codebase audit: 1 critical throttle bypass, a critical data-loss path in force-delete, and three money bugs. 13 commits, since merged. ⚠️ `NUM_PROXIES=1` still cannot be verified from code; ROADMAP 16 has the check.
@@ -29,6 +30,45 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-07 — ROADMAP 14d: pass visibility on MyBookings, and a checkout race
+
+Picked up an already-committed but unshipped fix sitting on `fix/pass-web-visibility`
+(`dd7170a`, authored earlier), verified it end to end, and pushed it through `/ship`.
+
+**What it fixes (both frontend-only, no backend or API contract change):**
+- `MyBookings.js` — the ₹35 Appointment Pass offer was fetched but never shown
+  until a patient reached `Payment.js`; now shown to non-holders on the
+  bookings list too.
+- `Payment.js` — the Pay button could enable before `/payment/pass/` resolved,
+  so a pass holder tapping Pay in that window was charged full price
+  (`handlePayment`) instead of redeeming free (`handleRedeem`). Button now
+  also gates on a `passLoading` flag; the fetch is capped at 8s so a hang
+  can't disable checkout for everyone.
+
+**Gate results:**
+
+| Gate | Result |
+|---|---|
+| `python manage.py test` | 503 passed, 2 skipped — unchanged |
+| `payments.tests_pass` + `tests_integration` | 91 passed (money-path re-check) |
+| `CI=true npx react-scripts test --watchAll=false` | 51 passed, 11 suites — was 49, +2 new |
+| `makemigrations --check --dry-run` | No changes detected (no backend touched) |
+| `npm run build` | Compiles clean, zero eslint warnings |
+| Secrets/debris scan | Clean |
+| Thread-leak trap (CLAUDE.md #1) | Zero `graph.facebook.com` lines |
+
+Also: `node_modules` didn't exist in this checkout (fresh clone, never
+installed) — ran `npm install` before any frontend command would work.
+`Claude outputs/TokenWalla_Status_Sheet.md` (an untracked scratch doc from
+2026-09-06) is now gitignored instead of showing dirty every session.
+
+**Pushed, not merged.** `57fe00b` on `fix/pass-web-visibility`. `gh` has no
+auth in a session, so the PR itself needs the web UI or `gh auth login` —
+compare link is in the header above and in ROADMAP 14d. **Not touched:**
+ROADMAP 14c (still 🔴, still Vishnu's — Meta template + Railway log check).
 
 ---
 
