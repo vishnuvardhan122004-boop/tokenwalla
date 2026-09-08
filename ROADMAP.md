@@ -2257,16 +2257,17 @@ the two deviations above with Vishnu.
   stricter and the worse of the pair, since it pushes users off symbols. One
   regex, its own commit; not folded into a floor change.
 - **Branch cleanup** — 12 local branches, several long dead
-- **Unexplained uncommitted files in the app repo's shared checkout** — new
-  2026-09-07. `app/(patient)/doctor/[id].tsx` and `utils/booking.ts` sit
-  modified-but-uncommitted on `feat/appointment-pass` (now merged as PR #18),
-  not written by this session and not matching anything in the session's own
-  work. Left untouched rather than guessed at — investigate whose they are
-  (a different concurrent session, most likely) and either commit or discard
-  before they rot further or get lost to an unrelated `git checkout`.
 
 Resolved and deliberately removed, so they don't get re-added:
 
+- ~~Unexplained uncommitted files in the app repo's shared checkout~~ —
+  resolved 2026-09-08. `app/(patient)/doctor/[id].tsx` and `utils/booking.ts`
+  turned out to be a real, already-correct fix for a booking bug (two
+  `useEffect`s could invalidate the calendar selection independently, parking
+  it on a day the doctor is off, still bookable) — just missing the unit test
+  its own comment promised. Added the test (`resolveSelectedDate`, 6 cases),
+  verified (174 app tests, `tsc --noEmit` clean), shipped on its own branch,
+  merged as app PR #20. Nothing was discarded.
 - ~~Verify the WhatsApp token is permanent~~ — generated 2026-08-10; the
   remaining half (is it live on Railway?) is item 2 in **Now**.
 - ~~Mobile app `/api/bookings/upgrade/` contract~~ — **not a thing.** Audited the
