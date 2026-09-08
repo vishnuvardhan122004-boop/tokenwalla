@@ -7,6 +7,7 @@ import HPayments from './HPayments';
 import SPECIALIZATION_OPTIONS from '../services/specializations';
 import { useVisiblePolling } from '../services/useVisiblePolling';
 import BookingNoticePicker from './BookingNoticePicker';
+import { providerLabel } from '../services/providerLabel';
 
 // Icon stylesheet, pulled in dynamically so its ~14 kB gzip stays out of the
 // bundle every patient downloads. See the longer note in Hprofile.js.
@@ -407,10 +408,11 @@ const Hdashboard = () => {
       setDoctors(prev => prev.map(d => d.id === docId
         ? { ...d, running_delay_minutes: data.running_delay_minutes }
         : d));
+      const label = providerLabel(doctor.name, 'DOCTOR');
       showToast(
         minutes > 0
-          ? `Dr. ${doctor.name} marked ${minutes}m late. ${data.notified_count} patients notified.`
-          : `Dr. ${doctor.name}'s delay cleared.`
+          ? `${label} marked ${minutes}m late. ${data.notified_count} patients notified.`
+          : `${label}'s delay cleared.`
       );
     } catch (err) {
       showToast(err?.response?.data?.message || "Failed to update delay.", "error");

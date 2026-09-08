@@ -1369,7 +1369,7 @@ Migrations, all additive and safe to run before the code: `doctors.0014`,
 **What this does NOT close:** every one of these has an app half that is merged
 and unbuilt. See 5b.
 
-### 14. The Appointment Pass — ₹35 for two visits, 30 days 🟡 — SHIPPED 2026-09-02, **ON SALE AGAIN 2026-09-06**
+### 14. The Appointment Pass — ₹35 for two visits, 30 days 🟡 — ON, guest-visible on web + app as of 2026-09-07
 
 **Where it stands, 2026-09-06: ON.** `PASS_ENABLED=True` on the Railway
 `tokenwalla-backend` project, set by Vishnu in the dashboard at ~01:10 IST and
@@ -1380,12 +1380,20 @@ now live spend rather than a hypothetical. **Watch the first redeemed pass
 against that figure.**
 
 **Update, 2026-09-07:** `GET /api/payment/pass/` is `AllowAny` now, not
-`IsAuthenticated` — opened up so the landing page can advertise the offer
-pre-login (`feat/show-pass-to-everyone`, PR #68). `enabled` still reads the
-real `PASS_ENABLED` value for anonymous callers, so an unauthenticated probe
-*does* answer whether the promotion is on now — the line above claiming
-otherwise was true when written and is stale. Checkout itself is unchanged:
-buying or redeeming still requires login.
+`IsAuthenticated` — opened up so the landing page (and the app's home screen,
+mirrored in app PR #18) can advertise the offer pre-login (`feat/show-pass-to-everyone`,
+web PR #68). `enabled` still reads the real `PASS_ENABLED` value for
+anonymous callers, so an unauthenticated probe *does* answer whether the
+promotion is on now — the line above claiming otherwise was true when
+written and is stale. Checkout itself is unchanged: buying or redeeming
+still requires login, on both web and app.
+
+**Where it stands, 2026-09-07 ~17:35 IST: ON, again.** The flag was found
+`False` on production mid-session — flipped off by Vishnu sometime after
+2026-09-06 outside of what WORKLOG recorded — then flipped back to `True` in
+the dashboard, confirmed live via the now-public `GET /api/payment/pass/`
+returning `enabled: true`. Same budget question as 2026-09-06, still open,
+still his call.
 
 **How it got here, end of 2026-09-02.** Built, reviewed, merged and deployed —
 then deliberately turned off for four days. Web PRs **#47, #48, #49, #50** and app PR **#17**
@@ -2293,6 +2301,14 @@ deferred, nothing depends on it yet).
 
 Resolved and deliberately removed, so they don't get re-added:
 
+- ~~Unexplained uncommitted files in the app repo's shared checkout~~ —
+  resolved 2026-09-08. `app/(patient)/doctor/[id].tsx` and `utils/booking.ts`
+  turned out to be a real, already-correct fix for a booking bug (two
+  `useEffect`s could invalidate the calendar selection independently, parking
+  it on a day the doctor is off, still bookable) — just missing the unit test
+  its own comment promised. Added the test (`resolveSelectedDate`, 6 cases),
+  verified (174 app tests, `tsc --noEmit` clean), shipped on its own branch,
+  merged as app PR #20. Nothing was discarded.
 - ~~Verify the WhatsApp token is permanent~~ — generated 2026-08-10; the
   remaining half (is it live on Railway?) is item 2 in **Now**.
 - ~~Mobile app `/api/bookings/upgrade/` contract~~ — **not a thing.** Audited the
