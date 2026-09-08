@@ -2055,7 +2055,7 @@ design.
 
 ---
 
-### 22. Doctor Running Late broadcast — web shipped, app ported, two PRs + Meta review pending 🟡
+### 22. Doctor Running Late broadcast — web + app fully merged, only Meta's review is left 🟡
 
 New capability: hospital staff mark a doctor delayed and today's `CONFIRMED`
 patients get a push + WhatsApp alert with the adjusted time. Requested as a
@@ -2097,19 +2097,15 @@ refreshed on the same 15s poll as the queue. 533 backend tests (2 skipped) ·
 57 web (was 52, +5). `/ship` gate: SHIP. Zero `/api/payment/*` or
 `/api/bookings/*` contract impact.
 
-**Web fix, pushed 2026-09-08, PR not opened** — the dashboard toast hard-coded
+**Web fix, merged as PR #72** — the dashboard toast hard-coded
 `Dr. ${doctor.name}`, doubling the prefix for any doctor whose stored name
 already said "Dr." (caught live-testing: "Dr. Dr. Test Sharma"). Now uses the
-same `providerLabel()` helper `MyBookings.js` already had. On
-`fix/hospital-delay-toast-double-prefix`, tests + build clean, merges cleanly
-onto current `main`. Compare:
-https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...fix/hospital-delay-toast-double-prefix?expand=1
+same `providerLabel()` helper `MyBookings.js` already had.
 
-**Mobile app (separate repo, `tokenwalla.app`) — shipped 2026-09-08, pushed,
-PR not opened.** Same feature, ported to the Expo app rather than mirroring a
-contract change (no `/api/payment/*` or `/api/bookings/*` shape changed, so
-nothing here was forced — this is net-new UI consuming the same two already-
-live endpoints):
+**Mobile app (separate repo, `tokenwalla.app`) — merged as app PR #19.** Same
+feature, ported to the Expo app rather than mirroring a contract change (no
+`/api/payment/*` or `/api/bookings/*` shape changed, so nothing here was
+forced — this is net-new UI consuming the same two already-live endpoints):
 - Hospital dashboard (`app/(hospital)/dashboard.tsx`): the same 5-button row,
   mirroring the existing `toggleAvail` pattern (per-doctor in-flight state,
   optimistic update, `Alert.alert` feedback) and the file's own warning
@@ -2127,12 +2123,15 @@ live endpoints):
   generic bell. Added a clock icon.
 - Built in an isolated `git worktree` off `origin/main`, not the shared
   checkout — that checkout had its own uncommitted, unrelated WIP on
-  `feat/appointment-pass` at the time (now merged as that repo's PR #17).
-  `tsc --noEmit` clean, `npm run lint` 0 new warnings, `jest` 14/14 suites ·
-  160/160 tests, verified against the real local backend (Expo web preview,
-  both screens clicked through end to end, not just read). Two commits on
-  `feat/mobile-doctor-delay`. Compare:
-  https://github.com/vishnuvardhan122004-boop/tokenwalla.app/compare/main...feat/mobile-doctor-delay?expand=1
+  `feat/appointment-pass` at the time (now merged as that repo's PR #17, and
+  its own stray files turned out to be a real bug fix too, merged separately
+  as app PR #20). `tsc --noEmit` clean, `npm run lint` 0 new warnings, `jest`
+  14/14 suites · 160/160 tests, verified against the real local backend (Expo
+  web preview, both screens clicked through end to end, not just read).
+  `main` advanced by 6 commits (PRs #17/#18/#20 plus a perf pass) between
+  branching and merging; resolved one real conflict (a `useMemo` wrap on
+  `activeCount` landing next to this feature's new `todayISO` line) by hand,
+  re-verified after (15/15 suites, 174/174 tests).
 
 **Two deliberate deviations from the original spec, both judgment calls made
 in the backend session, still not confirmed with Vishnu:**
@@ -2145,12 +2144,16 @@ in the backend session, still not confirmed with Vishnu:**
   page exists, not before, since an approved template's variable count is
   fixed and a mismatch fails every send.
 
-**Not done, all outside a session's control:** Meta approving
-`doctor_running_late` (currently In review); opening + merging the two
-pending PRs above (`gh` has no auth in a session, same recurring gap as
-`fix/otp-6-digit-input` — compare links are given); confirming the two
-deviations below with Vishnu; the public tracker page (Phase 4, deliberately
-deferred, nothing depends on it yet).
+**Not done:** Meta approving `doctor_running_late` — still **In review** as of
+2026-09-08 evening (`pass_expiring`, filed a day earlier on the same account,
+took about a day to clear, so this is within normal range, not stuck).
+Nothing else remains for a session to do: `gh auth login` finished mid-session
+(device-flow, no token ever handled directly), so all three PRs (#72, #73,
+app #19) were opened and later merged by Vishnu himself — merging stays his
+call regardless of auth, per CLAUDE.md's "merging is the deploy." Still open,
+non-blocking, whenever convenient: confirming the two deviations below with
+Vishnu, and the public tracker page (Phase 4, deliberately deferred, nothing
+depends on it yet).
 
 ---
 
