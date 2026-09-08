@@ -2047,7 +2047,7 @@ design.
 
 ---
 
-### 22. Doctor Running Late broadcast — backend + dashboard/patient UI shipped 2026-09-07 🟡
+### 22. Doctor Running Late broadcast — web shipped, app ported, two PRs + Meta review pending 🟡
 
 New capability: hospital staff mark a doctor delayed and today's `CONFIRMED`
 patients get a push + WhatsApp alert with the adjusted time. Requested as a
@@ -2070,8 +2070,9 @@ tracker page (Phase 4) is not built; nothing depends on it yet (see the
   daily-cadence cron in the codebase; not literally midnight, noted in the
   code comment) rather than getting its own service.
 - `WHATSAPP_TEMPLATE_DOCTOR_DELAY` / `doctor_running_late`, documented in
-  `WHATSAPP_TEMPLATES.md` §16. **Not yet submitted to Meta** — inert (dev-mode
-  no-op) until it is, same as §11–15.
+  `WHATSAPP_TEMPLATES.md` §16. **Submitted to Meta 2026-09-08 — status: In
+  review**, same unresolved wait as `pass_expiring`. Still inert (no-op, not
+  a send failure) until approved.
 - CLAUDE.md's background-thread table gained a sixth row
   (`_dispatch_doctor_delay_notifications`).
 - 22 new tests (`doctors/tests_running_delay.py`,
@@ -2088,6 +2089,43 @@ refreshed on the same 15s poll as the queue. 533 backend tests (2 skipped) ·
 57 web (was 52, +5). `/ship` gate: SHIP. Zero `/api/payment/*` or
 `/api/bookings/*` contract impact.
 
+**Web fix, pushed 2026-09-08, PR not opened** — the dashboard toast hard-coded
+`Dr. ${doctor.name}`, doubling the prefix for any doctor whose stored name
+already said "Dr." (caught live-testing: "Dr. Dr. Test Sharma"). Now uses the
+same `providerLabel()` helper `MyBookings.js` already had. On
+`fix/hospital-delay-toast-double-prefix`, tests + build clean, merges cleanly
+onto current `main`. Compare:
+https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...fix/hospital-delay-toast-double-prefix?expand=1
+
+**Mobile app (separate repo, `tokenwalla.app`) — shipped 2026-09-08, pushed,
+PR not opened.** Same feature, ported to the Expo app rather than mirroring a
+contract change (no `/api/payment/*` or `/api/bookings/*` shape changed, so
+nothing here was forced — this is net-new UI consuming the same two already-
+live endpoints):
+- Hospital dashboard (`app/(hospital)/dashboard.tsx`): the same 5-button row,
+  mirroring the existing `toggleAvail` pattern (per-doctor in-flight state,
+  optimistic update, `Alert.alert` feedback) and the file's own warning
+  palette (`Colors.warningBg/warningBorder`, the `holdBtn` precedent) rather
+  than inventing new styling.
+- My Bookings (`app/(patient)/my-bookings.tsx`): the same banner, reusing the
+  *existing* `unavailBanner` style (already used for the "doctor unavailable,
+  reschedule free" case) for visual consistency, and `utils/booking.ts`'s
+  existing `slotDateTime`/`toLocalISODate`/`providerLabel` rather than
+  reimplementing date math.
+- Notification-centre icon gap found and fixed in the same slice: the backend
+  push already carried `type: 'doctor_delay'` and worked end-to-end (receive,
+  record, tap-to-navigate all generic), but `app/(patient)/notifications.tsx`'s
+  `iconFor()` switch had no case for it, so it silently fell back to the
+  generic bell. Added a clock icon.
+- Built in an isolated `git worktree` off `origin/main`, not the shared
+  checkout — that checkout had its own uncommitted, unrelated WIP on
+  `feat/appointment-pass` at the time (now merged as that repo's PR #17).
+  `tsc --noEmit` clean, `npm run lint` 0 new warnings, `jest` 14/14 suites ·
+  160/160 tests, verified against the real local backend (Expo web preview,
+  both screens clicked through end to end, not just read). Two commits on
+  `feat/mobile-doctor-delay`. Compare:
+  https://github.com/vishnuvardhan122004-boop/tokenwalla.app/compare/main...feat/mobile-doctor-delay?expand=1
+
 **Two deliberate deviations from the original spec, both judgment calls made
 in the backend session, still not confirmed with Vishnu:**
 - `delay_minutes` is the closed set `{0,10,15,20,30,45,60}`, not a 0–120
@@ -2099,9 +2137,12 @@ in the backend session, still not confirmed with Vishnu:**
   page exists, not before, since an approved template's variable count is
   fixed and a mismatch fails every send.
 
-**Not done:** the public tracker page (Phase 4), submitting
-`doctor_running_late` to Meta (still inert, dev-mode no-op), and confirming
-the two deviations above with Vishnu.
+**Not done, all outside a session's control:** Meta approving
+`doctor_running_late` (currently In review); opening + merging the two
+pending PRs above (`gh` has no auth in a session, same recurring gap as
+`fix/otp-6-digit-input` — compare links are given); confirming the two
+deviations below with Vishnu; the public tracker page (Phase 4, deliberately
+deferred, nothing depends on it yet).
 
 ---
 

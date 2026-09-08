@@ -3,8 +3,9 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** on `main`. `feat/show-pass-to-everyone` (PR #68) and `docs/roadmap-14-anon-probe-note` (PR #69) both merged since the last entry. **Do NOT delete** `develop`, which deploys to staging.
-- **Latest commit at last update:** `5d44aff` `main` (web/backend — merged and deployed)
+- **Branch:** on `main`. PR #70 (WORKLOG: `PASS_ENABLED=True` record) and PR #71 (ROADMAP item 22 status correction) both merged since the last entry. Two more pushed, **PRs not opened** (`gh` has no auth in a session, the recurring gap): `fix/hospital-delay-toast-double-prefix` (this repo) and, in the **separate** `tokenwalla.app` repo, `feat/mobile-doctor-delay`. **Do NOT delete** `develop`, which deploys to staging.
+- **Latest commit at last update:** `3e5c014` `main` (web/backend — merged and deployed) · `0ee2663` `feat/mobile-doctor-delay` (`tokenwalla.app`, pushed, not merged; `96294e9` is the first of its two commits)
+- **Last updated:** 2026-09-08 — **ROADMAP item 22 wrap-up: WhatsApp template submitted, a live-testing bug fixed, and the feature ported to the mobile app.** Three things, found by actually clicking through the shipped feature rather than assuming it worked: (1) `doctor_running_late` was documented but never filed — submitted to Meta via WhatsApp Manager (browser automation this time, not handed to Vishnu — verified by re-opening the template list and seeing the row, per the standing submission checklist's own warning that a failed submit can look like it worked); status **In review**. (2) Live-testing the dashboard toast against a real doctor named "Dr. Test Sharma" surfaced "Dr. Dr. Test Sharma" — the toast hard-coded `Dr. ${doctor.name}` instead of reusing `providerLabel()`; fixed, pushed as `fix/hospital-delay-toast-double-prefix`. (3) Ported the whole feature to the mobile app (separate repo) — full detail in ROADMAP item 22 and below. **All three found real gaps a "looks done" read would have missed.** 533 backend / 57 web unchanged (no backend or web logic touched beyond the one-line toast fix); app: 14/14 suites, 160/160 tests.
 - **Production config, 2026-09-07 ~17:35 IST: `PASS_ENABLED=True`** on the Railway `tokenwalla` service (`tokenwalla-backend` project, `production` environment), set by Vishnu in the dashboard. Verified live: `GET /api/payment/pass/` (now open to anonymous callers, see PR #68 below) returns `enabled: true`. The break-even budget question from ROADMAP item 14 — under ~41% of buyers need to be people who'd have booked a second visit anyway, or each fully-redeemed pass loses ₹11.84 — is unchanged and still open; turning the flag on is Vishnu's call, taken knowingly, same as 2026-09-06.
 - **Previously:** 2026-09-07 (sixth session) — **Appointment Pass advertised to guests, pre-login.** Started as a report that the pass "still wasn't rendering" after PR #67; investigation (code, tests, `npm run build`, and the Vercel API — latest production deployment confirmed at `be34cff` with zero runtime errors in 48h) found nothing wrong — the flag, the universal `pass_eligible()`, and both `Payment.js`/`MyBookings.js` gates were already correct and tested. The follow-up ask was to show the pass to unauthenticated visitors; the original spec would have hardcoded `enabled: True` for anonymous callers (bypassing `PASS_ENABLED`, the one kill switch this feature has) and built a guest-checkout-with-mid-flow-OTP flow — declined both. Scoped down, with Vishnu's sign-off, to: `PassView` open to anonymous callers (`enabled` still reads the real flag), and a second pricing card on the landing page (`Hero.js`) advertising it pre-login — price/visits/window pulled live from `/payment/pass/`, never hard-coded, hidden the instant the flag is off. Checkout (`/payment`, still behind `RequireAuth`) is untouched; a guest can see the offer but still has to log in to buy or redeem it, same as every other booking action today. **535 backend tests (2 skipped) · 61 web (was 533/58 on `main` at `be34cff`, +2/+3 from this session's new tests)** — baselines refreshed in `.claude/commands/ship.md` in the same commit. `/ship` gate: SHIP. Zero `/api/bookings/*` contract impact; `/api/payment/pass/`'s only behavior change is that an unauthenticated `GET` now returns 200 (`pass: null`) instead of 401 — the authenticated response shape is byte-for-byte unchanged, so nothing the app currently does needs to change.
 - **Previously:** 2026-09-07 (fifth session) — **ROADMAP item 22, frontend slice: Doctor Running Late dashboard buttons + patient banner.** Hospital dashboard doctor cards get a `[+10m][+15m][+20m][+30m][Clear]` row hitting the existing `POST /api/doctors/<id>/set-delay/` (no backend changes — that endpoint shipped last session), highlighting the active preset and toasting `notified_count` on success. `MyBookings.js` shows an amber "running late" banner with struck-through original time → adjusted time for today's `CONFIRMED` bookings, fetched per-doctor off the existing `GET /doctors/{id}/` (bookings carry only the doctor id, not a nested delay field) and refreshed on the same 15s poll as the queue. **533 backend tests (2 skipped) · 57 web (was 52, +5 from this session's new tests)** — see caveat below; `/ship` gate: SHIP. Zero backend files touched, zero `/api/payment/*` or `/api/bookings/*` contract impact. Full detail below.
@@ -36,6 +37,74 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-08 — Doctor Running Late: WhatsApp filed, toast bug fixed, ported to the app
+
+Picked up ROADMAP item 22 where the fifth session left it (backend + web
+merged) and asked, per its own "Not done" list: WhatsApp template, and the
+app. All three turned out to have a real gap, not a formality:
+
+**1. `doctor_running_late` submitted to Meta.** WhatsApp Manager → Message
+templates → Create Template, filled in by hand rather than pasted (the
+composer auto-closes `{{` — typing the full literal `{{1}}` yields
+`{{1}}1}}`; the fix is to type `{{1` and let it self-close, verified
+character-by-character against the live field, not assumed). Body matches
+`WHATSAPP_TEMPLATES.md` §16 exactly. Submitted; re-opened the template list
+per the doc's own checklist ("a failed submit can look like it worked") and
+confirmed the row is there — status **In review**, same wait as
+`pass_expiring`.
+
+**2. Toast double-prefix bug, caught live-testing, not in review.** Seeded a
+real hospital session locally and clicked `+15m` on a doctor whose stored
+name is literally "Dr. Test Sharma" — the toast read "Dr. Dr. Test Sharma
+marked 15m late." `Hdashboard.js`'s `setDoctorDelay` hard-coded
+`` `Dr. ${doctor.name}` `` instead of the `providerLabel()` helper
+`MyBookings.js` already used for the same reason. Fixed, re-verified live
+(clicked `+30m`, toast now reads correctly), 58/58 web tests still pass.
+Pushed as `fix/hospital-delay-toast-double-prefix`; not yet merged (`gh` has
+no auth in a session — compare link in ROADMAP item 22).
+
+**3. Ported to the mobile app** (separate repo, `tokenwalla.app` — the
+website's own CLAUDE.md is explicit that the app has its own release cycle
+and the API is a contract, not an implementation detail; nothing here
+changed a contract, since both endpoints the app now calls were already
+live). The repo's own checkout had unrelated uncommitted WIP on
+`feat/appointment-pass` at the time (that repo's version of the
+"appointment pass, universal" work, since merged as its PR #17) — built in
+an isolated `git worktree` off `origin/main` instead of touching that
+checkout, the same shared-worktree precaution this session needed twice on
+the web repo too.
+- Hospital dashboard (`app/(hospital)/dashboard.tsx`): the same
+  `[+10m][+15m][+20m][+30m][Clear]` row, mirroring the file's own
+  `toggleAvail` pattern and warning palette rather than inventing new UI.
+- My Bookings (`app/(patient)/my-bookings.tsx`): the same amber banner,
+  reusing the *existing* `unavailBanner` style (the "doctor unavailable,
+  reschedule free" banner) and the app's own `slotDateTime` /
+  `toLocalISODate` / `providerLabel` utils.
+- Verified against the real local backend, not just `tsc`/`jest`: ran Expo
+  web, seeded a hospital + a patient session via a freshly-issued JWT (same
+  technique used to demo the web dashboard earlier), clicked `+15m` on a
+  real doctor, watched the toast and the highlighted preset, then switched
+  to the patient session and watched the banner appear on My Bookings with
+  the correct struck-through → adjusted time.
+- **Follow-up gap, found only by asking "does the notification actually
+  reach the user":** the backend push already worked end-to-end (receive,
+  record into the in-app notification list, tap-to-navigate — all generic,
+  keyed off `data.screen`/`data.type`), but `app/(patient)/notifications.tsx`'s
+  `iconFor()` switch had no `doctor_delay` case, so it silently fell back to
+  the generic bell. Seeded a fake entry into the real notification store and
+  confirmed the fix in the browser (clock icon, tap routes to My Bookings).
+- `tsc --noEmit` clean, `npm run lint` 0 new warnings, `jest` 14/14 suites ·
+  160/160 tests (before and after the icon fix). Two commits on
+  `feat/mobile-doctor-delay` (`96294e9`, `0ee2663`); pushed, not merged —
+  same `gh`-has-no-auth gap, compare link in ROADMAP item 22.
+
+**Not done, all outside a session's control:** Meta's review of the
+template; opening + merging both pending PRs; confirming the two spec
+deviations noted in the fourth session with Vishnu. ROADMAP item 22 updated
+to match all of the above.
 
 ---
 
