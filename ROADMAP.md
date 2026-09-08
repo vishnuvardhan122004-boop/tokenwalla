@@ -1369,7 +1369,7 @@ Migrations, all additive and safe to run before the code: `doctors.0014`,
 **What this does NOT close:** every one of these has an app half that is merged
 and unbuilt. See 5b.
 
-### 14. The Appointment Pass — ₹35 for two visits, 30 days 🟡 — SHIPPED 2026-09-02, **ON SALE AGAIN 2026-09-06**
+### 14. The Appointment Pass — ₹35 for two visits, 30 days 🟡 — ON, guest-visible on web + app as of 2026-09-07
 
 **Where it stands, 2026-09-06: ON.** `PASS_ENABLED=True` on the Railway
 `tokenwalla-backend` project, set by Vishnu in the dashboard at ~01:10 IST and
@@ -1380,12 +1380,20 @@ now live spend rather than a hypothetical. **Watch the first redeemed pass
 against that figure.**
 
 **Update, 2026-09-07:** `GET /api/payment/pass/` is `AllowAny` now, not
-`IsAuthenticated` — opened up so the landing page can advertise the offer
-pre-login (`feat/show-pass-to-everyone`, PR #68). `enabled` still reads the
-real `PASS_ENABLED` value for anonymous callers, so an unauthenticated probe
-*does* answer whether the promotion is on now — the line above claiming
-otherwise was true when written and is stale. Checkout itself is unchanged:
-buying or redeeming still requires login.
+`IsAuthenticated` — opened up so the landing page (and the app's home screen,
+mirrored in app PR #18) can advertise the offer pre-login (`feat/show-pass-to-everyone`,
+web PR #68). `enabled` still reads the real `PASS_ENABLED` value for
+anonymous callers, so an unauthenticated probe *does* answer whether the
+promotion is on now — the line above claiming otherwise was true when
+written and is stale. Checkout itself is unchanged: buying or redeeming
+still requires login, on both web and app.
+
+**Where it stands, 2026-09-07 ~17:35 IST: ON, again.** The flag was found
+`False` on production mid-session — flipped off by Vishnu sometime after
+2026-09-06 outside of what WORKLOG recorded — then flipped back to `True` in
+the dashboard, confirmed live via the now-public `GET /api/payment/pass/`
+returning `enabled: true`. Same budget question as 2026-09-06, still open,
+still his call.
 
 **How it got here, end of 2026-09-02.** Built, reviewed, merged and deployed —
 then deliberately turned off for four days. Web PRs **#47, #48, #49, #50** and app PR **#17**
@@ -2249,6 +2257,13 @@ the two deviations above with Vishnu.
   stricter and the worse of the pair, since it pushes users off symbols. One
   regex, its own commit; not folded into a floor change.
 - **Branch cleanup** — 12 local branches, several long dead
+- **Unexplained uncommitted files in the app repo's shared checkout** — new
+  2026-09-07. `app/(patient)/doctor/[id].tsx` and `utils/booking.ts` sit
+  modified-but-uncommitted on `feat/appointment-pass` (now merged as PR #18),
+  not written by this session and not matching anything in the session's own
+  work. Left untouched rather than guessed at — investigate whose they are
+  (a different concurrent session, most likely) and either commit or discard
+  before they rot further or get lost to an unrelated `git checkout`.
 
 Resolved and deliberately removed, so they don't get re-added:
 
