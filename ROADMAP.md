@@ -2047,14 +2047,15 @@ design.
 
 ---
 
-### 22. Doctor Running Late broadcast — backend shipped 2026-09-07, dashboard/patient UI next 🟡
+### 22. Doctor Running Late broadcast — backend + dashboard/patient UI shipped 2026-09-07 🟡
 
 New capability: hospital staff mark a doctor delayed and today's `CONFIRMED`
 patients get a push + WhatsApp alert with the adjusted time. Requested as a
 full 5-phase feature (backend, hospital dashboard widget, patient banner on
-web + a public tracker); scoped down to **backend only** for this session per
-the one-slice-per-session rule — the dashboard widget and patient-facing
-banner are next session's slice, using the endpoint shipped here.
+web + a public tracker); the backend shipped in one session, the dashboard
+widget + patient banner in the next — both merged to `main` now. The public
+tracker page (Phase 4) is not built; nothing depends on it yet (see the
+4-param template note below).
 
 **Shipped**, on `feature/doctor-running-late`:
 - `Doctor.running_delay_minutes` / `delay_updated_at` (additive migration).
@@ -2075,11 +2076,20 @@ banner are next session's slice, using the endpoint shipped here.
   (`_dispatch_doctor_delay_notifications`).
 - 22 new tests (`doctors/tests_running_delay.py`,
   `notifications/tests_doctor_delay.py`). 525 backend tests (2 skipped), was
-  503 — baseline needs refreshing in `.claude/commands/ship.md`. Web untouched,
-  52 tests still pass.
+  503. Merged as PR #65.
+
+**Frontend slice shipped 2026-09-07, merged as PR #66** — hospital dashboard
+doctor cards get a `[+10m][+15m][+20m][+30m][Clear]` row hitting the
+`set-delay/` endpoint above, highlighting the active preset and toasting
+`notified_count` on success; `MyBookings.js` shows an amber "running late"
+banner with struck-through original time → adjusted time for today's
+`CONFIRMED` bookings, fetched per-doctor off `GET /doctors/{id}/` and
+refreshed on the same 15s poll as the queue. 533 backend tests (2 skipped) ·
+57 web (was 52, +5). `/ship` gate: SHIP. Zero `/api/payment/*` or
+`/api/bookings/*` contract impact.
 
 **Two deliberate deviations from the original spec, both judgment calls made
-this session, not yet confirmed with Vishnu:**
+in the backend session, still not confirmed with Vishnu:**
 - `delay_minutes` is the closed set `{0,10,15,20,30,45,60}`, not a 0–120
   range — matches the endpoint spec's literal wording and the dashboard's
   planned preset buttons; a receptionist can't fat-finger an arbitrary value.
@@ -2089,9 +2099,9 @@ this session, not yet confirmed with Vishnu:**
   page exists, not before, since an approved template's variable count is
   fixed and a mismatch fails every send.
 
-**Not done:** the hospital dashboard delay widget, the patient-facing banner
-on `MyBookings.js` and the public tracker, and submitting the template to
-Meta. No PR opened yet.
+**Not done:** the public tracker page (Phase 4), submitting
+`doctor_running_late` to Meta (still inert, dev-mode no-op), and confirming
+the two deviations above with Vishnu.
 
 ---
 
