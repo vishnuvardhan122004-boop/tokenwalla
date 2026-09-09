@@ -3,9 +3,11 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** both repos on `main`, clean, nothing pending. **Do NOT delete** `develop`, which deploys to staging.
-- **Latest commit at last update:** website `cbd9cca` `main` · app `3553a19` `main` — both merged and deployed/live.
-- **Last updated:** 2026-09-08 (session close) — **ROADMAP item 22 fully merged; only Meta's review is left.** `gh auth login` completed mid-session (device-flow — no token ever handled directly, browser approval was Vishnu's own). All three PRs opened; Vishnu merged them himself (merging stays his call regardless of auth — CLAUDE.md's "merging is the deploy"). Two of the three had genuinely diverged from `main` by the time they were merge-ready (this repo saw heavy concurrent activity all day) — resolved both by hand rather than force-push: WORKLOG.md's top block conflicted with a concurrent session's own wrap (combined both narratives, PR #73), and the app's `my-bookings.tsx` conflicted with a `useMemo` perf commit that landed after branching (kept both, re-verified 15/15 suites · 174/174 tests, app PR #19). **Merged: web PR #72** (toast fix), **web PR #73** (this doc wrap), **app PR #19** (mobile port). Checked `doctor_running_late`'s status directly in WhatsApp Manager after merging: still **In review** — `pass_expiring` took about a day on this account, so not stuck, just not there yet. Session close: local branches for both merged PRs deleted, the app's temporary `git worktree` removed, all three local dev servers (Django, CRA, Expo web) stopped.
+- **Branch:** both repos on `main`, clean. Website `docs/14b-railway-cron-runbook` (PR #76) and `docs/wrap-2026-09-08-item-22-close` (PR #75) both still open, not yet merged. **Do NOT delete** `develop`, which deploys to staging.
+- **Latest commit at last update:** website `46714f8` `main` (includes #76) · app `3553a19` `main` (includes #19) — both merged and deployed/live.
+- **Last updated:** 2026-09-09 — **ROADMAP item 22 confirmed fully working, end to end, on a real phone.** `doctor_running_late` is now **Active** in WhatsApp Manager (checked live) — Meta's review cleared sometime after 2026-09-08. Vishnu ran all 16 `send_test_whatsapp` commands from the production container (`railway run` doesn't apply inside the container itself — the env vars are already native there — so it was `python manage.py send_test_whatsapp <mobile> --template ...` directly) and confirmed messages arrived on WhatsApp, `doctor_running_late` included. **Item 22 has nothing left for a session to do.** Found in passing: the test command's `SAMPLE_PARAMS` dict has no entry for `pass_expiring` or `doctor_running_late` (both added after the dict was last touched), so those two needed `--params` spelled out by hand — worth a one-line fix each, not urgent.
+- **Previously:** 2026-09-09 — **ROADMAP 14b's Railway migration assumption was wrong; corrected, with a cutover runbook.** 14b assumed both crons could move to Railway's new Infrastructure-as-Code (`.railway/railway.ts`); checked Railway's live docs instead of assuming, and the IaC reference has no cron/schedule field at all — `cronSchedule` only ever existed as a legacy Config-as-Code field, which has been silently overriding each service's own (stale) dashboard copy the whole time. Rewrote 14b with the one safe order (dashboard settings first, verify, then delete the config files) plus an exact numbered runbook. **Docs-only, zero app code touched, no test-count change.** Pushed as `docs/14b-railway-cron-runbook` @ `51c5a31`, opened as **PR #76**. **Also found: `gh auth status` came back logged in this session** — confirms the device-flow login from 2026-09-08 persists across sessions (shared macOS keychain, not session-scoped) — the "no PR can be opened from a session" gap is resolved for this machine.
+- **Previously:** 2026-09-08 (session close) — **ROADMAP item 22 fully merged; only Meta's review was left.** `gh auth login` completed mid-session (device-flow — no token ever handled directly, browser approval was Vishnu's own). All three PRs opened; Vishnu merged them himself (merging stays his call regardless of auth — CLAUDE.md's "merging is the deploy"). Two of the three had genuinely diverged from `main` by the time they were merge-ready (this repo saw heavy concurrent activity all day) — resolved both by hand rather than force-push: WORKLOG.md's top block conflicted with a concurrent session's own wrap (combined both narratives, PR #73), and the app's `my-bookings.tsx` conflicted with a `useMemo` perf commit that landed after branching (kept both, re-verified 15/15 suites · 174/174 tests, app PR #19). **Merged: web PR #72** (toast fix), **web PR #73** (this doc wrap), **app PR #19** (mobile port). Session close: local branches for both merged PRs deleted, the app's temporary `git worktree` removed, all three local dev servers (Django, CRA, Expo web) stopped.
 - **Previously:** 2026-09-08 — **ROADMAP item 22, first wrap: WhatsApp filed, a live-testing toast bug found, the feature ported to the app.** Three things, found by actually clicking through the shipped feature rather than assuming it worked: (1) `doctor_running_late` submitted to Meta via WhatsApp Manager (verified by re-opening the template list and seeing the row, per the standing submission checklist's own warning that a failed submit can look like it worked). (2) Live-testing the dashboard toast against a real doctor named "Dr. Test Sharma" surfaced "Dr. Dr. Test Sharma" — the toast hard-coded `Dr. ${doctor.name}` instead of reusing `providerLabel()`; fixed. (3) Ported the whole feature to the mobile app (separate repo, `tokenwalla.app`) — hospital dashboard buttons, patient banner, and a notification-centre icon gap found along the way (the push already worked end-to-end; the icon list just had no case for the new type). All three were real gaps a "looks done" read would have missed. 533 backend / 57 web unchanged (no backend/web logic touched beyond the one-line toast fix); app: `tsc`/`lint` clean, 14/14 suites · 160/160 tests, verified against the real local backend end to end (not just unit tests).
 - **Previously:** 2026-09-08 — **App repo cleanup: a real bug fix finished, not discarded.** A previous wrap flagged two uncommitted files in the app repo's shared checkout (`app/(patient)/doctor/[id].tsx`, `utils/booking.ts`) as unexplained and left them untouched. Read in full before touching anything: they were a genuine, already-correct fix — two separate `useEffect`s could invalidate the doctor-detail calendar selection independently, and the midnight-rollover one could fire without the working-day one, parking the selection on a day the doctor is off (a chip rendered "Off" and highlighted at once, still bookable). The only thing missing was the unit test the code's own comment already promised. Extracted the decision into a pure `resolveSelectedDate()` in `utils/booking.ts`, added 6 tests covering all branches plus the empty-window edge case, verified (174 app tests, `tsc --noEmit` clean), shipped on its own branch (unrelated to the pass work still sitting on `feat/appointment-pass`), merged as **app PR #20**. ROADMAP's "## Next" bullet for this moved to resolved.
 - **Production config, 2026-09-07 ~17:35 IST: `PASS_ENABLED=True`** on the Railway `tokenwalla` service (`tokenwalla-backend` project, `production` environment), set by Vishnu in the dashboard per the CLAUDE.md carve-out (variable + value confirmed explicitly in-session first). Verified live: `GET /api/payment/pass/` (now open to anonymous callers, see PR #68 below) returns `enabled: true`. The break-even budget question from ROADMAP item 14 — under ~41% of buyers need to be people who'd have booked a second visit anyway, or each fully-redeemed pass loses ₹11.84 — is unchanged and still open; turning the flag on is Vishnu's call, taken knowingly, same as 2026-09-06.
@@ -43,6 +45,42 @@ Newest entry on top. Update the **Status** columns as things land.
 - Keep entries short — one line per change, link the commit hash so it's traceable.
 
 ---
+
+## 2026-09-09 — ROADMAP 14b: Railway IaC assumption corrected, cutover runbook written
+
+Picked up the top unstarted item in ROADMAP "Now" — 14b, Railway's
+Config-as-Code sunset on 2026-12-01. Before scoping it, checked Railway's own
+docs rather than trust the item's original phrasing, and it turned out to
+matter:
+
+- **"Migrate to Railway's IaC" is a dead end for these two cron services.**
+  `.railway/railway.ts`'s `service()` config has no cron/schedule field
+  anywhere in Railway's reference — only `source`, `build`, `start`,
+  `healthcheck`, `preDeploy`, `replicas`, `env`, `domains`, `volumeMounts`.
+  `cronSchedule` only ever existed as a legacy Config-as-Code `deploy` field,
+  and Config-as-Code has been silently overriding each service's own (stale)
+  dashboard copy of it the whole time. Running `railway config migrate` on
+  either cron service would carry over build/start settings and drop the
+  schedule with no warning.
+- Rewrote ROADMAP 14b: replaced the "move to IaC, or record in the
+  dashboard" framing (read as two viable options) with the one that's
+  actually safe — set the dashboard Cron Schedule/start command/root
+  directory for both services first, verify, **then** delete
+  `backend/railway.cron.json` and `backend/railway.payouts.cron.json`. Added
+  an exact 6-step numbered runbook so there's nothing left to figure out when
+  someone executes it.
+- **Docs-only.** No application code touched, no migration, no test-count
+  change (533 backend / 57 web unchanged). Pushed as
+  `docs/14b-railway-cron-runbook` @ `51c5a31`, opened as **PR #76**.
+- **Found along the way, not part of the task:** `gh auth status` returned
+  logged in this session (account `vishnuvardhan122004-boop`, `repo` scope).
+  Every past session on record hit "not authenticated" here and had to hand
+  off a compare link instead of opening a PR. Opened #76 directly to confirm
+  it actually works, not just that the command claimed success.
+- **14b is 🟡, not ✅** — the dashboard half (steps 1–5 of the runbook) is
+  Vishnu's; a session has no Railway access beyond the `PASS_ENABLED`
+  carve-out. Closes only once he's run it and step 5's Railway-log check
+  passes.
 
 ## 2026-09-08 — Doctor Running Late: WhatsApp filed, toast bug fixed, ported to the app
 

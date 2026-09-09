@@ -7,7 +7,25 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-07 (fourth session) — **new item 22: Doctor
+- **Last updated:** 2026-09-09 (seventh session) — **14b's Railway migration
+  assumption was wrong; corrected, with a cutover runbook.** Item 14b (found
+  2026-09-02) assumed both cron services could move to Railway's new
+  Infrastructure-as-Code (`.railway/railway.ts`) — checked Railway's own live
+  docs instead of assuming, and they can't: the IaC reference has no
+  cron/schedule field at all, only `source`/`build`/`start`/`healthcheck`/
+  `preDeploy`/`replicas`/`env`/`domains`/`volumeMounts`. `cronSchedule` only
+  ever existed as a legacy Config-as-Code field, silently overriding each
+  service's own (stale) dashboard copy the whole time. Rewrote 14b with the
+  one safe order — dashboard settings first, verify, then delete
+  `backend/railway.cron.json` / `backend/railway.payouts.cron.json` — plus an
+  exact 6-step runbook. **Docs-only, zero app code touched.** Pushed as
+  `docs/14b-railway-cron-runbook` @ `51c5a31`, opened as **PR #76**.
+  **`gh auth status` came back logged in this session** — the recurring
+  "no PR can be opened from a session" gap (item 1, 14d, 22) may be resolved;
+  see the **Next** note below before assuming it holds permanently. **14b
+  stays 🟡** — the dashboard half is entirely Vishnu's, a session has no
+  Railway access beyond the `PASS_ENABLED` carve-out.
+- **Previously:** 2026-09-07 (fourth session) — **new item 22: Doctor
   Running Late broadcast, backend slice shipped, not merged.** Requested as a
   full 5-phase feature (backend + hospital dashboard + patient banner +
   tracker); scoped down to backend-only for this session on the
@@ -270,6 +288,13 @@ check which repo you are in before pushing.
 > branch above has to be turned into a PR by hand from its
 > `.../pull/new/<branch>` link. This has now cost time in two sessions —
 > running `gh auth login` once removes it permanently.
+>
+> **Corrected 2026-09-09 — this is no longer true, at least for this repo.**
+> `gh auth status` came back logged in (account `vishnuvardhan122004-boop`,
+> `repo` scope) and `gh pr create` opened PR #76 directly, no hand-off link
+> needed. Not re-verified for the `tokenwalla.app` repo. Don't delete this
+> block — if it regresses, knowing it worked once on 2026-09-09 narrows the
+> debugging.
 
 `docs/wrap-2026-08-10` was **never pushed** and is now folded into
 `docs/wrap-2026-08-11`, so don't go looking for it separately.
@@ -1691,7 +1716,7 @@ nowhere the repo can see them. Sharing a cron that is already declared in this
 repo keeps the whole schedule reviewable in a PR. A half-created service
 (`invigorating-light`) was discarded rather than left staged.
 
-### 14b. Config-as-code dies on 2026-12-01 🔴 — found 2026-09-02, not started
+### 14b. Config-as-code dies on 2026-12-01 🟡 — runbook written 2026-09-09, dashboard steps still Vishnu's
 
 Railway's service settings now carry: *"Config as Code is deprecated… Existing
 config files keep working until **2026-12-01**. Starting 2026-08-28, services
@@ -1701,14 +1726,28 @@ that have never used Config as Code cannot opt in."*
 `backend/railway.cron.json` (`send_appointment_reminders`, every 10 min, and now
 the pass nudge with it) and `backend/railway.payouts.cron.json`
 (`run_daily_payouts`, 15:00 UTC). After 2026-12-01 those files stop being read.
-What happens then is not documented as "keeps the last value" — assume the
-schedule and start command need to exist somewhere else before that date.
 
-**Before December:** move both crons to whatever Railway's Infrastructure-as-Code
-replacement is, or record their settings in the dashboard and delete the files
-so nothing looks configured by a file that is no longer read. Whichever way it
-goes, **the settings must not end up only in a dashboard nobody can diff** —
-that is how a payout cron silently stops running. The exact values today:
+**Checked against Railway's own docs 2026-09-09, not assumed: "migrate to
+Railway's IaC" is a dead end for these two services.** The IaC replacement
+(`.railway/railway.ts`, `railway config migrate`) has **no field for a cron
+schedule anywhere in its reference** — only `source`, `build`, `start`,
+`healthcheck`, `preDeploy`, `replicas`, `env`, `domains`, `volumeMounts`.
+`cronSchedule` only ever existed as a legacy Config-as-Code `deploy` field.
+Cron schedule lives **only** in a service's dashboard settings, and
+Config-as-Code has been overriding that dashboard field the whole time — so
+the dashboard's own copy is stale/unset right now, and it silently takes over
+the instant the file is gone. Running `railway config migrate` on either cron
+service would carry over build/start settings and drop the schedule with no
+warning.
+
+**So there is only one safe path, not two:** record the real settings in the
+dashboard, verify them, **then** delete the files — in that order. Do it the
+other way and the cron goes dark with no error, the same silent-failure shape
+that's already bitten this project three times (OTP throttle, anon rate
+limit). **The settings must not end up only in a dashboard nobody can diff**
+either — Railway genuinely offers no diffable alternative for cron today, so
+the table below is the durable record; check it against the dashboard by hand
+if it's ever in doubt. The exact values today:
 
 | Service | Root | Start command | Schedule |
 |---|---|---|---|
@@ -1717,6 +1756,32 @@ that is how a payout cron silently stops running. The exact values today:
 
 Both: repo `vishnuvardhan122004-boop/tokenwalla`, branch `main`, region
 Southeast Asia (Singapore), restart policy Never, all 18 shared variables.
+
+**The runbook, in order — none of this is a session's to execute (no Railway
+dashboard or CLI access beyond the `PASS_ENABLED` carve-out), but it's exact
+enough that there's nothing left to figure out when doing it:**
+
+1. Open each cron service's Settings page in the Railway dashboard. For both,
+   enter the Cron Schedule from the table above (`*/10 * * * *` /
+   `0 15 * * *`) and confirm the Start Command and Root Directory match too —
+   the dashboard fields, not the file. Save.
+2. **Do not delete or touch either `railway.*.json` file yet.** The file still
+   wins over the dashboard while it exists, so this step alone changes
+   nothing live — it's staging the fallback, not the cutover.
+3. Open the service's Settings → Config File field (if one is set to a custom
+   path) and note it, so it's clear what to clear in step 4.
+4. Once both dashboard forms are confirmed saved and correct, delete
+   `backend/railway.cron.json` and `backend/railway.payouts.cron.json` from
+   the repo and clear any custom Config File path from step 3. Commit,
+   push, merge to `main` — that push is what deploys the cutover.
+5. **Re-verify exactly like item 3 did the first time**, because "the file is
+   gone" and "the cron still runs" are different claims: check Railway →
+   Logs for both services after the next scheduled tick and confirm the real
+   output (`Reminder run complete`, `Nudged N pass(es)`, `Ledgered N
+   booking(s)`) — not just `Starting Container`.
+6. If either service reads blank or wrong in step 1, that's the dashboard's
+   stale copy from before Config-as-Code existed — expected, not a bug; the
+   values in the table above are the ones that have actually been running.
 
 Four product decisions behind these, agreed 2026-09-02: refund only the unused
 part · push-only nudge · reopen for 7 days on a late cancel · the free visit
@@ -2055,7 +2120,7 @@ design.
 
 ---
 
-### 22. Doctor Running Late broadcast — web + app fully merged, only Meta's review is left 🟡
+### ~~22. Doctor Running Late broadcast~~ ✅ 2026-09-09 — web + app merged, template Active, confirmed live on a real phone
 
 New capability: hospital staff mark a doctor delayed and today's `CONFIRMED`
 patients get a push + WhatsApp alert with the adjusted time. Requested as a
@@ -2078,9 +2143,9 @@ tracker page (Phase 4) is not built; nothing depends on it yet (see the
   daily-cadence cron in the codebase; not literally midnight, noted in the
   code comment) rather than getting its own service.
 - `WHATSAPP_TEMPLATE_DOCTOR_DELAY` / `doctor_running_late`, documented in
-  `WHATSAPP_TEMPLATES.md` §16. **Submitted to Meta 2026-09-08 — status: In
-  review**, same unresolved wait as `pass_expiring`. Still inert (no-op, not
-  a send failure) until approved.
+  `WHATSAPP_TEMPLATES.md` §16. Submitted to Meta 2026-09-08, **approved and
+  Active as of 2026-09-09** — confirmed both in WhatsApp Manager and by a
+  real test send reaching a real phone.
 - CLAUDE.md's background-thread table gained a sixth row
   (`_dispatch_doctor_delay_notifications`).
 - 22 new tests (`doctors/tests_running_delay.py`,
@@ -2097,7 +2162,7 @@ refreshed on the same 15s poll as the queue. 533 backend tests (2 skipped) ·
 57 web (was 52, +5). `/ship` gate: SHIP. Zero `/api/payment/*` or
 `/api/bookings/*` contract impact.
 
-**Web fix, merged as PR #72** — the dashboard toast hard-coded
+**Web fix, merged 2026-09-08 as PR #72** — the dashboard toast hard-coded
 `Dr. ${doctor.name}`, doubling the prefix for any doctor whose stored name
 already said "Dr." (caught live-testing: "Dr. Dr. Test Sharma"). Now uses the
 same `providerLabel()` helper `MyBookings.js` already had.
@@ -2144,16 +2209,21 @@ in the backend session, still not confirmed with Vishnu:**
   page exists, not before, since an approved template's variable count is
   fixed and a mismatch fails every send.
 
-**Not done:** Meta approving `doctor_running_late` — still **In review** as of
-2026-09-08 evening (`pass_expiring`, filed a day earlier on the same account,
-took about a day to clear, so this is within normal range, not stuck).
-Nothing else remains for a session to do: `gh auth login` finished mid-session
-(device-flow, no token ever handled directly), so all three PRs (#72, #73,
-app #19) were opened and later merged by Vishnu himself — merging stays his
-call regardless of auth, per CLAUDE.md's "merging is the deploy." Still open,
-non-blocking, whenever convenient: confirming the two deviations below with
-Vishnu, and the public tracker page (Phase 4, deliberately deferred, nothing
-depends on it yet).
+**Confirmed working end to end, 2026-09-09.** `doctor_running_late` is now
+**Active** in WhatsApp Manager — Meta's review cleared sometime after
+2026-09-08 (checked live in-browser, then separately confirmed by Vishnu
+running all 16 `send_test_whatsapp` templates from the production container
+and receiving them on a real phone, this one included). App PR #19 is also
+confirmed merged (`git log` on `tokenwalla.app`'s `main` shows `3553a19`) —
+the "still open" note from an earlier pass in this same file was stale, from
+a session that hadn't re-checked after Vishnu merged it. **Nothing is left
+for a session to do on this item.** Still open, non-blocking, whenever
+convenient: confirming the two deviations below with Vishnu, and the public
+tracker page (Phase 4, deliberately deferred, nothing depends on it yet). A
+small found-in-passing gap, not urgent: `send_test_whatsapp`'s built-in
+`SAMPLE_PARAMS` table has no entry for `pass_expiring` or
+`doctor_running_late` (both added after the dict was last touched), so
+testing either needs `--params` spelled out by hand.
 
 ---
 
