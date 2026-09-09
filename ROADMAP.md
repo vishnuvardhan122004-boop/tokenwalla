@@ -2120,7 +2120,7 @@ design.
 
 ---
 
-### 22. Doctor Running Late broadcast — web shipped, app ported, two PRs + Meta review pending 🟡
+### ~~22. Doctor Running Late broadcast~~ ✅ 2026-09-09 — web + app merged, template Active, confirmed live on a real phone
 
 New capability: hospital staff mark a doctor delayed and today's `CONFIRMED`
 patients get a push + WhatsApp alert with the adjusted time. Requested as a
@@ -2143,9 +2143,9 @@ tracker page (Phase 4) is not built; nothing depends on it yet (see the
   daily-cadence cron in the codebase; not literally midnight, noted in the
   code comment) rather than getting its own service.
 - `WHATSAPP_TEMPLATE_DOCTOR_DELAY` / `doctor_running_late`, documented in
-  `WHATSAPP_TEMPLATES.md` §16. **Submitted to Meta 2026-09-08 — status: In
-  review**, same unresolved wait as `pass_expiring`. Still inert (no-op, not
-  a send failure) until approved.
+  `WHATSAPP_TEMPLATES.md` §16. Submitted to Meta 2026-09-08, **approved and
+  Active as of 2026-09-09** — confirmed both in WhatsApp Manager and by a
+  real test send reaching a real phone.
 - CLAUDE.md's background-thread table gained a sixth row
   (`_dispatch_doctor_delay_notifications`).
 - 22 new tests (`doctors/tests_running_delay.py`,
@@ -2165,15 +2165,12 @@ refreshed on the same 15s poll as the queue. 533 backend tests (2 skipped) ·
 **Web fix, merged 2026-09-08 as PR #72** — the dashboard toast hard-coded
 `Dr. ${doctor.name}`, doubling the prefix for any doctor whose stored name
 already said "Dr." (caught live-testing: "Dr. Dr. Test Sharma"). Now uses the
-same `providerLabel()` helper `MyBookings.js` already had. Corrected
-2026-09-09 — this section still said "PR not opened" after the merge; `git
-log origin/main` confirms `a04ad5d` (#72) is on `main`.
+same `providerLabel()` helper `MyBookings.js` already had.
 
-**Mobile app (separate repo, `tokenwalla.app`) — shipped 2026-09-08, pushed,
-PR not opened.** Same feature, ported to the Expo app rather than mirroring a
-contract change (no `/api/payment/*` or `/api/bookings/*` shape changed, so
-nothing here was forced — this is net-new UI consuming the same two already-
-live endpoints):
+**Mobile app (separate repo, `tokenwalla.app`) — merged as app PR #19.** Same
+feature, ported to the Expo app rather than mirroring a contract change (no
+`/api/payment/*` or `/api/bookings/*` shape changed, so nothing here was
+forced — this is net-new UI consuming the same two already-live endpoints):
 - Hospital dashboard (`app/(hospital)/dashboard.tsx`): the same 5-button row,
   mirroring the existing `toggleAvail` pattern (per-doctor in-flight state,
   optimistic update, `Alert.alert` feedback) and the file's own warning
@@ -2191,12 +2188,15 @@ live endpoints):
   generic bell. Added a clock icon.
 - Built in an isolated `git worktree` off `origin/main`, not the shared
   checkout — that checkout had its own uncommitted, unrelated WIP on
-  `feat/appointment-pass` at the time (now merged as that repo's PR #17).
-  `tsc --noEmit` clean, `npm run lint` 0 new warnings, `jest` 14/14 suites ·
-  160/160 tests, verified against the real local backend (Expo web preview,
-  both screens clicked through end to end, not just read). Two commits on
-  `feat/mobile-doctor-delay`. Compare:
-  https://github.com/vishnuvardhan122004-boop/tokenwalla.app/compare/main...feat/mobile-doctor-delay?expand=1
+  `feat/appointment-pass` at the time (now merged as that repo's PR #17, and
+  its own stray files turned out to be a real bug fix too, merged separately
+  as app PR #20). `tsc --noEmit` clean, `npm run lint` 0 new warnings, `jest`
+  14/14 suites · 160/160 tests, verified against the real local backend (Expo
+  web preview, both screens clicked through end to end, not just read).
+  `main` advanced by 6 commits (PRs #17/#18/#20 plus a perf pass) between
+  branching and merging; resolved one real conflict (a `useMemo` wrap on
+  `activeCount` landing next to this feature's new `todayISO` line) by hand,
+  re-verified after (15/15 suites, 174/174 tests).
 
 **Two deliberate deviations from the original spec, both judgment calls made
 in the backend session, still not confirmed with Vishnu:**
@@ -2209,14 +2209,21 @@ in the backend session, still not confirmed with Vishnu:**
   page exists, not before, since an approved template's variable count is
   fixed and a mismatch fails every send.
 
-**Not done, all outside a session's control:** Meta approving
-`doctor_running_late` (currently In review); the toast fix is merged (#72,
-corrected 2026-09-09) but **app PR #19 is still open, in the separate
-`tokenwalla.app` repo** — a session's `gh` had no auth there as of
-2026-09-08, though it worked for this repo on 2026-09-09 (see the top-of-file
-note), so it's worth a session re-checking rather than assuming; confirming
-the two deviations below with Vishnu; the public tracker page (Phase 4,
-deliberately deferred, nothing depends on it yet).
+**Confirmed working end to end, 2026-09-09.** `doctor_running_late` is now
+**Active** in WhatsApp Manager — Meta's review cleared sometime after
+2026-09-08 (checked live in-browser, then separately confirmed by Vishnu
+running all 16 `send_test_whatsapp` templates from the production container
+and receiving them on a real phone, this one included). App PR #19 is also
+confirmed merged (`git log` on `tokenwalla.app`'s `main` shows `3553a19`) —
+the "still open" note from an earlier pass in this same file was stale, from
+a session that hadn't re-checked after Vishnu merged it. **Nothing is left
+for a session to do on this item.** Still open, non-blocking, whenever
+convenient: confirming the two deviations below with Vishnu, and the public
+tracker page (Phase 4, deliberately deferred, nothing depends on it yet). A
+small found-in-passing gap, not urgent: `send_test_whatsapp`'s built-in
+`SAMPLE_PARAMS` table has no entry for `pass_expiring` or
+`doctor_running_late` (both added after the dict was last touched), so
+testing either needs `--params` spelled out by hand.
 
 ---
 
