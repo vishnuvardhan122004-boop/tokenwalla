@@ -7,7 +7,20 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-09 — **item 22 closed for real, and two more
+- **Last updated:** 2026-09-09 — **item 15 closed: the app stops double-
+  charging on a refused reschedule, both parts shipped in one sitting.**
+  `create-order` now sends `booking_id`/`date`/`slot` so a full slot is
+  refused before the ₹5 fee is taken (the common case); a `409 retryable`
+  now retries the same paid order on a new slot instead of minting a second
+  one (the rare race). Merged as **app PR #21**, `tokenwalla.app` repo.
+  Verification split honestly by what was reachable: part 1 was clicked
+  through live against the real backend with a distinguishing test (flipped
+  the booking to `CANCELLED` mid-flow, confirmed a clean `400` instead of a
+  payment attempt); part 2 can't be driven through a real Razorpay WebView
+  round-trip in this sandbox, so it's verified against the backend's own
+  existing test for that exact contract instead. Full detail in item 15's
+  own section.
+- **Previously:** 2026-09-09 — **item 22 closed for real, and two more
   Meta findings landed the same day.** Item 22 (Doctor Running Late) was
   independently closed by a second session running on this same checkout —
   web + app both merged, `doctor_running_late` confirmed **Active** in
@@ -23,9 +36,7 @@ the things that can lose money or break a live booking come first.
   previously PENDING REVIEW) — **item 14c stays 🔴**, because a manual test
   send proves delivery but doesn't write the `WhatsAppLog` row the item is
   actually waiting on; only the real cron-triggered wrapper does that.
-  Docs-only, merged as **PR #78** (`82af27b`). Two running notes from
-  earlier the same day (item 14b's runbook, item 16 confirmed broken) are
-  folded into **Previously** below rather than repeated here.
+  Docs-only, merged as **PR #78** (`82af27b`).
 - **Previously:** 2026-09-09 (seventh session) — **item 16 confirmed broken,
   not just unverified: `NUM_PROXIES=1` binds every per-IP throttle to a
   rotating internal Railway edge IP, not the real caller.** Three calls to
@@ -1961,9 +1972,12 @@ https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...fix/pass-w
 
 ---
 
-### 15. The app re-pays the ₹5 reschedule fee after a refused slot 🟡 — found 2026-09-04, web half shipped
+### ~~15. The app re-pays the ₹5 reschedule fee after a refused slot~~ ✅ 2026-09-09 — both parts shipped, merged as app PR #21
 
-**Web is fixed; the app is not, and the app cannot be fixed on our schedule.**
+**Both web and app are fixed now.** Originally: web fixed, app not, and the
+app was assumed to be off this repo's release schedule — it turned out not to
+be; both parts landed in the separate `tokenwalla.app` repo the same day this
+item was picked back up.
 
 `/api/payment/verify/` refuses a reschedule into a full or already-started slot
 (added 2026-09-04 — before this it silently oversold the slot). On that refusal
@@ -1981,21 +1995,42 @@ taking the fee, and the app will get that protection with no release needed —
 but only when it starts sending `booking_id`/`date`/`slot`, which it does not.
 So today the app still pays first and gets refused second.
 
-**The app change, in two parts:**
+**Shipped, both parts, on `fix/reschedule-fee-no-double-charge` in the
+`tokenwalla.app` repo, merged as app PR #21:**
 
-1. Send `booking_id`, `date` and `slot` on the reschedule `create-order` call.
-   This alone fixes the common case — the fee is never taken. Additive; the
-   server ignores them from any client that omits them.
-2. On a `409` with `retryable: true`, keep `order_id` and re-POST `/verify/`
-   with it when the patient picks another slot, instead of creating a new order.
+1. `RescheduleModal.tsx`'s `create-order` call now sends `booking_id`, `date`
+   and `slot` — the common case (target slot already full) is refused before
+   the fee is taken, matching the website.
+2. On a `409` with `retryable: true`, the app now re-POSTs `/verify/` with
+   the **same** `order_id` when the patient picks another slot, instead of
+   minting a second paid order — the rare race (slot fills between checkout
+   opening and verify landing). Extracted the one place that reads a verify
+   response (`confirmReschedule`, mirroring the website's function of the
+   same name) so the fresh-payment and retry paths share identical logic.
 
-Part 1 is a two-line change and worth doing on its own. Part 2 only matters for
-the genuine race (the slot filling between checkout opening and verify landing),
-which is seconds wide.
+**Verification split by what was actually reachable:** part 1 was clicked
+through live against the real local backend — opened the flow, picked a
+slot, then flipped the target booking to `CANCELLED` mid-flow and picked
+another slot in the same still-open modal to force a *distinguishing* test
+(a plain "it still 502'd" isn't proof the pre-check ran, since a Razorpay
+gateway failure looks the same either way) — got a clean `400` instead of
+proceeding toward payment. Part 2 only engages after a real Razorpay payment
+succeeds, which needs a live WebView round-trip this sandbox can't complete
+(and `react-native-webview`'s message flow isn't meaningfully testable on
+the Expo web target regardless) — verified instead against the backend's own
+existing test for this exact contract,
+`payments/tests_integration.py::test_refused_reschedule_can_be_retried_free_on_the_same_order`.
+`tsc --noEmit`, `npm run lint`, `npx jest` (15/15 suites · 174/174 tests) all
+clean for both parts.
 
-**Until part 1 ships, the patient-facing message must not promise a free retry**
-— which is why the server says "your reschedule fee has not been used" rather
-than "still credited". Do not reword it back without shipping the app half.
+**Left open, not done here, not urgent:** the backend's refusal message
+("...your reschedule fee has not been used") was deliberately conservative
+because it used to talk to two clients in different states — the web already
+retrying for free, the app always re-charging. Now that both clients retry
+the same way, `payments/views.py`'s `_handle_reschedule` could say "still
+credited" instead — a backend money-path message change, so left for a
+session that's explicitly asked to touch it, not bundled into this app-only
+fix.
 
 ---
 
