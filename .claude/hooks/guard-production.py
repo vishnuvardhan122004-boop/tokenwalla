@@ -46,7 +46,7 @@ BLOCKED = [
         "Push normally. If history really needs fixing, do it by hand.",
     ),
     (
-        r"\bgit\s+push\b.*\b(origin\s+)?(main|develop)\b",
+        r"\bgit\s+push\b[^;&|]*\b(origin\s+)?(main|develop)\b",
         "pushes straight to a deploying branch — main deploys to production, develop to staging",
         "Push your feature branch and open a PR. CI runs the tests before anything deploys.",
     ),
