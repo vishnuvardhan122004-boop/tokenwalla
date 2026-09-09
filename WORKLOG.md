@@ -3,10 +3,11 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** website on `main` (tip `82af27b`, PRs #76/#77/#78 merged). App on `main` (tip `689cf29`, PRs #19/#20/#21 merged). This wrap is `docs/roadmap-15-app-fix-merged`, isolated in its own worktree — the shared checkout had another session's uncommitted edit to this same ROADMAP.md section in progress at the time. **Do NOT delete** `develop`, which deploys to staging.
-- **Latest commit at last update:** website `82af27b` `main` · app `689cf29` `main` (includes #21 — item 15's reschedule fix, both parts) — both merged and deployed/live.
+- **Branch:** website on `main` (tip `3025e3a`, PRs #76–#78 and #80 all merged). App on `main` (tip `689cf29`, PRs #19–#21 all merged). This entry itself resolves a real conflict: `docs/wrap-2026-09-09-session-close` (item 9/14c/16 close, PR #79) and `docs/roadmap-15-app-fix-merged` (item 15 close, PR #80) both touched this exact block, and #80 merged first — #79 needed this file re-merged by hand rather than force-pushed over. **Do NOT delete** `develop`, which deploys to staging.
+- **Latest commit at last update:** website `3025e3a` `main` (includes #80 — item 15's docs close) · app `689cf29` `main` (includes #21 — item 15's reschedule fix, both parts) — both merged and deployed/live.
 - **Last updated:** 2026-09-09 — **item 15 closed: the app stops double-charging on a refused reschedule.** `RescheduleModal.tsx`'s `create-order` call now sends `booking_id`/`date`/`slot` so a full slot is refused before the ₹5 fee is taken (part 1 — the common case); a `409 retryable` now retries the same paid order on a newly picked slot instead of minting a second one (part 2 — the rare race). Extracted the one place that reads a verify response (`confirmReschedule`) so the fresh-payment and retry paths can't drift apart, mirroring the website's own function of the same name. Merged as **app PR #21**. Part 1 verified live with a distinguishing test (flipped the target booking to `CANCELLED` mid-flow, confirmed a clean `400` instead of a payment attempt — not just "it 502'd the same either way"); part 2 can't be driven through a real Razorpay WebView round-trip in this sandbox, verified instead against the backend's own existing `test_refused_reschedule_can_be_retried_free_on_the_same_order`. `tsc`/lint/jest all clean both times (15/15 suites · 174/174 tests). Left open, not bundled in: the backend's reschedule-refusal message could now say "still credited" instead of the deliberately conservative "not been used", now that both clients retry the same way — a money-path message change, left for a session explicitly asked to touch it.
-- **Previously:** 2026-09-09 — **item 16 confirmed broken, not just unverified: `NUM_PROXIES=1` binds every per-IP throttle to a rotating internal Railway edge IP, not the real caller.** Vishnu ran the item's own verification curl (`/health/`, three calls from one stable Jio mobile IP, confirmed unchanged via `ipify.org`) against the live deployment: three different `resolved_ident` values came back, all in an unrelated Singapore hosting ASN, `chain_length` consistently `2` — one hop more than `NUM_PROXIES` accounts for. Worse than the single-shared-bucket failure mode the item originally worried about: not one bucket for everyone, but noise, since which internal edge node fronted a request decides its bucket. **Fix is `NUM_PROXIES=2` on Railway — outside a session's reach** (the CLAUDE.md carve-out covers only `PASS_ENABLED`), Vishnu's to set and re-verify with the same curl. Docs-only, pushed as `fix/roadmap-16-num-proxies-confirmed`, opened as **PR #77** (CI green, mergeable).
+- **Previously:** 2026-09-09 (session close) — **items 9 and 14c updated with today's Meta findings; NUM_PROXIES=2 still not set.** `centre_payout`, `centre_new_booking` and `appointment_prep` all submitted to Meta (In review); `pass_expiring` confirmed Active (approved). Re-checked `NUM_PROXIES` at session close — still `1`, `resolved_ident` still rotating across three calls, so item 16's fix has **not** been applied yet. Merged as **PR #78** (`82af27b`). Full detail in the `## 2026-09-09` section below.
+- **Previously:** 2026-09-09 — **item 16 confirmed broken, not just unverified: `NUM_PROXIES=1` binds every per-IP throttle to a rotating internal Railway edge IP, not the real caller.** Ran the item's own verification curl (`/health/`, three calls from one stable Jio mobile IP, confirmed unchanged via `ipify.org`) against the live deployment: three different `resolved_ident` values came back, all in an unrelated Singapore hosting ASN, `chain_length` consistently `2` — one hop more than `NUM_PROXIES` accounts for. Worse than the single-shared-bucket failure mode the item originally worried about: not one bucket for everyone, but noise, since which internal edge node fronted a request decides its bucket. **Fix is `NUM_PROXIES=2` on Railway — outside a session's reach** (the CLAUDE.md carve-out covers only `PASS_ENABLED`), Vishnu's to set and re-verify with the same curl. Docs-only, merged as **PR #77**.
 - **Previously:** 2026-09-09 — **ROADMAP item 22 confirmed fully working, end to end, on a real phone.** `doctor_running_late` is now **Active** in WhatsApp Manager (checked live) — Meta's review cleared sometime after 2026-09-08. Vishnu ran all 16 `send_test_whatsapp` commands from the production container (`railway run` doesn't apply inside the container itself — the env vars are already native there — so it was `python manage.py send_test_whatsapp <mobile> --template ...` directly) and confirmed messages arrived on WhatsApp, `doctor_running_late` included. **Item 22 has nothing left for a session to do.** Found in passing: the test command's `SAMPLE_PARAMS` dict has no entry for `pass_expiring` or `doctor_running_late` (both added after the dict was last touched), so those two needed `--params` spelled out by hand — worth a one-line fix each, not urgent.
 - **Previously:** 2026-09-09 — **ROADMAP 14b's Railway migration assumption was wrong; corrected, with a cutover runbook.** 14b assumed both crons could move to Railway's new Infrastructure-as-Code (`.railway/railway.ts`); checked Railway's live docs instead of assuming, and the IaC reference has no cron/schedule field at all — `cronSchedule` only ever existed as a legacy Config-as-Code field, which has been silently overriding each service's own (stale) dashboard copy the whole time. Rewrote 14b with the one safe order (dashboard settings first, verify, then delete the config files) plus an exact numbered runbook. **Docs-only, zero app code touched, no test-count change.** Pushed as `docs/14b-railway-cron-runbook` @ `51c5a31`, opened as **PR #76**. **Also found: `gh auth status` came back logged in this session** — confirms the device-flow login from 2026-09-08 persists across sessions (shared macOS keychain, not session-scoped) — the "no PR can be opened from a session" gap is resolved for this machine.
 - **Previously:** 2026-09-08 (session close) — **ROADMAP item 22 fully merged; only Meta's review was left.** `gh auth login` completed mid-session (device-flow — no token ever handled directly, browser approval was Vishnu's own). All three PRs opened; Vishnu merged them himself (merging stays his call regardless of auth — CLAUDE.md's "merging is the deploy"). Two of the three had genuinely diverged from `main` by the time they were merge-ready (this repo saw heavy concurrent activity all day) — resolved both by hand rather than force-push: WORKLOG.md's top block conflicted with a concurrent session's own wrap (combined both narratives, PR #73), and the app's `my-bookings.tsx` conflicted with a `useMemo` perf commit that landed after branching (kept both, re-verified 15/15 suites · 174/174 tests, app PR #19). **Merged: web PR #72** (toast fix), **web PR #73** (this doc wrap), **app PR #19** (mobile port). Session close: local branches for both merged PRs deleted, the app's temporary `git worktree` removed, all three local dev servers (Django, CRA, Expo web) stopped.
@@ -47,6 +48,46 @@ Newest entry on top. Update the **Status** columns as things land.
 - Keep entries short — one line per change, link the commit hash so it's traceable.
 
 ---
+
+## 2026-09-09 (session close) — Item 16 confirmed broken, three templates submitted, 14c/22 status updated
+
+Picked up where the day's earlier 14b work left off — daily check flagged
+item 16 as the next real 🔴, then a run of `send_test_whatsapp` (pasted from
+a parallel session working the same repo checkout) surfaced three template
+failures worth chasing down.
+
+- **Item 16 — confirmed broken, not just unverified.** `curl /health/` three
+  times from one stable client IP: `resolved_ident` came back different
+  every time, always in an unrelated hosting ASN, never the real caller.
+  Fix is `NUM_PROXIES=2` — outside a session's reach (CLAUDE.md's carve-out
+  covers only `PASS_ENABLED`), left for Vishnu. **Re-checked at session
+  close: still not set.** Merged as PR #77.
+- **Item 9 — all three remaining templates submitted to Meta.** The three
+  `send_test_whatsapp` failures (`centre_payout`, `centre_new_booking`,
+  `appointment_prep`, all `(#132001) Template name does not exist`) were
+  expected — `WHATSAPP_TEMPLATES.md` already marked them unsubmitted.
+  Submitted all three via Chrome browser automation, with explicit
+  go-ahead, after reproducing and working around the likely cause of a past
+  automation failure: the body field auto-closes `{{`, so typing the literal
+  `{{1}}` corrupts it to `{{1}}1}}`. Fix: type bare `{{` and let it
+  auto-insert the correctly-numbered token; verified every field by zoom
+  before moving to the next, and every submission by its row in the Manage
+  Templates list (status **In review**), not the toast alone. Companion
+  project-memory note updated to record the technique. Merged as PR #78.
+- **Item 14c — `pass_expiring` confirmed Active (approved), stays 🔴.** Same
+  pass through WhatsApp Manager: `pass_expiring` now shows Active, not
+  Pending. A manual test send succeeded too, but that call bypasses the
+  wrapper that writes a `WhatsAppLog` row — so the item's actual closing
+  condition (a real, cron-triggered `sent` row) still doesn't exist. Also in
+  PR #78.
+- **Item 22 — closed the same day, by a parallel session on this same
+  checkout,** not this one. Web + app merged, `doctor_running_late` Active,
+  delivery confirmed on a real phone. See that session's own WORKLOG entry
+  above for detail — not re-narrated here.
+- `gh auth status` stayed logged in for both PRs today (#77, #78), same as
+  #76 earlier — opened both directly.
+- Docs-only across the session. 533 backend / 57 web unchanged, no app code
+  touched, no migration.
 
 ## 2026-09-09 — ROADMAP 14b: Railway IaC assumption corrected, cutover runbook written
 

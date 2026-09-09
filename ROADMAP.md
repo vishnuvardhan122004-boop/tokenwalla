@@ -20,18 +20,35 @@ the things that can lose money or break a live booking come first.
   round-trip in this sandbox, so it's verified against the backend's own
   existing test for that exact contract instead. Full detail in item 15's
   own section.
-- **Previously:** 2026-09-09 — **item 16 confirmed broken, not just
-  unverified: `NUM_PROXIES=1` binds every per-IP throttle to a rotating
-  internal Railway edge IP, not the real caller.** Three calls to `/health/`
-  from one stable client (a Jio mobile IP, confirmed independently via
-  `ipify.org`, unchanged all three times) returned three different
+- **Previously:** 2026-09-09 — **item 22 closed for real, and two more
+  Meta findings landed the same day.** Item 22 (Doctor Running Late) was
+  independently closed by a second session running on this same checkout —
+  web + app both merged, `doctor_running_late` confirmed **Active** in
+  WhatsApp Manager and delivery proven on a real phone; see item 22's own
+  section, now struck through. Separately: three centre-shaped templates
+  (`centre_payout`, `centre_new_booking`, `appointment_prep`) were submitted
+  to Meta via Chrome browser automation, Vishnu's explicit go-ahead — found
+  and worked around the likely cause of a past automation failure (the body
+  field auto-closes `{{`, so a literal `{{1}}` corrupts to `{{1}}1}}`; the
+  fix is typing bare `{{` and letting it auto-number). All three confirmed
+  **In review** by their row in the Manage Templates list, not the toast
+  alone. Same pass: `pass_expiring` confirmed **Active** (approved,
+  previously PENDING REVIEW) — **item 14c stays 🔴**, because a manual test
+  send proves delivery but doesn't write the `WhatsAppLog` row the item is
+  actually waiting on; only the real cron-triggered wrapper does that.
+  Docs-only, merged as **PR #78** (`82af27b`).
+- **Previously:** 2026-09-09 (seventh session) — **item 16 confirmed broken,
+  not just unverified: `NUM_PROXIES=1` binds every per-IP throttle to a
+  rotating internal Railway edge IP, not the real caller.** Three calls to
+  `/health/` from one stable client (a Jio mobile IP, confirmed independently
+  via `ipify.org`, unchanged all three times) returned three different
   `resolved_ident` values, all in a Singapore hosting ASN unrelated to the
   caller — `chain_length` is `2`, meaning there's an extra hop `NUM_PROXIES`
   doesn't account for. This affects `AnonRateThrottle`, the OTP send burst
   guard, the 10/hour `ADMIN_SETUP_KEY` brute-force guard, and the 2000/day
   SMS ceiling. **The fix is `NUM_PROXIES=2` on Railway — outside a session's
-  reach (only `PASS_ENABLED` is in the carve-out), Vishnu's to set.**
-  Docs-only change here, no app code touched.
+  reach (only `PASS_ENABLED` is in the carve-out), Vishnu's to set.** Merged
+  as PR #77. Docs-only change, no app code touched.
 - **Previously:** 2026-09-09 (seventh session) — **14b's Railway migration
   assumption was wrong; corrected, with a cutover runbook.** Item 14b (found
   2026-09-02) assumed both cron services could move to Railway's new
@@ -2322,6 +2339,18 @@ testing either needs `--params` spelled out by hand.
 
 ## Next
 
+- **`gh` had auth in a session for the first time, 2026-09-09 — confirm it
+  still does before relying on it.** Every prior session recorded `gh auth
+  status` as not logged in and had to hand off a `.../compare/...` link for
+  a human to open the PR by hand (see item 1's blockquote). This session's
+  `gh auth status` came back logged in (`vishnuvardhan122004-boop`, `repo`
+  scope) and `gh pr create` opened PRs #76, #77 and #78 directly — a real
+  capability change, not assumed. Not yet confirmed whether it covers the
+  separate `tokenwalla.app` repo too — app PR #19 did land (see item 22,
+  closed the same day), but by a parallel session, so it's unclear whether
+  that merge went through `gh` or by hand. If a future session finds `gh`
+  unauthenticated again, that's not a regression to chase — it likely just
+  means this machine's `gh` login doesn't persist across sessions.
 - **Local `TWOFACTOR_API_KEY` is invalid — no local OTP send works** — new
   2026-09-07. `backend/.env` has a present but rejected key: `send_otp()` only
   falls back to its built-in dev-mode (console-printed OTP) when the key is
