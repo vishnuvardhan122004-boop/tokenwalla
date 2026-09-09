@@ -1691,7 +1691,7 @@ nowhere the repo can see them. Sharing a cron that is already declared in this
 repo keeps the whole schedule reviewable in a PR. A half-created service
 (`invigorating-light`) was discarded rather than left staged.
 
-### 14b. Config-as-code dies on 2026-12-01 🔴 — found 2026-09-02, not started
+### 14b. Config-as-code dies on 2026-12-01 🟡 — runbook written 2026-09-09, dashboard steps still Vishnu's
 
 Railway's service settings now carry: *"Config as Code is deprecated… Existing
 config files keep working until **2026-12-01**. Starting 2026-08-28, services
@@ -1701,14 +1701,28 @@ that have never used Config as Code cannot opt in."*
 `backend/railway.cron.json` (`send_appointment_reminders`, every 10 min, and now
 the pass nudge with it) and `backend/railway.payouts.cron.json`
 (`run_daily_payouts`, 15:00 UTC). After 2026-12-01 those files stop being read.
-What happens then is not documented as "keeps the last value" — assume the
-schedule and start command need to exist somewhere else before that date.
 
-**Before December:** move both crons to whatever Railway's Infrastructure-as-Code
-replacement is, or record their settings in the dashboard and delete the files
-so nothing looks configured by a file that is no longer read. Whichever way it
-goes, **the settings must not end up only in a dashboard nobody can diff** —
-that is how a payout cron silently stops running. The exact values today:
+**Checked against Railway's own docs 2026-09-09, not assumed: "migrate to
+Railway's IaC" is a dead end for these two services.** The IaC replacement
+(`.railway/railway.ts`, `railway config migrate`) has **no field for a cron
+schedule anywhere in its reference** — only `source`, `build`, `start`,
+`healthcheck`, `preDeploy`, `replicas`, `env`, `domains`, `volumeMounts`.
+`cronSchedule` only ever existed as a legacy Config-as-Code `deploy` field.
+Cron schedule lives **only** in a service's dashboard settings, and
+Config-as-Code has been overriding that dashboard field the whole time — so
+the dashboard's own copy is stale/unset right now, and it silently takes over
+the instant the file is gone. Running `railway config migrate` on either cron
+service would carry over build/start settings and drop the schedule with no
+warning.
+
+**So there is only one safe path, not two:** record the real settings in the
+dashboard, verify them, **then** delete the files — in that order. Do it the
+other way and the cron goes dark with no error, the same silent-failure shape
+that's already bitten this project three times (OTP throttle, anon rate
+limit). **The settings must not end up only in a dashboard nobody can diff**
+either — Railway genuinely offers no diffable alternative for cron today, so
+the table below is the durable record; check it against the dashboard by hand
+if it's ever in doubt. The exact values today:
 
 | Service | Root | Start command | Schedule |
 |---|---|---|---|
@@ -1717,6 +1731,32 @@ that is how a payout cron silently stops running. The exact values today:
 
 Both: repo `vishnuvardhan122004-boop/tokenwalla`, branch `main`, region
 Southeast Asia (Singapore), restart policy Never, all 18 shared variables.
+
+**The runbook, in order — none of this is a session's to execute (no Railway
+dashboard or CLI access beyond the `PASS_ENABLED` carve-out), but it's exact
+enough that there's nothing left to figure out when doing it:**
+
+1. Open each cron service's Settings page in the Railway dashboard. For both,
+   enter the Cron Schedule from the table above (`*/10 * * * *` /
+   `0 15 * * *`) and confirm the Start Command and Root Directory match too —
+   the dashboard fields, not the file. Save.
+2. **Do not delete or touch either `railway.*.json` file yet.** The file still
+   wins over the dashboard while it exists, so this step alone changes
+   nothing live — it's staging the fallback, not the cutover.
+3. Open the service's Settings → Config File field (if one is set to a custom
+   path) and note it, so it's clear what to clear in step 4.
+4. Once both dashboard forms are confirmed saved and correct, delete
+   `backend/railway.cron.json` and `backend/railway.payouts.cron.json` from
+   the repo and clear any custom Config File path from step 3. Commit,
+   push, merge to `main` — that push is what deploys the cutover.
+5. **Re-verify exactly like item 3 did the first time**, because "the file is
+   gone" and "the cron still runs" are different claims: check Railway →
+   Logs for both services after the next scheduled tick and confirm the real
+   output (`Reminder run complete`, `Nudged N pass(es)`, `Ledgered N
+   booking(s)`) — not just `Starting Container`.
+6. If either service reads blank or wrong in step 1, that's the dashboard's
+   stale copy from before Config-as-Code existed — expected, not a bug; the
+   values in the table above are the ones that have actually been running.
 
 Four product decisions behind these, agreed 2026-09-02: refund only the unused
 part · push-only nudge · reopen for 7 days on a late cancel · the free visit
