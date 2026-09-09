@@ -97,6 +97,21 @@ class StandardPagination(PageNumberPagination):
     max_page_size         = 200
 
 
+class OptionalPagination(StandardPagination):
+    """Same page sizing as StandardPagination, but off unless the caller asks.
+
+    MyBookingsView's bare-array response is a live contract with the website
+    and the mobile app (a separate repo, released on its own schedule) —
+    neither sends a `page` param today, so this must stay opt-in rather than
+    always-on like AllBookingsView's pagination.
+    """
+
+    def paginate_queryset(self, queryset, request, view=None):
+        if self.page_query_param not in request.query_params:
+            return None
+        return super().paginate_queryset(queryset, request, view)
+
+
 def _get_user_hospital_id(user):
     try:
         return int(user.last_name)
@@ -115,12 +130,17 @@ class MyBookingsView(APIView):
             .select_related('doctor', 'scan', 'hospital', 'user', 'appointment_pass')
             .order_by('-created')
         )
-        queue_map  = build_queue_map(bookings)
+        paginator = OptionalPagination()
+        page      = paginator.paginate_queryset(bookings, request)
+        rows      = bookings if page is None else page
+        queue_map  = build_queue_map(rows)
         serializer = BookingSerializer(
-            bookings, many=True,
+            rows, many=True,
             context={'request': request, 'queue_map': queue_map}
         )
-        return Response(serializer.data)
+        if page is None:
+            return Response(serializer.data)
+        return paginator.get_paginated_response(serializer.data)
 
 
 # ── Hospital: queue for own hospital only ─────────────────────────────────────
