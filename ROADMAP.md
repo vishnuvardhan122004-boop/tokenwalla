@@ -7,7 +7,21 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-09 — **item 15 closed: the app stops double-
+- **Last updated:** 2026-09-09 — **item 20 closed: `MyBookingsView`
+  pagination shipped opt-in, so the app needs zero changes.** New
+  `OptionalPagination` only activates when a caller sends `?page=`; grepped
+  both this repo and `tokenwalla.app` and confirmed every existing caller —
+  website and every shipped/in-flight app screen — reads the response as a
+  bare array and never sends that param, so nothing changes for anyone until
+  a future client opts in. Flagged as premature at today's traffic before
+  building it (see item 7); built anyway as cheap, genuinely additive prep,
+  Vishnu's explicit call. 5 new tests, 540 backend (2 skipped), 61 frontend
+  unchanged. Merged as **PR #82**. Full detail in item 20's own section.
+  > ⚠️ **Branched from `origin/main` before item 18's docs PR (#81) merged**,
+  > so this top block and item 18's may conflict depending on merge order —
+  > same situation as #79/#80 above; whoever merges second re-merges this
+  > block by hand rather than force-pushing over, per that entry's own note.
+- **Previously:** 2026-09-09 — **item 15 closed: the app stops double-
   charging on a refused reschedule, both parts shipped in one sitting.**
   `create-order` now sends `booking_id`/`date`/`slot` so a full slot is
   refused before the ₹5 fee is taken (the common case); a `409 retryable`
@@ -2149,7 +2163,34 @@ letting "no votes against" read as "confirmed".
 
 ---
 
-### 20. `MyBookingsView` is the last unpaginated patient list 🟢 — noticed 2026-09-04
+### ~~20. `MyBookingsView` is the last unpaginated patient list~~ ✅ 2026-09-09 — CLOSED, opt-in
+
+**Went with additive, not versioned — the app needs zero changes.** New
+`OptionalPagination` (subclasses `StandardPagination`, already used by
+`AllBookingsView`) returns `None` from `paginate_queryset` unless the caller
+sends `?page=`, so the response stays the exact bare array it's always been
+until something actually asks for a page. Grepped both this repo and
+`tokenwalla.app`: the website (`MyBookings.js`, `BookingToken.js`,
+`bookingService.js`) and every app screen that hits this endpoint
+(`my-bookings.tsx`, `my-qr.tsx`) treat the response as a raw array and never
+send `page` — so every live and in-flight caller is unaffected, byte for
+byte. Reused `build_queue_map` as-is; its own docstring already documents
+accepting a paginator page, the exact thing `AllBookingsView` already does,
+so no new queue-position logic was needed either.
+
+**Flagged before building it, on purpose.** At today's traffic — a handful of
+bookings on the whole platform, see [demand](#7-demand-is-now-the-only-real-problem-)
+— no patient has anywhere near enough history for this to matter yet; it was
+built as cheap, genuinely opt-in prep rather than an urgent fix, Vishnu's
+explicit call after the tradeoff was raised.
+
+5 new tests (`bookings/tests_my_bookings_pagination.py`): no-param response
+unchanged, `?page=` switches to the paginated shape, second page has no
+overlap with the first, `page_size` caps at 200, only the caller's own
+bookings come back. 540 backend tests (2 skipped), was 535. `/ship` clean —
+frontend untouched, 61/61. Merged as **PR #82**.
+
+The original item follows, for the record.
 
 `/api/bookings/my/` returns a patient's entire booking history with no
 pagination. It grows with one person's own usage rather than with platform
