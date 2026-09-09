@@ -1226,15 +1226,14 @@ Payouts stay **manual**, per the standing decision. No payout API.
 
 ---
 
-### 9. Three WhatsApp templates are waiting on a form 🟡
+### 9. Three WhatsApp templates are waiting on a form 🟡 — all three submitted 2026-09-09, In review
 
 > **Widened 2026-08-29, then narrowed the same day.** ✅ **`scan_report_ready`
 > is APPROVED** — verified in WhatsApp Manager: status **Active**, last edited
 > 28 Aug 2026, and its rendered body is *"Hello Rahul, your report for MRI Brain
 > at City Scan Centre is ready. Booking reference TW-2026-0142…"*, which is §11
 > word for word with the same four variables `send_scan_report_ready` sends. It
-> needs nothing. Three templates were written on 08-29 for scanning and blood
-> centres and remain **not submitted**:
+> needs nothing.
 >
 > | Template | Doc | Why it exists |
 > |---|---|---|
@@ -1253,7 +1252,22 @@ Payouts stay **manual**, per the standing decision. No payout API.
 > rejects a body param containing a newline, a tab or four consecutive spaces,
 > and `prep_instructions` is a `TextField` a centre types by hand.
 >
-> The rule below applies to all four: **do not try to automate the submission.**
+> **All three submitted 2026-09-09 via Chrome browser automation, with
+> Vishnu's explicit go-ahead — updating the standing "do not automate" rule
+> below, not breaking it blindly.** The failure mode that rule was protecting
+> against is real and was reproduced first: the body field auto-closes `{{`,
+> so typing the literal `{{1}}` yields `{{1}}1}}` — a corrupted variable that
+> either fails Meta's review or, worse, submits with the wrong param count.
+> The fix, verified character-by-character before use: type only the bare
+> `{{` (no digit, no closing braces) and let the field auto-insert the
+> complete, correctly-numbered `{{N}}` token itself; typing anything more
+> mangles it. Every field was zoomed and read back before moving to the next,
+> and each submission was confirmed by finding its row in the Manage
+> Templates list (status **In review**) — not by trusting the "submitted"
+> toast alone, which the standing checklist already warned can appear on a
+> failed submit. **If this is retried, keep the read-back-before-next-field
+> discipline — it's what makes automation here safe, not the automation
+> itself.**
 
 ### ~~9a. Submit `scan_report_ready` to Meta~~ ✅ 2026-08-29 — APPROVED AND ACTIVE
 
@@ -1803,7 +1817,7 @@ use-case survives).
 Migration `payments.0013` adds two columns, both nullable/defaulted. 429 backend
 tests (42 in `tests_pass.py`), 44 web.
 
-#### 14c. Prove the expiry nudge actually runs 🔴 — template submitted to Meta 2026-09-07, still red until a `sent` row
+#### 14c. Prove the expiry nudge actually runs 🔴 — template Active (approved) 2026-09-09, still red until a real `sent` row
 
 > **2026-09-06 (third session):** the WhatsApp half shipped. Still 🔴 — the
 > cron run is unobserved AND the template is unsubmitted, so no patient has
@@ -1823,6 +1837,19 @@ tests (42 in `tests_pass.py`), 44 web.
 > `pass_expiring` to Meta — status PENDING REVIEW, not yet approved.** Still
 > 🔴 **on purpose**: a submission is not a `sent` row, and this item is
 > explicitly being kept open until one exists.
+
+> **2026-09-09: Meta approved it — confirmed in WhatsApp Manager, status
+> Active.** Checked directly in the dashboard (Manage Templates list), not
+> inferred: `pass_expiring` now shows **Active**, not Pending. A manual
+> `send_test_whatsapp <mobile> --template pass_expiring` also succeeded with a
+> real `wamid`, confirming the approved body sends. **This does not close the
+> item** — that test call goes through `notifications.whatsapp.send_template`
+> directly, which does not write a `WhatsAppLog` row; only the real
+> `send_pass_expiring` wrapper (fired from `send_pass_expiry_reminders.py`
+> against an actual pass inside its 3-day window) does. So the blocker moves
+> from "is the template approved" (now: yes) to "has the real cron produced
+> one `status='sent'` row" (still: no observed row). Still 🔴, closer than
+> before.
 
 > **Why this is red now.** While the promotion was off, `Nudged 0 pass(es)` was
 > the right answer whether the chain worked or not, so an unrun nudge cost
