@@ -7,7 +7,19 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-09 (seventh session) — **14b's Railway migration
+- **Last updated:** 2026-09-09 — **item 16 confirmed broken, not just
+  unverified: `NUM_PROXIES=1` binds every per-IP throttle to a rotating
+  internal Railway edge IP, not the real caller.** Three calls to `/health/`
+  from one stable client (a Jio mobile IP, confirmed independently via
+  `ipify.org`, unchanged all three times) returned three different
+  `resolved_ident` values, all in a Singapore hosting ASN unrelated to the
+  caller — `chain_length` is `2`, meaning there's an extra hop `NUM_PROXIES`
+  doesn't account for. This affects `AnonRateThrottle`, the OTP send burst
+  guard, the 10/hour `ADMIN_SETUP_KEY` brute-force guard, and the 2000/day
+  SMS ceiling. **The fix is `NUM_PROXIES=2` on Railway — outside a session's
+  reach (only `PASS_ENABLED` is in the carve-out), Vishnu's to set.**
+  Docs-only change here, no app code touched.
+- **Previously:** 2026-09-09 (seventh session) — **14b's Railway migration
   assumption was wrong; corrected, with a cutover runbook.** Item 14b (found
   2026-09-02) assumed both cron services could move to Railway's new
   Infrastructure-as-Code (`.railway/railway.ts`) — checked Railway's own live
@@ -1941,7 +1953,7 @@ than "still credited". Do not reword it back without shipping the app half.
 
 ---
 
-### 16. `NUM_PROXIES=1` is a guess about the deployment 🔴 — set 2026-09-04, UNVERIFIED in production
+### 16. `NUM_PROXIES=1` is wrong 🔴 — confirmed 2026-09-09, needs `NUM_PROXIES=2` on Railway
 
 **One line decides whether every per-IP limit in the product works.** It was
 never set; DRF's default is `None`, which makes `BaseThrottle.get_ident` return
@@ -1954,23 +1966,40 @@ per request meant a new throttle bucket per request, silently defeating
 Fixed in `5a6f8c8` with `NUM_PROXIES = 1`, which takes `addrs[-1]` — the entry
 Railway itself appended, which a client cannot forge.
 
-**Why this is still open: 1 is correct for Railway fronting the app directly,
-and that has not been confirmed against the real deployment.** It fails safe in
-the security direction — the rightmost entry is always proxy-written at any hop
-count, so it can never be forged — but too low a value over-groups real users
-into one bucket and 429s them.
+**No longer "unverified" — checked against the live deployment 2026-09-09 and
+`1` is wrong.** `curl -s https://tokenwalla-production.up.railway.app/health/`
+run three times from one stable client (a Jio mobile IP in Hyderabad,
+confirmed independently via `ipify.org`, unchanged across all three calls)
+returned:
 
-**To close it,** once the branch is deployed, from a phone on mobile data:
-
-```bash
-curl -s https://<railway-domain>/health/ | python3 -m json.tool
+```
+resolved_ident: 152.233.68.98    (AS60068 Datacamp Limited, Singapore)
+resolved_ident: 152.233.15.120   (same ASN, different address)
+resolved_ident: 152.233.15.120
 ```
 
-Read `proxy.resolved_ident` (added in `4ade420` for exactly this). If it is that
-phone's public IP, the setting is right and this item closes. If it is a CDN
-egress or a private `10.x`, it is too low — raise `NUM_PROXIES` by one per
-extra hop. `/health/` echoes only the caller's own address; the raw header is
-deliberately not returned.
+`chain_length` was `2` on every call. None of the three `resolved_ident`
+values were the real client IP, and **the value changed between requests
+from the same client** — that's not "off by one proxy," that's the throttle
+binding to a rotating internal Railway edge node instead of the caller.
+Confirms the failure mode the item warned about, and worse: not one shared
+bucket for everyone, but noise — which node fronted a given request decides
+its bucket.
+
+**The fix: `NUM_PROXIES=2`, not `1`.** It's read from an env var
+(`backend/tokenwalla/settings.py:239`,
+`config('NUM_PROXIES', default=1, cast=int)`), not hardcoded — but per
+CLAUDE.md's Railway carve-out, the only variable a session may set is
+`PASS_ENABLED`. This one is **Vishnu's to set directly** in the Railway
+dashboard. Re-verify the same way once it's set:
+
+```bash
+curl -s https://tokenwalla-production.up.railway.app/health/ | python3 -m json.tool
+```
+
+Read `proxy.resolved_ident` — it should now match the caller's real public IP
+on every call, not rotate. `/health/` echoes only the caller's own address;
+the raw header is deliberately not returned.
 
 ---
 
