@@ -7,7 +7,25 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-07 (fourth session) — **new item 22: Doctor
+- **Last updated:** 2026-09-09 (seventh session) — **14b's Railway migration
+  assumption was wrong; corrected, with a cutover runbook.** Item 14b (found
+  2026-09-02) assumed both cron services could move to Railway's new
+  Infrastructure-as-Code (`.railway/railway.ts`) — checked Railway's own live
+  docs instead of assuming, and they can't: the IaC reference has no
+  cron/schedule field at all, only `source`/`build`/`start`/`healthcheck`/
+  `preDeploy`/`replicas`/`env`/`domains`/`volumeMounts`. `cronSchedule` only
+  ever existed as a legacy Config-as-Code field, silently overriding each
+  service's own (stale) dashboard copy the whole time. Rewrote 14b with the
+  one safe order — dashboard settings first, verify, then delete
+  `backend/railway.cron.json` / `backend/railway.payouts.cron.json` — plus an
+  exact 6-step runbook. **Docs-only, zero app code touched.** Pushed as
+  `docs/14b-railway-cron-runbook` @ `51c5a31`, opened as **PR #76**.
+  **`gh auth status` came back logged in this session** — the recurring
+  "no PR can be opened from a session" gap (item 1, 14d, 22) may be resolved;
+  see the **Next** note below before assuming it holds permanently. **14b
+  stays 🟡** — the dashboard half is entirely Vishnu's, a session has no
+  Railway access beyond the `PASS_ENABLED` carve-out.
+- **Previously:** 2026-09-07 (fourth session) — **new item 22: Doctor
   Running Late broadcast, backend slice shipped, not merged.** Requested as a
   full 5-phase feature (backend + hospital dashboard + patient banner +
   tracker); scoped down to backend-only for this session on the
@@ -270,6 +288,13 @@ check which repo you are in before pushing.
 > branch above has to be turned into a PR by hand from its
 > `.../pull/new/<branch>` link. This has now cost time in two sessions —
 > running `gh auth login` once removes it permanently.
+>
+> **Corrected 2026-09-09 — this is no longer true, at least for this repo.**
+> `gh auth status` came back logged in (account `vishnuvardhan122004-boop`,
+> `repo` scope) and `gh pr create` opened PR #76 directly, no hand-off link
+> needed. Not re-verified for the `tokenwalla.app` repo. Don't delete this
+> block — if it regresses, knowing it worked once on 2026-09-09 narrows the
+> debugging.
 
 `docs/wrap-2026-08-10` was **never pushed** and is now folded into
 `docs/wrap-2026-08-11`, so don't go looking for it separately.
@@ -2137,13 +2162,12 @@ refreshed on the same 15s poll as the queue. 533 backend tests (2 skipped) ·
 57 web (was 52, +5). `/ship` gate: SHIP. Zero `/api/payment/*` or
 `/api/bookings/*` contract impact.
 
-**Web fix, pushed 2026-09-08, PR not opened** — the dashboard toast hard-coded
+**Web fix, merged 2026-09-08 as PR #72** — the dashboard toast hard-coded
 `Dr. ${doctor.name}`, doubling the prefix for any doctor whose stored name
 already said "Dr." (caught live-testing: "Dr. Dr. Test Sharma"). Now uses the
-same `providerLabel()` helper `MyBookings.js` already had. On
-`fix/hospital-delay-toast-double-prefix`, tests + build clean, merges cleanly
-onto current `main`. Compare:
-https://github.com/vishnuvardhan122004-boop/tokenwalla/compare/main...fix/hospital-delay-toast-double-prefix?expand=1
+same `providerLabel()` helper `MyBookings.js` already had. Corrected
+2026-09-09 — this section still said "PR not opened" after the merge; `git
+log origin/main` confirms `a04ad5d` (#72) is on `main`.
 
 **Mobile app (separate repo, `tokenwalla.app`) — shipped 2026-09-08, pushed,
 PR not opened.** Same feature, ported to the Expo app rather than mirroring a
@@ -2186,11 +2210,13 @@ in the backend session, still not confirmed with Vishnu:**
   fixed and a mismatch fails every send.
 
 **Not done, all outside a session's control:** Meta approving
-`doctor_running_late` (currently In review); opening + merging the two
-pending PRs above (`gh` has no auth in a session, same recurring gap as
-`fix/otp-6-digit-input` — compare links are given); confirming the two
-deviations below with Vishnu; the public tracker page (Phase 4, deliberately
-deferred, nothing depends on it yet).
+`doctor_running_late` (currently In review); the toast fix is merged (#72,
+corrected 2026-09-09) but **app PR #19 is still open, in the separate
+`tokenwalla.app` repo** — a session's `gh` had no auth there as of
+2026-09-08, though it worked for this repo on 2026-09-09 (see the top-of-file
+note), so it's worth a session re-checking rather than assuming; confirming
+the two deviations below with Vishnu; the public tracker page (Phase 4,
+deliberately deferred, nothing depends on it yet).
 
 ---
 
