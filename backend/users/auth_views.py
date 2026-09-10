@@ -75,10 +75,50 @@ OTP_ATTEMPT_WINDOW = 300   # seconds a wrong-guess count stays alive
 # 180s is the mitigation, not the fix: it is comfortable for a human choosing
 # and typing a new password on a phone, and cuts the window by 3.3x.
 #
-# ponytail: shortened window, not a bound token — the real fix is a one-time
-# nonce returned by /otp/verify/ and required back by every consumer, which is
-# a BREAKING API change and must ship with a mobile app release.
+# The real fix (2026-09-10): /otp/verify/ also issues a single-use otp_token
+# (below). It is OPTIONAL on the 3 patient-facing consumers — the mobile app
+# doesn't send it yet, so they keep falling back to the bearer flag above,
+# unchanged, until an app release adopts it — and REQUIRED on the 3 hospital
+# equivalents, which only the website calls and which shipped the token in
+# the same change. So the race is fully closed today for hospital flows and
+# for any web-originated patient flow (ForgotPassword.js, profilecreate.js
+# already send it); only app-originated patient flows still ride the flag.
 OTP_VERIFIED_WINDOW = 180
+
+
+def issue_otp_token(mobile):
+    """Single-use proof that THIS caller — not just this phone number — is the
+    one who verified the OTP. Returned by /otp/verify/ alongside the legacy
+    flag; a consumer that requires it back closes the race the flag alone
+    cannot (an attacker never holds the nonce, even during the flag's window).
+    """
+    token = secrets.token_urlsafe(24)
+    cache.set(f'otp_token:{mobile}', token, timeout=OTP_VERIFIED_WINDOW)
+    return token
+
+
+def check_otp_proof(mobile, token=None, *, required=False):
+    """True if `mobile` currently holds valid OTP proof. Does NOT consume it —
+    call clear_otp_proof once the action that used it has actually succeeded,
+    so a failed downstream check (e.g. duplicate mobile) doesn't force a
+    re-verify, matching how the bearer flag always behaved.
+
+    token given      → must match the nonce from /otp/verify/.
+    token absent     → `required=True` rejects outright (hospital endpoints,
+                       web-only, ship the token in the same change);
+                       `required=False` falls back to the legacy flag
+                       (patient endpoints, mobile app can't send it yet).
+    """
+    if token:
+        return cache.get(f'otp_token:{mobile}') == token
+    if required:
+        return False
+    return bool(cache.get(f'otp_verified:{mobile}'))
+
+
+def clear_otp_proof(mobile):
+    cache.delete(f'otp_verified:{mobile}')
+    cache.delete(f'otp_token:{mobile}')
 
 
 # Both caps below are counted in the DATABASE (users.RateCounter), not the
@@ -346,7 +386,8 @@ class RegisterView(APIView):
         # stranger's number, which would then swallow that person's own OTP
         # login (mobile is USERNAME_FIELD and unique).
         mobile = str(request.data.get('mobile', '')).strip()
-        if not cache.get(f'otp_verified:{mobile}'):
+        otp_token = str(request.data.get('otp_token', '')).strip() or None
+        if not check_otp_proof(mobile, otp_token):
             return Response(
                 {'message': 'Please verify your mobile with OTP first.'},
                 status=400,
@@ -355,7 +396,7 @@ class RegisterView(APIView):
         s = RegisterSerializer(data=request.data)
         if s.is_valid():
             user = s.save()
-            cache.delete(f'otp_verified:{mobile}')
+            clear_otp_proof(mobile)
             r    = RefreshToken.for_user(user)
             return Response({
                 'user':    UserSerializer(user).data,
@@ -552,7 +593,8 @@ class VerifyOTPView(APIView):
 
         if verify_otp(mobile, otp):
             cache.set(f'otp_verified:{mobile}', True, timeout=OTP_VERIFIED_WINDOW)
-            return Response({'message': 'OTP verified.', 'verified': True})
+            token = issue_otp_token(mobile)
+            return Response({'message': 'OTP verified.', 'verified': True, 'otp_token': token})
 
         return Response({'message': 'Invalid or expired OTP.', 'verified': False}, status=400)
 
@@ -570,7 +612,8 @@ class ResetPasswordView(APIView):
         if len(password) < 6:
             return Response({'message': 'Password must be at least 6 characters.'}, status=400)
 
-        if not cache.get(f'otp_verified:{mobile}'):
+        otp_token = str(request.data.get('otp_token', '')).strip() or None
+        if not check_otp_proof(mobile, otp_token):
             return Response({'message': 'OTP not verified. Please verify OTP first.'}, status=400)
 
         try:
@@ -584,7 +627,7 @@ class ResetPasswordView(APIView):
 
         user.set_password(password)
         user.save(update_fields=['password'])
-        cache.delete(f'otp_verified:{mobile}')
+        clear_otp_proof(mobile)
         # Whoever got here proved they own the number via OTP, which is a
         # stronger signal than the successful password login that already
         # clears this. Without it a locked-out user resets their password and
@@ -639,13 +682,14 @@ class MeView(APIView):
         if new_mobile and new_mobile != user.mobile:
             if not re.match(r'^[6-9]\d{9}$', new_mobile):
                 return Response({'message': 'Invalid mobile number.'}, status=400)
-            if not cache.get(f'otp_verified:{new_mobile}'):
+            otp_token = str(request.data.get('otp_token', '')).strip() or None
+            if not check_otp_proof(new_mobile, otp_token):
                 return Response({'message': 'Please verify the new mobile with OTP first.'}, status=400)
             if User.objects.filter(mobile=new_mobile).exclude(pk=user.pk).exists():
                 return Response({'message': 'This mobile is already in use.'}, status=400)
             user.mobile = new_mobile
             user.username = new_mobile
-            cache.delete(f'otp_verified:{new_mobile}')
+            clear_otp_proof(new_mobile)
 
         user.save()
         logger.info('Profile updated for user %s', user.id)
