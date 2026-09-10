@@ -17,6 +17,7 @@ export default function Profilecreate() {
   const [otpLoading,  setOtpLoading]  = useState(false);
   const [otp,         setOtp]         = useState('');
   const [otpVerified, setOtpVerified] = useState(false);
+  const [otpToken,    setOtpToken]    = useState('');
   const [globalError, setGlobalError] = useState('');
 
   const changeUser = (e) => {
@@ -59,7 +60,7 @@ export default function Profilecreate() {
   const verifyOTP = async () => {
     try {
       const { data } = await API.post('/auth/otp/verify/', { mobile: user.mobile, otp });
-      if (data.verified) { setOtpVerified(true); }
+      if (data.verified) { setOtpVerified(true); setOtpToken(data.otp_token || ''); }
       else { setGlobalError('Invalid OTP. Please try again.'); }
     } catch { setGlobalError('Invalid OTP. Please try again.'); }
   };
@@ -71,9 +72,10 @@ export default function Profilecreate() {
     setLoading(true); setGlobalError('');
     try {
       const { data } = await API.post('/auth/register/', {
-        name:     user.name.trim(),
-        mobile:   user.mobile.trim(),
-        password: user.password,
+        name:      user.name.trim(),
+        mobile:    user.mobile.trim(),
+        password:  user.password,
+        otp_token: otpToken,
       });
       localStorage.setItem('access',  data.access);
       localStorage.setItem('refresh', data.refresh);

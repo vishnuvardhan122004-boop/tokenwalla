@@ -11,6 +11,7 @@ export default function ForgotPassword({ type = 'patient' }) {
   const [step,     setStep]     = useState(1);
   const [mobile,   setMobile]   = useState('');
   const [otp,      setOtp]      = useState('');
+  const [otpToken, setOtpToken] = useState('');
   const [password, setPassword] = useState('');
   const [confirm,  setConfirm]  = useState('');
   const [loading,  setLoading]  = useState(false);
@@ -37,6 +38,7 @@ export default function ForgotPassword({ type = 'patient' }) {
     try {
       const { data } = await API.post('/auth/otp/verify/', { mobile, otp });
       if (data.verified) {
+        setOtpToken(data.otp_token || '');
         setSuccess('OTP verified! Set your new password.');
         setStep(3);
       } else {
@@ -52,7 +54,7 @@ export default function ForgotPassword({ type = 'patient' }) {
     setLoading(true); setError(''); setSuccess('');
     try {
       const endpoint = isHospital ? '/hospitals/reset-password/' : '/auth/reset-password/';
-      await API.post(endpoint, { mobile, otp, password });
+      await API.post(endpoint, { mobile, otp, password, otp_token: otpToken });
       setSuccess('Password reset successfully!');
       setTimeout(() => navigate(isHospital ? '/Hlogin' : '/login'), 1500);
     } catch (err) {

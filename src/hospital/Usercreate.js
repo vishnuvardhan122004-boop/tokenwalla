@@ -49,6 +49,7 @@ const Husercreate = () => {
   const [otp,         setOtp]         = useState('');
   const [otpSent,     setOtpSent]     = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
+  const [otpToken, setOtpToken] = useState('');
   const [showPass,    setShowPass]    = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [errors,      setErrors]      = useState({});
@@ -101,7 +102,7 @@ const Husercreate = () => {
     setOtpLoading(true);
     try {
       const { data } = await API.post('/auth/otp/verify/', { mobile: hospital.mobile, otp });
-      if (data.verified) setOtpVerified(true);
+      if (data.verified) { setOtpVerified(true); setOtpToken(data.otp_token || ''); }
       else setError('Invalid OTP. Please check and try again.');
     } catch {
       setError('Invalid OTP. Please try again.');
@@ -129,6 +130,7 @@ const Husercreate = () => {
         longitude: hospital.longitude,
         mobile:    hospital.mobile,
         password:  hospital.password,
+        otp_token: otpToken,
       });
       setSuccess(`${noun} registered! Your account is under review — you can log in once an admin approves it.`);
       setTimeout(() => navigate('/Hlogin'), 2200);

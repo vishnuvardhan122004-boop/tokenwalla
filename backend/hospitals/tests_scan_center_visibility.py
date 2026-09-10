@@ -15,13 +15,13 @@ The negative assertions here matter more than the positive ones: proving a
 centre is absent from the default response is the contract. Deleting one of
 these tests to make a change pass is never the right move.
 """
-from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APIClient
 
 from doctors.models import Doctor
 from hospitals.models import Hospital
 from scans.models import Scan
+from users.auth_views import issue_otp_token
 
 
 class ScanCenterWorldMixin:
@@ -130,12 +130,13 @@ class RegistrationKindTests(TestCase):
     URL = '/api/hospitals/register/'
 
     def _register(self, mobile, **extra):
-        # Registration now requires the mobile to have been OTP-verified (the
-        # clients already do this first); stand in for that step.
-        cache.set(f'otp_verified:{mobile}', True, timeout=600)
+        # otp_token is optional (falls back to the otp_verified flag) but
+        # issuing a real one exercises the same path the website now uses.
+        token = issue_otp_token(mobile)
         return APIClient().post(self.URL, {
             'name': f'Provider {mobile}', 'mobile': mobile,
-            'password': 'Clinic-Str0ng-2026', 'city': 'Hindupur', **extra,
+            'password': 'Clinic-Str0ng-2026', 'city': 'Hindupur',
+            'otp_token': token, **extra,
         }, format='json')
 
     def test_registering_as_a_scan_centre_works(self):
@@ -282,10 +283,10 @@ class BloodCenterTests(TestCase):
         self.assertIn('center', ser.errors)
 
     def test_registration_accepts_the_new_kind(self):
-        cache.set('otp_verified:9111100050', True, 300)
+        token = issue_otp_token('9111100050')
         res = self.client.post('/api/hospitals/register/', {
             'name': 'New Lab', 'mobile': '9111100050', 'password': 'Test@1234',
-            'city': 'Hindupur', 'kind': 'BLOOD_CENTER',
+            'city': 'Hindupur', 'kind': 'BLOOD_CENTER', 'otp_token': token,
         }, format='json')
         self.assertIn(res.status_code, (200, 201), res.content)
         self.assertEqual(
@@ -519,10 +520,10 @@ class RegistrationCapabilityTests(TestCase):
         self.client = APIClient()
 
     def _register(self, mobile, **extra):
-        cache.set(f'otp_verified:{mobile}', True, 300)
+        token = issue_otp_token(mobile)
         return self.client.post('/api/hospitals/register/', {
             'name': 'Multi Care', 'mobile': mobile, 'password': 'Test@1234',
-            'city': 'Hindupur', **extra,
+            'city': 'Hindupur', 'otp_token': token, **extra,
         }, format='json')
 
     def test_also_offers_activates_extra_segments(self):

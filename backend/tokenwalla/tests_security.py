@@ -22,6 +22,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from hospitals.models import Hospital
 from doctors.models import Doctor
 from bookings.models import Booking
+from users.auth_views import issue_otp_token
 
 User = get_user_model()
 
@@ -570,9 +571,14 @@ class PasswordStrengthTests(TestCase):
         self.assertTrue(user.check_password('Pat1ent-Str0ng-2026'))
 
     def test_hospital_register_rejects_a_weak_password(self):
-        mobile = self._verified('9111222405')
+        # otp_token is optional here too, but issuing a real one (rather than
+        # the flag-only `_verified` helper above) exercises the same path the
+        # website now uses.
+        mobile = '9111222405'
+        token = issue_otp_token(mobile)
         res = self.client.post('/api/hospitals/register/', {
             'name': 'Weak Clinic', 'mobile': mobile, 'password': 'secret123',
+            'otp_token': token,
         }, format='json')
         self.assertEqual(res.status_code, 400)
         self.assertFalse(Hospital.objects.filter(mobile=mobile).exists())

@@ -2,7 +2,6 @@ import logging
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password, check_password
-from django.core.cache import cache
 from django.db import transaction
 from django.utils.dateparse import parse_date
 
@@ -14,7 +13,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from tokenwalla.utils import check_password_strength, is_valid_landline
 # One counter for both logins — a partner account and a patient account are the
 # same brute-force target, and two copies of the cap would drift.
-from users.auth_views import login_password_allowed, clear_login_failures
+from users.auth_views import (
+    login_password_allowed, clear_login_failures,
+    check_otp_proof, clear_otp_proof,
+)
 
 from .models import (
     Hospital, HospitalPhoto, in_segment, exclude_test_hospitals,
@@ -118,8 +120,11 @@ class HospitalRegisterView(APIView):
         # Same OTP-ownership gate as HospitalResetPasswordView and the mobile
         # change above: this endpoint is public, and the mobile it takes becomes
         # the login identity for a partner account that will hold other people's
-        # patient records. Both clients already verify before they get here.
-        if not cache.get(f'otp_verified:{mobile}'):
+        # patient records. otp_token is optional, same as the patient consumers
+        # — the app's own Huser.tsx calls this endpoint too, so it cannot be
+        # required until an app release sends it.
+        otp_token = str(data.get('otp_token', '')).strip() or None
+        if not check_otp_proof(mobile, otp_token):
             return Response(
                 {'message': 'Please verify your mobile with OTP first.'},
                 status=400,
@@ -208,7 +213,7 @@ class HospitalRegisterView(APIView):
         user.set_password(password)
         user.save()
 
-        cache.delete(f'otp_verified:{mobile}')
+        clear_otp_proof(mobile)
 
         logger.info(
             'Hospital "%s" registered (id=%s, user=%s) — awaiting admin approval',
@@ -484,13 +489,16 @@ class HospitalDetailView(APIView):
                 return len(m) == 10 and m.isdigit() and m[0] in '6789'
             if not _valid(new_mobile):
                 return Response({'message': 'Invalid mobile number.'}, status=400)
-            if not cache.get(f'otp_verified:{new_mobile}'):
+            # Optional — the app's (hospital)/profile.tsx PATCHes this endpoint
+            # too and doesn't send a token yet; falls back to the legacy flag.
+            otp_token = str(request.data.get('otp_token', '')).strip() or None
+            if not check_otp_proof(new_mobile, otp_token):
                 return Response({'message': 'Please verify the new mobile with OTP first.'}, status=400)
             if Hospital.objects.filter(mobile=new_mobile).exclude(pk=hospital.pk).exists():
                 return Response({'message': 'This mobile is already in use.'}, status=400)
             old_mobile = hospital.mobile
             hospital.mobile = new_mobile
-            cache.delete(f'otp_verified:{new_mobile}')
+            clear_otp_proof(new_mobile)
             # keep the linked hospital user's mobile in sync
             try:
                 u = User.objects.get(mobile=old_mobile)
@@ -618,7 +626,10 @@ class HospitalResetPasswordView(APIView):
                 {'message': 'Password must be at least 6 characters.'},
                 status=400,
             )
-        if not cache.get(f'otp_verified:{mobile}'):
+        # Optional — the app's Hforgotpassword.tsx calls this endpoint too and
+        # doesn't send a token yet; falls back to the legacy flag.
+        otp_token = str(request.data.get('otp_token', '')).strip() or None
+        if not check_otp_proof(mobile, otp_token):
             return Response(
                 {'message': 'OTP not verified. Please verify OTP first.'},
                 status=400,
@@ -649,7 +660,7 @@ class HospitalResetPasswordView(APIView):
         except User.DoesNotExist:
             pass
 
-        cache.delete(f'otp_verified:{mobile}')
+        clear_otp_proof(mobile)
         # Same as the patient reset — an OTP-verified reset must not leave the
         # account still locked out by the password cap.
         clear_login_failures(mobile)

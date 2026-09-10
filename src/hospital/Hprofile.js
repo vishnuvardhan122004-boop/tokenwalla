@@ -98,6 +98,7 @@ const Hprofile = () => {
   const [otp,         setOtp]         = useState("");
   const [otpSent,     setOtpSent]     = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
+  const [otpToken,    setOtpToken]    = useState("");
   const [otpLoading,  setOtpLoading]  = useState(false);
 
   const showToast = (msg, type = "success") => {
@@ -231,7 +232,7 @@ const Hprofile = () => {
     setOtpLoading(true);
     try {
       const { data } = await API.post("/auth/otp/verify/", { mobile: form.mobile.trim(), otp: otp.trim() });
-      if (data?.verified) { setOtpVerified(true); showToast("New mobile verified."); }
+      if (data?.verified) { setOtpVerified(true); setOtpToken(data.otp_token || ""); showToast("New mobile verified."); }
       else showToast("Invalid OTP. Please check and try again.", "error");
     } catch (err) {
       showToast(err?.response?.data?.message || "Invalid OTP. Please try again.", "error");
@@ -316,7 +317,7 @@ const Hprofile = () => {
         close_time:   form.close_time.trim(),
         services,
       };
-      if (mobileChanged) body.mobile = form.mobile.trim();
+      if (mobileChanged) { body.mobile = form.mobile.trim(); body.otp_token = otpToken; }
       const { data } = await API.patch(`/hospitals/${hospital.id}/`, body);
 
       // Upload banner / logo (multipart) if changed.
