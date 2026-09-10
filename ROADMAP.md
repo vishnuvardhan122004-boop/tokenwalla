@@ -7,9 +7,40 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-10 — **items 18 and 20 both confirmed merged
-  (PRs #81, #82); a full pass over `## Now` found nothing else session-
-  actionable today.** #82 needed a manual re-merge first — it had branched
+- **Last updated:** 2026-09-10 (second session) — **item 17 phase 1 shipped:
+  `/otp/verify/` now issues a single-use `otp_token`, optional on all 6
+  consumers, closing the race for every web-originated flow today.** The
+  item as first written assumed the real fix had to be a breaking API
+  change; it doesn't — the token works as an additive, optional field with
+  the legacy `otp_verified` flag staying the fallback everywhere, exactly
+  like the pagination fix in item 20 below. Website (`profilecreate.js`,
+  `ForgotPassword.js`, `Usercreate.js`, `Hprofile.js`) sends the token on
+  every one of its 6 calls now, closing the race for web-originated traffic
+  immediately; app-originated calls keep working exactly as before via the
+  flag, no regression, until an app release sends the token too. **A real
+  mistake caught before merge, not after:** the first commit made the token
+  *required* on the 3 hospital consumers on the assumption "only the website
+  calls them" — checked against the wrong evidence. Reading the actual
+  `tokenwalla.app` repo found `Huser.tsx`, `Hforgotpassword.tsx` and
+  `profile.tsx` all call those same three endpoints; shipping the required
+  version would have broken hospital register/reset/mobile-change in the app
+  the moment it deployed, with no fix faster than an EAS build and store
+  review. Corrected to the same optional-with-fallback treatment as the
+  patient endpoints before the PR went further — worth remembering next time
+  something gets scoped as "web-only" without actually checking the app
+  repo. 552 backend tests (2 skipped, was 540), 61 frontend unchanged.
+  Merged as **PR #84** (`58b2847`), confirmed live via `/health/` reporting
+  that exact commit. Companion app change — the same 6 screens now send
+  `otp_token` too — merged as **app PR #22** (`5eff1bb`); `tsc --noEmit`
+  clean, 174 jest tests unchanged, `expo lint` clean (no CI on that repo).
+  **Not done, deliberately: the app change is source-only until an EAS
+  build and store rollout put it on a phone, and only once that's rolled
+  out can a future session retire the flag fallback and close the race for
+  good.** Both PRs merged by Vishnu, not the session (CLAUDE.md: merging is
+  the deploy). **Item 17 stays 🟡** — see its own section for what's left.
+- **Previously:** 2026-09-10 (first session) — **items 18 and 20 both
+  confirmed merged (PRs #81, #82); a full pass over `## Now` found nothing
+  else session-actionable that day.** #82 needed a manual re-merge first — it had branched
   from `origin/main` before #81 landed, so both carried their own edit to
   this same top block, exactly the conflict the #79/#80 note predicts;
   resolved by hand, re-tested (540 backend, guard self-check both green),
@@ -2122,7 +2153,7 @@ the raw header is deliberately not returned.
 
 ---
 
-### 17. `otp_verified` is a bearer flag, and the real fix is breaking 🟡 — mitigated 2026-09-04
+### 17. `otp_verified` is a bearer flag 🟡 — phase 1 shipped 2026-09-10, phase 2 (app rollout) pending
 
 `cache['otp_verified:<mobile>']` is keyed on the phone number alone and bound to
 no session or device, because an anonymous caller has none to bind to. So
@@ -2131,23 +2162,76 @@ necessarily the person who passed the OTP. An attacker cannot **create** the
 flag (that still needs the code), so this is a race against a legitimate flow
 rather than a standalone attack — but it is the account-takeover path.
 
-Mitigated by cutting the window 600s → 180s (`9257144`), which is comfortable
-for a human typing a new password and shrinks the window 3.3x. Marked
-`ponytail:` in `users/auth_views.py` so the debt ledger keeps it.
+Mitigated 2026-09-04 by cutting the window 600s → 180s (`9257144`), which is
+comfortable for a human typing a new password and shrinks the window 3.3x.
 
-**The real fix is a one-time nonce** returned by `/otp/verify/` and required
-back by every consumer (register, reset-password, the mobile change, and the
-three hospital equivalents). That is a **breaking API change** — installed apps
-call verify-then-reset with no nonce — so per the API-contract rule it needs
-either a versioned endpoint kept alive through an app rollout, or it ships with
-an app release. Not a quiet server-side edit.
+**Surfaced again 2026-09-10 (first session), still deliberately not started**
+— this history is kept for what it got wrong. The item as originally written
+assumed the real fix had to be a **breaking API change**: a nonce required
+back by every consumer, needing either a versioned endpoint or a coordinated
+app release, scoped as its own session rather than squeezed into whatever was
+left of that one.
 
-**Surfaced again 2026-09-10, still deliberately not started.** After items 18
-and 20 closed, this was the only other real candidate left in `## Now` — but
-the mitigation already holds and the actual fix touches a live contract three
-hospital-side flows share with the patient one, across two repos on different
-release schedules. That's a session of its own — scope the versioning/rollout
-approach with Vishnu first, don't start mid-slice.
+**2026-09-10 (second session) — that assumption was wrong, and phase 1
+shipped the same day.** A nonce doesn't have to be *required* to be useful.
+`/otp/verify/` now also returns a single-use `otp_token`, **optional** on all
+6 consumers (register, reset-password, the mobile change, patient and
+hospital) — the legacy flag stays the fallback everywhere, byte-for-byte
+unchanged, so nothing breaks for a caller that doesn't send one. The website
+(`profilecreate.js`, `ForgotPassword.js`, `Usercreate.js`, `Hprofile.js`)
+sends it on every one of its 6 calls, which closes the race for every
+web-originated flow — patient and hospital both — **today**, with zero app
+coordination needed. `check_otp_proof(mobile, token=None)` in
+`users/auth_views.py` is the one place this lives; `issue_otp_token` /
+`clear_otp_proof` sit beside it.
+
+**A mistake caught before merge, not after.** The first commit on this made
+`otp_token` *required* on the 3 hospital consumers, on the premise "only the
+website calls them — no mobile app to break." That premise was checked
+against the wrong evidence: nobody had actually read the `tokenwalla.app`
+repo. It has `app/(hospital)/Huser.tsx` (register), `Hforgotpassword.tsx`
+(reset-password) and `profile.tsx` (mobile change, `PATCH /hospitals/<id>/`)
+— all three calling these same endpoints, all three already merged and
+architecturally live since well before this session. Shipping the required
+version would have broken hospital registration, password reset and
+mobile-number-change in the app the instant it deployed, with no fix faster
+than an EAS build and Play Store review. Caught by actually checking the app
+repo instead of inferring "hospital-admin-shaped, therefore web-only" —
+reverted to the same optional-with-fallback treatment as the 3 patient
+consumers before the PR went further. **The lesson: "only the website calls
+this" is a claim about a different repo and needs checking against that repo,
+not inferred from an endpoint's name.**
+
+**What shipped, concretely:**
+- Backend + website: `check_otp_proof`/`issue_otp_token`/`clear_otp_proof` in
+  `users/auth_views.py`; all 6 consumers updated
+  (`RegisterView`, `ResetPasswordView`, `MeView.patch`,
+  `HospitalRegisterView`, `HospitalDetailView.patch`,
+  `HospitalResetPasswordView`); website's 4 call sites send the token.
+  552 backend tests (2 skipped, was 540), 61 frontend unchanged,
+  `makemigrations --check` clean (cache-key only, no model change). Merged
+  **PR #84** (`58b2847`), confirmed live: `/health/` reports
+  `"commit": "58b2847e"`.
+- App: the same 6 screens (`app/(auth)/register.tsx`,
+  `forgot-password.tsx`, `app/(patient)/edit-profile.tsx`,
+  `app/(hospital)/Huser.tsx`, `Hforgotpassword.tsx`, `profile.tsx`) now
+  capture `otp_token` from the verify response and forward it. `tsc
+  --noEmit` clean, 174 jest tests unchanged, `expo lint` clean (this repo
+  has no CI). Merged **app PR #22** (`5eff1bb`).
+- Both merged by Vishnu — a session can open a PR, not merge one.
+
+**Not done, deliberately — this is phase 2, a future session's call:**
+- The app PR merging only changes the *source*. Nothing on any phone sends
+  `otp_token` until an EAS build ships and clears store review, on Vishnu's
+  usual release schedule — same asymmetry as every other app change.
+- The race is **not** closed for app-originated calls yet, for any of the 6
+  flows — they still ride the flag, exactly as before this session, which is
+  an explicit non-regression, not a fix.
+- Once the app release has rolled out to enough installs (`min_version` /
+  adoption data, Vishnu's call), a later change can make `otp_token`
+  mandatory and retire the flag fallback for good, closing the race
+  completely. Don't do this pre-emptively — it would 400 every install that
+  hasn't updated yet, on a live auth path.
 
 ---
 

@@ -3,9 +3,10 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** website on `main` (tip `3025e3a`, PRs #76–#78 and #80 all merged). App on `main` (tip `689cf29`, PRs #19–#21 all merged). This entry itself resolves a real conflict: `docs/wrap-2026-09-09-session-close` (item 9/14c/16 close, PR #79) and `docs/roadmap-15-app-fix-merged` (item 15 close, PR #80) both touched this exact block, and #80 merged first — #79 needed this file re-merged by hand rather than force-pushed over. **Do NOT delete** `develop`, which deploys to staging.
-- **Latest commit at last update:** website `b3a10b3` `main` (includes **#82**, merged by Vishnu — item 20's pagination, on top of **#81** — item 18's guard regex fix) · app `689cf29` `main` (includes #21 — item 15's reschedule fix, both parts) — all four merged and deployed/live. **Nothing pending on either repo.**
-- **Last updated:** 2026-09-10 — **items 18 and 20 both confirmed merged; full `## Now` sweep found nothing else session-actionable.** #82 had branched before #81 merged, so both carried a conflicting edit to this exact block — resolved by hand (not force-pushed), re-tested (540 backend, guard self-check both green), re-pushed, confirmed `MERGEABLE` before Vishnu merged it. `git fetch` after Vishnu's first "merged" turned out to be a beat early — `mergedAt` was still `null` — re-checked rather than taking the claim on faith, and it came back genuinely merged (`b3a10b3`) a moment later. Walked every open item left in `## Now`: 4c/13/14b/16 are Vishnu-only dashboard actions, 9 is waiting on Meta, 14c is blocked on a real pass reaching its expiry window, 6/7/19 aren't code. **Item 17** (the OTP bearer-flag nonce fix) is the one real candidate left, and it was deliberately not started — the fix is a breaking `/otp/verify/` contract change touching three hospital flows plus the patient one, across two repos on separate release schedules; that's a session of its own to scope, not something to start with whatever time was left. Full detail in item 17's own ROADMAP section and the dated entry below.
+- **Branch:** website on `main` (tip `58b2847`, PR #84 merged). App on `main` (tip `5eff1bb`, PR #22 merged). **Do NOT delete** `develop`, which deploys to staging.
+- **Latest commit at last update:** website `58b2847` `main` (includes **#84**, merged by Vishnu — item 17 phase 1: optional `otp_token` on all 6 OTP-gated endpoints) · app `5eff1bb` `main` (includes **app #22** — the same 6 screens sending the token) — both merged and the backend confirmed live (`/health/` reports `58b2847e`). **App change is source-only — needs an EAS build + store release before any phone has it.**
+- **Last updated:** 2026-09-10 (second session) — **item 17 phase 1 shipped and merged: `otp_token` closes the OTP-verify race for every web-originated flow today.** Optional on all 6 consumers (patient + hospital register/reset-password/mobile-change), flag stays the fallback, so nothing breaks for a caller that doesn't send it. **Caught a real mistake before merge:** the first commit made the token *required* on the 3 hospital endpoints on the unverified assumption "only the website calls them" — reading the actual `tokenwalla.app` repo found `Huser.tsx`/`Hforgotpassword.tsx`/`profile.tsx` all call those same endpoints, so the required version would have broken the app's hospital screens on deploy. Corrected before merge. 552 backend (2 skipped, was 540), 61 frontend unchanged; app: `tsc`/174 jest/`expo lint` all clean. Merged **PR #84** (`58b2847`) and **app PR #22** (`5eff1bb`) — both by Vishnu. Full detail in item 17's own ROADMAP section and the dated entry below.
+- **Previously:** 2026-09-10 (first session) — **items 18 and 20 both confirmed merged; full `## Now` sweep found nothing else session-actionable that day.** #82 had branched before #81 merged, so both carried a conflicting edit to this exact block — resolved by hand (not force-pushed), re-tested (540 backend, guard self-check both green), re-pushed, confirmed `MERGEABLE` before Vishnu merged it. `git fetch` after Vishnu's first "merged" turned out to be a beat early — `mergedAt` was still `null` — re-checked rather than taking the claim on faith, and it came back genuinely merged (`b3a10b3`) a moment later. Walked every open item left in `## Now`: 4c/13/14b/16 are Vishnu-only dashboard actions, 9 is waiting on Meta, 14c is blocked on a real pass reaching its expiry window, 6/7/19 aren't code. **Item 17** (the OTP bearer-flag nonce fix) was flagged as the one real candidate left and deliberately not started that session — see above for how that assumption held up a few hours later.
 - **Previously:** 2026-09-09 — **item 20 closed: opt-in pagination on `GET /api/bookings/my/`.** `MyBookingsView` was the last unpaginated patient-facing list, returning a patient's whole booking history in one response. New `OptionalPagination` (subclasses the existing `StandardPagination` `AllBookingsView` already uses) returns `None` from `paginate_queryset` unless the request sends `?page=`, so the response stays the same bare array it always was until something asks for a page. Grepped both this repo and `tokenwalla.app`: the website (`MyBookings.js`, `BookingToken.js`, `bookingService.js`) and every app screen hitting this endpoint (`my-bookings.tsx`, `my-qr.tsx`) read the response as a raw array and never send `page` — so no client, live or in-flight, needs to change. Reused `build_queue_map` unmodified; its docstring already documents accepting a paginator page (`AllBookingsView` already relies on that). **Flagged as premature before building it** — at today's booking volume no patient has anywhere near enough history for this to matter — built anyway as cheap, genuinely opt-in prep on Vishnu's explicit call after that tradeoff was raised. 5 new tests (`bookings/tests_my_bookings_pagination.py`), **540 backend (2 skipped)** (was 535), **61 frontend** unchanged, `makemigrations --check` clean. **Merged as PR #82.**
 - **Previously:** 2026-09-09 — **item 18 closed: the production guard's push-to-`main` regex stopped false-positiving on a later, unrelated command in the same chain.** `.claude/hooks/guard-production.py`'s push-to-deploying-branch rule used an unbounded `.*` between `push` and `main`/`develop`, so it crossed `&&`/`;`/`|` and matched a `main` belonging to a later command — e.g. `git push origin <branch> && git log --oneline main..HEAD` got blocked by the *log* call, not the push. Narrowed the gap to `[^;&|]*`. New `.claude/hooks/test_guard_production.py` (no framework — 5 must-still-block / 3 must-now-allow cases, run through the real hook's own stdin/exit-code contract) plus a live repro on this session's own branch (`git add -A && git status --short && git log --oneline main..HEAD` ran clean). Tooling-only: `/ship` baselines unchanged, **535 backend tests (2 skipped) · 61 frontend**. **Merged as PR #81.** This entry itself resolves the predicted #81/#82 top-block conflict by hand, per both entries' own note — not force-pushed over. Full detail below.
 - **Previously:** 2026-09-09 — **item 15 closed: the app stops double-charging on a refused reschedule.** `RescheduleModal.tsx`'s `create-order` call now sends `booking_id`/`date`/`slot` so a full slot is refused before the ₹5 fee is taken (part 1 — the common case); a `409 retryable` now retries the same paid order on a newly picked slot instead of minting a second one (part 2 — the rare race). Extracted the one place that reads a verify response (`confirmReschedule`) so the fresh-payment and retry paths can't drift apart, mirroring the website's own function of the same name. Merged as **app PR #21**. Part 1 verified live with a distinguishing test (flipped the target booking to `CANCELLED` mid-flow, confirmed a clean `400` instead of a payment attempt — not just "it 502'd the same either way"); part 2 can't be driven through a real Razorpay WebView round-trip in this sandbox, verified instead against the backend's own existing `test_refused_reschedule_can_be_retried_free_on_the_same_order`. `tsc`/lint/jest all clean both times (15/15 suites · 174/174 tests). Left open, not bundled in: the backend's reschedule-refusal message could now say "still credited" instead of the deliberately conservative "not been used", now that both clients retry the same way — a money-path message change, left for a session explicitly asked to touch it.
@@ -49,6 +50,61 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-10 (second session) — Item 17 phase 1: otp_token, shipped across both repos
+
+Scoped item 17 with Vishnu at session start rather than immediately deferring
+it again. Code research (not assumption) found the "real fix" didn't have to
+be the breaking change the item was written around — a nonce works fine as an
+optional field with the old flag as fallback, the same additive pattern
+item 20 used the day before.
+
+- **Backend + website: `otp_token` on all 6 OTP-gated consumers.**
+  `/api/auth/otp/verify/` now also returns a single-use `otp_token`
+  (`users/auth_views.py`: `issue_otp_token`, `check_otp_proof`,
+  `clear_otp_proof`). Optional everywhere — `RegisterView`,
+  `ResetPasswordView`, `MeView.patch`, `HospitalRegisterView`,
+  `HospitalDetailView.patch`, `HospitalResetPasswordView` all accept it but
+  fall back to the legacy `otp_verified:<mobile>` flag unchanged if it's
+  absent. Website's 4 call sites (`profilecreate.js`, `ForgotPassword.js`,
+  `Usercreate.js`, `Hprofile.js`) send it now, closing the race for every
+  web-originated flow today. 552 backend tests (2 skipped, was 540, +12 new
+  in `users/tests_otp_token.py`), 61 frontend unchanged, `makemigrations
+  --check` clean. Merged **PR #84**, deployed — confirmed via `/health/`
+  reporting `"commit": "58b2847e"`, the exact merge SHA.
+
+- **Caught and fixed a real mistake before merge, not after.** The first
+  commit made `otp_token` *required* on the 3 hospital consumers, reasoning
+  "only the website calls them, no mobile app to break" — a claim a research
+  agent produced by inferring from the endpoint's shape, explicitly told not
+  to check the other repo. It was wrong. Reading `tokenwalla.app` directly
+  found `app/(hospital)/Huser.tsx`, `Hforgotpassword.tsx` and `profile.tsx`
+  all calling those same three endpoints, already merged and live in that
+  repo's source. Shipping the required version would have broken hospital
+  registration, password reset and mobile-number-change in the app the
+  moment #84 deployed — un-fixable faster than an EAS build and store
+  review. Reverted to the same optional treatment as the patient endpoints,
+  simplified `check_otp_proof` by dropping its now-dead `required` kwarg,
+  rewrote the tests that had asserted the wrong (required) behavior, pushed
+  as a second commit, and corrected the PR description before Vishnu saw it.
+
+- **App: the same 6 screens now send the token too.**
+  `app/(auth)/register.tsx`, `forgot-password.tsx`,
+  `app/(patient)/edit-profile.tsx`, `app/(hospital)/Huser.tsx`,
+  `Hforgotpassword.tsx`, `profile.tsx` — each captures `otp_token` from the
+  verify response and forwards it on the matching register/reset/PATCH call,
+  same pattern as the website. `tsc --noEmit` clean, 174 jest tests
+  unchanged, `expo lint` clean (no CI configured on that repo). Merged
+  **app PR #22**. **Source only — does not reach any phone until an EAS
+  build ships and clears store review.**
+
+- **What's left, on purpose:** the race is closed for web traffic, unchanged
+  (not worse) for app traffic. Once the app release has actually rolled out,
+  a later session can make `otp_token` mandatory and retire the flag
+  fallback for good — not before, since that would 400 every install that
+  hasn't updated yet on a live auth path. See item 17's own ROADMAP section.
 
 ---
 
