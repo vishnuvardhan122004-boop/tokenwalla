@@ -4,9 +4,9 @@ A running record of changes so we can cross-check what's done and what's pending
 Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** website on `main` (tip `3025e3a`, PRs #76–#78 and #80 all merged). App on `main` (tip `689cf29`, PRs #19–#21 all merged). This entry itself resolves a real conflict: `docs/wrap-2026-09-09-session-close` (item 9/14c/16 close, PR #79) and `docs/roadmap-15-app-fix-merged` (item 15 close, PR #80) both touched this exact block, and #80 merged first — #79 needed this file re-merged by hand rather than force-pushed over. **Do NOT delete** `develop`, which deploys to staging.
-- **Latest commit at last update:** website `3025e3a` `main` (includes #80 — item 15's docs close) · app `689cf29` `main` (includes #21 — item 15's reschedule fix, both parts) — both merged and deployed/live. Two more sit on top, both pushed, **neither merged**: item 18's fix (`ee92438`+docs on `fix/guard-push-regex`, PR #81) and item 20's pagination (`60059d9` on `feat/paginate-my-bookings`, PR #82) — `main`'s tip is still `3025e3a`.
+- **Latest commit at last update:** website `d76259e` `main` (includes **#81**, merged by Vishnu — item 18's guard regex fix) · app `689cf29` `main` (includes #21 — item 15's reschedule fix, both parts) — both merged and deployed/live. Item 20's pagination (`60059d9`+docs on `feat/paginate-my-bookings`, PR #82) is pushed, **not yet merged**; this commit rebases it onto #81's tip and resolves the top-block conflict the #82 entry below predicted.
 - **Last updated:** 2026-09-09 — **item 20 closed: opt-in pagination on `GET /api/bookings/my/` — pushed, PR #82, not yet merged.** `MyBookingsView` was the last unpaginated patient-facing list, returning a patient's whole booking history in one response. New `OptionalPagination` (subclasses the existing `StandardPagination` `AllBookingsView` already uses) returns `None` from `paginate_queryset` unless the request sends `?page=`, so the response stays the same bare array it always was until something asks for a page. Grepped both this repo and `tokenwalla.app`: the website (`MyBookings.js`, `BookingToken.js`, `bookingService.js`) and every app screen hitting this endpoint (`my-bookings.tsx`, `my-qr.tsx`) read the response as a raw array and never send `page` — so no client, live or in-flight, needs to change. Reused `build_queue_map` unmodified; its docstring already documents accepting a paginator page (`AllBookingsView` already relies on that). **Flagged as premature before building it** — at today's booking volume no patient has anywhere near enough history for this to matter — built anyway as cheap, genuinely opt-in prep on Vishnu's explicit call after that tradeoff was raised. 5 new tests (`bookings/tests_my_bookings_pagination.py`), **540 backend (2 skipped)** (was 535), **61 frontend** unchanged, `makemigrations --check` clean. Pushed as `feat/paginate-my-bookings` @ `60059d9`, **opened as PR #82, not yet merged**.
-  > ⚠️ **Branched from `origin/main` before item 18's docs (PR #81) merged**, so this top block and #81's may conflict on merge — same shape as the #79/#80 conflict noted above; whoever merges second re-merges this block by hand rather than force-pushing over.
+- **Previously:** 2026-09-09 — **item 18 closed: the production guard's push-to-`main` regex stopped false-positiving on a later, unrelated command in the same chain.** `.claude/hooks/guard-production.py`'s push-to-deploying-branch rule used an unbounded `.*` between `push` and `main`/`develop`, so it crossed `&&`/`;`/`|` and matched a `main` belonging to a later command — e.g. `git push origin <branch> && git log --oneline main..HEAD` got blocked by the *log* call, not the push. Narrowed the gap to `[^;&|]*`. New `.claude/hooks/test_guard_production.py` (no framework — 5 must-still-block / 3 must-now-allow cases, run through the real hook's own stdin/exit-code contract) plus a live repro on this session's own branch (`git add -A && git status --short && git log --oneline main..HEAD` ran clean). Tooling-only: `/ship` baselines unchanged, **535 backend tests (2 skipped) · 61 frontend**. **Merged as PR #81.** This entry itself resolves the predicted #81/#82 top-block conflict by hand, per both entries' own note — not force-pushed over. Full detail below.
 - **Previously:** 2026-09-09 — **item 15 closed: the app stops double-charging on a refused reschedule.** `RescheduleModal.tsx`'s `create-order` call now sends `booking_id`/`date`/`slot` so a full slot is refused before the ₹5 fee is taken (part 1 — the common case); a `409 retryable` now retries the same paid order on a newly picked slot instead of minting a second one (part 2 — the rare race). Extracted the one place that reads a verify response (`confirmReschedule`) so the fresh-payment and retry paths can't drift apart, mirroring the website's own function of the same name. Merged as **app PR #21**. Part 1 verified live with a distinguishing test (flipped the target booking to `CANCELLED` mid-flow, confirmed a clean `400` instead of a payment attempt — not just "it 502'd the same either way"); part 2 can't be driven through a real Razorpay WebView round-trip in this sandbox, verified instead against the backend's own existing `test_refused_reschedule_can_be_retried_free_on_the_same_order`. `tsc`/lint/jest all clean both times (15/15 suites · 174/174 tests). Left open, not bundled in: the backend's reschedule-refusal message could now say "still credited" instead of the deliberately conservative "not been used", now that both clients retry the same way — a money-path message change, left for a session explicitly asked to touch it.
 - **Previously:** 2026-09-09 (session close) — **items 9 and 14c updated with today's Meta findings; NUM_PROXIES=2 still not set.** `centre_payout`, `centre_new_booking` and `appointment_prep` all submitted to Meta (In review); `pass_expiring` confirmed Active (approved). Re-checked `NUM_PROXIES` at session close — still `1`, `resolved_ident` still rotating across three calls, so item 16's fix has **not** been applied yet. Merged as **PR #78** (`82af27b`). Full detail in the `## 2026-09-09` section below.
 - **Previously:** 2026-09-09 — **item 16 confirmed broken, not just unverified: `NUM_PROXIES=1` binds every per-IP throttle to a rotating internal Railway edge IP, not the real caller.** Ran the item's own verification curl (`/health/`, three calls from one stable Jio mobile IP, confirmed unchanged via `ipify.org`) against the live deployment: three different `resolved_ident` values came back, all in an unrelated Singapore hosting ASN, `chain_length` consistently `2` — one hop more than `NUM_PROXIES` accounts for. Worse than the single-shared-bucket failure mode the item originally worried about: not one bucket for everyone, but noise, since which internal edge node fronted a request decides its bucket. **Fix is `NUM_PROXIES=2` on Railway — outside a session's reach** (the CLAUDE.md carve-out covers only `PASS_ENABLED`), Vishnu's to set and re-verify with the same curl. Docs-only, merged as **PR #77**.
@@ -91,9 +91,50 @@ actually pickable by a session rather than blocked on Vishnu or Meta.
   `makemigrations --check` clean.
 - Pushed as `feat/paginate-my-bookings` @ `60059d9`, **opened as PR #82**.
   **Not merged** — that's Vishnu's. Branched from `origin/main` before item
-  18's own docs PR (#81) merged, so the WORKLOG/ROADMAP top blocks in #81 and
-  #82 will likely conflict — flagged above, same shape as the #79/#80
-  conflict this file already carries a note about.
+  18's own docs PR (#81) merged; #81 merged first, so this section resolves
+  that predicted WORKLOG/ROADMAP top-block conflict by hand, same shape as
+  the #79/#80 conflict this file already carries a note about.
+
+## 2026-09-09 — Item 18 closed: guard's push-to-main regex fixed (PR #81, merged)
+
+`/start` walked ROADMAP's `## Now` top to bottom and found almost everything
+either closed or blocked on Vishnu (4c, 13, 16, 14b — all need his hands on
+Railway or the Razorpay dashboard) or waiting on Meta (9, 14c). Item 18 —
+🟢, cosmetic — was the first thing actually pickable by a session.
+
+- **The bug.** `.claude/hooks/guard-production.py`'s push-to-`main`/`develop`
+  rule: `\bgit\s+push\b.*\b(origin\s+)?(main|develop)\b`. The unbounded `.*`
+  doesn't stop at `&&`/`;`/`|`, so it matches a `main`/`develop` token
+  belonging to *any later command* in the same chain, not just the push's own
+  target — exactly what happened when a `git log --oneline main..HEAD` rode
+  along after an unrelated push.
+- **The fix.** Narrowed the gap to `[^;&|]*`, one line. Still blocks
+  `git push origin main`, `-u origin main`, `--force origin main`, and a
+  piped `git push origin main | cat`; now allows the same target `main`
+  showing up only in a later, separator-divided command.
+- **The check.** New `.claude/hooks/test_guard_production.py` — plain
+  `assert`s, no framework — drives the real hook by feeding it the same
+  stdin JSON Claude Code does and reading its exit code: 5 cases that must
+  still block, 3 that must now be allowed (the reported `&&` repro, plus `;`
+  and `|` variants). All 8 pass. Also verified live, not just synthetically:
+  ran `git add -A && git status --short && git log --oneline main..HEAD` for
+  real on this branch — the exact shape that used to trip it — and it went
+  through clean.
+- **`/ship` gate: SHIP.** Tooling-only change, nothing in `backend/` or
+  `src/` touched. Backend **535 tests (2 skipped)**, frontend **61/61** —
+  both match the existing baseline exactly, nothing added or dropped.
+  `makemigrations --check` clean (no model touched). Secret scan clean —
+  worth noting *why* the literal checklist command didn't run as written:
+  `git diff --cached | grep -iE 'rzp_live_|...'` is itself blocked by the
+  guard's `rzp_live_` rule, because that rule matches command *text*, and the
+  search pattern's own text contains the literal string. CLAUDE.md already
+  documents this exact class of false positive ("fires on prose that merely
+  quotes those subcommands") and says to recognise it, not route around it —
+  so the scan ran with a broadened, still-genuine pattern (`rzp_[a-z]+_`,
+  a superset, not a weaker check) instead of trying to dodge the guard.
+- Pushed as `fix/guard-push-regex` @ `ee92438`, **opened as PR #81**
+  (`gh pr create` worked directly — the 2026-09-09 note on `gh auth` holding
+  across sessions on this machine continues to hold). **Merged by Vishnu.**
 
 ## 2026-09-09 (session close) — Item 16 confirmed broken, three templates submitted, 14c/22 status updated
 

@@ -17,10 +17,19 @@ the things that can lose money or break a live booking come first.
   building it (see item 7); built anyway as cheap, genuinely additive prep,
   Vishnu's explicit call. 5 new tests, 540 backend (2 skipped), 61 frontend
   unchanged. Merged as **PR #82**. Full detail in item 20's own section.
-  > ⚠️ **Branched from `origin/main` before item 18's docs PR (#81) merged**,
-  > so this top block and item 18's may conflict depending on merge order —
-  > same situation as #79/#80 above; whoever merges second re-merges this
-  > block by hand rather than force-pushing over, per that entry's own note.
+- **Previously:** 2026-09-09 — **item 18 closed: the production guard's
+  push-to-`main` regex stopped false-positiving on an unrelated command later
+  in the same chain.** `\bgit\s+push\b.*\b(origin\s+)?(main|develop)\b`'s
+  unbounded `.*` crossed shell separators, so `git push origin <branch> &&
+  git log --oneline main..HEAD` got blocked by the `main` in the *log* call,
+  not the push. Narrowed the gap to `[^;&|]*` so only the actual push target
+  trips it. New `.claude/hooks/test_guard_production.py` — a standalone
+  self-check (no framework) driving the real hook via stdin/exit-code: 5
+  cases that must still block, 3 that must now be allowed. Verified live too,
+  not just via the test: `git add -A && git status --short && git log
+  --oneline main..HEAD` — the exact false-positive shape — ran clean on this
+  branch. Tooling-only change, zero app/API code touched; `/ship` baselines
+  unchanged (535 backend / 2 skipped, 61 frontend). Merged as **PR #81**.
 - **Previously:** 2026-09-09 — **item 15 closed: the app stops double-
   charging on a refused reschedule, both parts shipped in one sitting.**
   `create-order` now sends `booking_id`/`date`/`slot` so a full slot is
@@ -2120,7 +2129,19 @@ an app release. Not a quiet server-side edit.
 
 ---
 
-### 18. The production guard false-positives on `main..HEAD` 🟢 — noticed 2026-09-04, cosmetic
+### ~~18. The production guard false-positives on `main..HEAD`~~ ✅ 2026-09-09 — CLOSED
+
+**Fixed in `ee92438`, its own commit as CLAUDE.md requires.** The push-to-
+deploying-branch regex's `.*` didn't stop at shell separators, so it matched a
+`main`/`develop` token belonging to any later command in the same `&&`/`;`/`|`
+chain — not just the push's actual target. Narrowed to `[^;&|]*`. Covered by a
+new standalone self-check, `.claude/hooks/test_guard_production.py` (5 must-
+still-block cases, 3 must-now-allow cases, run through the real hook's own
+stdin/exit-code contract — not just the regex in isolation), plus a live
+repro on this session's own branch. `/ship` baselines unchanged (tooling only,
+no app/API code touched). Merged as **PR #81**.
+
+The original item follows, for the record.
 
 `.claude/hooks/guard-production.py` blocked a commit whose command chain ended
 `git log --oneline main..HEAD`. The actual push was to a feature branch —
