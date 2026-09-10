@@ -571,8 +571,9 @@ class PasswordStrengthTests(TestCase):
         self.assertTrue(user.check_password('Pat1ent-Str0ng-2026'))
 
     def test_hospital_register_rejects_a_weak_password(self):
-        # Hospital register requires a real otp_token (no flag fallback) —
-        # the flag-only `_verified` helper above is for the patient endpoints.
+        # otp_token is optional here too, but issuing a real one (rather than
+        # the flag-only `_verified` helper above) exercises the same path the
+        # website now uses.
         mobile = '9111222405'
         token = issue_otp_token(mobile)
         res = self.client.post('/api/hospitals/register/', {

@@ -3,11 +3,17 @@ The otp_token fix for the otp_verified race (ROADMAP item 17).
 
 The bearer flag `otp_verified:<mobile>` has no binding to a caller — whoever
 hits the consumer endpoint first inside the window wins, not necessarily
-whoever passed the OTP. /otp/verify/ now also issues a single-use otp_token;
-hospital endpoints (web-only, no stale app install to break) REQUIRE it and
-drop the flag fallback entirely, closing the race outright. Patient endpoints
-keep the flag as an OPTIONAL fallback until a mobile app release sends the
-token too.
+whoever passed the OTP. /otp/verify/ now also issues a single-use otp_token.
+
+It is OPTIONAL on all 6 consumers (patient AND hospital register/reset/mobile
+-change) — every one of them is reachable from both the website and the
+mobile app (verified against the app repo directly: app/(auth)/*,
+app/(patient)/edit-profile.tsx, app/(hospital)/Huser.tsx,
+Hforgotpassword.tsx, profile.tsx all call these same endpoints), and the app
+can't send a token until a release adopts it. So nothing may be made
+mandatory yet; the flag stays the fallback everywhere, unchanged, and the
+token only closes the race for a caller that actually sends one (the website,
+today).
 
 Run:  python manage.py test users.tests_otp_token
 """
@@ -31,24 +37,21 @@ class OtpProofHelperTests(TestCase):
     def setUp(self):
         cache.clear()
 
-    def test_no_proof_at_all_fails_both_modes(self):
+    def test_no_proof_at_all_fails(self):
         self.assertFalse(check_otp_proof('9000000900'))
-        self.assertFalse(check_otp_proof('9000000900', required=True))
 
-    def test_flag_alone_satisfies_optional_but_not_required(self):
+    def test_flag_alone_satisfies_the_fallback(self):
         cache.set('otp_verified:9000000901', True, timeout=60)
         self.assertTrue(check_otp_proof('9000000901'))
-        self.assertFalse(check_otp_proof('9000000901', required=True))
 
-    def test_valid_token_satisfies_both_modes(self):
+    def test_valid_token_satisfies_too(self):
         token = issue_otp_token('9000000902')
         self.assertTrue(check_otp_proof('9000000902', token))
-        self.assertTrue(check_otp_proof('9000000902', token, required=True))
 
-    def test_wrong_token_satisfies_neither(self):
+    def test_wrong_token_fails_even_with_flag_set(self):
+        cache.set('otp_verified:9000000903', True, timeout=60)
         issue_otp_token('9000000903')
         self.assertFalse(check_otp_proof('9000000903', 'not-the-real-token'))
-        self.assertFalse(check_otp_proof('9000000903', 'not-the-real-token', required=True))
 
     def test_clear_otp_proof_removes_both_keys(self):
         cache.set('otp_verified:9000000904', True, timeout=60)
@@ -78,27 +81,29 @@ class VerifyOTPIssuesTokenTests(TestCase):
 
 
 @override_settings(CACHES=LOCMEM_CACHE)
-class HospitalEndpointsRequireTokenTests(TestCase):
-    """The 3 hospital consumers: no fallback, so the bare flag can't satisfy them."""
+class HospitalEndpointsAcceptEitherProofTests(TestCase):
+    """The 3 hospital consumers: same optional-token-with-fallback treatment
+    as the patient ones — the app's Huser.tsx/Hforgotpassword.tsx/profile.tsx
+    call these endpoints too and don't send a token yet."""
 
     def setUp(self):
         self.client = APIClient()
         cache.clear()
 
-    def test_register_rejects_the_bare_flag(self):
+    def test_register_still_works_via_the_bare_flag(self):
         mobile = '9111333010'
-        cache.set(f'otp_verified:{mobile}', True, timeout=60)  # attacker's race window
+        cache.set(f'otp_verified:{mobile}', True, timeout=60)
         res = self.client.post('/api/hospitals/register/', {
-            'name': 'Race Clinic', 'mobile': mobile, 'password': 'Clinic-Str0ng-2026',
+            'name': 'Flag Clinic', 'mobile': mobile, 'password': 'Clinic-Str0ng-2026',
         }, format='json')
-        self.assertEqual(res.status_code, 400)
-        self.assertFalse(Hospital.objects.filter(mobile=mobile).exists())
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertTrue(Hospital.objects.filter(mobile=mobile).exists())
 
-    def test_register_succeeds_with_a_real_token(self):
+    def test_register_also_accepts_a_real_token(self):
         mobile = '9111333011'
         token = issue_otp_token(mobile)
         res = self.client.post('/api/hospitals/register/', {
-            'name': 'Real Clinic', 'mobile': mobile, 'password': 'Clinic-Str0ng-2026',
+            'name': 'Token Clinic', 'mobile': mobile, 'password': 'Clinic-Str0ng-2026',
             'otp_token': token,
         }, format='json')
         self.assertEqual(res.status_code, 201, res.content)
@@ -120,6 +125,14 @@ class HospitalEndpointsRequireTokenTests(TestCase):
         }, format='json')
         self.assertEqual(res.status_code, 400)
         self.assertFalse(Hospital.objects.filter(mobile=mobile2).exists())
+
+    def test_register_rejected_with_neither_proof(self):
+        mobile = '9111333014'
+        res = self.client.post('/api/hospitals/register/', {
+            'name': 'Nobody', 'mobile': mobile, 'password': 'Clinic-Str0ng-2026',
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(Hospital.objects.filter(mobile=mobile).exists())
 
 
 @override_settings(CACHES=LOCMEM_CACHE)

@@ -120,11 +120,11 @@ class HospitalRegisterView(APIView):
         # Same OTP-ownership gate as HospitalResetPasswordView and the mobile
         # change above: this endpoint is public, and the mobile it takes becomes
         # the login identity for a partner account that will hold other people's
-        # patient records. otp_token is REQUIRED, not optional — only the
-        # website calls this endpoint (no mobile app), and it ships the token
-        # in the same change, so there is no stale caller to fall back for.
+        # patient records. otp_token is optional, same as the patient consumers
+        # — the app's own Huser.tsx calls this endpoint too, so it cannot be
+        # required until an app release sends it.
         otp_token = str(data.get('otp_token', '')).strip() or None
-        if not check_otp_proof(mobile, otp_token, required=True):
+        if not check_otp_proof(mobile, otp_token):
             return Response(
                 {'message': 'Please verify your mobile with OTP first.'},
                 status=400,
@@ -489,8 +489,10 @@ class HospitalDetailView(APIView):
                 return len(m) == 10 and m.isdigit() and m[0] in '6789'
             if not _valid(new_mobile):
                 return Response({'message': 'Invalid mobile number.'}, status=400)
+            # Optional — the app's (hospital)/profile.tsx PATCHes this endpoint
+            # too and doesn't send a token yet; falls back to the legacy flag.
             otp_token = str(request.data.get('otp_token', '')).strip() or None
-            if not check_otp_proof(new_mobile, otp_token, required=True):
+            if not check_otp_proof(new_mobile, otp_token):
                 return Response({'message': 'Please verify the new mobile with OTP first.'}, status=400)
             if Hospital.objects.filter(mobile=new_mobile).exclude(pk=hospital.pk).exists():
                 return Response({'message': 'This mobile is already in use.'}, status=400)
@@ -624,8 +626,10 @@ class HospitalResetPasswordView(APIView):
                 {'message': 'Password must be at least 6 characters.'},
                 status=400,
             )
+        # Optional — the app's Hforgotpassword.tsx calls this endpoint too and
+        # doesn't send a token yet; falls back to the legacy flag.
         otp_token = str(request.data.get('otp_token', '')).strip() or None
-        if not check_otp_proof(mobile, otp_token, required=True):
+        if not check_otp_proof(mobile, otp_token):
             return Response(
                 {'message': 'OTP not verified. Please verify OTP first.'},
                 status=400,

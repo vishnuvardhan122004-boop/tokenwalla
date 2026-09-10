@@ -130,9 +130,8 @@ class RegistrationKindTests(TestCase):
     URL = '/api/hospitals/register/'
 
     def _register(self, mobile, **extra):
-        # Registration requires a real otp_token (hospital register has no
-        # fallback — see check_otp_proof(required=True)); stand in for the
-        # verify step by issuing one directly, same as the view does.
+        # otp_token is optional (falls back to the otp_verified flag) but
+        # issuing a real one exercises the same path the website now uses.
         token = issue_otp_token(mobile)
         return APIClient().post(self.URL, {
             'name': f'Provider {mobile}', 'mobile': mobile,

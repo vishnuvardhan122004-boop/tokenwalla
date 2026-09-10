@@ -76,13 +76,16 @@ OTP_ATTEMPT_WINDOW = 300   # seconds a wrong-guess count stays alive
 # and typing a new password on a phone, and cuts the window by 3.3x.
 #
 # The real fix (2026-09-10): /otp/verify/ also issues a single-use otp_token
-# (below). It is OPTIONAL on the 3 patient-facing consumers — the mobile app
-# doesn't send it yet, so they keep falling back to the bearer flag above,
-# unchanged, until an app release adopts it — and REQUIRED on the 3 hospital
-# equivalents, which only the website calls and which shipped the token in
-# the same change. So the race is fully closed today for hospital flows and
-# for any web-originated patient flow (ForgotPassword.js, profilecreate.js
-# already send it); only app-originated patient flows still ride the flag.
+# (below). It is OPTIONAL on all 6 consumers — register, reset-password and
+# the mobile change, patient AND hospital. The mobile app calls all 6 too
+# (app/(auth)/*, app/(patient)/edit-profile.tsx, app/(hospital)/Huser.tsx,
+# Hforgotpassword.tsx, profile.tsx — verified against that repo, not assumed)
+# and can't send the token until an app release adopts it, so nothing may
+# become mandatory yet; every consumer keeps falling back to the bearer flag
+# above, unchanged. The website (ForgotPassword.js, profilecreate.js,
+# Usercreate.js, Hprofile.js) already sends it, which closes the race for
+# every web-originated call today. Once an app release sends it too, a later
+# change can retire the flag fallback for good.
 OTP_VERIFIED_WINDOW = 180
 
 
@@ -97,22 +100,19 @@ def issue_otp_token(mobile):
     return token
 
 
-def check_otp_proof(mobile, token=None, *, required=False):
+def check_otp_proof(mobile, token=None):
     """True if `mobile` currently holds valid OTP proof. Does NOT consume it —
     call clear_otp_proof once the action that used it has actually succeeded,
     so a failed downstream check (e.g. duplicate mobile) doesn't force a
     re-verify, matching how the bearer flag always behaved.
 
-    token given      → must match the nonce from /otp/verify/.
-    token absent     → `required=True` rejects outright (hospital endpoints,
-                       web-only, ship the token in the same change);
-                       `required=False` falls back to the legacy flag
-                       (patient endpoints, mobile app can't send it yet).
+    token given  → must match the nonce from /otp/verify/, closing the race.
+    token absent → falls back to the legacy flag (every consumer is reachable
+                   from both the website and the app, and the app can't send
+                   a token yet).
     """
     if token:
         return cache.get(f'otp_token:{mobile}') == token
-    if required:
-        return False
     return bool(cache.get(f'otp_verified:{mobile}'))
 
 
