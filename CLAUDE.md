@@ -337,3 +337,60 @@ for a reason that isn't in the code. So the cache uses Redis only when
 database cache table, which needs nothing running. Set the flag on Railway once
 a Redis addon is attached, never locally. (The test suite forces LocMemCache
 regardless, so a developer with Redis configured doesn't get cross-test bleed.)
+
+## Verify UI/admin changes in an actual browser, not just a test client
+
+A Django `TestCase` hitting an admin URL and asserting on response content
+proves the view returns 200 and the right bytes are in there somewhere — it
+does not prove the page renders, that the filter sidebar populates, or that
+nothing 500s on a real click. **Before calling a UI or Django-admin change
+done, render it in a real browser and look at it** (Chromium is pre-installed
+in a Claude Code session; `chromium-cli` if available, otherwise Playwright
+directly — see below). This bit a session on 2026-09-11: `RateCounterAdmin`
+was verified only via `self.client.get(...)` assertions, never actually
+rendered, until asked to go back and check.
+
+**A session has no `backend/.env` and no local Postgres — this is the exact
+recipe that gets a real browser pointed at a real page, found the hard way:**
+
+```bash
+cd backend
+pip install --ignore-installed cffi cryptography   # fixes a pyo3/Rust panic
+                                                     # on `import jwt` — the
+                                                     # debian system
+                                                     # `cryptography` package
+                                                     # is missing `cffi`
+SECRET_KEY="local-dev-only" DEBUG=True \
+  DATABASE_URL="sqlite:///db.sqlite3" \
+  python manage.py migrate
+
+# create_superuser is unwired for this custom User model (USERNAME_FIELD is
+# `mobile`, but no custom manager overrides Django's default, which still
+# wants `username` positionally) — use create_user with both flags instead:
+SECRET_KEY="local-dev-only" DEBUG=True DATABASE_URL="sqlite:///db.sqlite3" \
+  python manage.py shell -c "
+from users.models import User
+User.objects.create_user(username='9990000001', mobile='9990000001',
+                          password='LocalVerify-2026', is_staff=True, is_superuser=True)
+"
+
+SECRET_KEY="local-dev-only" DEBUG=True DATABASE_URL="sqlite:///db.sqlite3" \
+  ALLOWED_HOSTS="localhost,127.0.0.1" python manage.py runserver 127.0.0.1:8000
+```
+
+Then drive it — `chromium-cli` if the skill is available, otherwise Node with
+the globally-installed `playwright` package:
+
+```bash
+NODE_PATH=/opt/node22/lib/node_modules node your_script.js
+# chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] })
+```
+
+Django admin is mounted at `/secure-admin-tw/`, **not** `/admin/` — the login
+page is `/secure-admin-tw/login/`. `SECRET_KEY` is the only genuinely required
+env var (everything else in `settings.py` has a default); `DATABASE_URL` as a
+`sqlite://` URL is what makes this need no Postgres server at all — it's the
+project's actual local/test story, same as `manage.py test` uses (see the
+`## Testing` section's SQLite notes above). Delete `backend/db.sqlite3` and
+kill the `runserver` process (`lsof -ti:8000 -sTCP:LISTEN | xargs -r kill`)
+when done — this is a throwaway local DB, not a fixture to keep around.
