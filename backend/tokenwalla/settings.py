@@ -318,6 +318,17 @@ if _cloudinary_configured:
         'API_KEY':    CLOUDINARY_API_KEY,
         'API_SECRET': CLOUDINARY_API_SECRET,
     }
+
+# Only production (DEBUG=False, i.e. Railway) ever writes to the real
+# Cloudinary account. A developer's `.env` commonly carries the same
+# production credentials (there's no separate sandbox account), so
+# `manage.py runserver` with DEBUG=True would otherwise make every local
+# file upload — hospital gallery photo, doctor photo, scan report — a live
+# write into the production media store. The test suite already has this
+# exact same protection further below (`'test' in sys.argv`); this extends
+# it to the dev server too, the same way `not DEBUG` already gates
+# SECURE_SSL_REDIRECT and friends just above.
+if _cloudinary_configured and not DEBUG:
     STORAGES = {
         'default': {
             'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
