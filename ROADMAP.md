@@ -7,8 +7,17 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-11 — **ROADMAP correction pass + OTP/login
-  rate-limit visibility shipped.** `/start` walked `## Now` top to bottom (same
+- **Last updated:** 2026-09-11 (second slice) — **the receipt endpoint
+  finally has a caller.** `MyBookings.js` gets a **Receipt** link per paid
+  booking, opening a modal with the full GST breakdown and a
+  Print/Save-as-PDF button (browser-native, no new dependency). Closes the
+  web half of the `## Next` item flagged as "the most substantive product
+  gap open." Verified end-to-end in a real browser — login, My Bookings,
+  receipt, a real generated PDF — not just test assertions. 6 new tests, 67
+  frontend, 557 backend unchanged. App half still open, separate repo. Full
+  detail in Done and WORKLOG.
+- **Previously:** 2026-09-11 (first slice) — **ROADMAP correction pass +
+  OTP/login rate-limit visibility shipped.** `/start` walked `## Now` top to bottom (same
   audit shape as the 2026-09-09 sessions) and found it emptier than the file
   said: item 17 phase 1 had shipped (`58b2847`, PR #84, 2026-09-10) with
   nothing here updated, and two `## Next` bullets (the web password-regex bug,
@@ -2531,11 +2540,19 @@ testing either needs `--params` spelled out by hand.
   there is no error tracking on the API itself (no Sentry/APM equivalent for
   the Django side — the app has Sentry, the backend does not), so an
   unhandled exception is still a Railway-log hunt, not a dashboard alert.
-- **Nothing consumes the receipt endpoint** — new 2026-08-11. `BookingReceiptView`
-  (`GET /api/payment/receipt/<pk>/`) is a finished, GST-compliant receipt —
-  taxable value, GST, SAC code, consultation fee marked exempt, readable by the
-  booking's own patient. **Neither the app nor the website calls it.** For a paid
-  healthcare service in India this is the most substantive product gap open.
+- ~~**Nothing consumes the receipt endpoint**~~ ✅ **web half closed 2026-09-11**
+  — new 2026-08-11. `BookingReceiptView` (`GET /api/payment/receipt/<pk>/`) was
+  a finished, GST-compliant receipt nobody called. `MyBookings.js` now has a
+  **Receipt** link (shown whenever `booking.amount > 0`) opening a modal that
+  fetches it and renders the full breakdown — seller/GSTIN, line items, the
+  doctor-fee GST-exemption note, taxable value, GST, total — plus a
+  **Print / Save as PDF** button using the browser's own print dialog, no PDF
+  library added. Verified against a real login → My Bookings → Receipt flow
+  in an actual browser, not just test-client assertions (per the browser-
+  verification rule added this session) — screenshots and a real generated
+  PDF, both correct. 6 new tests in `MyBookings.receipt.test.js`. **The app
+  half is still not done** — separate repo, separate release, out of scope
+  for a web-only session.
 - ~~**App has no WhatsApp opt-in toggle**~~ ✅ **closed 2026-09-06** — both
   halves of this bullet had gone stale and it was actively misleading readers.
   The app DOES have the toggle (`app/(patient)/profile.tsx:124`, patching
@@ -2635,6 +2652,39 @@ Resolved and deliberately removed, so they don't get re-added:
 ---
 
 ## Done
+
+- **2026-09-11 (second slice)** — **The receipt endpoint finally has a
+  caller — web half.** `BookingReceiptView` (`GET /api/payment/receipt/<pk>/`)
+  had existed since 2026-08-11 with nothing calling it — flagged in `## Next`
+  as "the most substantive product gap open" for a paid healthcare service in
+  India. `MyBookings.js` now shows a **Receipt** link per paid booking
+  (`booking.amount > 0`), opening a modal that fetches the GST breakdown and
+  renders it: seller/GSTIN, receipt number, booking details, a line-items
+  table (doctor fee marked GST-exempt, platform + gateway fee at 18%),
+  taxable value / GST / total, and a pass note when the booking bought or
+  redeemed an Appointment Pass. A **Print / Save as PDF** button calls the
+  browser's own print dialog — no PDF-generation dependency added.
+  **The print CSS took real debugging to get right**, worth recording: a
+  `body * { visibility: hidden }` pass alone left Bootstrap's global
+  `.visible { visibility: visible !important }` utility class winning on the
+  Navbar/Footer (higher specificity than a bare `body *`), so the final rule
+  also names them by tag+class (`nav.nav-root`, `footer.footer-root`) to
+  outrank it, on top of `display:none` on `.mb-root` for this page's own
+  header/tabs. Two self-inflicted detours cost the most time: a literal
+  backtick inside a CSS comment inside the component's own template-literal
+  `<style>` block twice broke the JS parse silently in the dev-server log
+  (webpack kept serving the last-good bundle, so several verification rounds
+  tested stale code without knowing it) — worth remembering if a CSS-only
+  edit to one of these inline `<style>{...}</style>` blocks ever appears to
+  have "no effect". **Verified in an actual browser end-to-end**, not just
+  test-client assertions: seeded a real patient/doctor/booking/payment via
+  the ORM, logged in through the real login form, opened My Bookings, opened
+  the receipt, and both a full-page screenshot and a real generated PDF
+  (via `page.pdf()`) came back correct and clean. 6 new tests in
+  `MyBookings.receipt.test.js`. **67 frontend, 557 backend (2 skipped)** —
+  unchanged backend count, this session touched no backend file.
+  **App half not done** — separate repo, separate release cycle, out of
+  scope for a web-only session. Full detail in WORKLOG.
 
 - **2026-09-11** — **ROADMAP correction pass + OTP/login rate-limit
   visibility shipped.** `/start` walked `## Now` top to bottom and found it
