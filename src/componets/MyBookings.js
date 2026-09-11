@@ -146,6 +146,10 @@ export default function MyBookings() {
   const [reports,           setReports]           = useState({});
   const [downloading,       setDownloading]       = useState(null);
   const [downloadingId,     setDownloadingId]     = useState(null);
+  const [receiptFor,        setReceiptFor]        = useState(null);   // booking, or null
+  const [receiptData,       setReceiptData]       = useState(null);
+  const [receiptLoading,    setReceiptLoading]    = useState(false);
+  const [receiptError,      setReceiptError]      = useState('');
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -236,6 +240,27 @@ export default function MyBookings() {
       setDownloadingId(null);
     }
   };
+
+  // BookingReceiptView is GST-compliant structured data, not a rendered file —
+  // this fetches it and prints it via the browser's own print-to-PDF, so no
+  // PDF-generation dependency is needed. 404s (no Payment row — e.g. a ₹0
+  // SERVICE_ONLY pass redemption) surface as the message the server sends,
+  // not a generic failure.
+  const openReceipt = async (booking) => {
+    setReceiptFor(booking);
+    setReceiptData(null);
+    setReceiptError('');
+    setReceiptLoading(true);
+    try {
+      const { data } = await API.get(`/payment/receipt/${booking.id}/`);
+      setReceiptData(data);
+    } catch (err) {
+      setReceiptError(err?.response?.data?.message || 'Could not load the receipt.');
+    } finally {
+      setReceiptLoading(false);
+    }
+  };
+  const closeReceipt = () => { setReceiptFor(null); setReceiptData(null); setReceiptError(''); };
 
   const handleCancel = async (booking) => {
     // The two sides of a pass need opposite warnings: cancelling a free visit
@@ -566,6 +591,54 @@ export default function MyBookings() {
         .mb-toast.error   { background: var(--color-error-text);   color: #fff; }
         @keyframes twPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
         @media (max-width: 600px) { .mb-token-col { width: 84px; padding: 16px 10px; } .mb-info-col { padding: 14px; } }
+        .mb-receipt-link { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; padding: 0; margin-left: 10px; font-size: 12px; font-weight: 600; color: var(--blue-600); cursor: pointer; font-family: var(--font-body); }
+        .mb-receipt-link:hover { text-decoration: underline; }
+        .mb-receipt-modal { max-width: 620px; max-height: 85vh; overflow-y: auto; }
+        .mb-receipt-error { color: var(--color-error-text); font-size: 14px; text-align: center; padding: 12px 0; }
+        .mb-receipt-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px dashed var(--blue-100); padding-bottom: 14px; margin-bottom: 14px; }
+        .mb-receipt-brand { font-family: var(--font-display); font-weight: 800; font-size: 18px; color: var(--blue-600); }
+        .mb-receipt-brand span { color: var(--gray-900); }
+        .mb-receipt-gstin { font-size: 11px; color: var(--gray-400); margin-top: 4px; }
+        .mb-receipt-meta { text-align: right; font-size: 12px; color: var(--gray-600); line-height: 1.6; }
+        .mb-receipt-booking { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 13px; margin-bottom: 16px; }
+        .mb-receipt-booking span { color: var(--gray-400); margin-right: 6px; }
+        .mb-receipt-booking b { color: var(--gray-900); }
+        .mb-receipt-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 14px; }
+        .mb-receipt-table th { text-align: left; color: var(--gray-400); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--blue-100); padding: 6px 8px; }
+        .mb-receipt-table td { padding: 8px; border-bottom: 1px solid var(--gray-100); color: var(--gray-900); vertical-align: top; }
+        .mb-receipt-table td:nth-child(3), .mb-receipt-table th:nth-child(3) { text-align: right; }
+        .mb-receipt-note { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+        .mb-receipt-summary { display: flex; flex-direction: column; gap: 6px; font-size: 13px; margin-bottom: 14px; }
+        .mb-receipt-summary > div { display: flex; justify-content: space-between; }
+        .mb-receipt-summary span { color: var(--gray-600); }
+        .mb-receipt-total { border-top: 1px solid var(--blue-100); padding-top: 8px; margin-top: 4px; font-size: 15px; font-weight: 700; }
+        .mb-receipt-pass { background: var(--blue-50); border-radius: 8px; padding: 8px 12px; font-size: 12px; color: var(--blue-700); margin-bottom: 10px; }
+        .mb-receipt-foot { font-size: 11px; color: var(--gray-400); text-align: center; border-top: 1px dashed var(--blue-100); padding-top: 10px; }
+        @media print {
+          /* Belt and braces: .mb-root display:none takes out this page's own
+             header/tabs (verified via getComputedStyle — a plain
+             visibility:hidden pass alone left them rendered for reasons not
+             worth chasing further), and the body-star visibility pass takes
+             out the app-wide Navbar/Footer, which live outside .mb-root and
+             so aren't covered by that rule alone. */
+          .mb-root, .mb-toast { display: none !important; }
+          /* Bootstrap ships a global (non-print-scoped) .visible utility class
+             (visibility:visible!important). A plain body-star selector has
+             lower specificity than that class, so it loses on any element carrying
+             it — which is why the Navbar/Footer partially survived a bare
+             visibility pass. Naming them by tag+class outscores a single
+             class selector, and display:none isn't overridable at all. */
+          nav.nav-root, nav.nav-root *, footer.footer-root, footer.footer-root * { display: none !important; visibility: hidden !important; }
+          body * { visibility: hidden !important; }
+          #mb-receipt-print-area, #mb-receipt-print-area * { visibility: visible !important; }
+          /* The overlay is position:fixed + backdrop-filter (its own containing
+             block) and the modal caps itself at max-height:85vh with
+             overflow-y:auto — both would clip the receipt's actual content
+             just as they would a scrolled view, so neutralise them for print. */
+          .mb-receipt-overlay { position: static !important; visibility: visible !important; background: none !important; backdrop-filter: none !important; padding: 0 !important; }
+          .mb-receipt-modal { position: static !important; max-width: none !important; max-height: none !important; overflow: visible !important; box-shadow: none !important; border: none !important; }
+          .mb-receipt-actions { display: none !important; }
+        }
       `}</style>
 
       <div className="mb-root">
@@ -685,6 +758,11 @@ export default function MyBookings() {
                           <div className="mb-meta-chip"><div className="mb-meta-icon"><i className="bi bi-calendar-event me-1" /></div>{booking.date || '—'}</div>
                           <div className="mb-meta-chip"><div className="mb-meta-icon"><i className="bi bi-clock me-1" /></div>{booking.slot || '—'}</div>
                           <span className="mb-amount">₹{booking.amount || 0}</span>
+                          {booking.amount > 0 && (
+                            <button type="button" className="mb-receipt-link" onClick={() => openReceipt(booking)}>
+                              <i className="bi bi-receipt me-1" />Receipt
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -911,6 +989,91 @@ export default function MyBookings() {
                       ? 'Confirm Reschedule (FREE)'
                       : `Pay ₹${RESCHEDULE_FEE} & Reschedule`}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── RECEIPT MODAL ── */}
+      {receiptFor && (
+        <div className="mb-modal-overlay mb-receipt-overlay" onClick={e => { if (e.target === e.currentTarget) closeReceipt(); }}>
+          <div className="mb-modal mb-receipt-modal">
+            {receiptLoading && (
+              <p style={{ textAlign: 'center', color: 'var(--gray-400)', padding: '20px 0' }}>Loading receipt…</p>
+            )}
+            {receiptError && (
+              <p className="mb-receipt-error"><i className="bi bi-exclamation-circle me-1" />{receiptError}</p>
+            )}
+            {receiptData && (
+              <div className="mb-receipt-print" id="mb-receipt-print-area">
+                <div className="mb-receipt-head">
+                  <div>
+                    <div className="mb-receipt-brand">Token<span>walla</span></div>
+                    <div className="mb-receipt-gstin">
+                      {receiptData.seller?.gstin ? `GSTIN: ${receiptData.seller.gstin}` : 'GSTIN not registered'}
+                    </div>
+                  </div>
+                  <div className="mb-receipt-meta">
+                    <div><b>Receipt {receiptData.receipt_no}</b></div>
+                    <div>{receiptData.issued_at}</div>
+                  </div>
+                </div>
+
+                <div className="mb-receipt-booking">
+                  <div><span>Token</span><b>{receiptData.booking?.token}</b></div>
+                  <div><span>Patient</span><b>{receiptData.booking?.patient}</b></div>
+                  <div><span>Doctor</span><b>{receiptData.booking?.doctor}</b></div>
+                  <div><span>Hospital</span><b>{receiptData.booking?.hospital}</b></div>
+                  <div><span>Date</span><b>{receiptData.booking?.date}</b></div>
+                  <div><span>Slot</span><b>{receiptData.booking?.slot}</b></div>
+                </div>
+
+                <table className="mb-receipt-table">
+                  <thead>
+                    <tr><th>Description</th><th>SAC</th><th>Taxable Value</th><th>GST</th></tr>
+                  </thead>
+                  <tbody>
+                    {(receiptData.line_items || []).map((li, i) => (
+                      <tr key={i}>
+                        <td>
+                          {li.description}
+                          {li.note && <div className="mb-receipt-note">{li.note}</div>}
+                        </td>
+                        <td>{li.sac_code || '—'}</td>
+                        <td>₹{li.taxable_value}</td>
+                        <td>{li.gst_rate}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div className="mb-receipt-summary">
+                  <div><span>Taxable Value (Platform + Gateway)</span><b>₹{receiptData.taxable_value}</b></div>
+                  <div><span>GST ({receiptData.gst?.rate})</span><b>₹{receiptData.gst?.amount}</b></div>
+                  <div className="mb-receipt-total"><span>Total Paid</span><b>₹{receiptData.total}</b></div>
+                </div>
+
+                {receiptData.pass && (
+                  <div className="mb-receipt-pass">
+                    🎟️ Appointment Pass — {receiptData.pass.role === 'purchase'
+                      ? 'this payment purchased the pass.'
+                      : 'this visit was redeemed against an existing pass.'}
+                  </div>
+                )}
+                {receiptData.note && <div className="mb-receipt-pass">{receiptData.note}</div>}
+
+                <div className="mb-receipt-foot">
+                  Payment ID: {receiptData.payment_id || '—'} · Status: {receiptData.status}
+                </div>
+              </div>
+            )}
+            <div className="mb-modal-actions mb-receipt-actions">
+              <button className="mb-modal-cancel" onClick={closeReceipt}>Close</button>
+              {receiptData && (
+                <button className="mb-modal-confirm" onClick={() => window.print()}>
+                  <i className="bi bi-printer me-1" />Print / Save as PDF
+                </button>
+              )}
             </div>
           </div>
         </div>
