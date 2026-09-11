@@ -7,7 +7,43 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-10 (second session) — **item 17 phase 1 shipped:
+- **Last updated:** 2026-09-11 — **a full production-readiness QA sweep across
+  web + app (Vishnu's explicit ask — "check every button... so we go
+  production ready"), not one ROADMAP item: found and fixed 6 real bugs and
+  closed 2 real local-dev production-safety risks. See item 23 for the full
+  writeup — this is the top of `## Now` for tomorrow, not item 17.** Six PRs
+  opened, all still open (Vishnu merges, not a session):
+  **web** [#87](https://github.com/vishnuvardhan122004-boop/tokenwalla/pull/87)
+  (slot picker said "Full" for a slot that just hadn't opened yet),
+  [#88](https://github.com/vishnuvardhan122004-boop/tokenwalla/pull/88) (a
+  corrupted byte sequence rendered literally as `�` on the password-reset
+  screen), [#89](https://github.com/vishnuvardhan122004-boop/tokenwalla/pull/89)
+  (scan/blood-test checkout said "Doctor Consultation Fee"),
+  [#90](https://github.com/vishnuvardhan122004-boop/tokenwalla/pull/90) (local
+  `runserver` was silently able to write to production Cloudinary and send
+  real WhatsApp messages — see below), [#91](https://github.com/vishnuvardhan122004-boop/tokenwalla/pull/91)
+  (deleting/replacing a hospital's stored image left the old file in storage
+  forever); **app** [#26](https://github.com/vishnuvardhan122004-boop/tokenwalla.app/pull/26)
+  (mirrors #89). Three more **app-only** PRs from the same sweep, opened
+  2026-09-10, also still unmerged:
+  [#23](https://github.com/vishnuvardhan122004-boop/tokenwalla.app/pull/23),
+  [#24](https://github.com/vishnuvardhan122004-boop/tokenwalla.app/pull/24),
+  [#25](https://github.com/vishnuvardhan122004-boop/tokenwalla.app/pull/25).
+  **The two real risks (#90) matter more than any single bug found:** local
+  `.env` carries production Cloudinary and WhatsApp credentials (no sandbox
+  account exists for either), so before today's fix, ordinary local QA —
+  clicking Call/Cancel/Hold on a booking, uploading a hospital photo — was
+  silently live. **Confirmed this already fired once**, before the fix
+  existed: a real `hospital_new_booking` WhatsApp send at 2026-09-11 00:04
+  IST, Meta accepted it and returned a message id. The recipient was a
+  synthetic test fixture (`9000000007`), not a real phone, so almost
+  certainly nobody received anything — but the API call itself was real, on
+  real credentials, from routine local testing. Now gated on `DEBUG`, the
+  same way the test suite has been gated since 2026-08-18. **Backend 556
+  tests (2 skipped, was 552), web 61, app 174 — all unchanged/green
+  throughout.** 552 tests → 556 came from this sweep's own 4 new tests
+  (`hospitals/tests_photo_gallery.py`), not from anything item 17 touched.
+- **Previously:** 2026-09-10 (second session) — **item 17 phase 1 shipped:
   `/otp/verify/` now issues a single-use `otp_token`, optional on all 6
   consumers, closing the race for every web-originated flow today.** The
   item as first written assumed the real fix had to be a breaking API
@@ -2505,8 +2541,112 @@ testing either needs `--params` spelled out by hand.
 
 ---
 
+### 23. Full production-readiness QA sweep — in progress 🟡 2026-09-10/11
+
+Not a bug fix, an ongoing exercise: click through every screen on web + app,
+patient and hospital, and fix what's actually broken. Requested explicitly by
+Vishnu rather than picked from `## Now`. Two sessions in, still going.
+
+**Tested and confirmed correct** (no bug, verified live, not just read):
+full Razorpay payment lifecycle (create-order → checkout → capture → verify
+with recovery from a dropped client → idempotent re-verify → cancel → tiered
+refund, both the 0% and a real 70% refund through Razorpay's own API);
+Appointment Pass (free redemption at a `SERVICE_ONLY` provider, cancellation
+returning the credit, "book for someone else" combined with a pass credit);
+reschedule fee wiring (code + the item-15 double-charge tests, 140/140);
+patient + hospital OTP-gated auth end to end (register, login-by-OTP,
+forgot-password → reset → login) once local dev-mode OTP was unlocked (see
+below); the hospital queue lifecycle (Waiting → Hold → Resume → Call →
+QR-scan check-in → Complete); Add Doctor; blood-test booking and its fee math;
+the report-sharing loop (hospital uploads → patient sees it in My Documents →
+downloads the exact bytes → hospital deletes it and the file is actually
+gone); the language switcher (English/Hindi/Telugu/Kannada all render
+correctly on the pages that have been migrated to `src/i18n/`).
+
+**Unlocked, not previously possible:** local OTP testing. `backend/.env`'s
+`TWOFACTOR_API_KEY` is present but real — `send_otp()` only drops into its
+built-in dev-mode (OTP printed to the console) when the key is **empty**, and
+a present real key takes the live-send branch every time, so registration/
+login-by-OTP/forgot-password could never be exercised locally before this
+session overrode it as an OS env var (`TWOFACTOR_API_KEY=""`) when starting
+`runserver` — `.env` itself untouched, same technique already used for the
+Razorpay test key. **This is process, not a fix** — it does not persist
+past this session's server process, so the next session hits the same wall
+unless it does the same override (or Vishnu blanks the local key for good).
+See the **Next** section below — this replaces the older "local
+`TWOFACTOR_API_KEY` is invalid" bullet, which had the wrong diagnosis.
+
+**6 bugs found and fixed, all in open PRs** (see the dated bullet at the top
+of this file for links) — the "Too soon"/"Full" slot label, the corrupted `�`
+on the OTP resend button, "Doctor Consultation Fee" on a scan/blood-test
+checkout, a hospital's deleted/replaced photo leaking in storage forever, and
+the local-dev Cloudinary/WhatsApp risk below.
+
+**2 real production-safety risks found and closed, not bugs in the product
+itself but in how local dev is configured** — `backend/.env` carries the
+*real* Cloudinary and WhatsApp Business credentials, because neither has a
+separate sandbox account. Before this session:
+- Any file upload from `manage.py runserver` (hospital gallery photo, banner,
+  logo, scan report) wrote to the **production Cloudinary account**.
+- Any booking-lifecycle action (cancel/hold/no-show/call/QR-scan/doctor-
+  unavailable/mark-paid/scan-report-ready/doctor-delay) could fire a **real
+  WhatsApp message** to a real phone.
+
+Both are now gated on `DEBUG` (PR #90) — Cloudinary the same way the test
+suite has been gated since 2026-08-18, WhatsApp the same way `send_otp`
+already treats an empty key, with one deliberate carve-out
+(`manage.py send_test_whatsapp --force`) for the one legitimate reason to
+send for real from a dev machine. **Confirmed this had already fired once**,
+before the fix existed — see the top-of-file bullet for the exact incident.
+Fixing this *found* a second bug: local files now serving from
+`FileSystemStorage` came back with a bare relative `/media/…` URL, which
+404s the instant the website (port 3000) and the API (port 8000) are
+different origins — Cloudinary's own URLs are absolute, so production never
+showed this. Fixed by giving the storage backend an absolute `base_url`
+while keeping `MEDIA_URL` itself relative (Django's own dev file-server is a
+no-op when its serving prefix is a full URL).
+
+**Found, not fixed — flagged as a scope decision, not a quick bug:** the
+website's i18n rollout is partial. `src/i18n/` covers `Navbar`/`Footer`/
+`Hero`/`AllDoctor` only; `MyBookings.js`, `Payment.js` and
+`DoctorsDetails.js` still render English-only regardless of the selected
+language. Translating the rest reliably into three languages is its own
+feature project — worth deciding whether/when to do, not something to
+improvise mid-sweep.
+
+**Still blocked, not this session's to fix:**
+- **The Razorpay checkout iframe stopped accepting any synthetic click** —
+  every coordinate, on two separate tabs, confirmed via cross-frame
+  diagnostics (`hover` reaches it, `click` doesn't). A browser-automation
+  tooling limitation, not an app bug — the same family of flakiness noted
+  informally in an earlier session ("tab died after clicking Success"), now
+  characterised precisely. Blocks click-through testing of anything needing
+  a **new** real payment: Pass purchase, reschedule's paid path, a
+  `FULL`-doctor paid pass redemption. The underlying gateway mechanics
+  (create → capture → verify → idempotent → refund) were already proven
+  end-to-end earlier in this same sweep, before the iframe stopped
+  responding — so this limits new coverage, not confidence in the code.
+- **iOS Simulator work** — Xcode isn't installed on this machine. Needs
+  Vishnu to install it and run `sudo xcode-select -s
+  /Applications/Xcode.app/Contents/Developer` himself; a session cannot do
+  this (it needs his Apple ID / admin password).
+
+**Not yet swept:** the admin dashboard beyond Doctor Payouts (no sidebar nav
+rendered at the tested viewport width — worth checking at desktop width),
+the hospital Scans/Services-management screens beyond Add Doctor, Terms/
+Privacy/Refund Policy static pages, Contact/support screens end to end.
+
+---
+
 ## Next
 
+- **PR #83 (`docs/wrap-2026-09-10-both-prs-merged`) is now redundant — new
+  2026-09-11.** Superseded by #85, which carries the same items-18/20 content
+  plus the item-17 wrap on top (confirmed: #83's commit isn't in #85's
+  history — #85 was written fresh, not branched from #83, after a
+  force-push got blocked and the branch was renamed). Merge #85 (or
+  whichever wrap this session's PR builds on) and close #83 without merging
+  it, or its diff will conflict with everything after it.
 - **`gh` had auth in a session for the first time, 2026-09-09 — confirm it
   still does before relying on it.** Every prior session recorded `gh auth
   status` as not logged in and had to hand off a `.../compare/...` link for
@@ -2519,15 +2659,18 @@ testing either needs `--params` spelled out by hand.
   that merge went through `gh` or by hand. If a future session finds `gh`
   unauthenticated again, that's not a regression to chase — it likely just
   means this machine's `gh` login doesn't persist across sessions.
-- **Local `TWOFACTOR_API_KEY` is invalid — no local OTP send works** — new
-  2026-09-07. `backend/.env` has a present but rejected key: `send_otp()` only
-  falls back to its built-in dev-mode (console-printed OTP) when the key is
-  **empty**, so a present-but-bad key still takes the live-send branch and
-  2Factor.in returns "Invalid API Key" → every `/api/auth/otp/request/` 500s
-  locally. Found verifying the item below in a browser. Local-only — says
-  nothing about whether Railway's key works — but it blocks *any* local OTP
-  testing (registration, login-by-OTP, forgot-password) until Vishnu supplies a
-  working key or blanks the local one.
+- **Corrected 2026-09-11 — the local `TWOFACTOR_API_KEY` isn't invalid, it's
+  real, which is a different and worse problem.** The original 2026-09-07
+  diagnosis (a rejected key causing a 500) was never actually confirmed —
+  this session found `send_otp()` only drops into dev-mode (console-printed
+  OTP) when the key is **empty**, and `backend/.env`'s key is a genuine
+  36-char value, so every local OTP send was taking the **live** branch,
+  spending real 2Factor.in credits (or 500ing if the balance/key has since
+  lapsed — unconfirmed either way). Unlocked for this session only by
+  overriding `TWOFACTOR_API_KEY=""` as an OS env var on `runserver` — `.env`
+  itself untouched — which is process, not a fix; the next session hits the
+  same wall unless it repeats the override or Vishnu blanks the key in
+  `.env` for good. Full detail in item 23.
 - **Slice 10 has no app half** — new 2026-08-19. The website ships scan-report
   download in `MyBookings.js`; the app (`a20ad2e`) has **no `reports/` call at
   all**. A patient who books a scan on the app is notified their report is

@@ -5,7 +5,8 @@ Newest entry on top. Update the **Status** columns as things land.
 
 - **Branch:** website on `main` (tip `58b2847`, PR #84 merged). App on `main` (tip `5eff1bb`, PR #22 merged). **Do NOT delete** `develop`, which deploys to staging.
 - **Latest commit at last update:** website `58b2847` `main` (includes **#84**, merged by Vishnu — item 17 phase 1: optional `otp_token` on all 6 OTP-gated endpoints) · app `5eff1bb` `main` (includes **app #22** — the same 6 screens sending the token) — both merged and the backend confirmed live (`/health/` reports `58b2847e`). **App change is source-only — needs an EAS build + store release before any phone has it.**
-- **Last updated:** 2026-09-10 (second session) — **item 17 phase 1 shipped and merged: `otp_token` closes the OTP-verify race for every web-originated flow today.** Optional on all 6 consumers (patient + hospital register/reset-password/mobile-change), flag stays the fallback, so nothing breaks for a caller that doesn't send it. **Caught a real mistake before merge:** the first commit made the token *required* on the 3 hospital endpoints on the unverified assumption "only the website calls them" — reading the actual `tokenwalla.app` repo found `Huser.tsx`/`Hforgotpassword.tsx`/`profile.tsx` all call those same endpoints, so the required version would have broken the app's hospital screens on deploy. Corrected before merge. 552 backend (2 skipped, was 540), 61 frontend unchanged; app: `tsc`/174 jest/`expo lint` all clean. Merged **PR #84** (`58b2847`) and **app PR #22** (`5eff1bb`) — both by Vishnu. Full detail in item 17's own ROADMAP section and the dated entry below.
+- **Last updated:** 2026-09-11 — **full production-readiness QA sweep, Vishnu's explicit ask: 6 bugs fixed, 2 real local-dev production-safety risks closed, nothing merged yet.** Web PRs #87 (slot picker: "Too soon" vs "Full"), #88 (corrupted `�` on the OTP resend button), #89 (scan/blood-test checkout said "Doctor Consultation Fee"), #90 (local `runserver` could write to production Cloudinary / send real WhatsApp — see below), #91 (deleting/replacing a hospital image leaked the old file in storage forever); app PR #26 mirrors #89; app PRs #23/#24/#25 (pending-payout caption, voice-call→SMS copy, Saturday hours) are also still open from 2026-09-10. **#90 is the one that matters:** `backend/.env` carries real production Cloudinary and WhatsApp credentials (no sandbox exists for either), so local QA — clicking Call/Cancel/Hold, uploading a photo — was silently hitting production. Confirmed this had already fired once, before the fix existed: a real `hospital_new_booking` WhatsApp send at 00:04 IST to a synthetic test number (`9000000007`, almost certainly not a real phone, but the API call itself was genuine). Both now gated on `DEBUG`, mirroring how the test suite has been protected since 2026-08-18; one deliberate carve-out (`send_test_whatsapp --force`) for sending for real from a dev machine on purpose. Fixing it surfaced a second bug (relative media URLs 404 across the website/API's two different local ports) — fixed with an absolute `base_url` on the storage backend, `MEDIA_URL` itself left relative so Django's own dev file-server keeps working. Also unlocked local OTP testing (`TWOFACTOR_API_KEY` override, session-only, not persisted) and used it to verify the full patient + hospital auth cycle end to end for the first time. **556 backend (2 skipped, was 552 — +4 from `hospitals/tests_photo_gallery.py`), 61 web, 174 app — all green.** Full detail in ROADMAP item 23 and the dated section below.
+- **Previously:** 2026-09-10 (second session) — **item 17 phase 1 shipped and merged: `otp_token` closes the OTP-verify race for every web-originated flow today.** Optional on all 6 consumers (patient + hospital register/reset-password/mobile-change), flag stays the fallback, so nothing breaks for a caller that doesn't send it. **Caught a real mistake before merge:** the first commit made the token *required* on the 3 hospital endpoints on the unverified assumption "only the website calls them" — reading the actual `tokenwalla.app` repo found `Huser.tsx`/`Hforgotpassword.tsx`/`profile.tsx` all call those same endpoints, so the required version would have broken the app's hospital screens on deploy. Corrected before merge. 552 backend (2 skipped, was 540), 61 frontend unchanged; app: `tsc`/174 jest/`expo lint` all clean. Merged **PR #84** (`58b2847`) and **app PR #22** (`5eff1bb`) — both by Vishnu. Full detail in item 17's own ROADMAP section and the dated entry below.
 - **Previously:** 2026-09-10 (first session) — **items 18 and 20 both confirmed merged; full `## Now` sweep found nothing else session-actionable that day.** #82 had branched before #81 merged, so both carried a conflicting edit to this exact block — resolved by hand (not force-pushed), re-tested (540 backend, guard self-check both green), re-pushed, confirmed `MERGEABLE` before Vishnu merged it. `git fetch` after Vishnu's first "merged" turned out to be a beat early — `mergedAt` was still `null` — re-checked rather than taking the claim on faith, and it came back genuinely merged (`b3a10b3`) a moment later. Walked every open item left in `## Now`: 4c/13/14b/16 are Vishnu-only dashboard actions, 9 is waiting on Meta, 14c is blocked on a real pass reaching its expiry window, 6/7/19 aren't code. **Item 17** (the OTP bearer-flag nonce fix) was flagged as the one real candidate left and deliberately not started that session — see above for how that assumption held up a few hours later.
 - **Previously:** 2026-09-09 — **item 20 closed: opt-in pagination on `GET /api/bookings/my/`.** `MyBookingsView` was the last unpaginated patient-facing list, returning a patient's whole booking history in one response. New `OptionalPagination` (subclasses the existing `StandardPagination` `AllBookingsView` already uses) returns `None` from `paginate_queryset` unless the request sends `?page=`, so the response stays the same bare array it always was until something asks for a page. Grepped both this repo and `tokenwalla.app`: the website (`MyBookings.js`, `BookingToken.js`, `bookingService.js`) and every app screen hitting this endpoint (`my-bookings.tsx`, `my-qr.tsx`) read the response as a raw array and never send `page` — so no client, live or in-flight, needs to change. Reused `build_queue_map` unmodified; its docstring already documents accepting a paginator page (`AllBookingsView` already relies on that). **Flagged as premature before building it** — at today's booking volume no patient has anywhere near enough history for this to matter — built anyway as cheap, genuinely opt-in prep on Vishnu's explicit call after that tradeoff was raised. 5 new tests (`bookings/tests_my_bookings_pagination.py`), **540 backend (2 skipped)** (was 535), **61 frontend** unchanged, `makemigrations --check` clean. **Merged as PR #82.**
 - **Previously:** 2026-09-09 — **item 18 closed: the production guard's push-to-`main` regex stopped false-positiving on a later, unrelated command in the same chain.** `.claude/hooks/guard-production.py`'s push-to-deploying-branch rule used an unbounded `.*` between `push` and `main`/`develop`, so it crossed `&&`/`;`/`|` and matched a `main` belonging to a later command — e.g. `git push origin <branch> && git log --oneline main..HEAD` got blocked by the *log* call, not the push. Narrowed the gap to `[^;&|]*`. New `.claude/hooks/test_guard_production.py` (no framework — 5 must-still-block / 3 must-now-allow cases, run through the real hook's own stdin/exit-code contract) plus a live repro on this session's own branch (`git add -A && git status --short && git log --oneline main..HEAD` ran clean). Tooling-only: `/ship` baselines unchanged, **535 backend tests (2 skipped) · 61 frontend**. **Merged as PR #81.** This entry itself resolves the predicted #81/#82 top-block conflict by hand, per both entries' own note — not force-pushed over. Full detail below.
@@ -50,6 +51,87 @@ Newest entry on top. Update the **Status** columns as things land.
 - After you commit, bump the two lines above: `Latest commit` = `git rev-parse --short HEAD`, `Last updated` = `date +%Y-%m-%d`.
 - Save the log with your work: `git add WORKLOG.md && git commit -m "docs: update worklog"` (then `git push`).
 - Keep entries short — one line per change, link the commit hash so it's traceable.
+
+---
+
+## 2026-09-11 — Full production-readiness QA sweep (2 sessions, web + app)
+
+Requested explicitly by Vishnu — "check every button... so we go production
+ready" — not a single ROADMAP item. Full writeup in ROADMAP item 23; this
+section is the terse version.
+
+**What got clicked through and confirmed correct, live, not just read:**
+- Full Razorpay payment lifecycle: create-order → checkout → capture →
+  verify (recovers from a dropped client connection) → idempotent re-verify
+  → cancel → tiered refund. Both the 0% tier and a genuine 70% refund
+  verified against Razorpay's own API (`amount_refunded: 1400`).
+- Appointment Pass: free redemption at a `SERVICE_ONLY` provider, cancel
+  returning the credit, "book for someone else" combined with a pass credit.
+- Reschedule fee wiring — code + the existing item-15 tests (140/140).
+- Patient + hospital OTP-gated auth, end to end, for the first time locally
+  (see the `TWOFACTOR_API_KEY` unlock below): register → verify → login;
+  forgot-password → OTP → reset → login with the new password.
+- Hospital queue lifecycle: Waiting → Hold → Resume → Call → QR-scan
+  check-in → Complete.
+- Add Doctor, blood-test booking + fee math, the report-sharing loop
+  (hospital shares a file → patient sees + downloads it in My Documents →
+  hospital deletes it and the file is actually gone), the language switcher
+  (EN/HI/TE/KN render correctly on the pages migrated to `src/i18n/`).
+
+**Unlocked:** local OTP testing. `send_otp()` only prints to the console when
+`TWOFACTOR_API_KEY` is **empty**; `backend/.env`'s key is real, so every
+local send was live (or failing) — never confirmed which. Worked around by
+exporting `TWOFACTOR_API_KEY=""` as an OS env var on `runserver`, same
+technique as the Razorpay test key, `.env` itself never touched.
+**Session-only — does not persist**, next session needs the same override.
+
+**6 bugs found and fixed, all in open PRs (nothing merged yet):**
+
+| PR | Repo | Bug |
+|---|---|---|
+| [#87](https://github.com/vishnuvardhan122004-boop/tokenwalla/pull/87) | web | slot picker said "Full" for a slot that just hadn't opened yet |
+| [#88](https://github.com/vishnuvardhan122004-boop/tokenwalla/pull/88) | web | corrupted `�` byte on the OTP resend button |
+| [#89](https://github.com/vishnuvardhan122004-boop/tokenwalla/pull/89) | web | scan/blood-test checkout said "Doctor Consultation Fee" |
+| [#26](https://github.com/vishnuvardhan122004-boop/tokenwalla.app/pull/26) | app | mirrors #89, + new `pay_test_fee` i18n key ×4 languages |
+| [#91](https://github.com/vishnuvardhan122004-boop/tokenwalla/pull/91) | web | deleting/replacing a hospital image never deleted the file, just the row |
+
+**2 real production-safety risks found and closed (PR #90, web/backend):**
+`backend/.env` carries real Cloudinary and WhatsApp Business credentials —
+no sandbox account exists for either. Before this fix, local `manage.py
+runserver` could (a) write a real file upload to the production Cloudinary
+account, and (b) fire a real WhatsApp send on any booking-lifecycle action.
+**Confirmed (a) — sorry, (b) — had already happened once**, before the fix
+existed: `hospital_new_booking` sent for real at 00:04 IST to `9000000007`
+(a synthetic test fixture, so almost certainly no real person received it,
+but Meta's API genuinely accepted and returned a message id). Both now
+gated on `DEBUG`, mirroring the Cloudinary pattern the test suite has had
+since 2026-08-18 and the empty-token pattern `send_otp` already used for
+2Factor; one deliberate bypass (`send_test_whatsapp --force`) for sending
+for real from a dev machine on purpose. A second commit on the same PR fixed
+a bug this exposed: local files served a bare relative `/media/…` URL,
+which 404s across the website's and API's two different local ports
+(Cloudinary's own URLs are absolute, so production never showed this) — an
+absolute `base_url` on the storage backend fixed it without touching
+`MEDIA_URL` (which has to stay relative or Django's dev static-file server
+stops serving `/media/*` at all — tried that first, broke everything, then
+found the right fix).
+
+**Found, not fixed:** the website's i18n rollout only covers `Navbar`/
+`Footer`/`Hero`/`AllDoctor` — `MyBookings.js`/`Payment.js`/
+`DoctorsDetails.js` are English-only regardless of language selected.
+Flagged as a scope decision (translating the rest reliably needs its own
+project), not attempted.
+
+**Still blocked:** the Razorpay checkout iframe stopped accepting any
+synthetic click partway through this sweep (`hover` reaches it, `click`
+doesn't — confirmed across two tabs, a tooling limitation not an app bug),
+blocking new-payment click-throughs (Pass purchase, paid reschedule, a
+`FULL`-doctor paid redemption). iOS Simulator work needs Vishnu's own Xcode
+install.
+
+**556 backend tests (2 skipped, was 552 — +4 new in
+`hospitals/tests_photo_gallery.py`), 61 web, 174 app — all green throughout.**
+`makemigrations --check` clean (no model changes anywhere in this sweep).
 
 ---
 
