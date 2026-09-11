@@ -7,7 +7,22 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-09 — **item 20 closed: `MyBookingsView`
+- **Last updated:** 2026-09-11 — **ROADMAP correction pass + OTP/login
+  rate-limit visibility shipped.** `/start` walked `## Now` top to bottom (same
+  audit shape as the 2026-09-09 sessions) and found it emptier than the file
+  said: item 17 phase 1 had shipped (`58b2847`, PR #84, 2026-09-10) with
+  nothing here updated, and two `## Next` bullets (the web password-regex bug,
+  the guard's `origin/main` false-positive) described bugs already fixed days
+  earlier — both corrected in place above rather than left to mislead the next
+  session. With every numbered item confirmed done or blocked on Vishnu/Meta,
+  the actual slice came from `## Next`: `RateCounter` (backs the OTP-per-mobile
+  cap at **10/day**, the OTP-per-IP cap, the OTP-attempt cap, and login
+  failures) had no admin visibility at all — confirmed by grep, not assumed.
+  `users/admin.py:RateCounterAdmin` now surfaces it, same pattern as the
+  existing `WhatsAppLogAdmin`. 5 new tests, **557 backend (2 skipped)** (was
+  540 + item 17's ~12 undocumented new tests), **61 frontend** unchanged,
+  `makemigrations --check` clean. Full detail in WORKLOG.
+- **Previously:** 2026-09-09 — **item 20 closed: `MyBookingsView`
   pagination shipped opt-in, so the app needs zero changes.** New
   `OptionalPagination` only activates when a caller sends `?page=`; grepped
   both this repo and `tokenwalla.app` and confirmed every existing caller —
@@ -2107,7 +2122,7 @@ the raw header is deliberately not returned.
 
 ---
 
-### 17. `otp_verified` is a bearer flag, and the real fix is breaking 🟡 — mitigated 2026-09-04
+### 17. `otp_verified` is a bearer flag 🟡 — phase 1 shipped 2026-09-10, phase 2 needs an app release
 
 `cache['otp_verified:<mobile>']` is keyed on the phone number alone and bound to
 no session or device, because an anonymous caller has none to bind to. So
@@ -2116,16 +2131,21 @@ necessarily the person who passed the OTP. An attacker cannot **create** the
 flag (that still needs the code), so this is a race against a legitimate flow
 rather than a standalone attack — but it is the account-takeover path.
 
-Mitigated by cutting the window 600s → 180s (`9257144`), which is comfortable
-for a human typing a new password and shrinks the window 3.3x. Marked
-`ponytail:` in `users/auth_views.py` so the debt ledger keeps it.
+Mitigated first by cutting the window 600s → 180s (`9257144`), comfortable for
+a human typing a new password and a 3.3x smaller window.
 
-**The real fix is a one-time nonce** returned by `/otp/verify/` and required
-back by every consumer (register, reset-password, the mobile change, and the
-three hospital equivalents). That is a **breaking API change** — installed apps
-call verify-then-reset with no nonce — so per the API-contract rule it needs
-either a versioned endpoint kept alive through an app rollout, or it ships with
-an app release. Not a quiet server-side edit.
+**Corrected 2026-09-11 — this section had gone stale.** It still called the
+real fix a breaking change as of 2026-09-09; `58b2847` (PR #84, 2026-09-10)
+shipped it two commits later, undocumented here until now (found by `/start`
+walking `git log` against this file). **Phase 1: `/otp/verify/` now also
+returns a single-use `otp_token`.** It is OPTIONAL on all 6 consumers
+(register, reset-password, the mobile change — patient and hospital both) —
+every one still falls back to the bearer flag, so nothing became mandatory and
+the predicted breaking change never had to happen. The website
+(`ForgotPassword.js`, `profilecreate.js`, `Usercreate.js`, `Hprofile.js`)
+already sends the token, which closes the race for every web-originated call
+today. **Phase 2** — retiring the flag fallback for good — still needs the
+mobile app to send the token first, which is an app release, not a session.
 
 ---
 
@@ -2462,21 +2482,22 @@ testing either needs `--params` spelled out by hand.
   only fires after login, from `HomeScreen`), then read `expo_token` out of
   Django admin at `/admin/notifications/devicetoken/`. Worth either logging it
   unconditionally or surfacing it on a debug screen.
-- **A blocked OTP IP is invisible** — new 2026-08-14, and it is the concrete
-  reason the observability item below should move up. Hitting
-  `OTP_MAX_SENDS_PER_IP_PER_DAY` produces a `logger.warning` and nothing else.
-  If the raised 2000 ceiling ever *does* bite a real carrier mid-promotion, you
-  find out from a user, not a dashboard — the same silent, self-confirming
-  failure shape the ceiling was raised to avoid. A count of 429s by reason,
-  visible anywhere, would settle it in seconds.
-- **The production guard false-positives on read-only `origin/main`** — new
-  2026-08-14. `.claude/hooks/guard-production.py` blocked a
-  `git push origin feat/app-version-gate` because the *same compound command*
-  also contained a read-only `git merge-tree --write-tree origin/main HEAD`.
-  The push was to a feature branch, which is exactly what the guard's own
-  message instructs. Narrowing it to match only actual push targets is a
-  one-line change — but it must be **its own deliberate commit**, never folded
-  into a feature PR. Until then, keep pushes in their own command.
+- ~~**A blocked OTP IP is invisible**~~ ✅ **closed 2026-09-11** — `RateCounter`
+  (backs the OTP-per-mobile and per-IP send caps, the attempt cap, and login
+  failures) had no admin registration anywhere, confirmed by grep before
+  building this. `users/admin.py:RateCounterAdmin` now lists every row
+  ordered by count descending (whatever is closest to tripping is on screen
+  first), filterable by kind (`otp_sends`, `otp_sends_ip`, `otp_attempts`,
+  `login_fails` — read from the DISTINCT prefixes actually present, not
+  hard-coded), same pattern as the existing `WhatsAppLogAdmin`. 5 new tests
+  in `users/tests_rate_counter.py`. Was new 2026-08-14, kept open this long
+  because "Now" had nothing else session-pickable left — see this session's
+  WORKLOG entry.
+- ~~**The production guard false-positives on read-only `origin/main`**~~ ✅
+  **closed 2026-09-09 as item 18** — same root cause (the push-to-`main`
+  regex's unbounded `.*` crossing into a later command in the same chain),
+  fixed by narrowing to `[^;&|]*`. This bullet just never got struck through;
+  found stale 2026-09-11.
 - **The walk-in doctor page has never run on a device** — new 2026-08-13. The
   web half was driven in a real browser (walk-in view renders, call button
   dials, expired announcement disappears, slotted doctors unchanged). The app
@@ -2504,11 +2525,14 @@ testing either needs `--params` spelled out by hand.
   header comment. Change one, change the other — or extract a shared package if
   a third copy ever appears.
 - **Backend observability** — new 2026-08-10, and more pressing now that traffic
-  is expected. There is no error tracking on the API and no way to see whether a
-  WhatsApp send succeeded without reading a Railway log by hand. Every
-  silent-failure hunt this week cost time that a `WhatsAppLog` view in Django
-  admin would have saved outright. Under promotion traffic you will learn about
-  a failure from a user, not a dashboard.
+  is expected. **Half done, found stale 2026-09-11:** `notifications/admin.py`
+  already registers `WhatsAppLogAdmin` (list/filter/search on event type,
+  status, error) and `users/admin.py` now does the same for `RateCounter` (see
+  the closed OTP-IP bullet above) — so "did a WhatsApp send succeed" and "who
+  is close to a rate cap" are both one page load. **Still genuinely open:**
+  there is no error tracking on the API itself (no Sentry/APM equivalent for
+  the Django side — the app has Sentry, the backend does not), so an
+  unhandled exception is still a Railway-log hunt, not a dashboard alert.
 - **Nothing consumes the receipt endpoint** — new 2026-08-11. `BookingReceiptView`
   (`GET /api/payment/receipt/<pk>/`) is a finished, GST-compliant receipt —
   taxable value, GST, SAC code, consultation fee marked exempt, readable by the
@@ -2545,15 +2569,13 @@ testing either needs `--params` spelled out by hand.
   (`users/auth_views.py:748`, `create_admin.py:34`). Raising it is one settings
   line + three ad-hoc checks + three frontend rules, but it is Vishnu's call
   about receptionist friction, so a session should not just pick 8.
-- **The web signup password rule is stricter than the server's, and wrong** —
-  new 2026-09-06, found while verifying the above. `src/componets/profilecreate.js:34-35`
-  validates against `/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/` — an
-  **alphanumeric-only** character class, so a password containing a symbol is
-  rejected in the browser while the backend accepts it happily. `Test@1234` —
-  the very example item 4d cites as passing the server — cannot be typed into
-  the web signup form. The two rules disagree and the client is both the
-  stricter and the worse of the pair, since it pushes users off symbols. One
-  regex, its own commit; not folded into a floor change.
+- ~~**The web signup password rule is stricter than the server's, and wrong**~~
+  ✅ **closed 2026-09-06, same day it was found** — `b2d5dbe` relaxed
+  `profilecreate.js`'s regex from the alphanumeric-only `[A-Za-z\d]{6,}` to a
+  bare `.{6,}` (still requiring a letter and a digit), so `Test@1234` types
+  into the web form instead of being rejected client-side while the backend
+  accepted it all along. Recorded in WORKLOG's 2026-09-06 entry; this bullet
+  just never got struck through here. Found stale 2026-09-11.
 - **Branch cleanup** — 12 local branches, several long dead
 
 Resolved and deliberately removed, so they don't get re-added:
