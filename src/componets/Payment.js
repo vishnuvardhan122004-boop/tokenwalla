@@ -610,14 +610,14 @@ export default function Payment() {
                 {Number(breakdown.offline_doctor_fee) > 0 ? (
                   <div className="pay-row">
                     <span className="pay-row-label">
-                      Doctor Consultation Fee
+                      {isScan ? 'Test Fee' : 'Doctor Consultation Fee'}
                       <span className="pay-for-tag">pay at clinic</span>
                     </span>
                     <span className="pay-row-value">₹{inr(breakdown.offline_doctor_fee)}</span>
                   </div>
                 ) : (
                   <div className="pay-row">
-                    <span className="pay-row-label">Doctor Consultation Fee</span>
+                    <span className="pay-row-label">{isScan ? 'Test Fee' : 'Doctor Consultation Fee'}</span>
                     <span className="pay-row-value">₹{inr(breakdown.doctor_fee)}</span>
                   </div>
                 )}
