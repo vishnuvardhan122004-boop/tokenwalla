@@ -219,7 +219,7 @@ const HPayments = ({ hospital, showToast }) => {
     { label: "Doctor Fees",   icon: "🩺", val: inr(totals.doctor_fees_collected), hex: "#7c3aed",
       hint: "Your doctors' consultation fees, paid to them in full" },
     { label: "Pending Payout", icon: "⏳", val: inr(totals.pending_payout), hex: "#d97706",
-      hint: "Earned on completed visits, not yet transferred" },
+      hint: "Collected online, not yet transferred to the doctor" },
     { label: "Paid Out",      icon: "✅", val: inr(totals.paid_amount), hex: "#0ea5e9",
       hint: "Already transferred to doctor / hospital accounts" },
     { label: "TokenWalla Charges", icon: "🏷️", val: inr(totals.service_total), hex: "#64748b",
