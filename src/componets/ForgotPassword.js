@@ -283,7 +283,7 @@ export default function ForgotPassword({ type = 'patient' }) {
               <button className="fp-btn-ghost" onClick={() => { setStep(1); setError(''); setSuccess(''); setOtp(''); }}>
                 ← Change Mobile Number
               </button>
-              <button className="fp-btn-ghost" onClick={requestOTP} disabled={loading}>� Send OTP Again</button>
+              <button className="fp-btn-ghost" onClick={requestOTP} disabled={loading}>Send OTP Again</button>
             </>
           )}
 
