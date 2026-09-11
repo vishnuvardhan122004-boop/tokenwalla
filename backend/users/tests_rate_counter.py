@@ -20,13 +20,14 @@ from datetime import timedelta
 
 from django.db import connection
 from django.test import TestCase, TransactionTestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from users.auth_views import (
     OTP_MAX_ATTEMPTS, OTP_MAX_SENDS_PER_DAY, _register_otp_failure,
     _reserve_otp_send,
 )
-from users.models import RateCounter
+from users.models import RateCounter, User
 
 
 class RateCounterTests(TestCase):
@@ -121,6 +122,61 @@ class OtpCapTests(TestCase):
         _clear_otp_state(self.MOBILE)
         self.assertFalse(
             RateCounter.objects.filter(key=f'otp_attempts:{self.MOBILE}').exists())
+
+
+class RateCounterAdminTests(TestCase):
+    """The admin view added to make a blocked carrier or an account under a
+    guessing attack visible without reading a Railway log by hand — see
+    users/admin.py:RateCounterAdmin.
+    """
+    CHANGELIST = 'admin:users_ratecounter_changelist'
+
+    def setUp(self):
+        staff = User.objects.create_user(
+            username='9999900098', mobile='9999900098', password='pw',
+            is_staff=True, is_superuser=True)
+        self.client.force_login(staff)
+
+    def test_changelist_loads_and_shows_the_row(self):
+        RateCounter.bump('otp_sends:9999900001', limit=OTP_MAX_SENDS_PER_DAY,
+                          window_seconds=60)
+        res = self.client.get(reverse(self.CHANGELIST))
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, 'otp_sends:9999900001')
+
+    def test_kind_filter_narrows_to_the_selected_prefix(self):
+        RateCounter.bump('otp_sends:9999900001', limit=10, window_seconds=60)
+        RateCounter.bump('login_fails:9999900001', limit=5, window_seconds=60)
+
+        res = self.client.get(reverse(self.CHANGELIST), {'kind': 'login_fails'})
+
+        self.assertContains(res, 'login_fails:9999900001')
+        self.assertNotContains(res, 'otp_sends:9999900001')
+
+    def test_kind_filter_offers_only_prefixes_actually_present(self):
+        RateCounter.bump('otp_attempts:9999900001', limit=5, window_seconds=60)
+        res = self.client.get(reverse(self.CHANGELIST))
+        self.assertContains(res, 'otp_attempts')
+        self.assertNotContains(res, 'login_fails')
+
+    def test_kind_column_reads_the_prefix_before_the_colon(self):
+        from django.contrib.admin.sites import site
+        from users.admin import RateCounterAdmin
+
+        obj = RateCounter.objects.create(
+            key='otp_attempts:9999900001', count=1,
+            expires_at=timezone.now() + timedelta(days=1))
+        self.assertEqual(RateCounterAdmin(RateCounter, site).kind(obj), 'otp_attempts')
+
+    def test_ordered_by_count_descending(self):
+        RateCounter.objects.create(key='otp_sends:a', count=1,
+                                    expires_at=timezone.now() + timedelta(days=1))
+        RateCounter.objects.create(key='otp_sends:b', count=9,
+                                    expires_at=timezone.now() + timedelta(days=1))
+
+        res = self.client.get(reverse(self.CHANGELIST))
+
+        self.assertLess(res.content.index(b'otp_sends:b'), res.content.index(b'otp_sends:a'))
 
 
 # The base class is chosen at import time, not merely skipped. Real threads need

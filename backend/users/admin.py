@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User
+from .models import User, RateCounter
 
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
@@ -61,3 +61,40 @@ class CustomUserAdmin(UserAdmin):
         if financial_rows_for(user=obj):
             return False
         return super().has_delete_permission(request, obj)
+
+
+class RateCounterKindFilter(admin.SimpleListFilter):
+    """`key` is free text shaped `<kind>:<subject>` (`otp_sends:<mobile>`,
+    `otp_sends_ip:<ip>`, `otp_attempts:<mobile>`, `login_fails:<mobile>`)
+    with no real column behind the prefix. Reads the DISTINCT prefixes
+    actually in the table rather than hard-coding today's four, so a cap
+    added later shows up here with no admin.py change.
+    """
+    title = 'kind'
+    parameter_name = 'kind'
+
+    def lookups(self, request, model_admin):
+        prefixes = sorted({k.split(':', 1)[0] for k in
+                            RateCounter.objects.values_list('key', flat=True)})
+        return [(p, p) for p in prefixes]
+
+    def queryset(self, request, queryset):
+        return (queryset.filter(key__startswith=f'{self.value()}:')
+                if self.value() else queryset)
+
+
+@admin.register(RateCounter)
+class RateCounterAdmin(admin.ModelAdmin):
+    """The only window into who is close to, or already hitting, a rate cap
+    — OTP sends per mobile or per IP, wrong-guess attempts, login failures —
+    without reading a Railway log by hand. Ordered by count descending so
+    whatever is closest to tripping its limit is on screen first.
+    """
+    list_display  = ('key', 'kind', 'count', 'expires_at')
+    list_filter   = (RateCounterKindFilter,)
+    search_fields = ('key',)
+    ordering      = ('-count',)
+
+    @admin.display(description='Kind')
+    def kind(self, obj):
+        return obj.key.split(':', 1)[0]
