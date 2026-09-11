@@ -7,7 +7,22 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-09 — **item 20 closed: `MyBookingsView`
+- **Last updated:** 2026-09-10 — **items 18 and 20 both confirmed merged
+  (PRs #81, #82); a full pass over `## Now` found nothing else session-
+  actionable today.** #82 needed a manual re-merge first — it had branched
+  from `origin/main` before #81 landed, so both carried their own edit to
+  this same top block, exactly the conflict the #79/#80 note predicts;
+  resolved by hand, re-tested (540 backend, guard self-check both green),
+  pushed, confirmed clean by GitHub before Vishnu merged it. Then walked
+  every remaining open item in `## Now` (4c, 13, 6, 7, 9, 14b, 14c, 16, 17,
+  19) — every one is either Vishnu-only (a Railway or Razorpay dashboard
+  action), waiting on Meta, blocked on real-world timing (14c), or not code
+  at all (6, 7, 19). **Item 17 is the only real candidate left**, and it was
+  deliberately not started: the mitigation already holds (600s → 180s), and
+  the actual fix is a breaking `/otp/verify/` contract change that needs
+  either a versioned endpoint or a coordinated app release — worth scoping
+  as its own session, not squeezing into whatever's left of this one.
+- **Previously:** 2026-09-09 — **item 20 closed: `MyBookingsView`
   pagination shipped opt-in, so the app needs zero changes.** New
   `OptionalPagination` only activates when a caller sends `?page=`; grepped
   both this repo and `tokenwalla.app` and confirmed every existing caller —
@@ -2126,6 +2141,13 @@ three hospital equivalents). That is a **breaking API change** — installed app
 call verify-then-reset with no nonce — so per the API-contract rule it needs
 either a versioned endpoint kept alive through an app rollout, or it ships with
 an app release. Not a quiet server-side edit.
+
+**Surfaced again 2026-09-10, still deliberately not started.** After items 18
+and 20 closed, this was the only other real candidate left in `## Now` — but
+the mitigation already holds and the actual fix touches a live contract three
+hospital-side flows share with the patient one, across two repos on different
+release schedules. That's a session of its own — scope the versioning/rollout
+approach with Vishnu first, don't start mid-slice.
 
 ---
 
