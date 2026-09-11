@@ -2421,6 +2421,13 @@ testing either needs `--params` spelled out by hand.
 
 ## Next
 
+> **Reordered 2026-09-11.** With the OTP-IP-visibility bullet closed today (see
+> Done) and the web-password-regex / guard-false-positive bullets confirmed
+> already-fixed, the top of this list is now **"Nothing consumes the receipt
+> endpoint"** below — explicitly called out as the most substantive product gap
+> open, and it needs no backend work, just a web UI trigger for an endpoint
+> that already exists. That's the recommended next slice.
+
 - **`gh` had auth in a session for the first time, 2026-09-09 — confirm it
   still does before relying on it.** Every prior session recorded `gh auth
   status` as not logged in and had to hand off a `.../compare/...` link for
@@ -2482,17 +2489,8 @@ testing either needs `--params` spelled out by hand.
   only fires after login, from `HomeScreen`), then read `expo_token` out of
   Django admin at `/admin/notifications/devicetoken/`. Worth either logging it
   unconditionally or surfacing it on a debug screen.
-- ~~**A blocked OTP IP is invisible**~~ ✅ **closed 2026-09-11** — `RateCounter`
-  (backs the OTP-per-mobile and per-IP send caps, the attempt cap, and login
-  failures) had no admin registration anywhere, confirmed by grep before
-  building this. `users/admin.py:RateCounterAdmin` now lists every row
-  ordered by count descending (whatever is closest to tripping is on screen
-  first), filterable by kind (`otp_sends`, `otp_sends_ip`, `otp_attempts`,
-  `login_fails` — read from the DISTINCT prefixes actually present, not
-  hard-coded), same pattern as the existing `WhatsAppLogAdmin`. 5 new tests
-  in `users/tests_rate_counter.py`. Was new 2026-08-14, kept open this long
-  because "Now" had nothing else session-pickable left — see this session's
-  WORKLOG entry.
+- ~~**A blocked OTP IP is invisible**~~ ✅ **closed 2026-09-11** —
+  `users/admin.py:RateCounterAdmin` now surfaces it. Full detail in **Done**.
 - ~~**The production guard false-positives on read-only `origin/main`**~~ ✅
   **closed 2026-09-09 as item 18** — same root cause (the push-to-`main`
   regex's unbounded `.*` crossing into a later command in the same chain),
@@ -2637,6 +2635,27 @@ Resolved and deliberately removed, so they don't get re-added:
 ---
 
 ## Done
+
+- **2026-09-11** — **ROADMAP correction pass + OTP/login rate-limit
+  visibility shipped.** `/start` walked `## Now` top to bottom and found it
+  emptier than the file said: item 17 phase 1 (`58b2847`, PR #84,
+  2026-09-10 — the single-use `otp_token`) had shipped with zero
+  ROADMAP/WORKLOG update, and two `## Next` bullets (the web signup
+  password regex, the guard's `origin/main` false-positive) described bugs
+  already fixed days earlier and never struck through. All three corrected
+  in place (see item 17 and `## Next`). With every numbered `## Now` item
+  confirmed done or blocked on Vishnu/Meta, the actual slice came from
+  `## Next`: `RateCounter` — backing the OTP-per-mobile cap (**10/day**, the
+  real SMS-spend control), the OTP-per-IP cap, the OTP-attempt cap, and
+  login failures — had no admin visibility anywhere, confirmed by grep
+  before writing anything. `users/admin.py:RateCounterAdmin` now lists every
+  row ordered by count descending, filterable by kind (reads the distinct
+  key prefixes actually present rather than hard-coding them), same shape
+  as the existing `WhatsAppLogAdmin`. 5 new tests, **557 backend tests (2
+  skipped)** (was 540 + item 17's undocumented +12), **61 frontend**
+  unchanged, `makemigrations --check` clean. Pushed as two commits
+  (`18a20f7` docs, `0254b78` feature) on `claude/new-session-liauqa`, not
+  yet a PR. Full detail in WORKLOG.
 
 - **2026-09-07** — **Patient web registration was completely blocked — fixed.**
   `profilecreate.js`'s OTP field has had `maxLength={4}` since the file's first
