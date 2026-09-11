@@ -40,13 +40,23 @@ def one_line(text: str, limit: int = 220) -> str:
     return flat
 
 
-def send_template(to_mobile: str, template_name: str, params: list) -> dict:
+def send_template(to_mobile: str, template_name: str, params: list, force: bool = False) -> dict:
     """
     Sends an approved WhatsApp template message.
 
     to_mobile:     10-digit Indian mobile (no country code) - we prefix 91.
     template_name: exact approved template name in Meta Business Manager.
     params:        ordered list of strings filling {{1}}, {{2}}, ... in the template body.
+    force:         bypass the DEBUG dev-mode stub below. Only `manage.py
+                   send_test_whatsapp` — an explicit, developer-run credential/
+                   template check — should ever pass this. Every other caller
+                   is triggered by an ordinary booking/queue action and must
+                   never reach the real Meta API from a local dev server, even
+                   though `.env` (the same file Railway reads in production)
+                   commonly carries the real production token: there's no
+                   separate WhatsApp sandbox account, so an un-gated send here
+                   means every local "Call Patient" or "Cancel" during a QA
+                   pass texts a real phone.
 
     Returns: {'success': bool, 'message_id': str|None, 'error': str|None}
     """
@@ -54,6 +64,14 @@ def send_template(to_mobile: str, template_name: str, params: list) -> dict:
     if not token:
         logger.warning('[notifications] WHATSAPP_ACCESS_TOKEN not set - skipping send (dev mode).')
         return {'success': False, 'message_id': None, 'error': 'WhatsApp not configured (dev mode).'}
+
+    if settings.DEBUG and not force:
+        logger.warning(
+            '[notifications] DEBUG=True - skipping real WhatsApp send to ...%s '
+            '(dev mode). Use `manage.py send_test_whatsapp` to send for real locally.',
+            to_mobile.strip()[-4:],
+        )
+        return {'success': False, 'message_id': None, 'error': 'WhatsApp send skipped in DEBUG mode.'}
 
     to = to_mobile.strip()
     if not to.startswith('91'):

@@ -318,6 +318,19 @@ if _cloudinary_configured:
         'API_KEY':    CLOUDINARY_API_KEY,
         'API_SECRET': CLOUDINARY_API_SECRET,
     }
+
+# Only production (DEBUG=False, i.e. Railway) ever writes to the real
+# Cloudinary account. A developer's `.env` commonly carries the same
+# production credentials (there's no separate sandbox account), so
+# `manage.py runserver` with DEBUG=True would otherwise make every local
+# file upload — hospital gallery photo, doctor photo, scan report — a live
+# write into the production media store. The test suite already has this
+# exact same protection further below (`'test' in sys.argv`); this extends
+# it to the dev server too, the same way `not DEBUG` already gates
+# SECURE_SSL_REDIRECT and friends just above.
+_use_cloudinary = _cloudinary_configured and not DEBUG
+
+if _use_cloudinary:
     STORAGES = {
         'default': {
             'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
@@ -327,10 +340,30 @@ if _cloudinary_configured:
         },
     }
 else:
-    # Dev fallback — images stored locally in backend/media/
+    # Dev fallback — images stored locally in backend/media/.
+    #
+    # `base_url` is set to an ABSOLUTE address on purpose, while MEDIA_URL
+    # below stays the plain '/media/' — the two are read by different code
+    # for different reasons and must not be collapsed into one.
+    # `urls.py`'s `static(settings.MEDIA_URL, ...)` is what actually serves
+    # these files in dev, and Django's `static()` helper is a deliberate
+    # no-op whenever its prefix is a full URL (it assumes something else,
+    # like a CDN, serves it then) — so MEDIA_URL has to stay relative for
+    # this server to serve /media/* at all. But FieldFile.url (what every
+    # serializer hands the frontend) resolves against THIS storage's
+    # base_url, defaulting to MEDIA_URL if unset — and a relative
+    # "/media/…" is only correct when the API and the website share an
+    # origin. Locally they don't (API on :8000, website on :3000), so a
+    # relative URL becomes "http://localhost:3000/media/…" the moment a
+    # browser resolves it against the WEBSITE's origin, which 404s. Override
+    # with BACKEND_URL if the API ever runs somewhere other than
+    # localhost:8000 locally.
     STORAGES = {
         'default': {
             'BACKEND': 'django.core.files.storage.FileSystemStorage',
+            'OPTIONS': {
+                'base_url': config('BACKEND_URL', default='http://localhost:8000') + '/media/',
+            },
         },
         'staticfiles': {
             'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
