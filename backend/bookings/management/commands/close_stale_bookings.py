@@ -2,6 +2,11 @@
 Run every ~15 minutes via Railway Cron Schedule:
     python manage.py close_stale_bookings
 
+Config-as-Code for this is ready at backend/railway.close-stale-bookings.cron.json
+(same shape as the two existing crons) — creating the Railway service itself
+and pointing it at that file is a dashboard step, not something committing
+code can do.
+
 Auto-completes an IN_PROGRESS booking 2 hours after it was called in
 (`called_at`, stamped by CallNextView / the QR-scan endpoint) -> COMPLETED.
 The patient was called, so the visit almost certainly happened and staff
