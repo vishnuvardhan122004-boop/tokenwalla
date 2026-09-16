@@ -25,7 +25,9 @@ always wins — this command can only act on a booking still sitting in the
 state it read, never overwrite a fresher human decision.
 
 The CONFIRMED-but-never-called case is deliberately NOT handled here — see
-mark_daily_no_shows, a separate once-a-day job. A doctor running hours behind
+mark_daily_no_shows, a separate command that behaves like a once-a-day sweep
+(see its own docstring for why it doesn't need a once-a-day schedule to do
+that). A doctor running hours behind
 can leave a patient genuinely still waiting near the 2h mark with no fault of
 staff or the patient, so "this patient never showed" is only unambiguous once
 the whole clinic day is over, not on a rolling few-hour clock. ON_HOLD is
