@@ -20,14 +20,23 @@ the things that can lose money or break a live booking come first.
   fault. Design decisions confirmed with Vishnu before and during the
   session, since this touches the exact statuses `run_daily_payouts`
   watches. 574 backend tests (2 skipped, was 556), 61 frontend unchanged.
-  Full detail in item 23. **Follow-up PR #93 open:** a bot review found
-  neither new command had any cron wiring in the repo — fixed with two new
-  Railway Config-as-Code files; still needs the two actual Railway cron
-  *services* created (Vishnu's, same as 14b). **Also a process note:** #92
-  squash-merged seconds before that fix could push, orphaning the commit;
-  restarted the branch per this file's own merged-PR procedure, and when the
-  production guard correctly blocked force-pushing the rebuilt branch back
-  under its old name, the single carried-forward commit went to a new branch
+  Full detail in item 23. **Follow-up PR #93 open, now fully closes the cron
+  gap with ZERO Railway dashboard step.** A bot review found neither new
+  command had any cron wiring in the repo; the first fix (two new
+  `railway.*.cron.json` files, each meant for its own new service) was
+  itself wrong — a *second* bot pass on #93 caught it, citing this repo's
+  own `send_pass_expiry_reminders.py`: Railway closed Config-as-Code to new
+  services on 2026-08-28, so a freshly-created service can never be pointed
+  at a config file at all. Corrected by riding both commands on the
+  **existing** `railway.cron.json` reminders cron instead (same precedent
+  `send_pass_expiry_reminders` already set) — `close_stale_bookings` and
+  `mark_daily_no_shows` now deploy and start running automatically the
+  moment #93 merges, no Railway access needed by anyone. **Also a process
+  note:** #92 squash-merged seconds before the first fix could push,
+  orphaning that commit; restarted the branch per this file's own
+  merged-PR procedure, and when the production guard correctly blocked
+  force-pushing the rebuilt branch back under its old name, the single
+  carried-forward commit went to a new branch
   (`claude/railway-cron-config-followup`) instead — a plain push, nothing
   forced, nothing lost. Also worth knowing: three small
   unrelated fixes landed on `main` on
@@ -2515,18 +2524,43 @@ exposed on any serializer.
 **Merged ✅ 2026-09-16, as PR #92** (squash-merged by Vishnu, `main` tip
 `97041e2`).
 
-**Follow-up, PR #93, open:** a bot review on #92 (`chatgpt-codex-connector`)
-correctly flagged that neither command had any cron wiring at all in the
-repo — fixed by adding `backend/railway.close-stale-bookings.cron.json`
-(`*/15 * * * *`) and `backend/railway.daily-no-shows.cron.json` (`45 18 * *
-*` UTC = 00:15 IST), matching the exact Config-as-Code shape the two
-existing crons (`railway.cron.json`, `railway.payouts.cron.json`) already
-use. What's left is purely a dashboard step no commit can do: Railway
-services aren't created by a file appearing in the repo, so someone with
-Railway access still has to create two new cron services and point each at
-its file — but the command and schedule are now fully specified, not
-something to type in from memory. Same hand-off shape as item 14b's
-existing crons.
+**Follow-up, PR #93, open — two rounds, second one actually closes it.**
+
+*Round 1 (wrong):* a bot review on #92 (`chatgpt-codex-connector`) correctly
+flagged that neither command had any cron wiring at all in the repo — "fixed"
+by adding `backend/railway.close-stale-bookings.cron.json` (`*/15 * * * *`)
+and `backend/railway.daily-no-shows.cron.json` (`45 18 * * *` UTC = 00:15
+IST), matching the *shape* the two existing crons use. Pushed without
+checking whether that shape still works for a brand-new service.
+
+*Round 2 (the actual fix):* a second bot pass on the round-1 commit caught
+what a repo grep would have: **Railway closed Config-as-Code to new services
+on 2026-08-28** (`ROADMAP.md` item 14b, and `send_pass_expiry_reminders.py`'s
+own docstring, both already said so). Neither new `railway.*.cron.json` file
+could ever be attached to a service, because the dashboard has no "point a
+new service at this file" option any more — that door closed three weeks
+before this session. The two files were deleted; both commands now ride the
+**existing** `railway.cron.json` reminders cron instead, exactly the
+precedent `send_pass_expiry_reminders` already set for the identical reason:
+`startCommand` is now `send_appointment_reminders; send_pass_expiry_reminders;
+close_stale_bookings; mark_daily_no_shows`, still `*/10 * * * *`. Every 10
+minutes instead of the original ~15/once-daily design is harmless either
+way — `close_stale_bookings`'s 2h cutoff only gets *more* responsive, and
+`mark_daily_no_shows`'s own `date__lt=today` filter is what makes it
+"once-effective-per-day" regardless of how often the command itself runs; it
+now catches the midnight rollover within 10 minutes rather than at a fixed
+00:15 offset.
+
+**Net result: zero Railway dashboard steps left.** Both commands start
+running automatically the moment #93 merges and deploys — no new service,
+no manual cron config, nothing for anyone to remember to do. **Lesson worth
+keeping:** the round-1 mistake was buildable in five seconds with a repo
+grep (`grep -rn "closed config-as-code" .`) that would have surfaced
+`send_pass_expiry_reminders.py`'s own docstring before writing any new
+config file — check existing precedent for "how does this repo already
+solve the exact same problem" before inventing a new mechanism, especially
+for infrastructure a session can't directly verify (no Railway dashboard
+access to confirm a new service actually accepts a config file).
 
 **Process note worth keeping:** #92 was squash-merged 11 seconds after the
 bot review landed — before the fix above could be pushed to that branch, so

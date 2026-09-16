@@ -1,11 +1,17 @@
 """
-Run every ~15 minutes via Railway Cron Schedule:
-    python manage.py close_stale_bookings
+Runs off the EXISTING reminders cron, every 10 minutes — see
+backend/railway.cron.json:
 
-Config-as-Code for this is ready at backend/railway.close-stale-bookings.cron.json
-(same shape as the two existing crons) — creating the Railway service itself
-and pointing it at that file is a dashboard step, not something committing
-code can do.
+    python manage.py send_appointment_reminders; python manage.py send_pass_expiry_reminders; python manage.py close_stale_bookings; python manage.py mark_daily_no_shows
+
+It rides along rather than getting its own cron service on purpose: Railway
+closed Config-as-Code to new services on 2026-08-28 (see ROADMAP item 14b and
+send_pass_expiry_reminders, which hit this first), so a dedicated service
+could only be configured by hand in the dashboard, where the start command
+and schedule live nowhere the repo can see them. Sharing a cron that's
+already declared here keeps the whole schedule reviewable in a PR. 10 minutes
+instead of the originally-planned ~15 is fine — more frequent only shortens
+how long a forgotten booking sits open, never a correctness concern.
 
 Auto-completes an IN_PROGRESS booking 2 hours after it was called in
 (`called_at`, stamped by CallNextView / the QR-scan endpoint) -> COMPLETED.
