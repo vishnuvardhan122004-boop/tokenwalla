@@ -8,7 +8,8 @@ Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
 - **Last updated:** 2026-09-16 — **new item 23: admin bookings-by-location
-  report + hospital auto-close-stale-bookings, both pushed, not merged.**
+  report + hospital auto-close-stale-bookings, opened as PR #92, not
+  merged.**
   `AdminReportsView` gains an additive `by_location` breakdown (bookings
   ranked by city). The stale-booking sweep is **two separate commands on two
   separate schedules**, split mid-session on Vishnu's correction:
@@ -21,7 +22,7 @@ the things that can lose money or break a live booking come first.
   session, since this touches the exact statuses `run_daily_payouts`
   watches. 574 backend tests (2 skipped, was 556), 61 frontend unchanged.
   Full detail in item 23. **Still needs:** the two Railway Cron Schedules
-  (Vishnu's, same as 14b), and a merge. Also worth knowing: three small
+  (Vishnu's, same as 14b), and a merge of PR #92. Also worth knowing: three small
   unrelated fixes landed on `main` on
   2026-09-11 (`#89`/`#90`/`#91` — scan fee labelling, dev-server Cloudinary/
   WhatsApp safety, orphaned hospital image cleanup) that never got written up
@@ -2510,8 +2511,8 @@ shortly after midnight (e.g. 00:15 IST). Code is ready for both; someone with
 Railway access adds the two cron services, same hand-off shape as item 14b's
 existing crons.
 
-Pushed on `claude/admin-fraction-hospital-automation-neoqnl`,
-**not yet merged** — no PR opened yet (not asked for this session).
+Pushed on `claude/admin-fraction-hospital-automation-neoqnl`, **opened as
+PR #92, not yet merged.**
 
 ---
 
