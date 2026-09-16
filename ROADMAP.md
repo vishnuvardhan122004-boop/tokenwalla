@@ -7,9 +7,8 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-16 — **new item 23: admin bookings-by-location
-  report + hospital auto-close-stale-bookings, opened as PR #92, not
-  merged.**
+- **Last updated:** 2026-09-16 — **item 23 merged as PR #92: admin
+  bookings-by-location report + hospital auto-close-stale-bookings.**
   `AdminReportsView` gains an additive `by_location` breakdown (bookings
   ranked by city). The stale-booking sweep is **two separate commands on two
   separate schedules**, split mid-session on Vishnu's correction:
@@ -21,8 +20,25 @@ the things that can lose money or break a live booking come first.
   fault. Design decisions confirmed with Vishnu before and during the
   session, since this touches the exact statuses `run_daily_payouts`
   watches. 574 backend tests (2 skipped, was 556), 61 frontend unchanged.
-  Full detail in item 23. **Still needs:** the two Railway Cron Schedules
-  (Vishnu's, same as 14b), and a merge of PR #92. Also worth knowing: three small
+  Full detail in item 23. **Follow-up PR #93 open, now fully closes the cron
+  gap with ZERO Railway dashboard step.** A bot review found neither new
+  command had any cron wiring in the repo; the first fix (two new
+  `railway.*.cron.json` files, each meant for its own new service) was
+  itself wrong — a *second* bot pass on #93 caught it, citing this repo's
+  own `send_pass_expiry_reminders.py`: Railway closed Config-as-Code to new
+  services on 2026-08-28, so a freshly-created service can never be pointed
+  at a config file at all. Corrected by riding both commands on the
+  **existing** `railway.cron.json` reminders cron instead (same precedent
+  `send_pass_expiry_reminders` already set) — `close_stale_bookings` and
+  `mark_daily_no_shows` now deploy and start running automatically the
+  moment #93 merges, no Railway access needed by anyone. **Also a process
+  note:** #92 squash-merged seconds before the first fix could push,
+  orphaning that commit; restarted the branch per this file's own
+  merged-PR procedure, and when the production guard correctly blocked
+  force-pushing the rebuilt branch back under its old name, the single
+  carried-forward commit went to a new branch
+  (`claude/railway-cron-config-followup`) instead — a plain push, nothing
+  forced, nothing lost. Also worth knowing: three small
   unrelated fixes landed on `main` on
   2026-09-11 (`#89`/`#90`/`#91` — scan fee labelling, dev-server Cloudinary/
   WhatsApp safety, orphaned hospital image cleanup) that never got written up
@@ -2505,14 +2521,61 @@ run has zero `graph.facebook.com` lines. No `/api/payment/*` or
 admin-only (the mobile app never calls it), and `called_at` is DB-only, not
 exposed on any serializer.
 
-**Not done — outside a session's reach:** the two Railway Cron Schedules —
-`close_stale_bookings` every ~15 min, `mark_daily_no_shows` once daily
-shortly after midnight (e.g. 00:15 IST). Code is ready for both; someone with
-Railway access adds the two cron services, same hand-off shape as item 14b's
-existing crons.
+**Merged ✅ 2026-09-16, as PR #92** (squash-merged by Vishnu, `main` tip
+`97041e2`).
 
-Pushed on `claude/admin-fraction-hospital-automation-neoqnl`, **opened as
-PR #92, not yet merged.**
+**Follow-up, PR #93, open — two rounds, second one actually closes it.**
+
+*Round 1 (wrong):* a bot review on #92 (`chatgpt-codex-connector`) correctly
+flagged that neither command had any cron wiring at all in the repo — "fixed"
+by adding `backend/railway.close-stale-bookings.cron.json` (`*/15 * * * *`)
+and `backend/railway.daily-no-shows.cron.json` (`45 18 * * *` UTC = 00:15
+IST), matching the *shape* the two existing crons use. Pushed without
+checking whether that shape still works for a brand-new service.
+
+*Round 2 (the actual fix):* a second bot pass on the round-1 commit caught
+what a repo grep would have: **Railway closed Config-as-Code to new services
+on 2026-08-28** (`ROADMAP.md` item 14b, and `send_pass_expiry_reminders.py`'s
+own docstring, both already said so). Neither new `railway.*.cron.json` file
+could ever be attached to a service, because the dashboard has no "point a
+new service at this file" option any more — that door closed three weeks
+before this session. The two files were deleted; both commands now ride the
+**existing** `railway.cron.json` reminders cron instead, exactly the
+precedent `send_pass_expiry_reminders` already set for the identical reason:
+`startCommand` is now `send_appointment_reminders; send_pass_expiry_reminders;
+close_stale_bookings; mark_daily_no_shows`, still `*/10 * * * *`. Every 10
+minutes instead of the original ~15/once-daily design is harmless either
+way — `close_stale_bookings`'s 2h cutoff only gets *more* responsive, and
+`mark_daily_no_shows`'s own `date__lt=today` filter is what makes it
+"once-effective-per-day" regardless of how often the command itself runs; it
+now catches the midnight rollover within 10 minutes rather than at a fixed
+00:15 offset.
+
+**Net result: zero Railway dashboard steps left.** Both commands start
+running automatically the moment #93 merges and deploys — no new service,
+no manual cron config, nothing for anyone to remember to do. **Lesson worth
+keeping:** the round-1 mistake was buildable in five seconds with a repo
+grep (`grep -rn "closed config-as-code" .`) that would have surfaced
+`send_pass_expiry_reminders.py`'s own docstring before writing any new
+config file — check existing precedent for "how does this repo already
+solve the exact same problem" before inventing a new mechanism, especially
+for infrastructure a session can't directly verify (no Railway dashboard
+access to confirm a new service actually accepts a config file).
+
+**Process note worth keeping:** #92 was squash-merged 11 seconds after the
+bot review landed — before the fix above could be pushed to that branch, so
+it landed on now-orphaned history instead. Restarted per this file's own
+merged-PR procedure (`checkout -B <branch> origin/main`, cherry-pick the one
+unmerged commit) — but pushing the rebuilt branch back under the **same**
+name is a force-push over now-diverged remote history, and the production
+guard correctly blocked it (`git push --force-with-lease` still trips the
+"force-push rewrites shared history" rule; it does not special-case an
+already-merged branch). Rather than fight the guard, pushed the single
+carried-forward commit to a **new** branch name instead
+(`claude/railway-cron-config-followup`) and opened it as its own PR — a
+plain, non-force push, and the honest shape of what it is: a follow-up, not
+a continuation of merged history. The old branch and its orphaned commit
+were left alone (nothing force-pushed, nothing deleted).
 
 ---
 
