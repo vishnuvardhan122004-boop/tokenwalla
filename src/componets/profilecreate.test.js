@@ -12,12 +12,12 @@ Element.prototype.scrollIntoView = jest.fn();
 const type = (label, value) => userEvent.type(screen.getByLabelText(label), value);
 
 /** Fill the form up to a verified mobile, then submit with `password`. */
-async function submitWith(password) {
+async function submitWith(password, registerRejection = { response: { data: { message: 'nope' } } }) {
   API.post.mockImplementation((url) => {
     if (url === '/auth/otp/request/') return Promise.resolve({ data: {} });
     if (url === '/auth/otp/verify/')  return Promise.resolve({ data: { verified: true } });
     // Fail the register call: success navigates and reloads the window.
-    return Promise.reject({ response: { data: { message: 'nope' } } });
+    return Promise.reject(registerRejection);
   });
 
   render(<MemoryRouter><Profilecreate /></MemoryRouter>);
@@ -46,6 +46,27 @@ test('a password with no digit is still refused before the request', async () =>
   await submitWith('abcdefgh');
   expect(await screen.findByText(/Min 6 chars/)).toBeInTheDocument();
   expect(API.post).not.toHaveBeenCalledWith('/auth/register/', expect.anything());
+});
+
+test('an all-numeric password is refused before the request', async () => {
+  // Django's NumericPasswordValidator rejects this server-side regardless;
+  // this is the one cheap, exact check duplicated client-side to save the
+  // round trip.
+  await submitWith('123456');
+  expect(await screen.findByText(/cannot be entirely numbers/)).toBeInTheDocument();
+  expect(API.post).not.toHaveBeenCalledWith('/auth/register/', expect.anything());
+});
+
+test('a server-side password rejection shows the real reason, not a generic message', async () => {
+  // RegisterSerializer.validate() raises {password: [...]} for a
+  // CommonPasswordValidator / similarity rejection - a shape this form used
+  // to fall through to 'Registration failed. Try again.' on, hiding the
+  // reason the server had already computed.
+  await submitWith('Test@1234', {
+    response: { data: { password: ['This password is too common.'] } },
+  });
+  expect(await screen.findByText('This password is too common.')).toBeInTheDocument();
+  expect(screen.queryByText(/Registration failed/)).not.toBeInTheDocument();
 });
 
 test('OTP field accepts 6 digits, strips non-digits, and gates the verify button', async () => {
