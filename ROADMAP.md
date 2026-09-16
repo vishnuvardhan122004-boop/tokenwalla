@@ -2505,11 +2505,18 @@ run has zero `graph.facebook.com` lines. No `/api/payment/*` or
 admin-only (the mobile app never calls it), and `called_at` is DB-only, not
 exposed on any serializer.
 
-**Not done — outside a session's reach:** the two Railway Cron Schedules —
-`close_stale_bookings` every ~15 min, `mark_daily_no_shows` once daily
-shortly after midnight (e.g. 00:15 IST). Code is ready for both; someone with
-Railway access adds the two cron services, same hand-off shape as item 14b's
-existing crons.
+**Not done — outside a session's reach:** creating the two Railway *services*
+themselves. A bot review on PR #92 (`chatgpt-codex-connector`) correctly
+flagged that neither command had any cron wiring at all in the repo — fixed
+by adding `backend/railway.close-stale-bookings.cron.json` (`*/15 * * * *`)
+and `backend/railway.daily-no-shows.cron.json` (`45 18 * * *` UTC = 00:15
+IST), matching the exact Config-as-Code shape the two existing crons
+(`railway.cron.json`, `railway.payouts.cron.json`) already use. What's left
+is purely a dashboard step no commit can do: Railway services aren't created
+by a file appearing in the repo, so someone with Railway access still has to
+create two new cron services and point each at its file — but the command
+and schedule are now fully specified, not something to type in from memory.
+Same hand-off shape as item 14b's existing crons.
 
 Pushed on `claude/admin-fraction-hospital-automation-neoqnl`, **opened as
 PR #92, not yet merged.**

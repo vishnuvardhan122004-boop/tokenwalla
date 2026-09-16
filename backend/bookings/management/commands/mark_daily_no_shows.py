@@ -2,6 +2,11 @@
 Run once a day, shortly after midnight, via Railway Cron Schedule:
     python manage.py mark_daily_no_shows
 
+Config-as-Code for this is ready at backend/railway.daily-no-shows.cron.json
+(00:15 IST = 18:45 UTC, same shape as the two existing crons) — creating the
+Railway service itself and pointing it at that file is a dashboard step, not
+something committing code can do.
+
 Marks CONFIRMED bookings from a day that has fully ended (`date` before
 today, local time) that were never called in (`called_at` still NULL) ->
 NO_SHOW. Mirrors NoShowView's own push + WhatsApp, since from the patient's
