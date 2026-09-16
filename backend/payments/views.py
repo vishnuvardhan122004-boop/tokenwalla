@@ -27,6 +27,7 @@ from notifications.push import push_booking_confirmed, push_new_booking_to_hospi
 from django.conf import settings
 from django.utils import timezone
 from django.db import transaction, IntegrityError, connection
+from django.db.models import Count
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -1247,8 +1248,9 @@ class AdminReportsView(APIView):
     """
     Admin-only reports endpoint.
     Returns a flat (non-paginated) response so the frontend can read
-    data.total, data.completed, data.waiting, data.bookings directly.
-    Limited to last 500 bookings for performance.
+    data.total, data.completed, data.waiting, data.by_location, data.bookings
+    directly. `bookings` is limited to the last 500 for performance;
+    `by_location` is computed over the whole table, not just that slice.
     """
     permission_classes = [IsAuthenticated, IsAdmin]
 
@@ -1264,6 +1266,25 @@ class AdminReportsView(APIView):
         completed = all_b.filter(status='COMPLETED').count()
         waiting   = all_b.filter(status='CONFIRMED').count()
 
+        # Where bookings actually come from, by the hospital/centre's own city —
+        # ranked by volume. Read off the full table rather than the 500-row
+        # `recent` slice below, so a busy day at the top of the list doesn't
+        # crowd out a smaller city's real share.
+        by_city = (
+            all_b
+            .values('hospital__city')
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+        by_location = [
+            {
+                'city':     row['hospital__city'] or 'Unknown',
+                'count':    row['count'],
+                'fraction': round(row['count'] / total, 4) if total else 0,
+            }
+            for row in by_city
+        ]
+
         recent   = all_b[:500]
         # The map matters most here: 500 rows with no map meant up to 500
         # extra queries from get_queue_position's slow path. build_queue_map
@@ -1275,10 +1296,11 @@ class AdminReportsView(APIView):
         ).data
 
         return Response({
-            'total':     total,
-            'completed': completed,
-            'waiting':   waiting,
-            'bookings':  bookings,
+            'total':       total,
+            'completed':   completed,
+            'waiting':     waiting,
+            'by_location': by_location,
+            'bookings':    bookings,
         })
 
 

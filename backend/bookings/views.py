@@ -64,7 +64,7 @@ def _whatsapp_async(send, booking, label):
     threading.Thread(target=_run, name=f'{label}-{booking.id}', daemon=True).start()
 
 
-def _claim_transition(booking, expected, new_status):
+def _claim_transition(booking, expected, new_status, **extra_fields):
     """Atomically move `booking` from one of `expected` into `new_status`.
 
     Returns True only if THIS caller made the change.
@@ -82,12 +82,17 @@ def _claim_transition(booking, expected, new_status):
     back, and run_daily_payouts then skipped the booking forever because of its
     `.exclude(payment__refunds__isnull=False)` guard — so the doctor was never
     ledgered for a visit the hospital had marked done.
+
+    `extra_fields` rides the same conditional UPDATE (e.g. `called_at=...` when
+    landing on IN_PROGRESS) so it is written iff this call actually won the race.
     """
     claimed = (Booking.objects
                .filter(pk=booking.pk, status__in=expected)
-               .update(status=new_status))
+               .update(status=new_status, **extra_fields))
     if claimed:
         booking.status = new_status      # keep the in-memory copy honest
+        for field, value in extra_fields.items():
+            setattr(booking, field, value)
     return bool(claimed)
 
 
@@ -236,7 +241,7 @@ class CallNextView(APIView):
                 status=400
             )
 
-        if not _claim_transition(booking, ('CONFIRMED',), 'IN_PROGRESS'):
+        if not _claim_transition(booking, ('CONFIRMED',), 'IN_PROGRESS', called_at=timezone.now()):
             return Response(
                 {'message': 'This booking was updated by someone else. Refresh and try again.'},
                 status=409
@@ -752,7 +757,7 @@ class ScanQRView(APIView):
         # means someone else already advanced this booking, which is exactly
         # what the already_done contract above describes — so reuse it rather
         # than inventing a second shape for installed apps to learn.
-        if not _claim_transition(booking, ('CONFIRMED',), 'IN_PROGRESS'):
+        if not _claim_transition(booking, ('CONFIRMED',), 'IN_PROGRESS', called_at=timezone.now()):
             booking.refresh_from_db()
             return Response({
                 'success':      False,
