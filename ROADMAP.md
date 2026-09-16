@@ -2735,7 +2735,10 @@ were left alone (nothing force-pushed, nothing deleted).
   sibling bug — see the new bullet below.
 - **The signup form (web AND app) hides the server's real password-rejection
   reason** — found 2026-09-16, fixed same day, pushed as
-  `fix/register-password-error-surfacing` in both repos, not yet merged.
+  `fix/register-password-error-surfacing` in both repos, **opened as web
+  PR #94 and app PR #27**, neither merged yet — merging is Vishnu's, and for
+  the app an EAS build + store review still follows before any patient has
+  it.
   `RegisterSerializer.validate()` raises a field-keyed DRF error
   (`{password: [...]}`) for a `CommonPasswordValidator` /
   `NumericPasswordValidator` / similarity-to-mobile rejection — not the
