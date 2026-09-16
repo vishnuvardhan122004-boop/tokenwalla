@@ -32,10 +32,20 @@ export default function Profilecreate() {
       errs.name = 'Enter your full name (letters only)';
     if (!/^[6-9]\d{9}$/.test(user.mobile.trim()))
       errs.mobile = 'Enter a valid 10-digit Indian mobile number';
+    // Django's NumericPasswordValidator rejects this server-side regardless;
+    // checked first because an all-numeric password also fails the general
+    // rule below (no letter), which would otherwise mask this with the
+    // generic length/letter/digit message. CommonPasswordValidator (a large
+    // word list) and the mobile/name similarity check are NOT duplicated
+    // here — the server's rejection message is now actually shown (see
+    // submitHandler), so a round trip still ends with the real reason
+    // instead of a guess.
+    if (/^\d+$/.test(user.password))
+      errs.password = 'Password cannot be entirely numbers';
     // `.` and not a symbol whitelist: the server is the real gate, and it
     // accepts anything Django's validators allow. The old [A-Za-z\d] class
     // rejected `Test@1234` here and never let the request out of the browser.
-    if (!/^(?=.*[A-Za-z])(?=.*\d).{6,}$/.test(user.password))
+    else if (!/^(?=.*[A-Za-z])(?=.*\d).{6,}$/.test(user.password))
       errs.password = 'Min 6 chars with at least one letter & number';
     if (user.password !== user.confirmPassword)
       errs.confirmPassword = 'Passwords do not match';
@@ -84,7 +94,14 @@ export default function Profilecreate() {
       window.location.reload();
     } catch (err) {
       const errData = err?.response?.data;
+      // RegisterSerializer.validate() raises a field-keyed DRF error
+      // ({password: [...]}) for a server-side password-strength rejection
+      // (too common / all-numeric / too similar to the mobile number) — not
+      // the {message} shape every other auth endpoint uses. Missing this
+      // meant a rejected password fell straight to the generic fallback
+      // below, hiding the real reason the server already computed.
       if (errData?.mobile) setErrors(prev => ({ ...prev, mobile: errData.mobile[0] }));
+      else if (errData?.password) setErrors(prev => ({ ...prev, password: errData.password[0] }));
       else setGlobalError(errData?.message || 'Registration failed. Try again.');
     } finally { setLoading(false); }
   };

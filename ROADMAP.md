@@ -2725,15 +2725,40 @@ were left alone (nothing force-pushed, nothing deleted).
   (`users/auth_views.py:748`, `create_admin.py:34`). Raising it is one settings
   line + three ad-hoc checks + three frontend rules, but it is Vishnu's call
   about receptionist friction, so a session should not just pick 8.
-- **The web signup password rule is stricter than the server's, and wrong** —
-  new 2026-09-06, found while verifying the above. `src/componets/profilecreate.js:34-35`
-  validates against `/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/` — an
-  **alphanumeric-only** character class, so a password containing a symbol is
-  rejected in the browser while the backend accepts it happily. `Test@1234` —
-  the very example item 4d cites as passing the server — cannot be typed into
-  the web signup form. The two rules disagree and the client is both the
-  stricter and the worse of the pair, since it pushes users off symbols. One
-  regex, its own commit; not folded into a floor change.
+- ~~**The web signup password rule is stricter than the server's, and
+  wrong**~~ ✅ closed, date unrecorded (found already fixed 2026-09-16) — this
+  bullet itself had gone stale. `profilecreate.js`'s regex already allows
+  symbols (`.{6,}` with letter+digit lookaheads, not the old alphanumeric-only
+  class), with its own comment and regression test naming this exact
+  `Test@1234` example. Confirmed on `main` (commit `b2d5dbe`) before doing
+  anything, so nothing was re-fixed. Checking led to a **real, still-open**
+  sibling bug — see the new bullet below.
+- **The signup form (web AND app) hides the server's real password-rejection
+  reason** — found 2026-09-16, fixed same day, pushed as
+  `fix/register-password-error-surfacing` in both repos, **opened as web
+  PR #94 and app PR #27**, neither merged yet — merging is Vishnu's, and for
+  the app an EAS build + store review still follows before any patient has
+  it.
+  `RegisterSerializer.validate()` raises a field-keyed DRF error
+  (`{password: [...]}`) for a `CommonPasswordValidator` /
+  `NumericPasswordValidator` / similarity-to-mobile rejection — not the
+  `{message}` shape every *other* auth endpoint on this site returns. Neither
+  the website's `profilecreate.js` catch block nor the app's
+  `app/(auth)/register.tsx` ever checked for a `password` (or, on the app
+  side, `mobile`) field key, so a rejected password fell straight to a
+  generic "Registration failed. Try again." even though the server had
+  already computed and returned the actual reason. Fixed by reading the
+  field-keyed error in both catch blocks (web already had this pattern for
+  `mobile`, just never extended it to `password`); also added one cheap,
+  exact client-side check ahead of the round trip — reject an all-numeric
+  password, matching `NumericPasswordValidator` exactly — on both platforms.
+  Deliberately did NOT try to duplicate `CommonPasswordValidator` (a large
+  word list) or the similarity check client-side; the message fix means a
+  round trip for those now ends with the real reason instead of a guess.
+  Web: 63 tests (was 61, +2), build clean. App: `tsc --noEmit` and lint
+  clean, 174/174 tests unchanged (no screen-test infra exists for this file —
+  see the "No component or screen tests in the app" bullet below, a
+  pre-existing gap not introduced here). Backend untouched on both.
 - **Branch cleanup** — 12 local branches, several long dead
 
 Resolved and deliberately removed, so they don't get re-added:
