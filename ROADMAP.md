@@ -7,7 +7,23 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-09 — **item 20 closed: `MyBookingsView`
+- **Last updated:** 2026-09-16 — **new item 23: admin bookings-by-location
+  report + hospital auto-close-stale-bookings, both pushed, not merged.**
+  `AdminReportsView` gains an additive `by_location` breakdown (bookings
+  ranked by city); a new `close_stale_bookings` cron auto-completes a
+  called-in booking after 2h and auto-no-shows a never-called one — design
+  decisions (which stage times out, `NO_SHOW` not `COMPLETED` for a
+  never-called booking, a real cron not a lazy check) confirmed with Vishnu
+  before writing code, since this touches the exact statuses
+  `run_daily_payouts` watches. 571 backend tests (2 skipped, was 556), 61
+  frontend unchanged. Full detail in item 23. **Still needs:** the Railway
+  Cron Schedule for the new command (Vishnu's, same as 14b), and a merge.
+  Also worth knowing: three small unrelated fixes landed on `main` on
+  2026-09-11 (`#89`/`#90`/`#91` — scan fee labelling, dev-server Cloudinary/
+  WhatsApp safety, orphaned hospital image cleanup) that never got written up
+  here; not this session's work, flagged so nobody assumes `main` stood
+  still since item 20.
+- **Previously:** 2026-09-09 — **item 20 closed: `MyBookingsView`
   pagination shipped opt-in, so the app needs zero changes.** New
   `OptionalPagination` only activates when a caller sends `?page=`; grepped
   both this repo and `tokenwalla.app` and confirmed every existing caller —
@@ -2396,6 +2412,87 @@ small found-in-passing gap, not urgent: `send_test_whatsapp`'s built-in
 `SAMPLE_PARAMS` table has no entry for `pass_expiring` or
 `doctor_running_late` (both added after the dict was last touched), so
 testing either needs `--params` spelled out by hand.
+
+---
+
+### 23. Admin bookings-by-location + hospital auto-close-stale-bookings 🟡 pushed, not yet merged — 2026-09-16
+
+Two independent slices, requested together in one session: an admin
+reporting question ("which area gets more tokens booked") and a hospital
+queue-hygiene question (a `CONFIRMED`/`IN_PROGRESS` booking staff forgot to
+close staying open forever). Planned with Vishnu before writing code — three
+clarifying questions asked and answered up front, because the second half
+changes when a booking reaches `COMPLETED`/`NO_SHOW`, the exact statuses
+`run_daily_payouts` watches.
+
+**1. Admin: bookings-by-location.** `AdminReportsView`
+(`backend/payments/views.py`) gains an additive `by_location` key — bookings
+grouped on `Hospital.city`, ranked by volume, each with `count` and
+`fraction` of the platform total. Computed over the *whole* table, not the
+existing 500-row `recent` slice, so a busy day at the top doesn't crowd out a
+smaller city's real share. `src/ADMIN/Reports.js` renders it as a ranked bar
+list above the existing filter toolbar. Read-only, no migration, no money
+path touched.
+
+**2. Hospital: auto-close a stale booking after 2 hours.** New
+`bookings.management.commands.close_stale_bookings`, meant to run every
+~15 minutes via Railway Cron. Two sweeps, decided explicitly rather than
+guessed:
+- `IN_PROGRESS` for over 2h → `COMPLETED` (the patient was called in, so the
+  visit almost certainly happened — staff just never tapped Complete).
+- `CONFIRMED`, never called, whose slot started over 2h ago → `NO_SHOW`
+  (mirrors `NoShowView`'s own push + WhatsApp).
+- **`ON_HOLD` is deliberately never touched** — that's an explicit staff
+  action (`HoldBookingView`), not a forgotten booking.
+- New nullable `Booking.called_at` (migration `0014`, additive) is the
+  discriminator between "still queued" and "called but not closed out" —
+  stamped by `CallNextView` and the QR-scan endpoint, the only two places a
+  booking becomes `IN_PROGRESS`. `_claim_transition` grew an `**extra_fields`
+  parameter so this rides the same atomic conditional `UPDATE` rather than a
+  separate unlocked write.
+- Both sweeps use the same "conditional UPDATE wins" idiom as
+  `_claim_transition` (bulk update for the `IN_PROGRESS` side, per-row
+  conditional update for the `CONFIRMED` side), so a live staff action on the
+  same booking always beats the cron, matching CLAUDE.md's own idempotency
+  rule for money-adjacent writes.
+
+**Design decisions Vishnu made explicitly before code was written** (not
+guessed): the 2h timer applies to `IN_PROGRESS` only, not `CONFIRMED`
+(a doctor running late can leave someone waiting near 2h without it being
+staff's fault); a never-called `CONFIRMED` booking becomes `NO_SHOW`, not
+`COMPLETED` (no payout implied for a visit nobody confirmed happened); and
+this ships as a real periodic cron, not a lazy dashboard-load check.
+
+**Explicitly NOT a payout automation.** `NO_SHOW` already feeds
+`run_daily_payouts` today (pre-existing, documented behaviour — a `FULL`
+provider keeps the held fee on a no-show). This item only lets a booking
+*reach* `COMPLETED`/`NO_SHOW` without a staff tap; marking a doctor paid is
+still 100% manual via the admin payouts page, untouched.
+
+**One-time effect worth watching the first time the cron runs**: any
+`CONFIRMED` booking from the last 7 days that was never called and whose
+slot has already passed will flip to `NO_SHOW` (with the same notification
+`NoShowView` already sends) on the very first run after this deploys — a
+catch-up, not a bug, but a real patient could get a "marked no-show" push
+for a booking they'd forgotten about.
+
+**Gate: SHIP.** 571 backend tests (2 skipped, was 556 — 15 new:
+`bookings/tests_close_stale_bookings.py`, `payments/tests_admin_reports.py`),
+61 frontend unchanged, `makemigrations --check` clean, money-path suites
+(`tests_payments`, `tests_integration`, `tests_pass`) re-run green, `-v 2`
+run has zero `graph.facebook.com` lines. No `/api/payment/*` or
+`/api/bookings/*` contract change — `by_location` is additive and
+admin-only (the mobile app never calls it), and `called_at` is DB-only, not
+exposed on any serializer.
+
+**Not done — outside a session's reach:** the Railway Cron Schedule that
+actually runs `close_stale_bookings` on a timer. Code is ready; someone with
+Railway access adds a new cron service (`python manage.py
+close_stale_bookings`, every ~15 min), same hand-off shape as item 14b's two
+existing crons.
+
+Pushed on `claude/admin-fraction-hospital-automation-neoqnl` @ `c0d7c28`,
+**not yet merged** — no PR opened yet (not asked for this session).
 
 ---
 
