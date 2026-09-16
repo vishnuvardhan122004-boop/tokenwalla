@@ -7,9 +7,8 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-16 — **new item 23: admin bookings-by-location
-  report + hospital auto-close-stale-bookings, opened as PR #92, not
-  merged.**
+- **Last updated:** 2026-09-16 — **item 23 merged as PR #92: admin
+  bookings-by-location report + hospital auto-close-stale-bookings.**
   `AdminReportsView` gains an additive `by_location` breakdown (bookings
   ranked by city). The stale-booking sweep is **two separate commands on two
   separate schedules**, split mid-session on Vishnu's correction:
@@ -21,8 +20,16 @@ the things that can lose money or break a live booking come first.
   fault. Design decisions confirmed with Vishnu before and during the
   session, since this touches the exact statuses `run_daily_payouts`
   watches. 574 backend tests (2 skipped, was 556), 61 frontend unchanged.
-  Full detail in item 23. **Still needs:** the two Railway Cron Schedules
-  (Vishnu's, same as 14b), and a merge of PR #92. Also worth knowing: three small
+  Full detail in item 23. **Follow-up PR #93 open:** a bot review found
+  neither new command had any cron wiring in the repo — fixed with two new
+  Railway Config-as-Code files; still needs the two actual Railway cron
+  *services* created (Vishnu's, same as 14b). **Also a process note:** #92
+  squash-merged seconds before that fix could push, orphaning the commit;
+  restarted the branch per this file's own merged-PR procedure, and when the
+  production guard correctly blocked force-pushing the rebuilt branch back
+  under its old name, the single carried-forward commit went to a new branch
+  (`claude/railway-cron-config-followup`) instead — a plain push, nothing
+  forced, nothing lost. Also worth knowing: three small
   unrelated fixes landed on `main` on
   2026-09-11 (`#89`/`#90`/`#91` — scan fee labelling, dev-server Cloudinary/
   WhatsApp safety, orphaned hospital image cleanup) that never got written up
@@ -2505,21 +2512,36 @@ run has zero `graph.facebook.com` lines. No `/api/payment/*` or
 admin-only (the mobile app never calls it), and `called_at` is DB-only, not
 exposed on any serializer.
 
-**Not done — outside a session's reach:** creating the two Railway *services*
-themselves. A bot review on PR #92 (`chatgpt-codex-connector`) correctly
-flagged that neither command had any cron wiring at all in the repo — fixed
-by adding `backend/railway.close-stale-bookings.cron.json` (`*/15 * * * *`)
-and `backend/railway.daily-no-shows.cron.json` (`45 18 * * *` UTC = 00:15
-IST), matching the exact Config-as-Code shape the two existing crons
-(`railway.cron.json`, `railway.payouts.cron.json`) already use. What's left
-is purely a dashboard step no commit can do: Railway services aren't created
-by a file appearing in the repo, so someone with Railway access still has to
-create two new cron services and point each at its file — but the command
-and schedule are now fully specified, not something to type in from memory.
-Same hand-off shape as item 14b's existing crons.
+**Merged ✅ 2026-09-16, as PR #92** (squash-merged by Vishnu, `main` tip
+`97041e2`).
 
-Pushed on `claude/admin-fraction-hospital-automation-neoqnl`, **opened as
-PR #92, not yet merged.**
+**Follow-up, PR #93, open:** a bot review on #92 (`chatgpt-codex-connector`)
+correctly flagged that neither command had any cron wiring at all in the
+repo — fixed by adding `backend/railway.close-stale-bookings.cron.json`
+(`*/15 * * * *`) and `backend/railway.daily-no-shows.cron.json` (`45 18 * *
+*` UTC = 00:15 IST), matching the exact Config-as-Code shape the two
+existing crons (`railway.cron.json`, `railway.payouts.cron.json`) already
+use. What's left is purely a dashboard step no commit can do: Railway
+services aren't created by a file appearing in the repo, so someone with
+Railway access still has to create two new cron services and point each at
+its file — but the command and schedule are now fully specified, not
+something to type in from memory. Same hand-off shape as item 14b's
+existing crons.
+
+**Process note worth keeping:** #92 was squash-merged 11 seconds after the
+bot review landed — before the fix above could be pushed to that branch, so
+it landed on now-orphaned history instead. Restarted per this file's own
+merged-PR procedure (`checkout -B <branch> origin/main`, cherry-pick the one
+unmerged commit) — but pushing the rebuilt branch back under the **same**
+name is a force-push over now-diverged remote history, and the production
+guard correctly blocked it (`git push --force-with-lease` still trips the
+"force-push rewrites shared history" rule; it does not special-case an
+already-merged branch). Rather than fight the guard, pushed the single
+carried-forward commit to a **new** branch name instead
+(`claude/railway-cron-config-followup`) and opened it as its own PR — a
+plain, non-force push, and the honest shape of what it is: a follow-up, not
+a continuation of merged history. The old branch and its orphaned commit
+were left alone (nothing force-pushed, nothing deleted).
 
 ---
 
