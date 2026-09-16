@@ -2735,10 +2735,11 @@ were left alone (nothing force-pushed, nothing deleted).
   sibling bug — see the new bullet below.
 - **The signup form (web AND app) hides the server's real password-rejection
   reason** — found 2026-09-16, fixed same day, pushed as
-  `fix/register-password-error-surfacing` in both repos. **Web PR #94
-  merged** — live on `main` (`be52c21`), Vercel/Railway redeployed
-  automatically. **App PR #27 still open** — merging it only lands the code;
-  an EAS build + store review still follows before any patient has it.
+  `fix/register-password-error-surfacing` in both repos. **Both merged
+  2026-09-16**: web PR #94 (`main` `be52c21`, Vercel/Railway redeployed
+  automatically — live now) and app PR #27 (`tokenwalla.app` `main`
+  `7a2e66d`). The app half is code-merged only — an EAS build + store review
+  still stand between this and any patient's phone; nobody has it yet.
   `RegisterSerializer.validate()` raises a field-keyed DRF error
   (`{password: [...]}`) for a `CommonPasswordValidator` /
   `NumericPasswordValidator` / similarity-to-mobile rejection — not the
