@@ -7,43 +7,51 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-16 — **item 23 merged as PR #92: admin
-  bookings-by-location report + hospital auto-close-stale-bookings.**
-  `AdminReportsView` gains an additive `by_location` breakdown (bookings
-  ranked by city). The stale-booking sweep is **two separate commands on two
-  separate schedules**, split mid-session on Vishnu's correction:
-  `close_stale_bookings` (every ~15 min) auto-completes a called-in booking
-  2h after it was called; `mark_daily_no_shows` (once daily, shortly after
-  midnight) auto-no-shows a `CONFIRMED` booking never called once its whole
-  day has ended — not a rolling 2h clock during the day, since a delayed
-  doctor can leave someone genuinely still waiting near 2h with nobody at
-  fault. Design decisions confirmed with Vishnu before and during the
-  session, since this touches the exact statuses `run_daily_payouts`
-  watches. 574 backend tests (2 skipped, was 556), 61 frontend unchanged.
-  Full detail in item 23. **Follow-up PR #93 open, now fully closes the cron
-  gap with ZERO Railway dashboard step.** A bot review found neither new
-  command had any cron wiring in the repo; the first fix (two new
-  `railway.*.cron.json` files, each meant for its own new service) was
-  itself wrong — a *second* bot pass on #93 caught it, citing this repo's
-  own `send_pass_expiry_reminders.py`: Railway closed Config-as-Code to new
-  services on 2026-08-28, so a freshly-created service can never be pointed
-  at a config file at all. Corrected by riding both commands on the
-  **existing** `railway.cron.json` reminders cron instead (same precedent
-  `send_pass_expiry_reminders` already set) — `close_stale_bookings` and
-  `mark_daily_no_shows` now deploy and start running automatically the
-  moment #93 merges, no Railway access needed by anyone. **Also a process
-  note:** #92 squash-merged seconds before the first fix could push,
-  orphaning that commit; restarted the branch per this file's own
-  merged-PR procedure, and when the production guard correctly blocked
-  force-pushing the rebuilt branch back under its old name, the single
-  carried-forward commit went to a new branch
-  (`claude/railway-cron-config-followup`) instead — a plain push, nothing
-  forced, nothing lost. Also worth knowing: three small
-  unrelated fixes landed on `main` on
+- **Last updated:** 2026-09-16 (session close) — **three things landed today:
+  item 23 closed, a real cross-repo auth bug found and fixed, and the mobile
+  app made ready to build.**
+  1. **Item 23 — CLOSED.** Admin bookings-by-location report (`AdminReportsView`
+     gains an additive `by_location` breakdown) + hospital auto-close-stale-
+     bookings, as two separate commands on two separate schedules
+     (`close_stale_bookings` every ~10 min, `mark_daily_no_shows` riding the
+     same cron but gated by its own `date__lt=today` filter so it still acts
+     once-per-day). Merged as **PR #92** then a cron-wiring follow-up as
+     **PR #93** — both live on `main` (`7bffcc4`). Zero Railway dashboard
+     steps needed; full detail in item 23's own section.
+  2. **New item 24 — CLOSED.** The signup form on **both web and app** was
+     hiding the server's real password-rejection reason (a DRF field-keyed
+     error the client never checked, falling back to a generic "Registration
+     failed"). Found while checking the app for an unrelated, already-fixed
+     regex bug. Fixed on both platforms, merged as **web PR #94** (`main`
+     `be52c21`, live) and **app PR #27** (`tokenwalla.app` `main` `7a2e66d`).
+     Full detail in item 24.
+  3. **New item 25 — in progress, this is tomorrow's pickup.** Mobile app
+     v1.5.0 is build-ready: version already bumped (`app.json`/`package.json`,
+     Vishnu's own commit `b8ee37c`, predates this session) and a new
+     `CHANGELOG.md` now carries the complete, accurate list — including the
+     two fixes (R8/ProGuard, item 24) that landed *after* that version-bump
+     commit was cut. Pushed as `docs/changelog-1.5.0`, **not merged**. The
+     actual `eas build --profile production` has **not been run** — that is
+     the next concrete step, not something this session can trigger (no EAS
+     credentials/login in a session, and per CLAUDE.md `/api/app-version/`'s
+     `APP_LATEST_VERSION` must only point at it *after* the store approves
+     the build, never before). Full detail in item 25.
+
+  Also worth knowing: three small unrelated fixes landed on `main` on
   2026-09-11 (`#89`/`#90`/`#91` — scan fee labelling, dev-server Cloudinary/
   WhatsApp safety, orphaned hospital image cleanup) that never got written up
   here; not this session's work, flagged so nobody assumes `main` stood
   still since item 20.
+  **Process note worth keeping:** PR #92 squash-merged 11 seconds after a bot
+  review landed, before that review's fix could push — the commit landed on
+  now-orphaned history. Restarted per this file's own merged-PR procedure
+  (`checkout -B <branch> origin/main`, cherry-pick the unmerged commit), and
+  when the production guard correctly blocked force-pushing the rebuilt
+  branch back under its *original* name, the carried-forward commit went to
+  a **new** branch instead (`claude/railway-cron-config-followup`) — a plain
+  push, nothing forced, nothing lost. The same "PR merged out from under a
+  branch" shape recurred a second time later in the session (item 24's fix);
+  handled the same way both times.
 - **Previously:** 2026-09-09 — **item 20 closed: `MyBookingsView`
   pagination shipped opt-in, so the app needs zero changes.** New
   `OptionalPagination` only activates when a caller sends `?page=`; grepped
@@ -2436,7 +2444,7 @@ testing either needs `--params` spelled out by hand.
 
 ---
 
-### 23. Admin bookings-by-location + hospital auto-close-stale-bookings 🟡 pushed, not yet merged — 2026-09-16
+### ~~23. Admin bookings-by-location + hospital auto-close-stale-bookings~~ ✅ 2026-09-16 — merged (PR #92 + #93), live on `main`, zero follow-up steps
 
 Two independent slices, requested together in one session: an admin
 reporting question ("which area gets more tokens booked") and a hospital
@@ -2524,7 +2532,7 @@ exposed on any serializer.
 **Merged ✅ 2026-09-16, as PR #92** (squash-merged by Vishnu, `main` tip
 `97041e2`).
 
-**Follow-up, PR #93, open — two rounds, second one actually closes it.**
+**Follow-up, PR #93, merged ✅ — two rounds, second one actually closes it.**
 
 *Round 1 (wrong):* a bot review on #92 (`chatgpt-codex-connector`) correctly
 flagged that neither command had any cron wiring at all in the repo — "fixed"
@@ -2551,10 +2559,11 @@ way — `close_stale_bookings`'s 2h cutoff only gets *more* responsive, and
 now catches the midnight rollover within 10 minutes rather than at a fixed
 00:15 offset.
 
-**Net result: zero Railway dashboard steps left.** Both commands start
-running automatically the moment #93 merges and deploys — no new service,
-no manual cron config, nothing for anyone to remember to do. **Lesson worth
-keeping:** the round-1 mistake was buildable in five seconds with a repo
+**Net result: zero Railway dashboard steps left.** Both commands are already
+running in production — #93 merged and deployed at `7bffcc4` — no new
+service, no manual cron config, nothing for anyone to remember to do.
+**Lesson worth keeping:** the round-1 mistake was buildable in five seconds
+with a repo
 grep (`grep -rn "closed config-as-code" .`) that would have surfaced
 `send_pass_expiry_reminders.py`'s own docstring before writing any new
 config file — check existing precedent for "how does this repo already
@@ -2576,6 +2585,96 @@ carried-forward commit to a **new** branch name instead
 plain, non-force push, and the honest shape of what it is: a follow-up, not
 a continuation of merged history. The old branch and its orphaned commit
 were left alone (nothing force-pushed, nothing deleted).
+
+### ~~24. Signup hides the real password-rejection reason (web + app)~~ ✅ 2026-09-16 — merged (web PR #94, app PR #27), both live
+
+Asked to check whether the mobile app had the same alphanumeric-only
+password regex the website's signup form once had (a *different*, already-
+closed bug — see the struck-through "web signup password rule" bullet in
+**Next**, confirmed still fixed on `main` at `b2d5dbe` before touching
+anything). The app never had that bug — its client check was always just
+`password.length >= 6`, no character-class regex at all — but checking it
+surfaced a real, separate, more serious bug present on **both** platforms.
+
+**Root cause.** `RegisterSerializer.validate()` (`backend/users/serializers.py`)
+raises a field-keyed DRF error — `{"password": ["..."]}` — for a server-side
+password-strength rejection (`CommonPasswordValidator`, `NumericPasswordValidator`,
+or the mobile/name similarity check). Every *other* auth endpoint in this
+codebase returns `{"message": "..."}` instead. Neither `profilecreate.js`'s
+nor `app/(auth)/register.tsx`'s catch block checked for a `password` key —
+web already had this exact pattern for a duplicate `mobile`, just never
+extended it to `password`; the app checked neither key. So a password
+rejected for being too common, all-numeric, or too similar to the phone
+number fell straight to a generic "Registration failed. Try again." **even
+though the server had already computed and returned the actual reason.**
+
+**Fixed, both platforms:**
+- Catch blocks now read the field-keyed error before falling back to the
+  generic message.
+- One cheap, exact client-side pre-check added ahead of the round trip on
+  both platforms: reject an all-numeric password before it's even sent,
+  matching `NumericPasswordValidator` exactly. Deliberately **not**
+  duplicating `CommonPasswordValidator` (a large word list) or the
+  similarity check client-side — the message fix means a round trip for
+  those now ends with the real reason instead of a guess.
+
+**Gate.** Web: 2 new regression tests (`profilecreate.test.js`), 63 frontend
+tests (was 61), build clean, backend untouched (574 tests unaffected). App:
+`tsc --noEmit` and `expo lint` clean, 174/174 tests unchanged (no
+screen-test harness exists for this file — a pre-existing gap, not
+introduced here).
+
+**Merged ✅ 2026-09-16.** Web as **PR #94** (`main` `be52c21`, CI green
+before merge, no review threads, Vercel/Railway redeployed automatically —
+live now). App as **PR #27** (`tokenwalla.app` `main` `7a2e66d`, no CI
+configured in that repo, verified via the local checks above instead). The
+app half is code-merged only — see item 25 for what still stands between
+this and a patient's phone.
+
+**Process note, same shape as item 23's:** both PRs merged out from under
+the branch mid-session before a same-day follow-up commit could push —
+once for the cron-config fix (item 23), once here (the app's `main` moved
+under `fix/register-password-error-surfacing` between checking CI and
+writing the changelog). Same fix both times: rebuild the branch off the new
+`main`, carry the unmerged commit forward, push under a new branch name
+rather than fight the force-push guard.
+
+### 25. Ship mobile app v1.5.0 🟡 build-ready, EAS build not yet run — 2026-09-16
+
+**Everything code-side is done; only the build and store steps remain, and
+those are explicitly outside a session's reach.**
+
+- **Version:** already bumped to `1.5.0` in `app.json`/`package.json` —
+  Vishnu's own commit `b8ee37c`, cut 2026-09-15, the day before this
+  session. Nothing to change here.
+- **Changelog:** this repo's only prior convention was a descriptive
+  `chore(release)` commit message (see `b8ee37c`'s own body) — no file. Two
+  real fixes landed *after* that commit was cut, before any build ran: R8/
+  ProGuard obfuscation (`c0a6788`) and item 24's password-error fix (`#27`).
+  Neither was in the original release note. Added `CHANGELOG.md` to carry
+  the complete, accurate list forward — pushed as `docs/changelog-1.5.0`,
+  **not merged, no PR opened**.
+- **Not done, and not a session's to do:**
+  1. Merge `docs/changelog-1.5.0`.
+  2. Run `eas build --profile production --platform android` — needs EAS
+     login/credentials a session doesn't have. Last production build was
+     1.4.0 (versionCode 40); `autoIncrement: true` + `appVersionSource:
+     "remote"` in `eas.json` means EAS assigns the next versionCode itself,
+     nothing to set by hand.
+  3. `eas submit` is unconfigured beyond the Play `serviceAccountKeyPath` —
+     confirm the AAB still needs uploading by hand, or that submit config,
+     before assuming it's automatic.
+  4. **Only after the store has actually approved the build**, set
+     `APP_LATEST_VERSION=1.5.0` on Railway (not before — CLAUDE.md/ROADMAP
+     item 5b already document the exact failure mode: pointing installs at
+     a version nobody can download yet). This is a Railway env var, not code
+     — outside the `PASS_ENABLED` carve-out, so it's Vishnu's to set
+     regardless of timing.
+- **On-device pass, if it hasn't happened since 1.4.0 shipped:** nothing
+  new to check specifically for 1.5.0's two post-cut fixes (a password-
+  strength network error and a ProGuard build flag), but the two headline
+  1.5.0 features (Appointment Pass at checkout, Doctor Running Late) were
+  device-tested in their own sessions already — see items 14 and 22.
 
 ---
 
