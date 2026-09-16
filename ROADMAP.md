@@ -10,15 +10,19 @@ the things that can lose money or break a live booking come first.
 - **Last updated:** 2026-09-16 — **new item 23: admin bookings-by-location
   report + hospital auto-close-stale-bookings, both pushed, not merged.**
   `AdminReportsView` gains an additive `by_location` breakdown (bookings
-  ranked by city); a new `close_stale_bookings` cron auto-completes a
-  called-in booking after 2h and auto-no-shows a never-called one — design
-  decisions (which stage times out, `NO_SHOW` not `COMPLETED` for a
-  never-called booking, a real cron not a lazy check) confirmed with Vishnu
-  before writing code, since this touches the exact statuses
-  `run_daily_payouts` watches. 571 backend tests (2 skipped, was 556), 61
-  frontend unchanged. Full detail in item 23. **Still needs:** the Railway
-  Cron Schedule for the new command (Vishnu's, same as 14b), and a merge.
-  Also worth knowing: three small unrelated fixes landed on `main` on
+  ranked by city). The stale-booking sweep is **two separate commands on two
+  separate schedules**, split mid-session on Vishnu's correction:
+  `close_stale_bookings` (every ~15 min) auto-completes a called-in booking
+  2h after it was called; `mark_daily_no_shows` (once daily, shortly after
+  midnight) auto-no-shows a `CONFIRMED` booking never called once its whole
+  day has ended — not a rolling 2h clock during the day, since a delayed
+  doctor can leave someone genuinely still waiting near 2h with nobody at
+  fault. Design decisions confirmed with Vishnu before and during the
+  session, since this touches the exact statuses `run_daily_payouts`
+  watches. 574 backend tests (2 skipped, was 556), 61 frontend unchanged.
+  Full detail in item 23. **Still needs:** the two Railway Cron Schedules
+  (Vishnu's, same as 14b), and a merge. Also worth knowing: three small
+  unrelated fixes landed on `main` on
   2026-09-11 (`#89`/`#90`/`#91` — scan fee labelling, dev-server Cloudinary/
   WhatsApp safety, orphaned hospital image cleanup) that never got written up
   here; not this session's work, flagged so nobody assumes `main` stood
@@ -2434,34 +2438,48 @@ smaller city's real share. `src/ADMIN/Reports.js` renders it as a ranked bar
 list above the existing filter toolbar. Read-only, no migration, no money
 path touched.
 
-**2. Hospital: auto-close a stale booking after 2 hours.** New
-`bookings.management.commands.close_stale_bookings`, meant to run every
-~15 minutes via Railway Cron. Two sweeps, decided explicitly rather than
-guessed:
-- `IN_PROGRESS` for over 2h → `COMPLETED` (the patient was called in, so the
-  visit almost certainly happened — staff just never tapped Complete).
-- `CONFIRMED`, never called, whose slot started over 2h ago → `NO_SHOW`
-  (mirrors `NoShowView`'s own push + WhatsApp).
-- **`ON_HOLD` is deliberately never touched** — that's an explicit staff
+**2. Hospital: auto-close a stale booking.** Split into **two separate
+commands on two separate schedules**, not one — the split itself is a
+correction made mid-session (see below), because the two cases are not the
+same kind of "stale":
+
+- `bookings.management.commands.close_stale_bookings` — `IN_PROGRESS` for
+  over 2h → `COMPLETED` (the patient was called in, so the visit almost
+  certainly happened — staff just never tapped Complete). Meant to run
+  frequently, every ~15 minutes, since it's about keeping the live queue
+  honest.
+- `bookings.management.commands.mark_daily_no_shows` — `CONFIRMED`, never
+  called, from a day that has **fully ended** (its `date` is before today,
+  local time) → `NO_SHOW` (mirrors `NoShowView`'s own push + WhatsApp). Meant
+  to run **once a day, shortly after midnight** — Vishnu's explicit
+  correction: a rolling "2h since the slot" clock (the first cut of this
+  item) would auto-no-show a patient a delayed doctor simply hasn't reached
+  yet, which is not the patient's or staff's fault. "Never showed" is only
+  unambiguous once the whole clinic day is over, so this waits for the day
+  to actually end rather than guessing mid-day.
+- **`ON_HOLD` is deliberately untouched by both** — that's an explicit staff
   action (`HoldBookingView`), not a forgotten booking.
 - New nullable `Booking.called_at` (migration `0014`, additive) is the
-  discriminator between "still queued" and "called but not closed out" —
-  stamped by `CallNextView` and the QR-scan endpoint, the only two places a
-  booking becomes `IN_PROGRESS`. `_claim_transition` grew an `**extra_fields`
-  parameter so this rides the same atomic conditional `UPDATE` rather than a
-  separate unlocked write.
-- Both sweeps use the same "conditional UPDATE wins" idiom as
+  discriminator both commands key on — "still queued" vs. "called but not
+  closed out." Stamped by `CallNextView` and the QR-scan endpoint, the only
+  two places a booking becomes `IN_PROGRESS`. `_claim_transition` grew an
+  `**extra_fields` parameter so this rides the same atomic conditional
+  `UPDATE` rather than a separate unlocked write.
+- Both commands use the same "conditional UPDATE wins" idiom as
   `_claim_transition` (bulk update for the `IN_PROGRESS` side, per-row
   conditional update for the `CONFIRMED` side), so a live staff action on the
-  same booking always beats the cron, matching CLAUDE.md's own idempotency
+  same booking always beats the sweep, matching CLAUDE.md's own idempotency
   rule for money-adjacent writes.
 
 **Design decisions Vishnu made explicitly before code was written** (not
-guessed): the 2h timer applies to `IN_PROGRESS` only, not `CONFIRMED`
+guessed), the second one corrected mid-session once the first cut's flaw
+surfaced: the completion timer applies to `IN_PROGRESS` only, not `CONFIRMED`
 (a doctor running late can leave someone waiting near 2h without it being
 staff's fault); a never-called `CONFIRMED` booking becomes `NO_SHOW`, not
-`COMPLETED` (no payout implied for a visit nobody confirmed happened); and
-this ships as a real periodic cron, not a lazy dashboard-load check.
+`COMPLETED` (no payout implied for a visit nobody confirmed happened); the
+no-show sweep runs once daily after midnight, on the calendar day ending, not
+on a rolling few-hour clock during the day; and both ship as real crons, not
+a lazy dashboard-load check.
 
 **Explicitly NOT a payout automation.** `NO_SHOW` already feeds
 `run_daily_payouts` today (pre-existing, documented behaviour — a `FULL`
@@ -2469,15 +2487,16 @@ provider keeps the held fee on a no-show). This item only lets a booking
 *reach* `COMPLETED`/`NO_SHOW` without a staff tap; marking a doctor paid is
 still 100% manual via the admin payouts page, untouched.
 
-**One-time effect worth watching the first time the cron runs**: any
-`CONFIRMED` booking from the last 7 days that was never called and whose
-slot has already passed will flip to `NO_SHOW` (with the same notification
-`NoShowView` already sends) on the very first run after this deploys — a
-catch-up, not a bug, but a real patient could get a "marked no-show" push
-for a booking they'd forgotten about.
+**One-time effect worth watching the first time `mark_daily_no_shows` runs**:
+any `CONFIRMED` booking from the last 7 days that was never called will flip
+to `NO_SHOW` (with the same notification `NoShowView` already sends) the
+first midnight after this deploys — a catch-up, not a bug, but a real
+patient could get a "marked no-show" push for a booking they'd forgotten
+about.
 
-**Gate: SHIP.** 571 backend tests (2 skipped, was 556 — 15 new:
-`bookings/tests_close_stale_bookings.py`, `payments/tests_admin_reports.py`),
+**Gate: SHIP.** 574 backend tests (2 skipped, was 556 — 18 new:
+`bookings/tests_close_stale_bookings.py`,
+`bookings/tests_mark_daily_no_shows.py`, `payments/tests_admin_reports.py`),
 61 frontend unchanged, `makemigrations --check` clean, money-path suites
 (`tests_payments`, `tests_integration`, `tests_pass`) re-run green, `-v 2`
 run has zero `graph.facebook.com` lines. No `/api/payment/*` or
@@ -2485,13 +2504,13 @@ run has zero `graph.facebook.com` lines. No `/api/payment/*` or
 admin-only (the mobile app never calls it), and `called_at` is DB-only, not
 exposed on any serializer.
 
-**Not done — outside a session's reach:** the Railway Cron Schedule that
-actually runs `close_stale_bookings` on a timer. Code is ready; someone with
-Railway access adds a new cron service (`python manage.py
-close_stale_bookings`, every ~15 min), same hand-off shape as item 14b's two
+**Not done — outside a session's reach:** the two Railway Cron Schedules —
+`close_stale_bookings` every ~15 min, `mark_daily_no_shows` once daily
+shortly after midnight (e.g. 00:15 IST). Code is ready for both; someone with
+Railway access adds the two cron services, same hand-off shape as item 14b's
 existing crons.
 
-Pushed on `claude/admin-fraction-hospital-automation-neoqnl` @ `c0d7c28`,
+Pushed on `claude/admin-fraction-hospital-automation-neoqnl`,
 **not yet merged** — no PR opened yet (not asked for this session).
 
 ---
