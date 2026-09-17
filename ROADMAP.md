@@ -2806,6 +2806,24 @@ were left alone (nothing force-pushed, nothing deleted).
 
 ## Next
 
+- **CI does not always run on a PR, and a lone green check can be Vercel's
+  preview rather than the tests** — new 2026-09-17, and this is a **gating**
+  gap on a live product, which is why it sits at the top of Next. PR #96 was
+  opened and **no `CI / Backend tests` run was ever created for it**. What it
+  *did* show was a single green check — Vercel's preview deployment, dated the
+  **previous day**, from when the branch was first pushed. So the PR looked
+  gated and merging it would have been completely ungated.
+  `.github/workflows/deploy.yml` triggers on `pull_request` with **no path
+  filters**, so this was not a config exclusion; the run simply was never
+  created. A later push fired `synchronize` and produced a real run, which is
+  the only reason it was caught.
+  **Until this is understood, treat a green PR as unverified until you have
+  confirmed the check is named "Backend tests".** CLAUDE.md's "CI runs on
+  `pull_request`, so a PR is gated before it lands" is not a guarantee you can
+  lean on. Worth reproducing deliberately: open a PR from an already-pushed
+  branch that has sat for a while and see whether a run appears (#96's branch
+  had been pushed days before its PR was opened, which is the most likely
+  trigger for the miss).
 - **`gh` had auth in a session for the first time, 2026-09-09 — confirm it
   still does before relying on it.** Every prior session recorded `gh auth
   status` as not logged in and had to hand off a `.../compare/...` link for
@@ -3054,6 +3072,38 @@ Resolved and deliberately removed, so they don't get re-added:
 ---
 
 ## Done
+
+- **2026-09-17** — **Five PRs merged; two Railway variables verified; the
+  session's only 🔴 closed.** `main` went `be52c21` → `2451b5b`.
+  **Items closed: 16, 13, 17 (to 🟢), 23.**
+  - **16 ✅ — `NUM_PROXIES=2`, and verified rather than assumed.** `/health/`
+    returns `num_proxies: 2` with `resolved_ident` equal to the caller's own
+    Jio mobile IP, identical across three reloads — `_proxy_probe`'s own
+    success condition, and the direct inverse of the 2026-09-09 failure (three
+    *different* idents in an unrelated Singapore ASN). `AnonRateThrottle`, the
+    OTP send burst guard, the 10/hour `ADMIN_SETUP_KEY` guard and the 2000/day
+    SMS ceiling now key on real callers again (**PR #97**).
+  - **13 ✅ — `APP_LATEST_VERSION=1.4.0` live**, so 1.3.x installs see the
+    update prompt; `min_version` stays blank deliberately (**PR #97**).
+  - **17 🟡→🟢 — the OTP nonce was already shipped** on backend, website AND
+    the app's source (all six call sites), while this file still called it
+    unstarted and "breaking." It landed 2026-09-10 as an *optional*
+    `otp_token`, which is why it needed no endpoint version (**PR #95**).
+  - **23 ✅ closed out** — #92/#93 were merged but still described here as
+    pending, and the cron cadence was wrong (**PR #96**).
+  - **#86 merged** — the hospital "Pending Payout" caption, plus a second
+    inaccuracy the fix itself introduced ("to the doctor" contradicts
+    `payout_to_hospital`).
+  - **A Codex P1 caught a dangerous line before it landed**: the build
+    sequence said "let it roll out → then retire the OTP fallback," treating a
+    **dismissible** nag as a migration guarantee. Corrected in four places; the
+    real gate is now written down (**PR #98**).
+  - **The theme, worth naming:** almost none of today was writing code — total
+    logic changed was one JSX string. It was correcting docs that described a
+    repo which no longer existed: shipped work called unstarted, merged PRs
+    called pending, a branch sitting days with no PR, and a green check that
+    was a day-old Vercel deploy. Each would have cost a future session real
+    time to rediscover. 574 backend / 63 frontend green throughout.
 
 - **2026-09-07** — **Patient web registration was completely blocked — fixed.**
   `profilecreate.js`'s OTP field has had `maxLength={4}` since the file's first
