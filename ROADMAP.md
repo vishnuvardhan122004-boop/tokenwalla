@@ -7,7 +7,29 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-16 — **item 23 CLOSED — merged as PR #92 + PR
+- **Last updated:** 2026-09-17 — **item 17 was far more done than this file
+  said: the OTP nonce is live on the backend, the website AND the app's source;
+  only an app release is left.** A `/start` pass walked `## Now` top to bottom,
+  found everything above 17 either closed or explicitly Vishnu-only (4c, 6, 7,
+  9, 13, 14/14b/14c, 16 each say so in their own text), and picked 17 — whose
+  text still described the fix as unstarted and "breaking." It isn't: **PR #84**
+  (`58b2847`, 2026-09-10) shipped it as an **optional** `otp_token` nonce from
+  `/auth/otp/verify/`, so it needed no endpoint version and no flag day —
+  senders get the race closed, non-senders fall back to the old phone-keyed flag
+  exactly as before. Read the code in **both** repos rather than trusting this
+  file: the website sends it on all four of its consumers, and **the app's
+  `main` already sends it on all six** (`register.tsx`,
+  `forgot-password.tsx`, `edit-profile.tsx`, `Huser.tsx`, `Hforgotpassword.tsx`,
+  `(hospital)/profile.tsx`). **What's genuinely left is a release, not code:**
+  the last store build is v1.4.0 / versionCode 40 (2026-08-29), which predates
+  the app-side change, so no installed phone runs it and every live app call
+  still rides the fallback. Also corrected the same stale claim where it does
+  real damage — the comment block in `users/auth_views.py` telling a future
+  reader the app "can't send the token until an app release adopts it." **Do not
+  retire the fallback until the new build has rolled out** (that is the breaking
+  step; item 13's update prompt is what nudges stragglers, which is why 13 is
+  worth doing first). Docs + comment only, zero logic touched.
+- **Previously:** 2026-09-16 — **item 23 CLOSED — merged as PR #92 + PR
   #93, both live on `main` (`7bffcc4`).** Admin bookings-by-location report
   + hospital auto-close-stale-bookings.
   `AdminReportsView` gains an additive `by_location` breakdown (bookings
@@ -2146,7 +2168,48 @@ the raw header is deliberately not returned.
 
 ---
 
-### 17. `otp_verified` is a bearer flag, and the real fix is breaking 🟡 — mitigated 2026-09-04
+### 17. `otp_verified` is a bearer flag, and the real fix is breaking 🟢 — nonce SHIPPED (backend + web + app source); only an app release is left — 2026-09-17
+
+> ✅ **Corrected 2026-09-17: this item's own text was stale and was under-selling
+> how done it is.** It still read "the real fix is breaking … not a quiet
+> server-side edit," describing work as unstarted that has in fact shipped on
+> three of four surfaces. Checked by reading the code in both repos, not by
+> trusting this file.
+>
+> **What actually happened:** the nonce shipped as **PR #84** (`58b2847`,
+> 2026-09-10) and dodged the breaking-change problem entirely by being
+> **optional**. `/auth/otp/verify/` now also returns a single-use
+> `otp_token` (`issue_otp_token`, `users/auth_views.py`); `check_otp_proof(mobile,
+> token)` requires it to match when a caller sends one, and falls back to the
+> legacy phone-keyed flag when nobody does. A caller that sends the nonce gets
+> the race closed; a caller that doesn't is exactly as safe (or unsafe) as
+> before. No endpoint version, no flag day.
+>
+> | Surface | Sends `otp_token`? | Race closed? |
+> |---|---|---|
+> | Backend (`/otp/verify/` + all 6 consumers) | issues & accepts it | ✅ live |
+> | Website (`ForgotPassword.js`, `profilecreate.js`, `Usercreate.js`, `Hprofile.js`) | yes | ✅ live |
+> | App **source** (`register.tsx`, `forgot-password.tsx`, `edit-profile.tsx`, `Huser.tsx`, `Hforgotpassword.tsx`, `(hospital)/profile.tsx`) | **yes — all 6** | ⏳ not on phones |
+> | App **installs** | no — last store build predates it | 🔴 still on the fallback |
+>
+> **The one thing actually left is a RELEASE, not code.** The last build shipped
+> to Play is **v1.4.0 / versionCode 40, cut 2026-08-29**; the app-side nonce
+> landed after it. So the app's `main` is correct and no phone is running it —
+> every live app call still rides the bearer-flag fallback. A session cannot
+> close this: it needs an EAS build + store review, which is Vishnu's.
+>
+> **Do NOT retire the fallback yet.** That is the genuinely breaking step, and
+> doing it before the new build has rolled out locks every un-updated 1.4.0
+> install out of register, reset-password and the mobile change. Sequence it:
+> ship the build → let it roll out (item 13's update prompt is what nudges
+> stragglers, and is the reason 13 is worth doing before this) → only then drop
+> the legacy branch from `check_otp_proof`.
+>
+> The stale claim in `users/auth_views.py`'s own comment block ("the app … can't
+> send the token until an app release adopts it") was corrected in the same
+> commit as this note.
+>
+> The original item follows, for the record.
 
 `cache['otp_verified:<mobile>']` is keyed on the phone number alone and bound to
 no session or device, because an anonymous caller has none to bind to. So
