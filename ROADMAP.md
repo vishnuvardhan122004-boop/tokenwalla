@@ -24,10 +24,26 @@ the things that can lose money or break a live booking come first.
   1.5.0 ships, leaving the update prompt pointing everyone at the version they
   already have. One Railway variable, same place as today.
   **The sequence, in order:** build 1.5.0 → submit → confirm live on Play →
-  set `APP_LATEST_VERSION=1.5.0` → let it roll out → **only then** retire the
-  OTP bearer-flag fallback in `check_otp_proof` (item 17's last piece; dropping
-  it while 1.4.0 installs survive locks those users out of register, password
-  reset and the mobile change). Docs-only change.
+  set `APP_LATEST_VERSION=1.5.0`. **Then stop.** Retiring the OTP bearer-flag
+  fallback is NOT the next step, and an earlier draft of this note wrongly
+  implied it was — caught by a Codex P1 review on PR #98 before it merged.
+  **`APP_LATEST_VERSION` is a dismissible nag, not a gate.** `settings.py`
+  says so in as many words ("below this, the app shows a *dismissible* update
+  available"), the app's own `UpdateAction` is `'block' | 'nag' | 'none'` and
+  `latest_version` only ever yields `nag`, and item 13 already records that
+  "Not now" survives a background/reopen. `APP_MIN_VERSION` is the only hard
+  block and it is deliberately empty. So a 1.4.0 user can dismiss the prompt
+  forever and keep using the app, and **"let it roll out" establishes
+  nothing** — dropping the fallback on that basis locks those still-active
+  installs out of register, password reset and the mobile change.
+  **What would actually establish it, and it is better than any store
+  statistic:** instrument the six consumers to count calls arriving WITHOUT an
+  `otp_token`, since that is the direct measure of who is still on the old
+  path — a store version histogram only tells you what is installed, not what
+  is calling. Retire the fallback when that count has been zero across a
+  meaningful window, or accept the cost of setting `APP_MIN_VERSION`
+  deliberately. That instrumentation is a real code task and item 17's actual
+  next step. Docs-only change.
 - **Previously:** 2026-09-17 — **items 16 and 13 both CLOSED by two Railway
   variables Vishnu set, each verified against the live deployment rather than
   assumed.** **Item 16 (🔴, the security one):** `NUM_PROXIES=2` is set, and
@@ -68,9 +84,10 @@ the things that can lose money or break a live booking come first.
   still rides the fallback. Also corrected the same stale claim where it does
   real damage — the comment block in `users/auth_views.py` telling a future
   reader the app "can't send the token until an app release adopts it." **Do not
-  retire the fallback until the new build has rolled out** (that is the breaking
-  step; item 13's update prompt is what nudges stragglers, which is why 13 is
-  worth doing first). Docs + comment only, zero logic touched.
+  retire the fallback until adoption is measured** — see the correction in the
+  entry above and in item 17: shipping a build and switching on the update
+  prompt does not establish that legacy installs are gone, because the prompt
+  is dismissible. Docs + comment only, zero logic touched.
 - **Previously:** 2026-09-16 — **item 23 CLOSED — merged as PR #92 + PR
   #93, both live on `main` (`7bffcc4`).** Admin bookings-by-location report
   + hospital auto-close-stale-bookings.
@@ -1101,10 +1118,13 @@ how you lose a build. Do it in the release **after** 1.2.0.
 > background/reopen, so the mechanism is proven; only this particular
 > value has not been seen driving it.
 >
-> **This also feeds item 17.** The update prompt is what pulls stragglers
-> onto a new build, so it is the lever that eventually makes retiring the
-> OTP bearer-flag fallback safe — see item 17 for why that must wait for
-> the next release to roll out.
+> **This helps item 17 but does not unblock it** (corrected 2026-09-17,
+> Codex P1 on PR #98). The prompt nudges people onto a new build, but it is
+> **dismissible** — it cannot establish that the old build is gone, and it
+> must not be read as the condition for retiring the OTP bearer-flag
+> fallback. `APP_MIN_VERSION` is the only hard block and is deliberately
+> empty. See item 17: the real gate is measuring calls that still arrive
+> without an `otp_token`, not the nag being switched on.
 >
 > The original item follows, for the record.
 
@@ -2324,9 +2344,25 @@ the raw header is deliberately not returned.
 > **Do NOT retire the fallback yet.** That is the genuinely breaking step, and
 > doing it before the new build has rolled out locks every un-updated 1.4.0
 > install out of register, reset-password and the mobile change. Sequence it:
-> ship the build → let it roll out (item 13's update prompt is what nudges
-> stragglers, and is the reason 13 is worth doing before this) → only then drop
-> the legacy branch from `check_otp_proof`.
+> ship the build → then **measure adoption before dropping anything**.
+>
+> ⚠️ **Corrected 2026-09-17 (Codex P1 on PR #98).** An earlier version of this
+> line said "let it roll out … then drop the legacy branch," treating item 13's
+> update prompt as a migration guarantee. It is not one: `APP_LATEST_VERSION`
+> drives a **dismissible** nag (`settings.py`'s own words; the app's
+> `UpdateAction` is `'block' | 'nag' | 'none'` and this path only ever yields
+> `nag`), and item 13 records that "Not now" survives a background/reopen.
+> `APP_MIN_VERSION` is the only hard block and is deliberately empty. So a
+> 1.4.0 user can dismiss forever and keep using the app, and a release being
+> "rolled out" says nothing about who is still calling the old path.
+>
+> **The gate that actually works:** instrument the six consumers to count calls
+> arriving WITHOUT an `otp_token`. That measures who is still on the legacy
+> path directly, which a store version histogram cannot — it tells you what is
+> installed, not what is calling. Retire the fallback once that count has held
+> at zero across a meaningful window, or set `APP_MIN_VERSION` deliberately and
+> accept that it locks out anyone below it. That instrumentation is this item's
+> real next step.
 >
 > The stale claim in `users/auth_views.py`'s own comment block ("the app … can't
 > send the token until an app release adopts it") was corrected in the same
