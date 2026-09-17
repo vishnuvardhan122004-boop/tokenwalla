@@ -7,7 +7,68 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-09 — **item 20 closed: `MyBookingsView`
+- **Last updated:** 2026-09-17 — **item 17 was far more done than this file
+  said: the OTP nonce is live on the backend, the website AND the app's source;
+  only an app release is left.** A `/start` pass walked `## Now` top to bottom,
+  found everything above 17 either closed or explicitly Vishnu-only (4c, 6, 7,
+  9, 13, 14/14b/14c, 16 each say so in their own text), and picked 17 — whose
+  text still described the fix as unstarted and "breaking." It isn't: **PR #84**
+  (`58b2847`, 2026-09-10) shipped it as an **optional** `otp_token` nonce from
+  `/auth/otp/verify/`, so it needed no endpoint version and no flag day —
+  senders get the race closed, non-senders fall back to the old phone-keyed flag
+  exactly as before. Read the code in **both** repos rather than trusting this
+  file: the website sends it on all four of its consumers, and **the app's
+  `main` already sends it on all six** (`register.tsx`,
+  `forgot-password.tsx`, `edit-profile.tsx`, `Huser.tsx`, `Hforgotpassword.tsx`,
+  `(hospital)/profile.tsx`). **What's genuinely left is a release, not code:**
+  the last store build is v1.4.0 / versionCode 40 (2026-08-29), which predates
+  the app-side change, so no installed phone runs it and every live app call
+  still rides the fallback. Also corrected the same stale claim where it does
+  real damage — the comment block in `users/auth_views.py` telling a future
+  reader the app "can't send the token until an app release adopts it." **Do not
+  retire the fallback until the new build has rolled out** (that is the breaking
+  step; item 13's update prompt is what nudges stragglers, which is why 13 is
+  worth doing first). Docs + comment only, zero logic touched.
+- **Previously:** 2026-09-16 — **item 23 CLOSED — merged as PR #92 + PR
+  #93, both live on `main` (`7bffcc4`).** Admin bookings-by-location report
+  + hospital auto-close-stale-bookings.
+  `AdminReportsView` gains an additive `by_location` breakdown (bookings
+  ranked by city). The stale-booking sweep is **two separate commands on two
+  separate schedules**, split mid-session on Vishnu's correction:
+  `close_stale_bookings` (every ~10 min, riding the existing reminders cron)
+  auto-completes a called-in booking 2h after it was called;
+  `mark_daily_no_shows` (same cron, but its own `date__lt=today` filter
+  makes it act once-daily regardless) auto-no-shows a `CONFIRMED` booking
+  never called once its whole day has ended — not a rolling 2h clock during
+  the day, since a delayed doctor can leave someone genuinely still waiting
+  near 2h with nobody at fault. Design decisions confirmed with Vishnu
+  before and during the session, since this touches the exact statuses
+  `run_daily_payouts` watches. 574 backend tests (2 skipped, was 556), 61
+  frontend unchanged. Full detail in item 23. **Follow-up PR #93, merged,
+  closed the cron gap with ZERO Railway dashboard step.** A bot review
+  found neither new command had any cron wiring in the repo; the first fix
+  (two new `railway.*.cron.json` files, each meant for its own new service)
+  was itself wrong — a *second* bot pass on #93 caught it, citing this
+  repo's own `send_pass_expiry_reminders.py`: Railway closed Config-as-Code
+  to new services on 2026-08-28, so a freshly-created service can never be
+  pointed at a config file at all. Corrected by riding both commands on the
+  **existing** `railway.cron.json` reminders cron instead (same precedent
+  `send_pass_expiry_reminders` already set) — `close_stale_bookings` and
+  `mark_daily_no_shows` were already running in production the moment #93
+  merged and deployed; nothing left for Vishnu to configure. **Also a
+  process note:** #92 squash-merged seconds before the first fix could push,
+  orphaning that commit; restarted the branch per this file's own
+  merged-PR procedure, and when the production guard correctly blocked
+  force-pushing the rebuilt branch back under its old name, the single
+  carried-forward commit went to a new branch
+  (`claude/railway-cron-config-followup`) instead — a plain push, nothing
+  forced, nothing lost. Also worth knowing: three small
+  unrelated fixes landed on `main` on
+  2026-09-11 (`#89`/`#90`/`#91` — scan fee labelling, dev-server Cloudinary/
+  WhatsApp safety, orphaned hospital image cleanup) that never got written up
+  here; not this session's work, flagged so nobody assumes `main` stood
+  still since item 20.
+- **Previously:** 2026-09-09 — **item 20 closed: `MyBookingsView`
   pagination shipped opt-in, so the app needs zero changes.** New
   `OptionalPagination` only activates when a caller sends `?page=`; grepped
   both this repo and `tokenwalla.app` and confirmed every existing caller —
@@ -2107,7 +2168,48 @@ the raw header is deliberately not returned.
 
 ---
 
-### 17. `otp_verified` is a bearer flag, and the real fix is breaking 🟡 — mitigated 2026-09-04
+### 17. `otp_verified` is a bearer flag, and the real fix is breaking 🟢 — nonce SHIPPED (backend + web + app source); only an app release is left — 2026-09-17
+
+> ✅ **Corrected 2026-09-17: this item's own text was stale and was under-selling
+> how done it is.** It still read "the real fix is breaking … not a quiet
+> server-side edit," describing work as unstarted that has in fact shipped on
+> three of four surfaces. Checked by reading the code in both repos, not by
+> trusting this file.
+>
+> **What actually happened:** the nonce shipped as **PR #84** (`58b2847`,
+> 2026-09-10) and dodged the breaking-change problem entirely by being
+> **optional**. `/auth/otp/verify/` now also returns a single-use
+> `otp_token` (`issue_otp_token`, `users/auth_views.py`); `check_otp_proof(mobile,
+> token)` requires it to match when a caller sends one, and falls back to the
+> legacy phone-keyed flag when nobody does. A caller that sends the nonce gets
+> the race closed; a caller that doesn't is exactly as safe (or unsafe) as
+> before. No endpoint version, no flag day.
+>
+> | Surface | Sends `otp_token`? | Race closed? |
+> |---|---|---|
+> | Backend (`/otp/verify/` + all 6 consumers) | issues & accepts it | ✅ live |
+> | Website (`ForgotPassword.js`, `profilecreate.js`, `Usercreate.js`, `Hprofile.js`) | yes | ✅ live |
+> | App **source** (`register.tsx`, `forgot-password.tsx`, `edit-profile.tsx`, `Huser.tsx`, `Hforgotpassword.tsx`, `(hospital)/profile.tsx`) | **yes — all 6** | ⏳ not on phones |
+> | App **installs** | no — last store build predates it | 🔴 still on the fallback |
+>
+> **The one thing actually left is a RELEASE, not code.** The last build shipped
+> to Play is **v1.4.0 / versionCode 40, cut 2026-08-29**; the app-side nonce
+> landed after it. So the app's `main` is correct and no phone is running it —
+> every live app call still rides the bearer-flag fallback. A session cannot
+> close this: it needs an EAS build + store review, which is Vishnu's.
+>
+> **Do NOT retire the fallback yet.** That is the genuinely breaking step, and
+> doing it before the new build has rolled out locks every un-updated 1.4.0
+> install out of register, reset-password and the mobile change. Sequence it:
+> ship the build → let it roll out (item 13's update prompt is what nudges
+> stragglers, and is the reason 13 is worth doing before this) → only then drop
+> the legacy branch from `check_otp_proof`.
+>
+> The stale claim in `users/auth_views.py`'s own comment block ("the app … can't
+> send the token until an app release adopts it") was corrected in the same
+> commit as this note.
+>
+> The original item follows, for the record.
 
 `cache['otp_verified:<mobile>']` is keyed on the phone number alone and bound to
 no session or device, because an anonymous caller has none to bind to. So
@@ -2399,6 +2501,150 @@ testing either needs `--params` spelled out by hand.
 
 ---
 
+### ~~23. Admin bookings-by-location + hospital auto-close-stale-bookings~~ ✅ 2026-09-16 — merged (PR #92 + #93), live on `main`, zero follow-up steps
+
+Two independent slices, requested together in one session: an admin
+reporting question ("which area gets more tokens booked") and a hospital
+queue-hygiene question (a `CONFIRMED`/`IN_PROGRESS` booking staff forgot to
+close staying open forever). Planned with Vishnu before writing code — three
+clarifying questions asked and answered up front, because the second half
+changes when a booking reaches `COMPLETED`/`NO_SHOW`, the exact statuses
+`run_daily_payouts` watches.
+
+**1. Admin: bookings-by-location.** `AdminReportsView`
+(`backend/payments/views.py`) gains an additive `by_location` key — bookings
+grouped on `Hospital.city`, ranked by volume, each with `count` and
+`fraction` of the platform total. Computed over the *whole* table, not the
+existing 500-row `recent` slice, so a busy day at the top doesn't crowd out a
+smaller city's real share. `src/ADMIN/Reports.js` renders it as a ranked bar
+list above the existing filter toolbar. Read-only, no migration, no money
+path touched.
+
+**2. Hospital: auto-close a stale booking.** Split into **two separate
+commands on two separate schedules**, not one — the split itself is a
+correction made mid-session (see below), because the two cases are not the
+same kind of "stale":
+
+- `bookings.management.commands.close_stale_bookings` — `IN_PROGRESS` for
+  over 2h → `COMPLETED` (the patient was called in, so the visit almost
+  certainly happened — staff just never tapped Complete). Meant to run
+  frequently, every ~15 minutes, since it's about keeping the live queue
+  honest.
+- `bookings.management.commands.mark_daily_no_shows` — `CONFIRMED`, never
+  called, from a day that has **fully ended** (its `date` is before today,
+  local time) → `NO_SHOW` (mirrors `NoShowView`'s own push + WhatsApp). Meant
+  to run **once a day, shortly after midnight** — Vishnu's explicit
+  correction: a rolling "2h since the slot" clock (the first cut of this
+  item) would auto-no-show a patient a delayed doctor simply hasn't reached
+  yet, which is not the patient's or staff's fault. "Never showed" is only
+  unambiguous once the whole clinic day is over, so this waits for the day
+  to actually end rather than guessing mid-day.
+- **`ON_HOLD` is deliberately untouched by both** — that's an explicit staff
+  action (`HoldBookingView`), not a forgotten booking.
+- New nullable `Booking.called_at` (migration `0014`, additive) is the
+  discriminator both commands key on — "still queued" vs. "called but not
+  closed out." Stamped by `CallNextView` and the QR-scan endpoint, the only
+  two places a booking becomes `IN_PROGRESS`. `_claim_transition` grew an
+  `**extra_fields` parameter so this rides the same atomic conditional
+  `UPDATE` rather than a separate unlocked write.
+- Both commands use the same "conditional UPDATE wins" idiom as
+  `_claim_transition` (bulk update for the `IN_PROGRESS` side, per-row
+  conditional update for the `CONFIRMED` side), so a live staff action on the
+  same booking always beats the sweep, matching CLAUDE.md's own idempotency
+  rule for money-adjacent writes.
+
+**Design decisions Vishnu made explicitly before code was written** (not
+guessed), the second one corrected mid-session once the first cut's flaw
+surfaced: the completion timer applies to `IN_PROGRESS` only, not `CONFIRMED`
+(a doctor running late can leave someone waiting near 2h without it being
+staff's fault); a never-called `CONFIRMED` booking becomes `NO_SHOW`, not
+`COMPLETED` (no payout implied for a visit nobody confirmed happened); the
+no-show sweep runs once daily after midnight, on the calendar day ending, not
+on a rolling few-hour clock during the day; and both ship as real crons, not
+a lazy dashboard-load check.
+
+**Explicitly NOT a payout automation.** `NO_SHOW` already feeds
+`run_daily_payouts` today (pre-existing, documented behaviour — a `FULL`
+provider keeps the held fee on a no-show). This item only lets a booking
+*reach* `COMPLETED`/`NO_SHOW` without a staff tap; marking a doctor paid is
+still 100% manual via the admin payouts page, untouched.
+
+**One-time effect worth watching the first time `mark_daily_no_shows` runs**:
+any `CONFIRMED` booking from the last 7 days that was never called will flip
+to `NO_SHOW` (with the same notification `NoShowView` already sends) the
+first midnight after this deploys — a catch-up, not a bug, but a real
+patient could get a "marked no-show" push for a booking they'd forgotten
+about.
+
+**Gate: SHIP.** 574 backend tests (2 skipped, was 556 — 18 new:
+`bookings/tests_close_stale_bookings.py`,
+`bookings/tests_mark_daily_no_shows.py`, `payments/tests_admin_reports.py`),
+61 frontend unchanged, `makemigrations --check` clean, money-path suites
+(`tests_payments`, `tests_integration`, `tests_pass`) re-run green, `-v 2`
+run has zero `graph.facebook.com` lines. No `/api/payment/*` or
+`/api/bookings/*` contract change — `by_location` is additive and
+admin-only (the mobile app never calls it), and `called_at` is DB-only, not
+exposed on any serializer.
+
+**Merged ✅ 2026-09-16, as PR #92** (squash-merged by Vishnu, `main` tip
+`97041e2`).
+
+**Follow-up, PR #93, merged ✅ — two rounds, second one actually closes it.**
+
+*Round 1 (wrong):* a bot review on #92 (`chatgpt-codex-connector`) correctly
+flagged that neither command had any cron wiring at all in the repo — "fixed"
+by adding `backend/railway.close-stale-bookings.cron.json` (`*/15 * * * *`)
+and `backend/railway.daily-no-shows.cron.json` (`45 18 * * *` UTC = 00:15
+IST), matching the *shape* the two existing crons use. Pushed without
+checking whether that shape still works for a brand-new service.
+
+*Round 2 (the actual fix):* a second bot pass on the round-1 commit caught
+what a repo grep would have: **Railway closed Config-as-Code to new services
+on 2026-08-28** (`ROADMAP.md` item 14b, and `send_pass_expiry_reminders.py`'s
+own docstring, both already said so). Neither new `railway.*.cron.json` file
+could ever be attached to a service, because the dashboard has no "point a
+new service at this file" option any more — that door closed three weeks
+before this session. The two files were deleted; both commands now ride the
+**existing** `railway.cron.json` reminders cron instead, exactly the
+precedent `send_pass_expiry_reminders` already set for the identical reason:
+`startCommand` is now `send_appointment_reminders; send_pass_expiry_reminders;
+close_stale_bookings; mark_daily_no_shows`, still `*/10 * * * *`. Every 10
+minutes instead of the original ~15/once-daily design is harmless either
+way — `close_stale_bookings`'s 2h cutoff only gets *more* responsive, and
+`mark_daily_no_shows`'s own `date__lt=today` filter is what makes it
+"once-effective-per-day" regardless of how often the command itself runs; it
+now catches the midnight rollover within 10 minutes rather than at a fixed
+00:15 offset.
+
+**Net result: zero Railway dashboard steps left.** Both commands are already
+running in production — #93 merged and deployed at `7bffcc4` — no new
+service, no manual cron config, nothing for anyone to remember to do.
+**Lesson worth
+keeping:** the round-1 mistake was buildable in five seconds with a repo
+grep (`grep -rn "closed config-as-code" .`) that would have surfaced
+`send_pass_expiry_reminders.py`'s own docstring before writing any new
+config file — check existing precedent for "how does this repo already
+solve the exact same problem" before inventing a new mechanism, especially
+for infrastructure a session can't directly verify (no Railway dashboard
+access to confirm a new service actually accepts a config file).
+
+**Process note worth keeping:** #92 was squash-merged 11 seconds after the
+bot review landed — before the fix above could be pushed to that branch, so
+it landed on now-orphaned history instead. Restarted per this file's own
+merged-PR procedure (`checkout -B <branch> origin/main`, cherry-pick the one
+unmerged commit) — but pushing the rebuilt branch back under the **same**
+name is a force-push over now-diverged remote history, and the production
+guard correctly blocked it (`git push --force-with-lease` still trips the
+"force-push rewrites shared history" rule; it does not special-case an
+already-merged branch). Rather than fight the guard, pushed the single
+carried-forward commit to a **new** branch name instead
+(`claude/railway-cron-config-followup`) and opened it as its own PR — a
+plain, non-force push, and the honest shape of what it is: a follow-up, not
+a continuation of merged history. The old branch and its orphaned commit
+were left alone (nothing force-pushed, nothing deleted).
+
+---
+
 ## Next
 
 - **`gh` had auth in a session for the first time, 2026-09-09 — confirm it
@@ -2545,15 +2791,40 @@ testing either needs `--params` spelled out by hand.
   (`users/auth_views.py:748`, `create_admin.py:34`). Raising it is one settings
   line + three ad-hoc checks + three frontend rules, but it is Vishnu's call
   about receptionist friction, so a session should not just pick 8.
-- **The web signup password rule is stricter than the server's, and wrong** —
-  new 2026-09-06, found while verifying the above. `src/componets/profilecreate.js:34-35`
-  validates against `/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/` — an
-  **alphanumeric-only** character class, so a password containing a symbol is
-  rejected in the browser while the backend accepts it happily. `Test@1234` —
-  the very example item 4d cites as passing the server — cannot be typed into
-  the web signup form. The two rules disagree and the client is both the
-  stricter and the worse of the pair, since it pushes users off symbols. One
-  regex, its own commit; not folded into a floor change.
+- ~~**The web signup password rule is stricter than the server's, and
+  wrong**~~ ✅ closed, date unrecorded (found already fixed 2026-09-16) — this
+  bullet itself had gone stale. `profilecreate.js`'s regex already allows
+  symbols (`.{6,}` with letter+digit lookaheads, not the old alphanumeric-only
+  class), with its own comment and regression test naming this exact
+  `Test@1234` example. Confirmed on `main` (commit `b2d5dbe`) before doing
+  anything, so nothing was re-fixed. Checking led to a **real, still-open**
+  sibling bug — see the new bullet below.
+- **The signup form (web AND app) hides the server's real password-rejection
+  reason** — found 2026-09-16, fixed same day, pushed as
+  `fix/register-password-error-surfacing` in both repos, **opened as web
+  PR #94 and app PR #27**, neither merged yet — merging is Vishnu's, and for
+  the app an EAS build + store review still follows before any patient has
+  it.
+  `RegisterSerializer.validate()` raises a field-keyed DRF error
+  (`{password: [...]}`) for a `CommonPasswordValidator` /
+  `NumericPasswordValidator` / similarity-to-mobile rejection — not the
+  `{message}` shape every *other* auth endpoint on this site returns. Neither
+  the website's `profilecreate.js` catch block nor the app's
+  `app/(auth)/register.tsx` ever checked for a `password` (or, on the app
+  side, `mobile`) field key, so a rejected password fell straight to a
+  generic "Registration failed. Try again." even though the server had
+  already computed and returned the actual reason. Fixed by reading the
+  field-keyed error in both catch blocks (web already had this pattern for
+  `mobile`, just never extended it to `password`); also added one cheap,
+  exact client-side check ahead of the round trip — reject an all-numeric
+  password, matching `NumericPasswordValidator` exactly — on both platforms.
+  Deliberately did NOT try to duplicate `CommonPasswordValidator` (a large
+  word list) or the similarity check client-side; the message fix means a
+  round trip for those now ends with the real reason instead of a guess.
+  Web: 63 tests (was 61, +2), build clean. App: `tsc --noEmit` and lint
+  clean, 174/174 tests unchanged (no screen-test infra exists for this file —
+  see the "No component or screen tests in the app" bullet below, a
+  pre-existing gap not introduced here). Backend untouched on both.
 - **Branch cleanup** — 12 local branches, several long dead
 
 Resolved and deliberately removed, so they don't get re-added:

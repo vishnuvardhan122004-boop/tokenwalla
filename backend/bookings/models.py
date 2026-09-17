@@ -108,6 +108,12 @@ class Booking(models.Model):
     booked_for_name   = models.CharField(max_length=100, blank=True)
     booked_for_mobile = models.CharField(max_length=15,  blank=True)
     created      = models.DateTimeField(auto_now_add=True)
+    # Set the moment a booking moves CONFIRMED -> IN_PROGRESS (CallNextView, the
+    # QR-scan endpoint). NULL means "never called" — that is what lets
+    # close_stale_bookings tell a patient still waiting in queue apart from one
+    # already in with the doctor, since both can otherwise be CONFIRMED /
+    # IN_PROGRESS for hours on a delayed day.
+    called_at    = models.DateTimeField(null=True, blank=True)
 
     @property
     def patient_display_name(self):

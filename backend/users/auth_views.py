@@ -77,15 +77,22 @@ OTP_ATTEMPT_WINDOW = 300   # seconds a wrong-guess count stays alive
 #
 # The real fix (2026-09-10): /otp/verify/ also issues a single-use otp_token
 # (below). It is OPTIONAL on all 6 consumers — register, reset-password and
-# the mobile change, patient AND hospital. The mobile app calls all 6 too
-# (app/(auth)/*, app/(patient)/edit-profile.tsx, app/(hospital)/Huser.tsx,
-# Hforgotpassword.tsx, profile.tsx — verified against that repo, not assumed)
-# and can't send the token until an app release adopts it, so nothing may
-# become mandatory yet; every consumer keeps falling back to the bearer flag
-# above, unchanged. The website (ForgotPassword.js, profilecreate.js,
-# Usercreate.js, Hprofile.js) already sends it, which closes the race for
-# every web-originated call today. Once an app release sends it too, a later
-# change can retire the flag fallback for good.
+# the mobile change, patient AND hospital. The website (ForgotPassword.js,
+# profilecreate.js, Usercreate.js, Hprofile.js) already sends it, closing the
+# race for every web-originated call today.
+#
+# Corrected 2026-09-17: the mobile app's SOURCE also already sends it, on all
+# 6 call sites (app/(auth)/register.tsx, app/(auth)/forgot-password.tsx,
+# app/(patient)/edit-profile.tsx, app/(hospital)/Huser.tsx,
+# Hforgotpassword.tsx, (hospital)/profile.tsx — read directly in that repo,
+# not assumed) — this comment previously said the app "can't send the token
+# until an app release adopts it," which was true when written and is no
+# longer true of the app's `main`. What's still true: the last build actually
+# shipped to the Play Store (v1.4.0 / versionCode 40, cut 2026-08-29) predates
+# this change, so no installed phone runs it yet — every live app call still
+# rides the bearer-flag fallback below until a new build ships. Nothing may
+# become mandatory until that rollout is confirmed; retiring the fallback
+# before then would lock out every un-updated install still on 1.4.0.
 OTP_VERIFIED_WINDOW = 180
 
 

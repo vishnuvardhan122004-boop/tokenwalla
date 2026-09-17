@@ -86,7 +86,7 @@ class Command(BaseCommand):
             f'Sending "{template}" (lang={getattr(settings, "WHATSAPP_TEMPLATE_LANG", "en")}) '
             f'to ...{mobile[-4:]} with {len(params)} param(s)…'
         )
-        result = send_template(to_mobile=mobile, template_name=template, params=params)
+        result = send_template(to_mobile=mobile, template_name=template, params=params, force=True)
 
         if result['success']:
             self.stdout.write(self.style.SUCCESS(f'✅ Sent. message_id={result["message_id"]}'))

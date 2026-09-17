@@ -476,10 +476,16 @@ class HospitalDetailView(APIView):
             if isinstance(svc, list):
                 hospital.services = [str(s).strip() for s in svc if str(s).strip()]
 
-        # Banner / logo image uploads (multipart)
+        # Banner / logo image uploads (multipart). Drop the old blob before
+        # pointing the field at the new one, or it just leaks in storage
+        # forever — same fix as HospitalPhotoDeleteView above.
         if 'image' in request.FILES:
+            if hospital.image:
+                hospital.image.delete(save=False)
             hospital.image = request.FILES['image']
         if 'logo' in request.FILES:
+            if hospital.logo:
+                hospital.logo.delete(save=False)
             hospital.logo = request.FILES['logo']
 
         raw_mobile = request.data.get('mobile')
@@ -555,7 +561,11 @@ class HospitalPhotoDeleteView(APIView):
             return Response({'message': 'Not found.'}, status=404)
         if not _is_owner_or_admin(request.user, hospital):
             return Response({'message': 'Not allowed.'}, status=403)
-        HospitalPhoto.objects.filter(pk=photo_id, hospital=hospital).delete()
+        photo = HospitalPhoto.objects.filter(pk=photo_id, hospital=hospital).first()
+        if photo:
+            if photo.image:
+                photo.image.delete(save=False)   # drop the blob too, not just the row
+            photo.delete()
         return Response({'message': 'Deleted.'})
 
 

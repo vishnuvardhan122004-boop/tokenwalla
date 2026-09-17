@@ -11,7 +11,7 @@ const STATUS_STYLES = {
 };
 
 const Reports = () => {
-  const [data,    setData]    = useState({ total: 0, completed: 0, waiting: 0, bookings: [] });
+  const [data,    setData]    = useState({ total: 0, completed: 0, waiting: 0, by_location: [], bookings: [] });
   const [loading, setLoading] = useState(false);
   const [filter,  setFilter]  = useState('all');
   const [search,  setSearch]  = useState('');
@@ -21,12 +21,13 @@ const Reports = () => {
     setLoading(true);
     API.get('/payment/reports/')
       .then(({ data: raw }) => {
-        // AdminReportsView returns flat { total, completed, waiting, bookings: [] }
+        // AdminReportsView returns flat { total, completed, waiting, by_location, bookings: [] }
         setData({
-          total:     raw.total     || 0,
-          completed: raw.completed || 0,
-          waiting:   raw.waiting   || 0,
-          bookings:  Array.isArray(raw.bookings) ? raw.bookings : [],
+          total:       raw.total       || 0,
+          completed:   raw.completed   || 0,
+          waiting:     raw.waiting     || 0,
+          by_location: Array.isArray(raw.by_location) ? raw.by_location : [],
+          bookings:    Array.isArray(raw.bookings)    ? raw.bookings    : [],
         });
       })
       .catch(() => setError('Failed to load reports.'))
@@ -80,7 +81,16 @@ const Reports = () => {
         .rp-badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 100px; font-size: 12px; font-weight: 600; border: 1px solid transparent; }
         .rp-token { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--blue-700); font-weight: 500; }
         .rp-empty { text-align: center; padding: 60px 20px; color: var(--gray-400); font-size: 14px; }
-        @media (max-width: 900px) { .rp-stats { grid-template-columns: 1fr 1fr; } }
+        .rp-loc-card { background: #fff; border: 1px solid var(--blue-100); border-radius: 16px; padding: 20px 22px; margin-bottom: 24px; }
+        .rp-loc-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 14px; }
+        .rp-loc-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+        .rp-loc-row:last-child { margin-bottom: 0; }
+        .rp-loc-city { width: 140px; flex-shrink: 0; font-size: 13px; font-weight: 500; color: var(--gray-700); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rp-loc-bar-wrap { flex: 1; background: var(--gray-100); border-radius: 6px; height: 10px; overflow: hidden; }
+        .rp-loc-bar { height: 100%; background: var(--blue-600); border-radius: 6px; transition: width 0.3s; }
+        .rp-loc-value { width: 92px; flex-shrink: 0; text-align: right; font-size: 13px; color: var(--gray-500); }
+        .rp-loc-value strong { color: var(--gray-900); font-weight: 700; }
+        @media (max-width: 900px) { .rp-stats { grid-template-columns: 1fr 1fr; } .rp-loc-city { width: 90px; } }
       `}</style>
 
       <div className="rp-header">
@@ -116,6 +126,21 @@ const Reports = () => {
           <div className="rp-stat-label">Total Revenue</div>
         </div>
       </div>
+
+      {!loading && data.by_location.length > 0 && (
+        <div className="rp-loc-card">
+          <div className="rp-loc-title"><i className="bi bi-geo-alt me-1" />Bookings by Location</div>
+          {data.by_location.map(row => (
+            <div className="rp-loc-row" key={row.city}>
+              <div className="rp-loc-city" title={row.city}>{row.city}</div>
+              <div className="rp-loc-bar-wrap">
+                <div className="rp-loc-bar" style={{ width: `${Math.round(row.fraction * 100)}%` }} />
+              </div>
+              <div className="rp-loc-value"><strong>{row.count}</strong> ({Math.round(row.fraction * 100)}%)</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="rp-toolbar">
         <div className="rp-search-wrap">

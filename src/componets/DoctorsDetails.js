@@ -233,11 +233,16 @@ export default function DoctorDetails() {
   const callNumber = hospitalInfo?.landline || doctor?.landline
                   || hospitalInfo?.mobile   || doctor?.mobile || '';
 
-  // Returns slot visual state: 'available' | 'partial' | 'full' | 'selected'
+  // Returns slot visual state: 'available' | 'partial' | 'full' | 'too-soon' | 'selected'
+  // The backend's `full` flag covers two different reasons (genuinely at
+  // capacity, or inside the booking cutoff) — check `too_soon` first so a
+  // slot that simply hasn't happened yet doesn't read as "Full" to the
+  // patient, matching the distinction the app already makes.
   const slotState = (slot) => {
     if (slot === selectedSlot) return 'selected';
     const info = slotAvail[slot];
     if (!info) return 'available';
+    if (info.too_soon) return 'too-soon';
     if (info.full) return 'full';
     if (info.booked > 0) return 'partial';
     return 'available';
@@ -253,6 +258,7 @@ export default function DoctorDetails() {
   const slotSubtext = (slot) => {
     const info = slotAvail[slot];
     if (!info || info.booked === 0) return null;
+    if (info.too_soon) return 'Too soon';
     if (info.full) return 'Full';
     const left = info.max - info.booked;
     return `${left} left`;
@@ -1127,14 +1133,15 @@ export default function DoctorDetails() {
                             return (
                               <button
                                 key={s}
-                                className={`dd-slot ${state}`}
+                                className={`dd-slot ${state === 'too-soon' ? 'full' : state}`}
                                 onClick={() => handleSlotClick(s)}
-                                disabled={state === 'full'}
-                                title={state === 'full' ? 'This slot is fully booked' : sub ? `${sub} slots remaining` : ''}
+                                disabled={state === 'full' || state === 'too-soon'}
+                                title={state === 'too-soon' ? 'Too close to now to book' : state === 'full' ? 'This slot is fully booked' : sub ? `${sub} slots remaining` : ''}
                               >
+                                {state === 'too-soon' && <span className="dd-slot-full-tag">Too soon</span>}
                                 {state === 'full' && <span className="dd-slot-full-tag">Full</span>}
                                 <span>{slotLabel(s)}</span>
-                                {sub && state !== 'full' && (
+                                {sub && state !== 'full' && state !== 'too-soon' && (
                                   <span className="dd-slot-sub">{sub}</span>
                                 )}
                                 {(state === 'partial' || state === 'selected' || (state === 'available' && pct > 0)) && (
@@ -1160,14 +1167,15 @@ export default function DoctorDetails() {
                             return (
                               <button
                                 key={s}
-                                className={`dd-slot ${state}`}
+                                className={`dd-slot ${state === 'too-soon' ? 'full' : state}`}
                                 onClick={() => handleSlotClick(s)}
-                                disabled={state === 'full'}
-                                title={state === 'full' ? 'This slot is fully booked' : sub ? `${sub} slots remaining` : ''}
+                                disabled={state === 'full' || state === 'too-soon'}
+                                title={state === 'too-soon' ? 'Too close to now to book' : state === 'full' ? 'This slot is fully booked' : sub ? `${sub} slots remaining` : ''}
                               >
+                                {state === 'too-soon' && <span className="dd-slot-full-tag">Too soon</span>}
                                 {state === 'full' && <span className="dd-slot-full-tag">Full</span>}
                                 <span>{slotLabel(s)}</span>
-                                {sub && state !== 'full' && (
+                                {sub && state !== 'full' && state !== 'too-soon' && (
                                   <span className="dd-slot-sub">{sub}</span>
                                 )}
                                 {(state === 'partial' || state === 'selected' || (state === 'available' && pct > 0)) && (
