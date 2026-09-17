@@ -7,7 +7,38 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-17 (session close) — **tomorrow's first move is the
+- **Last updated:** 2026-09-17 (second session) — **item 17's real next step
+  (instrument the six consumers for otp_token adoption) is written, tested,
+  and open as PR #100 — not merged.** `check_otp_proof()`
+  (`backend/users/auth_views.py`) is the one chokepoint all 6 consumers
+  already share, so this stayed a single-function change: on every fallback
+  call (no `otp_token` sent) it now bumps a per-day `RateCounter` row
+  (`otp_token_missing:<date>`), giving a real, measured answer to "is anyone
+  still on the old path" instead of inferring it from a store release date —
+  exactly what this morning's Codex-P1 correction said was missing. A 90-day
+  window keeps a day's tally alive past `run_daily_payouts`' own
+  `RateCounter.purge_expired()` sweep, long enough to actually read a trend.
+  Added a **read-only** `RateCounter` admin alongside it (add/change/delete
+  all blocked — this table also backs the OTP-attempt and `ADMIN_SETUP_KEY`
+  brute-force caps, so an editable version would let anyone with admin access
+  quietly zero out a live rate limit) so the tally can be checked without a
+  shell — nothing on this table had one before. 577 backend tests (2 skipped,
+  was 574), 3 new; 63 frontend untouched; `makemigrations --check` clean, no
+  migration, no `/api/*` contract change. **Verified PR #100's CI actually ran
+  real checks before calling it gated** — `Backend tests` and `Website tests &
+  build` both real GitHub Actions runs, not just Vercel's preview — the exact
+  failure mode this morning's top-of-**Next** entry flagged, applied rather
+  than just noted. `/ship`'s own secret-scan step tripped the documented
+  `guard-production.py` false positive on the live-key prefix (see **Next**);
+  worked around it by writing the staged diff to a scratch file and reading it
+  directly, instead of retyping the trigger string or fighting the hook.
+  **Does not close item 17** — stays 🟢: the fallback still can't be retired
+  until (a) PR #100 merges and deploys, and (b) the next app build ships and
+  the new counter reads zero across a real window. **Tomorrow's first move is
+  unchanged by this session and still the EAS build** (separate app repo,
+  Vishnu's) — this session did not touch it. See the entry below for the full
+  sequence.
+- **Previously:** 2026-09-17 (session close) — **tomorrow's first move is the
   EAS build, and three things about it were wrong or missing here.** (1) **`eas
   submit` IS configured** — `eas.json` carries a real production submit block
   (`track: production`, `releaseStatus: completed`,
@@ -2311,7 +2342,7 @@ the raw header is deliberately not returned.
 
 ---
 
-### 17. `otp_verified` is a bearer flag, and the real fix is breaking 🟢 — nonce SHIPPED (backend + web + app source); only an app release is left — 2026-09-17
+### 17. `otp_verified` is a bearer flag, and the real fix is breaking 🟢 — nonce SHIPPED; adoption metric written (PR #100, unmerged); app release still the blocker — 2026-09-17
 
 > ✅ **Corrected 2026-09-17: this item's own text was stale and was under-selling
 > how done it is.** It still read "the real fix is breaking … not a quiet
@@ -2363,6 +2394,15 @@ the raw header is deliberately not returned.
 > at zero across a meaningful window, or set `APP_MIN_VERSION` deliberately and
 > accept that it locks out anyone below it. That instrumentation is this item's
 > real next step.
+>
+> **✅ Written 2026-09-17 (second session):** that instrumentation is now code,
+> not a plan. `check_otp_proof()` bumps `RateCounter` key
+> `otp_token_missing:<date>` on every fallback call, at the one chokepoint all
+> 6 consumers already share. A read-only admin makes the tally readable
+> without a shell. 3 new tests, 577 backend total. **Not live yet** — open as
+> PR #100, unmerged. Once it ships, the actual retirement gate is watching
+> those rows read zero across a real window, after the next app build rolls
+> out — not a date on the calendar, per the correction above.
 >
 > The stale claim in `users/auth_views.py`'s own comment block ("the app … can't
 > send the token until an app release adopts it") was corrected in the same
@@ -2862,6 +2902,10 @@ were left alone (nothing force-pushed, nothing deleted).
   failing loudly. One-line fix, its own commit, never folded into a feature PR.
   **Recurred 2026-09-07** on the OTP-fix session's step-4 secret scan — 19 days
   later, still open, still a one-line fix nobody has landed on its own.
+  **Recurred again 2026-09-17** (second session, item 17's adoption-metric
+  PR) — third time now. Worked around by writing the staged diff to a file
+  and reading it directly rather than grepping, so the check still ran; the
+  underlying regex is still unfixed.
 - **The test counts in the docs are badly stale** — new 2026-08-19. `CLAUDE.md`
   said 158 backend tests and the `/ship` checklist says 99; the real numbers are
   **304 backend / 25 frontend** (250 backend before item 8). A stale baseline
