@@ -7,7 +7,28 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-17 — **item 17 was far more done than this file
+- **Last updated:** 2026-09-17 — **items 16 and 13 both CLOSED by two Railway
+  variables Vishnu set, each verified against the live deployment rather than
+  assumed.** **Item 16 (🔴, the security one):** `NUM_PROXIES=2` is set, and
+  `/health/` now returns `num_proxies: 2` with `resolved_ident` equal to the
+  caller's **own Jio mobile IP, identical across three consecutive reloads** —
+  the exact success condition `_proxy_probe`'s docstring defines, and the direct
+  inverse of the 2026-09-09 failure (three *different* idents in an unrelated
+  Singapore hosting ASN). Every per-IP control now keys on the real caller
+  again: `AnonRateThrottle`, the OTP send burst guard, the 10/hour
+  `ADMIN_SETUP_KEY` brute-force guard and the 2000/day paid-SMS ceiling.
+  **Item 13:** `APP_LATEST_VERSION=1.4.0` is set and `GET /api/app-version/`
+  serves `latest_version: "1.4.0"` where it served `""` since 2026-08-17, so
+  1.3.x installs will now see the update prompt; `min_version` stays blank
+  deliberately (a hard gate, not a nag). **The distinction worth keeping:**
+  `num_proxies: 2` echoed back proves only that the variable took — it does not
+  prove 2 is the *right* number, since that depends on the real proxy topology
+  and cannot be derived from code. `resolved_ident` is the only thing that
+  settles it; re-run the three-reload check if Railway ever changes its edge.
+  Also landed today: **PR #86**, correcting the hospital dashboard's "Pending
+  Payout" caption (and a second inaccuracy the fix itself introduced — see
+  below). Docs-only change; no code touched.
+- **Previously:** 2026-09-17 — **item 17 was far more done than this file
   said: the OTP nonce is live on the backend, the website AND the app's source;
   only an app release is left.** A `/start` pass walked `## Now` top to bottom,
   found everything above 17 either closed or explicitly Vishnu-only (4c, 6, 7,
@@ -1019,7 +1040,36 @@ crashes arrive minified). It needs `SENTRY_AUTH_TOKEN` in EAS secrets *before*
 the flag comes off, and changing build config immediately before a release is
 how you lose a build. Do it in the release **after** 1.2.0.
 
-### 13. Turn the update prompt back on 🟡 — newly actionable 2026-08-29
+### ~~13. Turn the update prompt back on~~ ✅ 2026-09-17 — `APP_LATEST_VERSION=1.4.0` is live
+
+> ✅ **Closed 2026-09-17.** Vishnu set `APP_LATEST_VERSION` on Railway, and
+> the public endpoint now serves it: `GET /api/app-version/` returns
+> `latest_version: "1.4.0"`, where it had served `""` since it was
+> deliberately blanked on 2026-08-17.
+>
+> That endpoint response **is** the proof for this item — it is what the
+> app compares against at launch, so a correct value there is the whole
+> mechanism. Every 1.3.x install will now see the update prompt.
+>
+> **`min_version` stays blank, deliberately** — checked, and it must stay
+> that way. It is a hard gate rather than a nag: setting it blocks every
+> install below it with no way out, which is a decision about locking real
+> patients out of a working app, not a rollout convenience.
+>
+> **Still unverified, and it is polish rather than a gate:** nobody has
+> watched the modal actually fire on a 1.3.x handset. The prompt itself
+> was observed working on 2026-08-17 and "Not now" survived a
+> background/reopen, so the mechanism is proven; only this particular
+> value has not been seen driving it.
+>
+> **This also feeds item 17.** The update prompt is what pulls stragglers
+> onto a new build, so it is the lever that eventually makes retiring the
+> OTP bearer-flag fallback safe — see item 17 for why that must wait for
+> the next release to roll out.
+>
+> The original item follows, for the record.
+
+### 13-history. Turn the update prompt back on 🟡 — newly actionable 2026-08-29
 
 `/api/app-version/` serves blank `min_version` and `latest_version` today:
 
@@ -2118,7 +2168,41 @@ fix.
 
 ---
 
-### 16. `NUM_PROXIES=1` is wrong 🔴 — confirmed 2026-09-09, needs `NUM_PROXIES=2` on Railway
+### ~~16. `NUM_PROXIES=1` is wrong~~ ✅ 2026-09-17 — FIXED and verified on the live deployment
+
+> ✅ **Closed 2026-09-17.** Vishnu set `NUM_PROXIES=2` on the Railway
+> `tokenwalla` service, and it is verified by the probe this item was
+> written around rather than by the variable being present.
+>
+> **What the live `/health/` now returns:** `num_proxies: 2`, and
+> `resolved_ident` is the caller's **own Jio mobile IP, identical across
+> three consecutive reloads**. That is the exact success condition in
+> `_proxy_probe`'s docstring (`backend/tokenwalla/urls.py:41`) — "if it is
+> that phone's public address, NUM_PROXIES is right."
+>
+> Compare the 2026-09-09 failure it replaces: three reloads from one stable
+> caller returned **three different** `resolved_ident` values, all in a
+> Singapore hosting ASN unrelated to the caller. Stable-and-correct is the
+> direct inverse, so this is a real fix and not a coincidence.
+>
+> **What this restores.** Every per-IP control now keys on the actual
+> caller instead of a rotating internal Railway edge address:
+> `AnonRateThrottle`, the OTP send burst guard, the 10/hour
+> `ADMIN_SETUP_KEY` brute-force guard, and the 2000/day paid-SMS ceiling.
+> These are security controls, and for the whole period this item was open
+> they were bucketing unrelated users together and splitting one user
+> across buckets.
+>
+> **Worth keeping:** `num_proxies: 2` echoed back only proves the variable
+> took — it does **not** prove 2 is the right number, because the right
+> number depends on how many proxies actually sit in front of the service
+> and cannot be derived from code. `resolved_ident` is the only thing that
+> settles it. If Railway ever changes its edge topology, re-run the same
+> three-reload check rather than assuming the setting still fits.
+>
+> The original item follows, for the record.
+
+### 16-history. `NUM_PROXIES=1` is wrong 🔴 — confirmed 2026-09-09, needed `NUM_PROXIES=2` on Railway
 
 **One line decides whether every per-IP limit in the product works.** It was
 never set; DRF's default is `None`, which makes `BaseThrottle.get_ident` return
