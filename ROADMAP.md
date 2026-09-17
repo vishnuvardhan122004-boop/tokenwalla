@@ -7,7 +7,28 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-17 — **items 16 and 13 both CLOSED by two Railway
+- **Last updated:** 2026-09-17 (session close) — **tomorrow's first move is the
+  EAS build, and three things about it were wrong or missing here.** (1) **`eas
+  submit` IS configured** — `eas.json` carries a real production submit block
+  (`track: production`, `releaseStatus: completed`,
+  `serviceAccountKeyPath: ./play-service-account.json`), so the next release
+  needs no manual Play Console upload; this file claimed the opposite in four
+  places. **Precondition:** `play-service-account.json` is gitignored
+  (`.gitignore:61`) and lives only on the build machine — confirm it is there
+  *before* starting a build, not after. (2) **The app is already at 1.5.0** in
+  both `app.json` and `package.json` (store has 1.4.0), and
+  `appVersionSource: remote` + `autoIncrement` moves versionCode 40 → 41 by
+  itself, so nothing needs editing first. (3) **`APP_LATEST_VERSION` will need
+  updating again the moment 1.5.0 is live** — it was set to `1.4.0` today, which
+  is correct for what is on the store right now and becomes stale the instant
+  1.5.0 ships, leaving the update prompt pointing everyone at the version they
+  already have. One Railway variable, same place as today.
+  **The sequence, in order:** build 1.5.0 → submit → confirm live on Play →
+  set `APP_LATEST_VERSION=1.5.0` → let it roll out → **only then** retire the
+  OTP bearer-flag fallback in `check_otp_proof` (item 17's last piece; dropping
+  it while 1.4.0 installs survive locks those users out of register, password
+  reset and the mobile change). Docs-only change.
+- **Previously:** 2026-09-17 — **items 16 and 13 both CLOSED by two Railway
   variables Vishnu set, each verified against the live deployment rather than
   assumed.** **Item 16 (🔴, the security one):** `NUM_PROXIES=2` is set, and
   `/health/` now returns `num_proxies: 2` with `resolved_ident` equal to the
@@ -841,6 +862,24 @@ run on a device** — worth forcing one crash on a preview build before trusting
 it in production.
 
 `eas submit` is still unconfigured, so the AAB goes to Play Console **by hand**.
+
+> ⚠️ **Corrected 2026-09-17 — `eas submit` IS configured now, and this line
+> (plus the two later repeats of it in this item, and the bullet that was in
+> "Next") is stale.** `eas.json` carries a real production submit block:
+> `track: production`, `releaseStatus: completed`,
+> `serviceAccountKeyPath: ./play-service-account.json`. So the next release
+> does **not** need a manual Play Console upload — don't spend the time on one
+> out of habit.
+>
+> **The catch, and it is the part that will bite:** `play-service-account.json`
+> is gitignored (`.gitignore:61`) and is not in the repo, which is correct for
+> a credential but means `eas submit` only works if that file is actually
+> present on the build machine. Check for it **before** starting a build, not
+> after — otherwise you discover it at the moment you wanted to ship, and fall
+> back to the manual upload anyway.
+>
+> Unchanged and still true: there is no iOS build profile, so this is
+> Android-only in practice.
 
 The original gate run follows, with findings 1 and 2 struck.
 
@@ -2857,10 +2896,19 @@ were left alone (nothing force-pushed, nothing deleted).
   three EAS profiles, so production crashes arrive minified and unsymbolicated.
   Correct while there is no `SENTRY_AUTH_TOKEN`; turn it back on for production
   once that is in EAS secrets.
-- **`eas submit` is unconfigured** — `"submit": {"production": {}}` is empty: no
-  service-account key, no track. And there is no iOS build profile at all
-  (production sets only `android.buildType`), so this is Android-only in
-  practice despite the `ios/` directory.
+- ~~**`eas submit` is unconfigured**~~ ✅ **closed 2026-09-17 — it is configured;
+  this bullet had gone stale.** `eas.json`'s production submit block is real
+  now: `track: production`, `releaseStatus: completed`,
+  `serviceAccountKeyPath: ./play-service-account.json` — not the empty
+  `"submit": {"production": {}}` this bullet described. A release no longer
+  needs a manual Play Console upload. **One precondition, easy to trip over:**
+  `play-service-account.json` is gitignored (`.gitignore:61`) and lives only on
+  the build machine, so confirm it is present *before* kicking off a build.
+  Found while prepping the 1.5.0 build; item 5b's runbook carries the same
+  correction inline, since that is where someone actually reads it.
+  **Still true:** there is no iOS build profile at all (production sets only
+  `android.buildType`), so this is Android-only in practice despite the `ios/`
+  directory.
 - **No component or screen tests in the app** — all 118 are pure logic. Nothing
   renders a screen; there is no `@testing-library/react-native`. This is why the
   `useAndroidBack` hook shipped without one.
