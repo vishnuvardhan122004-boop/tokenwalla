@@ -5,6 +5,7 @@ import { useVisiblePolling } from '../services/useVisiblePolling';
 import { downloadBookingTicket } from '../services/downloadTicket';
 import { downloadReport as fetchReportFile } from '../services/downloadReport';
 import BookingQR from './BookingQR';
+import ReceiptModal from './ReceiptModal';
 import { providerLabel } from '../services/providerLabel';
 
 const STATUS_MAP = {
@@ -146,6 +147,7 @@ export default function MyBookings() {
   const [reports,           setReports]           = useState({});
   const [downloading,       setDownloading]       = useState(null);
   const [downloadingId,     setDownloadingId]     = useState(null);
+  const [receiptBooking,    setReceiptBooking]    = useState(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -522,6 +524,8 @@ export default function MyBookings() {
         .mb-meta-chip { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--gray-500); }
         .mb-meta-icon { width: 22px; height: 22px; border-radius: 5px; background: var(--blue-50); display: flex; align-items: center; justify-content: center; font-size: 11px; }
         .mb-amount { font-size: 13px; font-weight: 600; color: var(--blue-600); background: var(--blue-50); border: 1px solid var(--blue-200); border-radius: 7px; padding: 3px 10px; }
+        .mb-receipt-link { font-size: 12.5px; font-weight: 600; color: var(--blue-600); background: none; border: none; padding: 3px 2px; cursor: pointer; font-family: inherit; text-decoration: underline; text-underline-offset: 2px; }
+        .mb-receipt-link:hover { color: var(--blue-800); }
         .mb-queue-panel { border-top: 1px solid var(--blue-50); padding: 14px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: #F0F9FF; }
         .mb-queue-circle { width: 48px; height: 48px; border-radius: 50%; background: var(--blue-50); border: 2px solid var(--blue-300); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 1.2rem; font-weight: 800; color: var(--blue-600); flex-shrink: 0; }
         .mb-queue-label { font-size: 12px; color: var(--gray-400); margin-bottom: 2px; }
@@ -685,6 +689,15 @@ export default function MyBookings() {
                           <div className="mb-meta-chip"><div className="mb-meta-icon"><i className="bi bi-calendar-event me-1" /></div>{booking.date || '—'}</div>
                           <div className="mb-meta-chip"><div className="mb-meta-icon"><i className="bi bi-clock me-1" /></div>{booking.slot || '—'}</div>
                           <span className="mb-amount">₹{booking.amount || 0}</span>
+                          {booking.amount > 0 && (
+                            <button
+                              type="button"
+                              className="mb-receipt-link"
+                              onClick={() => setReceiptBooking(booking)}
+                            >
+                              <i className="bi bi-receipt me-1" />Receipt
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -914,6 +927,11 @@ export default function MyBookings() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── RECEIPT MODAL ── */}
+      {receiptBooking && (
+        <ReceiptModal booking={receiptBooking} onClose={() => setReceiptBooking(null)} />
       )}
 
       {toast && <div className={`mb-toast ${toast.type}`}>{toast.msg}</div>}
