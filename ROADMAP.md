@@ -29,32 +29,34 @@ the things that can lose money or break a live booking come first.
   retire the fallback until the new build has rolled out** (that is the breaking
   step; item 13's update prompt is what nudges stragglers, which is why 13 is
   worth doing first). Docs + comment only, zero logic touched.
-- **Previously:** 2026-09-16 — **item 23 merged as PR #92: admin
-  bookings-by-location report + hospital auto-close-stale-bookings.**
+- **Previously:** 2026-09-16 — **item 23 CLOSED — merged as PR #92 + PR
+  #93, both live on `main` (`7bffcc4`).** Admin bookings-by-location report
+  + hospital auto-close-stale-bookings.
   `AdminReportsView` gains an additive `by_location` breakdown (bookings
   ranked by city). The stale-booking sweep is **two separate commands on two
   separate schedules**, split mid-session on Vishnu's correction:
-  `close_stale_bookings` (every ~15 min) auto-completes a called-in booking
-  2h after it was called; `mark_daily_no_shows` (once daily, shortly after
-  midnight) auto-no-shows a `CONFIRMED` booking never called once its whole
-  day has ended — not a rolling 2h clock during the day, since a delayed
-  doctor can leave someone genuinely still waiting near 2h with nobody at
-  fault. Design decisions confirmed with Vishnu before and during the
-  session, since this touches the exact statuses `run_daily_payouts`
-  watches. 574 backend tests (2 skipped, was 556), 61 frontend unchanged.
-  Full detail in item 23. **Follow-up PR #93 open, now fully closes the cron
-  gap with ZERO Railway dashboard step.** A bot review found neither new
-  command had any cron wiring in the repo; the first fix (two new
-  `railway.*.cron.json` files, each meant for its own new service) was
-  itself wrong — a *second* bot pass on #93 caught it, citing this repo's
-  own `send_pass_expiry_reminders.py`: Railway closed Config-as-Code to new
-  services on 2026-08-28, so a freshly-created service can never be pointed
-  at a config file at all. Corrected by riding both commands on the
+  `close_stale_bookings` (every ~10 min, riding the existing reminders cron)
+  auto-completes a called-in booking 2h after it was called;
+  `mark_daily_no_shows` (same cron, but its own `date__lt=today` filter
+  makes it act once-daily regardless) auto-no-shows a `CONFIRMED` booking
+  never called once its whole day has ended — not a rolling 2h clock during
+  the day, since a delayed doctor can leave someone genuinely still waiting
+  near 2h with nobody at fault. Design decisions confirmed with Vishnu
+  before and during the session, since this touches the exact statuses
+  `run_daily_payouts` watches. 574 backend tests (2 skipped, was 556), 61
+  frontend unchanged. Full detail in item 23. **Follow-up PR #93, merged,
+  closed the cron gap with ZERO Railway dashboard step.** A bot review
+  found neither new command had any cron wiring in the repo; the first fix
+  (two new `railway.*.cron.json` files, each meant for its own new service)
+  was itself wrong — a *second* bot pass on #93 caught it, citing this
+  repo's own `send_pass_expiry_reminders.py`: Railway closed Config-as-Code
+  to new services on 2026-08-28, so a freshly-created service can never be
+  pointed at a config file at all. Corrected by riding both commands on the
   **existing** `railway.cron.json` reminders cron instead (same precedent
   `send_pass_expiry_reminders` already set) — `close_stale_bookings` and
-  `mark_daily_no_shows` now deploy and start running automatically the
-  moment #93 merges, no Railway access needed by anyone. **Also a process
-  note:** #92 squash-merged seconds before the first fix could push,
+  `mark_daily_no_shows` were already running in production the moment #93
+  merged and deployed; nothing left for Vishnu to configure. **Also a
+  process note:** #92 squash-merged seconds before the first fix could push,
   orphaning that commit; restarted the branch per this file's own
   merged-PR procedure, and when the production guard correctly blocked
   force-pushing the rebuilt branch back under its old name, the single
@@ -2499,7 +2501,7 @@ testing either needs `--params` spelled out by hand.
 
 ---
 
-### 23. Admin bookings-by-location + hospital auto-close-stale-bookings 🟡 pushed, not yet merged — 2026-09-16
+### ~~23. Admin bookings-by-location + hospital auto-close-stale-bookings~~ ✅ 2026-09-16 — merged (PR #92 + #93), live on `main`, zero follow-up steps
 
 Two independent slices, requested together in one session: an admin
 reporting question ("which area gets more tokens booked") and a hospital
@@ -2587,7 +2589,7 @@ exposed on any serializer.
 **Merged ✅ 2026-09-16, as PR #92** (squash-merged by Vishnu, `main` tip
 `97041e2`).
 
-**Follow-up, PR #93, open — two rounds, second one actually closes it.**
+**Follow-up, PR #93, merged ✅ — two rounds, second one actually closes it.**
 
 *Round 1 (wrong):* a bot review on #92 (`chatgpt-codex-connector`) correctly
 flagged that neither command had any cron wiring at all in the repo — "fixed"
@@ -2614,9 +2616,10 @@ way — `close_stale_bookings`'s 2h cutoff only gets *more* responsive, and
 now catches the midnight rollover within 10 minutes rather than at a fixed
 00:15 offset.
 
-**Net result: zero Railway dashboard steps left.** Both commands start
-running automatically the moment #93 merges and deploys — no new service,
-no manual cron config, nothing for anyone to remember to do. **Lesson worth
+**Net result: zero Railway dashboard steps left.** Both commands are already
+running in production — #93 merged and deployed at `7bffcc4` — no new
+service, no manual cron config, nothing for anyone to remember to do.
+**Lesson worth
 keeping:** the round-1 mistake was buildable in five seconds with a repo
 grep (`grep -rn "closed config-as-code" .`) that would have surfaced
 `send_pass_expiry_reminders.py`'s own docstring before writing any new
