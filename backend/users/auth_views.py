@@ -7,6 +7,7 @@ from urllib.parse import quote
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.core.cache import cache
+from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -107,6 +108,13 @@ def issue_otp_token(mobile):
     return token
 
 
+# How long a day's otp_token-missing tally survives run_daily_payouts' own
+# RateCounter.purge_expired() sweep — long enough to read a trend across
+# weeks, not just today's count. Not a real cap: see the comment at its one
+# call site below.
+OTP_TOKEN_MISSING_WINDOW = 90 * 24 * 60 * 60  # seconds (90 days)
+
+
 def check_otp_proof(mobile, token=None):
     """True if `mobile` currently holds valid OTP proof. Does NOT consume it —
     call clear_otp_proof once the action that used it has actually succeeded,
@@ -115,11 +123,21 @@ def check_otp_proof(mobile, token=None):
 
     token given  → must match the nonce from /otp/verify/, closing the race.
     token absent → falls back to the legacy flag (every consumer is reachable
-                   from both the website and the app, and the app can't send
-                   a token yet).
+                   from both the website and the app; no shipped app build
+                   sends the token yet, so this path still carries real
+                   traffic — see OTP_VERIFIED_WINDOW above). Also bumps a
+                   per-day adoption counter, item 17's actual next step: know
+                   when this fallback is safe to retire from a measured zero,
+                   not a guess from a store release.
     """
     if token:
         return cache.get(f'otp_token:{mobile}') == token
+    RateCounter.bump(
+        f'otp_token_missing:{timezone.localdate()}',
+        # Not a real cap — this is a tally, not a limit. Set impossibly high
+        # so it's never "not allowed"; only count_after is ever read.
+        limit=10 ** 9, window_seconds=OTP_TOKEN_MISSING_WINDOW,
+    )
     return bool(cache.get(f'otp_verified:{mobile}'))
 
 
