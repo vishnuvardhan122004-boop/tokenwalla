@@ -1,6 +1,28 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User
+from .models import RateCounter, User
+
+
+@admin.register(RateCounter)
+class RateCounterAdmin(admin.ModelAdmin):
+    """Read-only. This table also backs the OTP attempt cap and the
+    ADMIN_SETUP_KEY brute-force guard — an editable admin here would let
+    anyone with admin access quietly zero out a live rate limit. Added so
+    the otp_token_missing adoption tally (item 17) can be read without a
+    shell; every other RateCounter key benefits the same way.
+    """
+    list_display  = ('key', 'count', 'expires_at')
+    search_fields = ('key',)
+    ordering      = ('-expires_at',)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):

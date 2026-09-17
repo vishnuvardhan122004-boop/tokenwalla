@@ -20,10 +20,12 @@ Run:  python manage.py test users.tests_otp_token
 from django.core.cache import cache
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from hospitals.models import Hospital
 from users.auth_views import check_otp_proof, clear_otp_proof, issue_otp_token
+from users.models import RateCounter
 
 User = get_user_model()
 
@@ -59,6 +61,24 @@ class OtpProofHelperTests(TestCase):
         clear_otp_proof('9000000904')
         self.assertFalse(check_otp_proof('9000000904'))
         self.assertIsNone(cache.get('otp_token:9000000904'))
+
+    def test_missing_token_bumps_the_adoption_counter(self):
+        """item 17's real next step: know the fallback is unused, don't guess."""
+        check_otp_proof('9000000905')
+        key = f'otp_token_missing:{timezone.localdate()}'
+        self.assertEqual(RateCounter.objects.get(key=key).count, 1)
+
+    def test_repeated_missing_calls_accumulate_on_the_same_day(self):
+        check_otp_proof('9000000906')
+        check_otp_proof('9000000907')
+        key = f'otp_token_missing:{timezone.localdate()}'
+        self.assertEqual(RateCounter.objects.get(key=key).count, 2)
+
+    def test_valid_token_does_not_bump_the_counter(self):
+        token = issue_otp_token('9000000908')
+        check_otp_proof('9000000908', token)
+        key = f'otp_token_missing:{timezone.localdate()}'
+        self.assertFalse(RateCounter.objects.filter(key=key).exists())
 
 
 @override_settings(CACHES=LOCMEM_CACHE)
