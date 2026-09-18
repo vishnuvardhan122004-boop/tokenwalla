@@ -7,7 +7,76 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-17 (second session) — **item 17's real next step
+- **Last updated:** 2026-09-18 (second session) — **the v1.5.0 production
+  Android build exists now; it is NOT on the Play Store.** Ran
+  `eas build --profile production --platform android --non-interactive`
+  from `~/Desktop/app/Tokenwalla` (`main`, clean, already at version
+  `1.5.0` in both `app.json`/`package.json` from a prior session) — built
+  clean, no errors. **Corrects a stale build-history claim while it's live:**
+  versionCode incremented **42 → 43**, not the 40 → 41 the previous note
+  assumed — meaning builds happened between the last one this file recorded
+  (40, 2026-08-29) and today that nobody wrote up. Don't trust a versionCode
+  number in this file without re-checking; nothing here re-derives it from
+  EAS automatically. Artifact:
+  `https://expo.dev/artifacts/eas/iElj3wPkNKDto3_5sjYpnIHkY2BvdO5Cpl35JlkH9w0.aab`;
+  build record (the durable link, unlike the artifact one):
+  `https://expo.dev/accounts/vishnu2004/projects/tokenwalla/builds/6b0510bb-71ac-479e-93eb-1df42f4e0e06`.
+  **Confirmed live, not assumed: the Play Store is still serving 1.4.0**
+  (`GET /api/app-version/` on `tokenwalla-production.up.railway.app` →
+  `latest_version: "1.4.0"`, checked this session).
+  **`eas submit` is still blocked, same reason as 2026-09-17 flagged it
+  could be:** `play-service-account.json` is not present in the mobile repo
+  (correctly gitignored, machine-local only) and a bounded search of
+  `~/Desktop` and `~/Downloads` didn't turn it up either. Needs a fresh key
+  from Google Play Console → API access → service accounts, placed at
+  `~/Desktop/app/Tokenwalla/play-service-account.json`, before submit can
+  run — that part is Vishnu's.
+  **One thing worth being precise about: `APP_LATEST_VERSION` is NOT in
+  CLAUDE.md's feature-flag carve-out table — only `PASS_ENABLED` is.** The
+  2026-09-17 note that called the next version bump "one Railway variable,
+  same place as today" was describing *what* changes, not *who's allowed to
+  change it* — CLAUDE.md is explicit that a session may touch only the
+  variables the table lists, and that adding a row is "a deliberate edit to
+  this file, as its own commit — never something a session decides mid-task."
+  So once 1.5.0 is actually live on Play, setting
+  `APP_LATEST_VERSION=1.5.0` is Vishnu's to do directly, not a session's,
+  unless that table gets a deliberate row added first.
+- **Previously:** 2026-09-18 — **`main` had zero branch protection; fixed,
+  and three PRs are now sitting open waiting on a merge, not on any more
+  session work.** Picked up the "CI does not always run on a PR" note from
+  the top of **Next** and root-caused it instead of re-guessing: PR #96's
+  first commit had **zero** GitHub Actions runs against it, ever (confirmed
+  via the Actions API) — not a draft PR, not disabled Actions, not a
+  `deploy.yml` config gap, so it reads as a one-off GitHub delivery miss this
+  repo's config can't fix. **What was actually fixable and mattered more:**
+  `GET .../branches/main/protection` returned `404` — nothing on GitHub's
+  side has ever gated a merge here, regardless of whether any one run fires.
+  Closed with `gh api PUT .../branches/main/protection`: required checks
+  `Backend tests` + `Website tests & build`, `strict: false`,
+  **`enforce_admins: true`** on Vishnu's explicit call (he merges everything
+  himself, so an admin-exempt rule gates nothing real). Verified live, not
+  just by reading the setting back: opened **PR #103** for this doc update
+  and watched its own `mergeStateStatus` go `BLOCKED` → `CLEAN` as
+  `Backend tests` and `Website tests & build` finished — the gate holds and
+  unblocks correctly. Full detail in the **Next** section (now closed there)
+  and in WORKLOG.
+  **Found along the way, not this session's to fix: #102's session
+  (`feat/patient-receipt-view` — wires `GET /api/payment/receipt/<pk>/` into
+  My Bookings, 67 frontend tests, verified live) shipped a complete PR and
+  never ran `/wrap`**, so neither this file nor WORKLOG recorded it until
+  today. **Three PRs are open right now, all green, all just waiting on a
+  merge:** #100 (item 17's otp_token adoption metric), #102 (the receipt
+  view), #103 (this branch-protection fix). None of them are a session's to
+  merge. **Nothing in `## Now` is session-actionable** — every numbered item
+  is closed, waiting on Meta/an app release, or explicitly Vishnu-only (4c's
+  live key, 14b's Railway dashboard step). **Tomorrow's first move is the top
+  of `## Next`:** `/ship`'s own secret-scan step trips `guard-production.py`
+  on the live Razorpay key prefix in the scan command's own text — described
+  as a one-line regex fix three separate times now (2026-08-19, 2026-09-07,
+  2026-09-17) and still nobody has landed it as its own commit. Confirmed
+  still present today: `guard-production.py:74` still has the bare
+  `r"rzp_live_"` pattern with no exemption for the scan step itself.
+- **Previously:** 2026-09-17 (second session) — **item 17's real next step
   (instrument the six consumers for otp_token adoption) is written, tested,
   and open as PR #100 — not merged.** `check_otp_proof()`
   (`backend/users/auth_views.py`) is the one chokepoint all 6 consumers
@@ -351,6 +420,15 @@ the things that can lose money or break a live booking come first.
 ---
 
 ## Now
+
+> ⚠️ **2026-09-18 — nothing below is session-actionable right now.** Every
+> numbered item is closed, waiting on Meta/an app release, or explicitly
+> Vishnu-only (4c's live key swap, 14b's Railway dashboard step). Three PRs
+> (#100, #102, #103) are open and green, waiting on a merge, not more work.
+> **Start with the top of `## Next` instead** — `/ship`'s secret-scan false
+> positive in `guard-production.py`, a confirmed-still-open one-line fix. If
+> the PRs above have merged by the time you read this, re-scan `## Now` from
+> the top first; this banner does not update itself.
 
 ### ~~0. RAILWAY IS NOT DEPLOYING — UNPAID BILL~~ ✅ 2026-08-16 — RESOLVED
 
@@ -2846,24 +2924,33 @@ were left alone (nothing force-pushed, nothing deleted).
 
 ## Next
 
-- **CI does not always run on a PR, and a lone green check can be Vercel's
-  preview rather than the tests** — new 2026-09-17, and this is a **gating**
-  gap on a live product, which is why it sits at the top of Next. PR #96 was
-  opened and **no `CI / Backend tests` run was ever created for it**. What it
-  *did* show was a single green check — Vercel's preview deployment, dated the
-  **previous day**, from when the branch was first pushed. So the PR looked
-  gated and merging it would have been completely ungated.
-  `.github/workflows/deploy.yml` triggers on `pull_request` with **no path
-  filters**, so this was not a config exclusion; the run simply was never
-  created. A later push fired `synchronize` and produced a real run, which is
-  the only reason it was caught.
-  **Until this is understood, treat a green PR as unverified until you have
-  confirmed the check is named "Backend tests".** CLAUDE.md's "CI runs on
-  `pull_request`, so a PR is gated before it lands" is not a guarantee you can
-  lean on. Worth reproducing deliberately: open a PR from an already-pushed
-  branch that has sat for a while and see whether a run appears (#96's branch
-  had been pushed days before its PR was opened, which is the most likely
-  trigger for the miss).
+- ~~**CI does not always run on a PR, and a lone green check can be Vercel's
+  preview rather than the tests**~~ ✅ **closed 2026-09-18 — `main` now has a
+  real gate; the missing run itself was never this repo's bug to fix.**
+  Confirmed against the GitHub API, not assumed: PR #96's first commit
+  (`60a5f6a8`, pushed 2026-09-16 14:10) has **zero** workflow runs against it,
+  ever — the `pull_request: opened` event simply never produced one. Ruled
+  out the two obvious causes: the PR was never a draft (no
+  `ready_for_review` in its timeline), and repo Actions were fully enabled
+  (`allowed_actions: all`). `deploy.yml`'s trigger is plain `on: pull_request:`
+  with no `types:` filter and no path filter — nothing in this repo's config
+  explains the miss, so it reads as a GitHub-side delivery gap, not a
+  misconfiguration. The only run on that PR fired off the second commit's
+  `synchronize` seven minutes before merge.
+  **The bigger finding: `main` had no branch protection at all** —
+  `GET .../branches/main/protection` returned `404 Branch not protected`.
+  Nothing on GitHub's side was ever gating a merge; a PR with zero runs and a
+  PR with two green runs were equally mergeable. That's the actual gap, and
+  it doesn't depend on explaining the webhook miss: **fixed by requiring
+  status checks on `main`**, exact context names `Backend tests` and
+  `Website tests & build` (matching `deploy.yml`'s job `name:` fields),
+  `strict: false` (doesn't force branches up to date — narrower than the bug
+  being closed), **`enforce_admins: true`** — Vishnu's explicit call, since
+  he's the one who merges everything and a rule that doesn't bind the admin
+  doesn't bind the person doing the merging. Applied via `gh api PUT
+  .../branches/main/protection`, verified by re-reading it back and by
+  PR #102 (already green) reporting `mergeable_state: clean` under the new
+  rule — existing good PRs aren't disrupted.
 - **`gh` had auth in a session for the first time, 2026-09-09 — confirm it
   still does before relying on it.** Every prior session recorded `gh auth
   status` as not logged in and had to hand off a `.../compare/...` link for

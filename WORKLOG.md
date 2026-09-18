@@ -3,8 +3,76 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** website `main` tip `9e455f4` (PR #99, this morning's wrap). **PR
-  #100 open, not merged** — item 17's otp_token adoption metric
+- **Branch:** `chore/ci-gating-gap` (`tokenwalla`, PR #103, still open) — this
+  second half of the day's session worked in the **other** repo,
+  `~/Desktop/app/Tokenwalla` (`main`, clean, no commits made there today).
+- **Latest commit:** unchanged from below (`1ebccc8`/`a626809` on
+  `chore/ci-gating-gap`, unmerged) — today's second session made no new
+  commits in either repo; the app repo was already sitting at `1.5.0`.
+- **Last updated:** 2026-09-18 (second session) — **built v1.5.0 for
+  Android (versionCode 43); did not submit it.** `eas build --profile
+  production --platform android --non-interactive` from the app repo, on
+  Vishnu's explicit go-ahead. Clean build, no errors. Artifact:
+  `expo.dev/artifacts/eas/iElj3wPkNKDto3_5sjYpnIHkY2BvdO5Cpl35JlkH9w0.aab`;
+  build record: `expo.dev/.../builds/6b0510bb-71ac-479e-93eb-1df42f4e0e06`.
+  **`eas submit` was NOT run** — `play-service-account.json` isn't present
+  in the app repo (checked directly) or in `~/Desktop`/`~/Downloads`
+  (bounded search). Confirmed live that the Play Store is still on 1.4.0
+  (`/api/app-version/` on the real backend). **Caught and corrected a stale
+  fact while doing this:** versionCode went 42→43, not the 40→41 ROADMAP's
+  last build note assumed — unlogged builds happened in between. **Also
+  worth keeping straight for whoever does the submit:** `APP_LATEST_VERSION`
+  is not in CLAUDE.md's flag carve-out table (only `PASS_ENABLED` is), so
+  bumping it to `1.5.0` once this is live on Play is Vishnu's action
+  directly, not a session's, unless that table gets a deliberate row added
+  first. Full detail in ROADMAP's top entry for today.
+- **Branch:** `chore/ci-gating-gap`, pushed, **open as PR #103** — no
+  application code changes, this fix is entirely a GitHub repo setting; the
+  PR carries the ROADMAP/WORKLOG write-up. **Two other PRs already sit open,
+  untouched by this session:** `#100` (item 17's `otp_token` adoption metric,
+  CI green, unmerged) and `#102` (`feat/patient-receipt-view` — wires the GST
+  receipt endpoint into My Bookings, 67 frontend tests, verified live,
+  unmerged). **#102's session ended without running `/wrap`, so this is the
+  first WORKLOG entry to record it exists** — nothing wrong with the work
+  itself, just flagging the gap so it isn't mistaken for something this
+  session did. **All three PRs are green and waiting on a merge, nothing
+  else.**
+- **Last updated:** 2026-09-18 — **`main` had no branch protection at all;
+  fixed.** Picked up the "CI does not always run on a PR" note from the top
+  of ROADMAP's Next and root-caused it properly instead of re-guessing. PR
+  #96's first commit has **zero** workflow runs against it, ever — confirmed
+  via `gh api .../actions/runs?head_sha=...` returning empty, not inferred.
+  Ruled out the two obvious causes before calling it a platform gap: not a
+  draft PR (no `ready_for_review` event in its timeline), not Actions being
+  disabled (`allowed_actions: all`). `deploy.yml`'s trigger is plain `on:
+  pull_request:` with no `types:`/path filter, so there's no config bug in
+  this repo to fix — reads as a GitHub-side delivery miss on the `opened`
+  event. **What actually mattered, and is fixable: `GET
+  .../branches/main/protection` returned `404 Branch not protected`.**
+  Nothing on GitHub's side was ever gating a merge — a PR with zero runs and
+  a PR with two green runs were equally mergeable, which is the real bug
+  regardless of why any one run does or doesn't fire. Closed with `gh api PUT
+  .../branches/main/protection`: required status checks `Backend tests` +
+  `Website tests & build` (the exact job names in `deploy.yml`), `strict:
+  false` (doesn't force branches up to date — narrower than the bug being
+  closed), **`enforce_admins: true`**, Vishnu's explicit call since he's the
+  one who merges everything and a rule that exempts the admin doesn't gate
+  anything in practice. Verified two ways: read the protection back to
+  confirm it stuck, and checked PR #102's `mergeable_state` — reports
+  `clean` under the new rule, so existing green work isn't disrupted.
+  **Confirmed end to end, not just via the API response:** opened PR #103
+  for this doc update and watched it directly — `mergeStateStatus` read
+  `BLOCKED` immediately after opening, then flipped to `CLEAN` the moment
+  `Backend tests` and `Website tests & build` both reported `SUCCESS`. The
+  gate holds and unblocks correctly, including for the admin. Docs +
+  repo-settings only, zero app code touched. **Not done this session:**
+  merging #100, #102 or #103 — that's Vishnu's, as always.
+- **Latest commit:** `1ebccc8` (docs, `chore/ci-gating-gap`, PR #103 —
+  **not merged**). `main` itself is still at `9e455f4`, unchanged by this
+  session; the branch-protection change is a live GitHub setting, not a
+  commit, so it took effect immediately without waiting on any merge.
+- **Previously:** 2026-09-17 (second session) tip `9e455f4` (PR #99, this
+  morning's wrap). **PR #100 open, not merged** — item 17's otp_token adoption metric
   (`feat/otp-token-adoption-metric`, `9a896c8`), CI green (`Backend tests` +
   `Website tests & build`, both real runs — checked, not assumed). App `main`
   unchanged at `7a2e66d`, **still unbuilt since v1.4.0 / versionCode 40 on
