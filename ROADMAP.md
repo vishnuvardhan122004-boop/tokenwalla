@@ -7,7 +7,41 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-18 — **`main` had zero branch protection; fixed,
+- **Last updated:** 2026-09-18 (second session) — **the v1.5.0 production
+  Android build exists now; it is NOT on the Play Store.** Ran
+  `eas build --profile production --platform android --non-interactive`
+  from `~/Desktop/app/Tokenwalla` (`main`, clean, already at version
+  `1.5.0` in both `app.json`/`package.json` from a prior session) — built
+  clean, no errors. **Corrects a stale build-history claim while it's live:**
+  versionCode incremented **42 → 43**, not the 40 → 41 the previous note
+  assumed — meaning builds happened between the last one this file recorded
+  (40, 2026-08-29) and today that nobody wrote up. Don't trust a versionCode
+  number in this file without re-checking; nothing here re-derives it from
+  EAS automatically. Artifact:
+  `https://expo.dev/artifacts/eas/iElj3wPkNKDto3_5sjYpnIHkY2BvdO5Cpl35JlkH9w0.aab`;
+  build record (the durable link, unlike the artifact one):
+  `https://expo.dev/accounts/vishnu2004/projects/tokenwalla/builds/6b0510bb-71ac-479e-93eb-1df42f4e0e06`.
+  **Confirmed live, not assumed: the Play Store is still serving 1.4.0**
+  (`GET /api/app-version/` on `tokenwalla-production.up.railway.app` →
+  `latest_version: "1.4.0"`, checked this session).
+  **`eas submit` is still blocked, same reason as 2026-09-17 flagged it
+  could be:** `play-service-account.json` is not present in the mobile repo
+  (correctly gitignored, machine-local only) and a bounded search of
+  `~/Desktop` and `~/Downloads` didn't turn it up either. Needs a fresh key
+  from Google Play Console → API access → service accounts, placed at
+  `~/Desktop/app/Tokenwalla/play-service-account.json`, before submit can
+  run — that part is Vishnu's.
+  **One thing worth being precise about: `APP_LATEST_VERSION` is NOT in
+  CLAUDE.md's feature-flag carve-out table — only `PASS_ENABLED` is.** The
+  2026-09-17 note that called the next version bump "one Railway variable,
+  same place as today" was describing *what* changes, not *who's allowed to
+  change it* — CLAUDE.md is explicit that a session may touch only the
+  variables the table lists, and that adding a row is "a deliberate edit to
+  this file, as its own commit — never something a session decides mid-task."
+  So once 1.5.0 is actually live on Play, setting
+  `APP_LATEST_VERSION=1.5.0` is Vishnu's to do directly, not a session's,
+  unless that table gets a deliberate row added first.
+- **Previously:** 2026-09-18 — **`main` had zero branch protection; fixed,
   and three PRs are now sitting open waiting on a merge, not on any more
   session work.** Picked up the "CI does not always run on a PR" note from
   the top of **Next** and root-caused it instead of re-guessing: PR #96's

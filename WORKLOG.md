@@ -3,6 +3,29 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
+- **Branch:** `chore/ci-gating-gap` (`tokenwalla`, PR #103, still open) — this
+  second half of the day's session worked in the **other** repo,
+  `~/Desktop/app/Tokenwalla` (`main`, clean, no commits made there today).
+- **Latest commit:** unchanged from below (`1ebccc8`/`a626809` on
+  `chore/ci-gating-gap`, unmerged) — today's second session made no new
+  commits in either repo; the app repo was already sitting at `1.5.0`.
+- **Last updated:** 2026-09-18 (second session) — **built v1.5.0 for
+  Android (versionCode 43); did not submit it.** `eas build --profile
+  production --platform android --non-interactive` from the app repo, on
+  Vishnu's explicit go-ahead. Clean build, no errors. Artifact:
+  `expo.dev/artifacts/eas/iElj3wPkNKDto3_5sjYpnIHkY2BvdO5Cpl35JlkH9w0.aab`;
+  build record: `expo.dev/.../builds/6b0510bb-71ac-479e-93eb-1df42f4e0e06`.
+  **`eas submit` was NOT run** — `play-service-account.json` isn't present
+  in the app repo (checked directly) or in `~/Desktop`/`~/Downloads`
+  (bounded search). Confirmed live that the Play Store is still on 1.4.0
+  (`/api/app-version/` on the real backend). **Caught and corrected a stale
+  fact while doing this:** versionCode went 42→43, not the 40→41 ROADMAP's
+  last build note assumed — unlogged builds happened in between. **Also
+  worth keeping straight for whoever does the submit:** `APP_LATEST_VERSION`
+  is not in CLAUDE.md's flag carve-out table (only `PASS_ENABLED` is), so
+  bumping it to `1.5.0` once this is live on Play is Vishnu's action
+  directly, not a session's, unless that table gets a deliberate row added
+  first. Full detail in ROADMAP's top entry for today.
 - **Branch:** `chore/ci-gating-gap`, pushed, **open as PR #103** — no
   application code changes, this fix is entirely a GitHub repo setting; the
   PR carries the ROADMAP/WORKLOG write-up. **Two other PRs already sit open,
