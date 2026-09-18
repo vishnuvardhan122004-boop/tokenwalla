@@ -7,7 +7,42 @@ know about it.
 Sessions are ~3 hours. Each item below is sized to fit one, and ordered so that
 the things that can lose money or break a live booking come first.
 
-- **Last updated:** 2026-09-17 (second session) — **item 17's real next step
+- **Last updated:** 2026-09-18 — **`main` had zero branch protection; fixed,
+  and three PRs are now sitting open waiting on a merge, not on any more
+  session work.** Picked up the "CI does not always run on a PR" note from
+  the top of **Next** and root-caused it instead of re-guessing: PR #96's
+  first commit had **zero** GitHub Actions runs against it, ever (confirmed
+  via the Actions API) — not a draft PR, not disabled Actions, not a
+  `deploy.yml` config gap, so it reads as a one-off GitHub delivery miss this
+  repo's config can't fix. **What was actually fixable and mattered more:**
+  `GET .../branches/main/protection` returned `404` — nothing on GitHub's
+  side has ever gated a merge here, regardless of whether any one run fires.
+  Closed with `gh api PUT .../branches/main/protection`: required checks
+  `Backend tests` + `Website tests & build`, `strict: false`,
+  **`enforce_admins: true`** on Vishnu's explicit call (he merges everything
+  himself, so an admin-exempt rule gates nothing real). Verified live, not
+  just by reading the setting back: opened **PR #103** for this doc update
+  and watched its own `mergeStateStatus` go `BLOCKED` → `CLEAN` as
+  `Backend tests` and `Website tests & build` finished — the gate holds and
+  unblocks correctly. Full detail in the **Next** section (now closed there)
+  and in WORKLOG.
+  **Found along the way, not this session's to fix: #102's session
+  (`feat/patient-receipt-view` — wires `GET /api/payment/receipt/<pk>/` into
+  My Bookings, 67 frontend tests, verified live) shipped a complete PR and
+  never ran `/wrap`**, so neither this file nor WORKLOG recorded it until
+  today. **Three PRs are open right now, all green, all just waiting on a
+  merge:** #100 (item 17's otp_token adoption metric), #102 (the receipt
+  view), #103 (this branch-protection fix). None of them are a session's to
+  merge. **Nothing in `## Now` is session-actionable** — every numbered item
+  is closed, waiting on Meta/an app release, or explicitly Vishnu-only (4c's
+  live key, 14b's Railway dashboard step). **Tomorrow's first move is the top
+  of `## Next`:** `/ship`'s own secret-scan step trips `guard-production.py`
+  on the live Razorpay key prefix in the scan command's own text — described
+  as a one-line regex fix three separate times now (2026-08-19, 2026-09-07,
+  2026-09-17) and still nobody has landed it as its own commit. Confirmed
+  still present today: `guard-production.py:74` still has the bare
+  `r"rzp_live_"` pattern with no exemption for the scan step itself.
+- **Previously:** 2026-09-17 (second session) — **item 17's real next step
   (instrument the six consumers for otp_token adoption) is written, tested,
   and open as PR #100 — not merged.** `check_otp_proof()`
   (`backend/users/auth_views.py`) is the one chokepoint all 6 consumers
@@ -351,6 +386,15 @@ the things that can lose money or break a live booking come first.
 ---
 
 ## Now
+
+> ⚠️ **2026-09-18 — nothing below is session-actionable right now.** Every
+> numbered item is closed, waiting on Meta/an app release, or explicitly
+> Vishnu-only (4c's live key swap, 14b's Railway dashboard step). Three PRs
+> (#100, #102, #103) are open and green, waiting on a merge, not more work.
+> **Start with the top of `## Next` instead** — `/ship`'s secret-scan false
+> positive in `guard-production.py`, a confirmed-still-open one-line fix. If
+> the PRs above have merged by the time you read this, re-scan `## Now` from
+> the top first; this banner does not update itself.
 
 ### ~~0. RAILWAY IS NOT DEPLOYING — UNPAID BILL~~ ✅ 2026-08-16 — RESOLVED
 
