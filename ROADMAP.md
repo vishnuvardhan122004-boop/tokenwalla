@@ -2846,24 +2846,33 @@ were left alone (nothing force-pushed, nothing deleted).
 
 ## Next
 
-- **CI does not always run on a PR, and a lone green check can be Vercel's
-  preview rather than the tests** — new 2026-09-17, and this is a **gating**
-  gap on a live product, which is why it sits at the top of Next. PR #96 was
-  opened and **no `CI / Backend tests` run was ever created for it**. What it
-  *did* show was a single green check — Vercel's preview deployment, dated the
-  **previous day**, from when the branch was first pushed. So the PR looked
-  gated and merging it would have been completely ungated.
-  `.github/workflows/deploy.yml` triggers on `pull_request` with **no path
-  filters**, so this was not a config exclusion; the run simply was never
-  created. A later push fired `synchronize` and produced a real run, which is
-  the only reason it was caught.
-  **Until this is understood, treat a green PR as unverified until you have
-  confirmed the check is named "Backend tests".** CLAUDE.md's "CI runs on
-  `pull_request`, so a PR is gated before it lands" is not a guarantee you can
-  lean on. Worth reproducing deliberately: open a PR from an already-pushed
-  branch that has sat for a while and see whether a run appears (#96's branch
-  had been pushed days before its PR was opened, which is the most likely
-  trigger for the miss).
+- ~~**CI does not always run on a PR, and a lone green check can be Vercel's
+  preview rather than the tests**~~ ✅ **closed 2026-09-18 — `main` now has a
+  real gate; the missing run itself was never this repo's bug to fix.**
+  Confirmed against the GitHub API, not assumed: PR #96's first commit
+  (`60a5f6a8`, pushed 2026-09-16 14:10) has **zero** workflow runs against it,
+  ever — the `pull_request: opened` event simply never produced one. Ruled
+  out the two obvious causes: the PR was never a draft (no
+  `ready_for_review` in its timeline), and repo Actions were fully enabled
+  (`allowed_actions: all`). `deploy.yml`'s trigger is plain `on: pull_request:`
+  with no `types:` filter and no path filter — nothing in this repo's config
+  explains the miss, so it reads as a GitHub-side delivery gap, not a
+  misconfiguration. The only run on that PR fired off the second commit's
+  `synchronize` seven minutes before merge.
+  **The bigger finding: `main` had no branch protection at all** —
+  `GET .../branches/main/protection` returned `404 Branch not protected`.
+  Nothing on GitHub's side was ever gating a merge; a PR with zero runs and a
+  PR with two green runs were equally mergeable. That's the actual gap, and
+  it doesn't depend on explaining the webhook miss: **fixed by requiring
+  status checks on `main`**, exact context names `Backend tests` and
+  `Website tests & build` (matching `deploy.yml`'s job `name:` fields),
+  `strict: false` (doesn't force branches up to date — narrower than the bug
+  being closed), **`enforce_admins: true`** — Vishnu's explicit call, since
+  he's the one who merges everything and a rule that doesn't bind the admin
+  doesn't bind the person doing the merging. Applied via `gh api PUT
+  .../branches/main/protection`, verified by re-reading it back and by
+  PR #102 (already green) reporting `mergeable_state: clean` under the new
+  rule — existing good PRs aren't disrupted.
 - **`gh` had auth in a session for the first time, 2026-09-09 — confirm it
   still does before relying on it.** Every prior session recorded `gh auth
   status` as not logged in and had to hand off a `.../compare/...` link for

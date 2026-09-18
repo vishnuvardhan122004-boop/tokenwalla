@@ -3,8 +3,44 @@
 A running record of changes so we can cross-check what's done and what's pending.
 Newest entry on top. Update the **Status** columns as things land.
 
-- **Branch:** website `main` tip `9e455f4` (PR #99, this morning's wrap). **PR
-  #100 open, not merged** — item 17's otp_token adoption metric
+- **Branch:** `chore/ci-gating-gap`, cut from `main` — no application code
+  changes, this fix is entirely a GitHub repo setting. **Two other PRs already
+  sit open, untouched by this session:** `#100` (item 17's `otp_token`
+  adoption metric, CI green, unmerged) and `#102` (`feat/patient-receipt-view`
+  — wires the GST receipt endpoint into My Bookings, 67 frontend tests,
+  verified live, unmerged). **#102's session ended without running `/wrap`,
+  so this is the first WORKLOG entry to record it exists** — nothing wrong
+  with the work itself, just flagging the gap so it isn't mistaken for
+  something this session did.
+- **Last updated:** 2026-09-18 — **`main` had no branch protection at all;
+  fixed.** Picked up the "CI does not always run on a PR" note from the top
+  of ROADMAP's Next and root-caused it properly instead of re-guessing. PR
+  #96's first commit has **zero** workflow runs against it, ever — confirmed
+  via `gh api .../actions/runs?head_sha=...` returning empty, not inferred.
+  Ruled out the two obvious causes before calling it a platform gap: not a
+  draft PR (no `ready_for_review` event in its timeline), not Actions being
+  disabled (`allowed_actions: all`). `deploy.yml`'s trigger is plain `on:
+  pull_request:` with no `types:`/path filter, so there's no config bug in
+  this repo to fix — reads as a GitHub-side delivery miss on the `opened`
+  event. **What actually mattered, and is fixable: `GET
+  .../branches/main/protection` returned `404 Branch not protected`.**
+  Nothing on GitHub's side was ever gating a merge — a PR with zero runs and
+  a PR with two green runs were equally mergeable, which is the real bug
+  regardless of why any one run does or doesn't fire. Closed with `gh api PUT
+  .../branches/main/protection`: required status checks `Backend tests` +
+  `Website tests & build` (the exact job names in `deploy.yml`), `strict:
+  false` (doesn't force branches up to date — narrower than the bug being
+  closed), **`enforce_admins: true`**, Vishnu's explicit call since he's the
+  one who merges everything and a rule that exempts the admin doesn't gate
+  anything in practice. Verified two ways: read the protection back to
+  confirm it stuck, and checked PR #102's `mergeable_state` — reports
+  `clean` under the new rule, so existing green work isn't disrupted. Pushed
+  this change's own docs update as a real PR right after this commit, so
+  that PR's own checks (and the fact `enforce_admins` binds this merge too)
+  are the live proof the gate holds, not just the API response. Docs +
+  repo-settings only, zero app code touched.
+- **Previously:** 2026-09-17 (second session) tip `9e455f4` (PR #99, this
+  morning's wrap). **PR #100 open, not merged** — item 17's otp_token adoption metric
   (`feat/otp-token-adoption-metric`, `9a896c8`), CI green (`Backend tests` +
   `Website tests & build`, both real runs — checked, not assumed). App `main`
   unchanged at `7a2e66d`, **still unbuilt since v1.4.0 / versionCode 40 on
